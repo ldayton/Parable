@@ -4,7 +4,7 @@ This module defines the complete IR type system and serves as the specification.
 Each node's docstring documents its semantics and invariants.
 
 Architecture:
-    Source -> Frontend (phases 1-8) -> [IR] -> Middleend (phases 10-13) -> Backend -> Target
+    Source -> Frontend (phases 1-8) -> [IR] -> Middleend (phases 10-14) -> Backend -> Target
 
 Frontend produces fully-typed IR. Middleend annotates IR in place. Backend emits code.
 """
@@ -13,6 +13,31 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Literal
+
+
+# ============================================================
+# OWNERSHIP
+#
+# Memory ownership annotations inferred by phase 14 (ownership.py).
+# Backends use these to emit correct memory management code.
+# ============================================================
+
+Ownership = Literal["owned", "borrowed", "shared", "weak"]
+"""Ownership classification for values and references.
+
+| Kind     | Meaning                          | C                    | Go      | Java    | Rust        | TS      |
+|----------|----------------------------------|----------------------|---------|---------|-------------|---------|
+| owned    | Value owned by this binding      | arena-allocated      | (GC)    | (GC)    | T / Box<T>  | (GC)    |
+| borrowed | Reference to caller's value      | pointer (no free)    | (GC)    | (GC)    | &T          | (GC)    |
+| shared   | Runtime-managed (inference fail) | refcounted           | (GC)    | (GC)    | Rc<T>       | (GC)    |
+| weak     | Back-reference (no ownership)    | non-owning pointer   | (GC)    | WeakRef | Weak<T>     | (GC)    |
+
+Default ownership:
+- VarDecl: owned (unless assigned from borrowed)
+- Param: borrowed (unless explicitly takes ownership)
+- Field: owned (unless marked weak for back-references)
+- Return: owned (ownership transfers to caller)
+"""
 
 
 # ============================================================
@@ -58,15 +83,15 @@ class Type:
 class Primitive(Type):
     """Primitive types with direct target-language equivalents.
 
-    | Kind   | Go      | Rust   | C        | Java    |
-    |--------|---------|--------|----------|---------|
-    | string | string  | String | char*    | String  |
-    | int    | int     | i64    | int64_t  | long    |
-    | bool   | bool    | bool   | bool     | boolean |
-    | float  | float64 | f64    | double   | double  |
-    | byte   | byte    | u8     | uint8_t  | byte    |
-    | rune   | rune    | char   | int32_t  | int     |
-    | void   | (none)  | ()     | void     | void    |
+    | Kind   | C        | Go      | Java    | Rust   | TS      |
+    |--------|----------|---------|---------|--------|---------|
+    | string | char*    | string  | String  | String | string  |
+    | int    | int64_t  | int     | long    | i64    | number  |
+    | bool   | bool     | bool    | boolean | bool   | boolean |
+    | float  | double   | float64 | double  | f64    | number  |
+    | byte   | uint8_t  | byte    | byte    | u8     | number  |
+    | rune   | int32_t  | rune    | int     | char   | string  |
+    | void   | void     | (none)  | void    | ()     | void    |
     """
 
     kind: Literal["string", "int", "bool", "float", "byte", "rune", "void"]
@@ -94,6 +119,7 @@ class CharSequence(Type):
 
     | Target | Representation |
     |--------|----------------|
+    | C      | int32_t*       |
     | Go     | []rune         |
     | Java   | char[]         |
     | Rust   | Vec<char>      |
@@ -111,9 +137,10 @@ class Slice(Type):
 
     | Target | Representation     |
     |--------|--------------------|
+    | C      | T* + len           |
     | Go     | []T                |
-    | Rust   | Vec<T>             |
     | Java   | ArrayList<T>       |
+    | Rust   | Vec<T>             |
     | TS     | T[]                |
 
     Invariants:
@@ -129,9 +156,11 @@ class Array(Type):
 
     | Target | Representation |
     |--------|----------------|
-    | Go     | [N]T           |
-    | Rust   | [T; N]         |
     | C      | T[N]           |
+    | Go     | [N]T           |
+    | Java   | T[]            |
+    | Rust   | [T; N]         |
+    | TS     | T[] (readonly) |
 
     Invariants:
     - size > 0
@@ -148,9 +177,11 @@ class Map(Type):
 
     | Target | Representation   |
     |--------|------------------|
+    | C      | hashmap struct   |
     | Go     | map[K]V          |
-    | Rust   | HashMap<K, V>    |
     | Java   | HashMap<K, V>    |
+    | Rust   | HashMap<K, V>    |
+    | TS     | Map<K, V>        |
 
     Invariants:
     - key is hashable type (Primitive, StructRef with value semantics)
@@ -167,9 +198,11 @@ class Set(Type):
 
     | Target | Representation   |
     |--------|------------------|
+    | C      | hashset struct   |
     | Go     | map[T]struct{}   |
-    | Rust   | HashSet<T>       |
     | Java   | HashSet<T>       |
+    | Rust   | HashSet<T>       |
+    | TS     | Set<T>           |
 
     Invariants:
     - element is hashable type
@@ -184,7 +217,9 @@ class Tuple(Type):
 
     | Target | Representation          |
     |--------|-------------------------|
+    | C      | struct { T1; T2; ... }  |
     | Go     | multiple return values  |
+    | Java   | record or Object[]      |
     | Rust   | (T1, T2, ...)           |
     | TS     | [T1, T2, ...]           |
 
@@ -201,9 +236,11 @@ class Pointer(Type):
 
     | Target | owned=True | owned=False |
     |--------|------------|-------------|
-    | Go     | *T         | *T          |
-    | Rust   | Box<T>     | &T          |
     | C      | T*         | T*          |
+    | Go     | *T         | *T          |
+    | Java   | T          | T           |
+    | Rust   | Box<T>     | &T          |
+    | TS     | T          | T           |
 
     Invariants:
     - target is not Void
@@ -219,7 +256,9 @@ class Optional(Type):
 
     | Target | Representation |
     |--------|----------------|
+    | C      | T* (NULL)      |
     | Go     | *T (nil)       |
+    | Java   | Optional<T>    |
     | Rust   | Option<T>      |
     | TS     | T | null       |
 
@@ -247,9 +286,11 @@ class InterfaceRef(Type):
 
     | Target | Representation      |
     |--------|---------------------|
+    | C      | void* + vtable      |
     | Go     | InterfaceName       |
-    | Rust   | dyn Trait           |
     | Java   | InterfaceName       |
+    | Rust   | dyn Trait           |
+    | TS     | InterfaceName       |
 
     Special names:
     - "any": Go any/interface{}, Rust dyn Any, Java Object
@@ -264,11 +305,13 @@ class Union(Type):
 
     All variants share a discriminant field (typically `kind: string`).
 
-    | Target | Representation        |
-    |--------|----------------------|
+    | Target | Representation          |
+    |--------|-------------------------|
+    | C      | tagged union            |
     | Go     | interface + type switch |
-    | Rust   | enum                 |
-    | TS     | discriminated union  |
+    | Java   | sealed interface        |
+    | Rust   | enum                    |
+    | TS     | discriminated union     |
 
     Invariants:
     - len(variants) >= 2
@@ -283,10 +326,13 @@ class Union(Type):
 class FuncType(Type):
     """Function type (for function pointers, callbacks, closures).
 
-    | Target | Representation           |
-    |--------|--------------------------|
-    | Go     | func(P...) R             |
-    | Rust   | fn(P...) -> R / Fn trait |
+    | Target | Representation            |
+    |--------|---------------------------|
+    | C      | R (*)(P...)               |
+    | Go     | func(P...) R              |
+    | Java   | @FunctionalInterface / λ  |
+    | Rust   | fn(P...) -> R / Fn trait  |
+    | TS     | (p: P...) => R            |
 
     Invariants:
     - ret is valid Type (use VOID for no return)
@@ -363,12 +409,18 @@ class Field:
     Invariants:
     - typ is fully resolved (no unresolved type variables)
     - If default is present, default.typ is assignable to typ
+
+    Ownership semantics:
+    - owned (default): Field owns its value; destroyed with struct
+    - weak: Back-reference; does not own (prevents cycles)
     """
 
     name: str
     typ: Type
     default: Expr | None = None
     loc: Loc = field(default_factory=Loc.unknown)
+    # Ownership annotations (phase 14)
+    ownership: Ownership = "owned"
 
 
 @dataclass
@@ -404,7 +456,9 @@ class Enum:
 
     | Target | Representation           |
     |--------|--------------------------|
+    | C      | enum or #define          |
     | Go     | const iota or string     |
+    | Java   | enum                     |
     | Rust   | enum                     |
     | TS     | enum or union            |
 
@@ -487,6 +541,11 @@ class Param:
     Middleend annotations:
     - is_modified: Parameter is assigned/mutated in function body
     - is_unused: Parameter is never referenced
+    - ownership: Does this param take ownership or borrow?
+
+    Ownership semantics:
+    - borrowed (default): Caller retains ownership; callee cannot store
+    - owned: Ownership transfers to callee; caller must not use after call
     """
 
     name: str
@@ -497,6 +556,8 @@ class Param:
     # Middleend annotations
     is_modified: bool = False
     is_unused: bool = False
+    # Ownership annotations (phase 14)
+    ownership: Ownership = "borrowed"
 
 
 @dataclass
@@ -544,15 +605,18 @@ class VarDecl(Stmt):
 
     | Target | mutable=True    | mutable=False |
     |--------|-----------------|---------------|
+    | C      | T x = v         | const T x = v |
     | Go     | var x T = v     | (same)        |
+    | Java   | T x = v         | final T x = v |
     | Rust   | let mut x = v   | let x = v     |
     | TS     | let x = v       | const x = v   |
-    | Java   | T x = v         | final T x = v |
 
     Middleend annotations:
     - is_reassigned: Variable assigned again after declaration
     - is_const: Never reassigned (enables const/final emission)
     - initial_value_unused: Initial value overwritten before read
+    - ownership: Who owns this value (owned/borrowed/shared)
+    - region: Arena/region this value belongs to (None = default/stack)
     """
 
     name: str
@@ -563,6 +627,9 @@ class VarDecl(Stmt):
     is_reassigned: bool = False
     is_const: bool = False
     initial_value_unused: bool = False
+    # Ownership annotations (phase 14)
+    ownership: Ownership = "owned"
+    region: str | None = None
 
 
 @dataclass
@@ -673,7 +740,9 @@ class TypeSwitch(Stmt):
 
     | Target | Representation                    |
     |--------|-----------------------------------|
+    | C      | switch on tag + cast              |
     | Go     | switch binding := expr.(type)     |
+    | Java   | switch with instanceof patterns   |
     | Rust   | match with downcast               |
     | TS     | if/else with typeof/instanceof    |
 
@@ -753,7 +822,9 @@ class ForRange(Stmt):
 
     | Target | Representation                |
     |--------|-------------------------------|
+    | C      | for (i=0; i<len; i++)         |
     | Go     | for i, v := range iterable    |
+    | Java   | for (var v : iterable)        |
     | Rust   | for (i, v) in iter.enumerate()|
     | TS     | for (const [i, v] of entries) |
 
@@ -852,7 +923,9 @@ class TryCatch(Stmt):
 
     | Target | Representation                |
     |--------|-------------------------------|
+    | C      | setjmp/longjmp or error codes |
     | Go     | defer/recover pattern         |
+    | Java   | try/catch                     |
     | Rust   | Result + ? or panic/catch     |
     | TS     | try/catch                     |
 
@@ -881,7 +954,9 @@ class Raise(Stmt):
 
     | Target | Representation          |
     |--------|-------------------------|
+    | C      | longjmp or return error |
     | Go     | panic(Error{...})       |
+    | Java   | throw new Exception(...)|
     | Rust   | return Err(...) or panic|
     | TS     | throw new Error(...)    |
     """
@@ -898,10 +973,13 @@ class SoftFail(Stmt):
 
     Used in parser combinators: "try this, if it doesn't match, return nil".
 
-    | Target | Representation |
-    |--------|----------------|
-    | Go     | return nil     |
-    | Rust   | return None    |
+    | Target | Representation      |
+    |--------|---------------------|
+    | C      | return NULL         |
+    | Go     | return nil          |
+    | Java   | return Optional.empty() |
+    | Rust   | return None         |
+    | TS     | return null         |
     """
 
 
@@ -924,6 +1002,7 @@ class Expr:
     Middleend annotations:
     - is_interface: Expression statically typed as interface (affects nil checks in Go)
     - narrowed_type: More precise type at this use site after type guards
+    - escapes: This expression's value escapes its scope (stored in field, returned, etc.)
     """
 
     typ: Type
@@ -931,6 +1010,8 @@ class Expr:
     # Middleend annotations
     is_interface: bool = False
     narrowed_type: Type | None = None
+    # Ownership annotations (phase 14)
+    escapes: bool = False
 
 
 # --- Literals ---
@@ -1122,9 +1203,11 @@ class StaticCall(Expr):
 
     | Target | Representation     |
     |--------|--------------------|
+    | C      | Type_method(args)  |
     | Go     | Type.Method(args)  |
-    | Rust   | Type::method(args) |
     | Java   | Type.method(args)  |
+    | Rust   | Type::method(args) |
+    | TS     | Type.method(args)  |
     """
 
     on_type: Type
@@ -1204,7 +1287,9 @@ class Truthy(Expr):
 
     | Target | Representation                    |
     |--------|-----------------------------------|
+    | C      | len > 0 or x != NULL or x != 0    |
     | Go     | len(s) > 0 or x != nil or x != 0  |
+    | Java   | !s.isEmpty() or x != null         |
     | Rust   | !s.is_empty() or x.is_some()      |
     | TS     | !!x or x.length > 0               |
 
@@ -1247,9 +1332,11 @@ class Cast(Expr):
 
     | Target | Representation |
     |--------|----------------|
+    | C      | (T)x           |
     | Go     | T(x)           |
-    | Rust   | x as T         |
     | Java   | (T) x          |
+    | Rust   | x as T         |
+    | TS     | x as T         |
 
     Invariants:
     - Conversion is valid (numeric↔numeric, etc.)
@@ -1267,8 +1354,11 @@ class TypeAssert(Expr):
 
     | Target | safe=True           | safe=False        |
     |--------|---------------------|-------------------|
+    | C      | tag check + cast    | (T*)x             |
     | Go     | x.(T) with ok check | x.(T) panic       |
+    | Java   | instanceof + (T) x  | (T) x             |
     | Rust   | downcast checked    | downcast unchecked|
+    | TS     | x as T (with guard) | x as T            |
 
     Invariants:
     - expr.typ is interface or union containing asserted
@@ -1287,7 +1377,9 @@ class IsType(Expr):
 
     | Target | Representation           |
     |--------|--------------------------|
+    | C      | x->tag == T_TAG          |
     | Go     | _, ok := x.(T)           |
+    | Java   | x instanceof T           |
     | Rust   | x.is::<T>() or match     |
     | TS     | x instanceof T           |
 
@@ -1307,7 +1399,9 @@ class IsNil(Expr):
 
     | Target | Representation           |
     |--------|--------------------------|
+    | C      | x == NULL                |
     | Go     | x == nil (or reflection) |
+    | Java   | x == null                |
     | Rust   | x.is_none()              |
     | TS     | x === null               |
 
@@ -1332,7 +1426,9 @@ class Len(Expr):
 
     | Target | Representation |
     |--------|----------------|
+    | C      | x.len          |
     | Go     | len(x)         |
+    | Java   | x.size()       |
     | Rust   | x.len()        |
     | TS     | x.length       |
 
@@ -1350,7 +1446,9 @@ class MakeSlice(Expr):
 
     | Target | Representation              |
     |--------|-----------------------------|
+    | C      | arena_alloc(cap * sizeof(T))|
     | Go     | make([]T, len, cap)         |
+    | Java   | new ArrayList<>(cap)        |
     | Rust   | Vec::with_capacity(cap)     |
     | TS     | new Array(len)              |
 
@@ -1369,7 +1467,9 @@ class MakeMap(Expr):
 
     | Target | Representation      |
     |--------|---------------------|
+    | C      | hashmap_new()       |
     | Go     | make(map[K]V)       |
+    | Java   | new HashMap<>()     |
     | Rust   | HashMap::new()      |
     | TS     | new Map()           |
 
@@ -1387,7 +1487,9 @@ class SliceLit(Expr):
 
     | Target | Representation   |
     |--------|------------------|
+    | C      | (T[]){a, b, c}   |
     | Go     | []T{a, b, c}     |
+    | Java   | List.of(a, b, c) |
     | Rust   | vec![a, b, c]    |
     | TS     | [a, b, c]        |
 
@@ -1419,11 +1521,13 @@ class MapLit(Expr):
 class SetLit(Expr):
     """Set literal.
 
-    | Target | Representation           |
-    |--------|--------------------------|
+    | Target | Representation             |
+    |--------|----------------------------|
+    | C      | hashset_from(a, b, ...)    |
     | Go     | map[T]struct{}{a: {}, ...} |
-    | Rust   | HashSet::from([a, b])    |
-    | TS     | new Set([a, b])          |
+    | Java   | Set.of(a, b)               |
+    | Rust   | HashSet::from([a, b])      |
+    | TS     | new Set([a, b])            |
 
     Invariants:
     - All elements have type element_type
@@ -1451,10 +1555,13 @@ class StructLit(Expr):
 
     Semantics: Create new instance with specified field values.
 
-    | Target | Representation           |
-    |--------|--------------------------|
-    | Go     | &StructName{f1: v1, ...} |
+    | Target | Representation            |
+    |--------|---------------------------|
+    | C      | (StructName){.f1=v1, ...} |
+    | Go     | &StructName{f1: v1, ...}  |
+    | Java   | new StructName(v1, ...)   |
     | Rust   | StructName { f1: v1, ... }|
+    | TS     | { f1: v1, ... } as T      |
 
     Invariants:
     - struct_name exists in module
@@ -1476,9 +1583,12 @@ class LastElement(Expr):
 
     | Target | Representation   |
     |--------|------------------|
+    | C      | s.data[s.len-1]  |
     | Go     | s[len(s)-1]      |
-    | Python | s[-1]            |
     | Java   | s.get(s.size()-1)|
+    | Python | s[-1]            |
+    | Rust   | s.last()         |
+    | TS     | s[s.length-1]    |
 
     Invariants:
     - sequence.typ is Slice or Array
@@ -1518,9 +1628,11 @@ class CharAt(Expr):
 
     | Target | Representation            |
     |--------|---------------------------|
+    | C      | utf8_char_at(s, i)        |
     | Go     | []rune(s)[i] or runes[i]  |
     | Java   | s.charAt(i)               |
     | Rust   | s.chars().nth(i)          |
+    | TS     | s.charAt(i) or s[i]       |
 
     Invariants:
     - string.typ is STRING
@@ -1540,9 +1652,11 @@ class CharLen(Expr):
 
     | Target | Representation      |
     |--------|---------------------|
+    | C      | utf8_char_count(s)  |
     | Go     | len([]rune(s))      |
     | Java   | s.length()          |
     | Rust   | s.chars().count()   |
+    | TS     | s.length            |
 
     Invariants:
     - string.typ is STRING
@@ -1560,9 +1674,11 @@ class Substring(Expr):
 
     | Target | Representation              |
     |--------|-----------------------------|
+    | C      | utf8_substring(s, lo, hi)   |
     | Go     | string([]rune(s)[lo:hi])    |
     | Java   | s.substring(lo, hi)         |
     | Rust   | s.chars().skip(lo).take(hi-lo).collect() |
+    | TS     | s.substring(lo, hi)         |
 
     Invariants:
     - string.typ is STRING
@@ -1584,8 +1700,11 @@ class StringConcat(Expr):
 
     | Target | Representation            |
     |--------|---------------------------|
+    | C      | str_concat(s1, s2, ...)   |
     | Go     | s1 + s2 + ... or builder  |
+    | Java   | s1 + s2 or StringBuilder  |
     | Rust   | format!("{}{}", s1, s2)   |
+    | TS     | s1 + s2 or template       |
 
     Invariants:
     - len(parts) >= 2
@@ -1604,7 +1723,9 @@ class StringFormat(Expr):
 
     | Target | Representation          |
     |--------|-------------------------|
+    | C      | snprintf(buf, tmpl, ...)|
     | Go     | fmt.Sprintf(tmpl, args) |
+    | Java   | String.format(tmpl, ...)|
     | Rust   | format!(tmpl, args)     |
     | TS     | template literal        |
 
@@ -1625,9 +1746,12 @@ class TrimChars(Expr):
 
     | Target | Representation                        |
     |--------|---------------------------------------|
+    | C      | str_trim(s, chars, mode)              |
     | Go     | strings.TrimLeft/Right/Trim           |
-    | Python | s.lstrip/rstrip/strip(chars)          |
     | Java   | regex or manual                       |
+    | Python | s.lstrip/rstrip/strip(chars)          |
+    | Rust   | s.trim_start_matches/trim_end_matches |
+    | TS     | regex or manual                       |
 
     Invariants:
     - string.typ is STRING
@@ -1646,14 +1770,14 @@ class CharClassify(Expr):
 
     Semantics: Test if character belongs to class.
 
-    | Kind   | Go                  | Java                 |
-    |--------|---------------------|----------------------|
-    | alnum  | unicode.IsLetter || unicode.IsDigit | Character.isLetterOrDigit |
-    | digit  | unicode.IsDigit     | Character.isDigit    |
-    | alpha  | unicode.IsLetter    | Character.isLetter   |
-    | space  | unicode.IsSpace     | Character.isWhitespace |
-    | upper  | unicode.IsUpper     | Character.isUpperCase |
-    | lower  | unicode.IsLower     | Character.isLowerCase |
+    | Kind   | C           | Go                  | Java                      | Rust                 | TS          |
+    |--------|-------------|---------------------|---------------------------|----------------------|-------------|
+    | alnum  | isalnum(c)  | unicode.IsLetter || unicode.IsDigit | Character.isLetterOrDigit | c.is_alphanumeric() | /\w/.test   |
+    | digit  | isdigit(c)  | unicode.IsDigit     | Character.isDigit         | c.is_ascii_digit()   | /\d/.test   |
+    | alpha  | isalpha(c)  | unicode.IsLetter    | Character.isLetter        | c.is_alphabetic()    | /[a-zA-Z]/  |
+    | space  | isspace(c)  | unicode.IsSpace     | Character.isWhitespace    | c.is_whitespace()    | /\s/.test   |
+    | upper  | isupper(c)  | unicode.IsUpper     | Character.isUpperCase     | c.is_uppercase()     | /[A-Z]/     |
+    | lower  | islower(c)  | unicode.IsLower     | Character.isLowerCase     | c.is_lowercase()     | /[a-z]/     |
 
     Invariants:
     - char.typ is CHAR or RUNE or STRING (single char)
@@ -1675,9 +1799,11 @@ class ParseInt(Expr):
 
     | Target | Representation        |
     |--------|-----------------------|
+    | C      | strtoll(s, NULL, 10)  |
     | Go     | strconv.Atoi(s)       |
     | Java   | Integer.parseInt(s)   |
     | Rust   | s.parse::<i64>()      |
+    | TS     | parseInt(s, 10)       |
 
     Error handling depends on context (may panic or return error).
 
@@ -1693,11 +1819,13 @@ class ParseInt(Expr):
 class IntToStr(Expr):
     """Convert integer to string.
 
-    | Target | Representation       |
-    |--------|----------------------|
-    | Go     | strconv.Itoa(n)      |
-    | Java   | String.valueOf(n)    |
-    | Rust   | n.to_string()        |
+    | Target | Representation            |
+    |--------|---------------------------|
+    | C      | snprintf(buf, "%lld", n)  |
+    | Go     | strconv.Itoa(n)           |
+    | Java   | String.valueOf(n)         |
+    | Rust   | n.to_string()             |
+    | TS     | String(n) or n.toString() |
 
     Invariants:
     - value.typ is INT
@@ -1715,10 +1843,13 @@ class SentinelToOptional(Expr):
 
     Common pattern: -1 as "not found" → None
 
-    | Target | Representation                     |
-    |--------|------------------------------------|
-    | Go     | if x == sentinel { nil } else { x }|
+    | Target | Representation                             |
+    |--------|---------------------------------------------|
+    | C      | x == sentinel ? NULL : &x                  |
+    | Go     | if x == sentinel { nil } else { x }        |
+    | Java   | x == sentinel ? Optional.empty() : Optional.of(x) |
     | Rust   | if x == sentinel { None } else { Some(x) } |
+    | TS     | x === sentinel ? null : x                  |
 
     Invariants:
     - expr.typ matches sentinel.typ
@@ -1740,13 +1871,38 @@ class AddrOf(Expr):
 
     | Target | Representation |
     |--------|----------------|
-    | Go     | &x             |
-    | Rust   | &x or Box::new |
     | C      | &x             |
+    | Go     | &x             |
+    | Java   | x (reference)  |
+    | Rust   | &x or Box::new |
+    | TS     | x (reference)  |
 
     Invariants:
     - operand is addressable (variable, field, index)
     - typ is Pointer(operand.typ)
+    """
+
+    operand: Expr
+
+
+@dataclass
+class WeakRef(Expr):
+    """Create weak (non-owning) reference.
+
+    Used for back-references in cyclic structures. The referenced
+    value must outlive this reference.
+
+    | Target | Representation  |
+    |--------|-----------------|
+    | C      | x (no refcount) |
+    | Go     | (no change)     |
+    | Java   | WeakReference<> |
+    | Rust   | Weak::new(&x)   |
+    | TS     | WeakRef<>       |
+
+    Invariants:
+    - operand is addressable
+    - typ is Pointer(operand.typ) or equivalent weak wrapper
     """
 
     operand: Expr
@@ -1809,6 +1965,18 @@ class SymbolTable:
     structs: dict[str, StructInfo] = field(default_factory=dict)
     functions: dict[str, FuncInfo] = field(default_factory=dict)
     constants: dict[str, Type] = field(default_factory=dict)
+
+
+@dataclass
+class OwnershipInfo:
+    """Ownership analysis results for a module (phase 14)."""
+
+    # Variables that escape their scope
+    escaping_vars: set[str] = field(default_factory=set)
+    # Variables with ambiguous ownership (need runtime management)
+    shared_vars: set[str] = field(default_factory=set)
+    # Back-reference fields in structs: struct_name -> [field_names]
+    weak_fields: dict[str, list[str]] = field(default_factory=dict)
 
 
 @dataclass

@@ -327,79 +327,32 @@ class Frontend:
 
     def _build_constructor(self, class_name: str, init_ast: ast.FunctionDef, info: StructInfo) -> Function:
         """Build a NewXxx constructor function from __init__ AST."""
-        from .. import ir
-        # Build parameters (same as __init__ excluding self)
-        params: list[Param] = []
-        param_types: dict[str, Type] = {}
-        for arg in init_ast.args.args:
-            if arg.arg == "self":
-                continue
-            py_type = self._annotation_to_str(arg.annotation) if arg.annotation else ""
-            typ = self._py_type_to_ir(py_type) if py_type else Interface("any")
-            # Check for parameter type overrides
-            override_key = (f"New{class_name}", arg.arg)
-            if override_key in PARAM_TYPE_OVERRIDES:
-                typ = PARAM_TYPE_OVERRIDES[override_key]
-            else:
-                # Try __init__ param overrides
-                override_key = ("__init__", arg.arg)
-                if override_key in PARAM_TYPE_OVERRIDES:
-                    typ = PARAM_TYPE_OVERRIDES[override_key]
-            params.append(Param(name=arg.arg, typ=typ, loc=Loc.unknown()))
-            param_types[arg.arg] = typ
-        # Handle default arguments
-        n_params = len(params)
-        n_defaults = len(init_ast.args.defaults) if init_ast.args.defaults else 0
-        for i, default_ast in enumerate(init_ast.args.defaults or []):
-            param_idx = n_params - n_defaults + i
-            if 0 <= param_idx < n_params:
-                params[param_idx].default = self._lower_expr(default_ast)
-        # Set up type context for lowering __init__ body
-        self._current_func_info = None
+        callbacks = builders.BuilderCallbacks(
+            annotation_to_str=self._annotation_to_str,
+            py_type_to_ir=self._py_type_to_ir,
+            py_return_type_to_ir=self._py_return_type_to_ir,
+            lower_expr=self._lower_expr,
+            lower_stmts=self._lower_stmts,
+            collect_var_types=self._collect_var_types,
+            is_exception_subclass=self._is_exception_subclass,
+            extract_union_struct_names=self._extract_union_struct_names,
+            loc_from_node=self._loc_from_node,
+            setup_and_lower_stmts=self._setup_and_lower_stmts,
+        )
+        return builders.build_constructor(class_name, init_ast, info, callbacks)
+
+    def _setup_and_lower_stmts(
+        self,
+        class_name: str,
+        func_info: FuncInfo | None,
+        type_ctx: TypeContext,
+        stmts: list[ast.stmt],
+    ) -> list:
+        """Set up type context and lower statements."""
         self._current_class_name = class_name
-        var_types, tuple_vars, sentinel_ints, list_element_unions = self._collect_var_types(init_ast.body)
-        var_types.update(param_types)
-        var_types["self"] = Pointer(StructRef(class_name))
-        self._type_ctx = TypeContext(
-            return_type=Pointer(StructRef(class_name)),
-            var_types=var_types,
-            tuple_vars=tuple_vars,
-            sentinel_ints=sentinel_ints,
-            list_element_unions=list_element_unions,
-        )
-        # Build constructor body:
-        # 1. self := &ClassName{}
-        # 2. ... __init__ body statements ...
-        # 3. return self
-        body: list[ir.Stmt] = []
-        # Create self = &ClassName{}
-        self_init = ir.Assign(
-            target=ir.VarLV(name="self", loc=Loc.unknown()),
-            value=ir.StructLit(
-                struct_name=class_name,
-                fields={},
-                typ=Pointer(StructRef(class_name)),
-                loc=Loc.unknown(),
-            ),
-            loc=Loc.unknown(),
-        )
-        self_init.is_declaration = True
-        body.append(self_init)
-        # Lower __init__ body (excluding any "return" statements which are implicit in __init__)
-        init_body = self._lower_stmts(init_ast.body)
-        body.extend(init_body)
-        # Return self
-        body.append(ir.Return(
-            value=ir.Var(name="self", typ=Pointer(StructRef(class_name)), loc=Loc.unknown()),
-            loc=Loc.unknown(),
-        ))
-        return Function(
-            name=f"New{class_name}",
-            params=params,
-            ret=Pointer(StructRef(class_name)),
-            body=body,
-            loc=Loc.unknown(),
-        )
+        self._current_func_info = func_info
+        self._type_ctx = type_ctx
+        return self._lower_stmts(stmts)
 
     def _build_function_shell(self, node: ast.FunctionDef, with_body: bool = False) -> Function:
         """Build IR Function from AST. Set with_body=True to lower statements."""

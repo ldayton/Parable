@@ -15,6 +15,7 @@ emit backend="go":
 check backend="go":
     #!/usr/bin/env bash
     set -euo pipefail
+    just style src/frontend
     case "{{backend}}" in
         go)
             uv run python -m src.tongues --target go < {{source}} > /tmp/transpile-ir.go

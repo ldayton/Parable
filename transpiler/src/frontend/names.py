@@ -24,7 +24,7 @@ ALLOWED_BUILTINS: set[str] = {
     # Type check
     "isinstance",
     # Iteration
-    "range",
+    "range", "enumerate", "zip",
     # Formatting
     "repr", "ascii", "bin", "hex", "oct",
     # Boolean
@@ -302,6 +302,45 @@ class NameResolver:
                         kind = "constant" if is_all_caps(name) else "variable"
                         info = NameInfo(name, kind, "module", lineno, col, "", "")
                         self.result.table.add_module(info)
+            elif node_type == "ImportFrom":
+                # Register imported names in module scope
+                names_list = stmt.get("names", [])
+                j = 0
+                while j < len(names_list):
+                    alias = names_list[j]
+                    if isinstance(alias, dict):
+                        # Use asname if present, otherwise use name
+                        asname = alias.get("asname")
+                        import_name = alias.get("name", "")
+                        bound_name = asname if asname is not None else import_name
+                        if bound_name != "" and bound_name != "*":
+                            info = NameInfo(bound_name, "import", "module", lineno, col, "", "")
+                            self.result.table.add_module(info)
+                    j += 1
+            elif node_type == "If":
+                # Handle TYPE_CHECKING blocks - imports inside are module-level
+                test = stmt.get("test", {})
+                if test.get("_type") == "Name" and test.get("id") == "TYPE_CHECKING":
+                    if_body = stmt.get("body", [])
+                    j = 0
+                    while j < len(if_body):
+                        if_stmt = if_body[j]
+                        if if_stmt.get("_type") == "ImportFrom":
+                            if_names = if_stmt.get("names", [])
+                            k = 0
+                            while k < len(if_names):
+                                alias = if_names[k]
+                                if isinstance(alias, dict):
+                                    asname = alias.get("asname")
+                                    import_name = alias.get("name", "")
+                                    bound_name = asname if asname is not None else import_name
+                                    if bound_name != "" and bound_name != "*":
+                                        if_lineno = if_stmt.get("lineno", 0)
+                                        if_col = if_stmt.get("col_offset", 0)
+                                        info = NameInfo(bound_name, "import", "module", if_lineno, if_col, "", "")
+                                        self.result.table.add_module(info)
+                                k += 1
+                        j += 1
             i += 1
 
     def pass2_class_names(self, ast_dict: ASTNode) -> None:
@@ -493,6 +532,34 @@ class NameResolver:
                         col = node.get("col_offset", 0)
                         info = NameInfo(exc_name, "variable", "local", lineno, col, class_name, func_name)
                         self.result.table.add_local(class_name, func_name, info)
+            elif node_type == "ImportFrom":
+                # Register imported names in local scope
+                names_list = node.get("names", [])
+                k = 0
+                while k < len(names_list):
+                    alias = names_list[k]
+                    if isinstance(alias, dict):
+                        asname = alias.get("asname")
+                        import_name = alias.get("name", "")
+                        bound_name = asname if asname is not None else import_name
+                        if bound_name != "" and bound_name != "*":
+                            existing = self.result.table.get_local(class_name, func_name, bound_name)
+                            if existing is None:
+                                lineno = node.get("lineno", 0)
+                                col = node.get("col_offset", 0)
+                                info = NameInfo(bound_name, "import", "local", lineno, col, class_name, func_name)
+                                self.result.table.add_local(class_name, func_name, info)
+                    k += 1
+            elif node_type in ("ListComp", "SetComp", "DictComp", "GeneratorExp"):
+                # Collect comprehension loop variables
+                generators = node.get("generators", [])
+                k = 0
+                while k < len(generators):
+                    gen = generators[k]
+                    if isinstance(gen, dict):
+                        target = gen.get("target", {})
+                        self.collect_assign_target(target, class_name, func_name, node)
+                    k += 1
             # Add children (skip nested FunctionDef - shouldn't exist per Phase 3)
             children = get_children(node)
             m = 0

@@ -491,7 +491,7 @@ def add_address_of_for_ptr_params(
                     op="&",
                     operand=arg,
                     typ=param_type,
-                    loc=arg.loc if hasattr(arg, "loc") else Loc.unknown(),
+                    loc=arg.loc,
                 )
     return result
 
@@ -529,7 +529,7 @@ def deref_for_slice_params(
                     op="*",
                     operand=arg,
                     typ=inner_slice,
-                    loc=arg.loc if hasattr(arg, "loc") else Loc.unknown(),
+                    loc=arg.loc,
                 )
     return result
 
@@ -562,7 +562,7 @@ def deref_for_func_slice_params(
                     op="*",
                     operand=arg,
                     typ=inner_slice,
-                    loc=arg.loc if hasattr(arg, "loc") else Loc.unknown(),
+                    loc=arg.loc,
                 )
     return result
 
@@ -579,7 +579,7 @@ def coerce_args_to_node(func_info: "FuncInfo", args: list["ir.Expr"]) -> list["i
         param_type = param.typ
         # Check if param expects Node but arg is interface{}
         if isinstance(param_type, InterfaceRef) and param_type.name == "Node":
-            arg_type = getattr(arg, "typ", None)
+            arg_type = arg.typ
             # interface{} is represented as InterfaceRef("any")
             if arg_type == InterfaceRef("any"):
                 result[i] = ir.TypeAssert(
@@ -587,7 +587,7 @@ def coerce_args_to_node(func_info: "FuncInfo", args: list["ir.Expr"]) -> list["i
                     asserted=InterfaceRef("Node"),
                     safe=True,
                     typ=InterfaceRef("Node"),
-                    loc=arg.loc if hasattr(arg, "loc") else Loc.unknown(),
+                    loc=arg.loc,
                 )
     return result
 
@@ -666,7 +666,7 @@ def lower_expr_Constant(node: ASTNode) -> "ir.Expr":
         return ir.StringLit(value=value, typ=STRING, loc=loc_from_node(node))
     if value is None:
         return ir.NilLit(typ=InterfaceRef("any"), loc=loc_from_node(node))
-    return ir.Var(name=f"TODO_Constant_{type(value)}", typ=InterfaceRef("any"))
+    return ir.Var(name="TODO_Constant_unknown", typ=InterfaceRef("any"))
 
 
 def lower_expr_Name(
@@ -731,7 +731,7 @@ def lower_expr_Attribute(
             )
     # Check if accessing a field on a Node-typed expression that isn't in the interface
     # Node interface only has Kind() method, so any other field needs a type assertion
-    obj_type = getattr(obj, "typ", None)
+    obj_type = obj.typ
     if is_node_interface_type(obj_type) and node_attr != "kind":
         # Look up which struct types have this field
         if node_attr in node_field_types:
@@ -823,12 +823,12 @@ def lower_expr_Subscript(
         # Slicing preserves type - string slice is still string, slice of slice is still slice
         slice_type: "Type" = infer_expr_type_from_ast(node_value)
         if slice_type == InterfaceRef("any"):
-            slice_type = obj.typ if hasattr(obj, "typ") else InterfaceRef("any")
+            slice_type = obj.typ
         return ir.SliceExpr(obj=obj, low=low, high=high, typ=slice_type, loc=loc_from_node(node))
     idx = convert_negative_index(node_slice, obj, node, lower_expr)
     # Infer element type from slice type
     elem_type: "Type" = InterfaceRef("any")
-    obj_type = getattr(obj, "typ", None)
+    obj_type = obj.typ
     if isinstance(obj_type, Slice):
         elem_type = obj_type.element
     # Handle tuple indexing: tuple[0] -> tuple.F0 (as FieldAccess)
@@ -848,7 +848,7 @@ def lower_expr_Subscript(
     # In Go, string[i] returns byte, but Python returns str
     # Check both AST inference and lowered expression type
     is_string = infer_expr_type_from_ast(node_value) == STRING
-    if not is_string and hasattr(obj, "typ") and obj.typ == STRING:
+    if not is_string and obj.typ == STRING:
         is_string = True
     if is_string:
         return ir.Cast(expr=index_expr, to_type=STRING, typ=STRING, loc=loc_from_node(node))
@@ -1253,7 +1253,7 @@ def lower_expr_Set(
 
     elements = [lower_expr(e) for e in node.get("elts", [])]
     # Infer element type from first element
-    elem_type = getattr(elements[0], "typ", STRING) if elements else STRING
+    elem_type = elements[0].typ if elements else STRING
     return ir.SetLit(
         element_type=elem_type, elements=elements, typ=Set(elem_type), loc=loc_from_node(node)
     )
@@ -1349,11 +1349,7 @@ def lower_expr_as_bool(
     # Non-boolean expression - needs truthy check
     expr = lower_expr(node)
     # Use the IR expression's type if available, otherwise infer from AST
-    expr_type = (
-        expr.typ
-        if hasattr(expr, "typ") and expr.typ != InterfaceRef("any")
-        else infer_expr_type_from_ast(node)
-    )
+    expr_type = expr.typ if expr.typ != InterfaceRef("any") else infer_expr_type_from_ast(node)
     # Bool expressions don't need nil check
     if expr_type == BOOL:
         return expr
@@ -1432,9 +1428,9 @@ def lower_expr_IfExp(
         type_ctx.narrowed_attr_paths.pop(attr_kind_check[0])
     else_expr = lower_expr(node.get("orelse"))
     # Use type from lowered expressions (prefer then branch, fall back to else)
-    result_type = getattr(then_expr, "typ", None)
+    result_type = then_expr.typ
     if result_type is None or result_type == InterfaceRef("any"):
-        result_type = getattr(else_expr, "typ", None)
+        result_type = else_expr.typ
     if result_type is None:
         result_type = InterfaceRef("any")
     return ir.Ternary(
@@ -1688,7 +1684,7 @@ def lower_expr_Call(
                 arg = args[0]
                 # Check if arg is int-typed (via AST inference or lowered type)
                 arg_ast_type = dispatch.infer_expr_type_from_ast(node_args[0])
-                if arg_ast_type == INT or (hasattr(arg, "typ") and arg.typ == INT):
+                if arg_ast_type == INT or arg.typ == INT:
                     coerced_args = [ir.Cast(expr=arg, to_type=BYTE, typ=BYTE, loc=arg.loc)]
             # list.append(x) -> append(list, x) in Go (handled via MethodCall for now)
             return ir.MethodCall(
@@ -1786,7 +1782,7 @@ def lower_expr_Call(
         # Check for list() copy
         if func_name == "list" and args:
             # list(x) is a copy operation - preserve element type from source
-            source_type = getattr(args[0], "typ", None)
+            source_type = args[0].typ
             if isinstance(source_type, Slice):
                 result_type = source_type
             else:

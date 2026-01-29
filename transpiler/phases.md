@@ -21,12 +21,13 @@ Sequential pipeline with clean phase boundaries. Each phase completes before the
 |   6   | frontend  | `hierarchy.py`   | Class hierarchy; subtyping relations                |
 |   7   | frontend  | `inference.py`   | Bidirectional type inference (↑synth / ↓check)      |
 |   8   | frontend  | `lowering.py`    | Type-directed elaboration to IR                     |
-|   9   | middleend | `__init__.py`    | Orchestrate phases 10–13                            |
+|   9   | middleend | `__init__.py`    | Orchestrate phases 10–14                            |
 |  10   | middleend | `scope.py`       | Variable declarations, reassignments, modifications |
 |  11   | middleend | `returns.py`     | Return pattern analysis                             |
 |  12   | middleend | `liveness.py`    | Unused values, catch vars, bindings                 |
 |  13   | middleend | `hoisting.py`    | Variables needing hoisting for Go emission          |
-|  14   | backend   | `<lang>.py`      | Emit target language source from annotated IR       |
+|  14   | middleend | `ownership.py`   | Ownership inference and escape analysis             |
+|  15   | backend   | `<lang>.py`      | Emit target language source from annotated IR       |
 
 ## Frontend (Phases 0–8)
 
@@ -89,6 +90,9 @@ Reject unsupported Python features early. If verification passes, downstream pha
 | No decorators            | Functions/classes aren't modified at runtime                 |
 | No mutable defaults      | Default args are immutable; no shared-state bugs             |
 | Static imports           | Only `typing`, `__future__`, `collections.abc`               |
+| No back-references       | Fields cannot reference their container (no cycles)          |
+| No borrowed field storage| Parameters cannot be stored in fields without copy           |
+| Immutable string params  | String parameters are borrowed; copy if storing              |
 
 **Postconditions:** AST conforms to Tongues subset; all invariants above hold; rejected programs produce clear error messages with source locations.
 
@@ -219,7 +223,7 @@ Translate TypedAST to IR. Lowering only reads types, never computes them—if ph
 
 **Prior art:** [Three-address code](https://en.wikipedia.org/wiki/Three-address_code), [Cornell CS 4120 IR notes](https://www.cs.cornell.edu/courses/cs4120/2023sp/notes/ir/)
 
-## Middleend (Phases 9–13)
+## Middleend (Phases 9–14)
 
 Read-only analysis passes that annotate IR nodes in place. No transformations—just computing properties needed for code generation.
 
@@ -229,10 +233,11 @@ Read-only analysis passes that annotate IR nodes in place. No transformations—
 | `returns.py`   | —              | `needs_named_returns`                                     |
 | `liveness.py`  | scope, returns | `initial_value_unused`, `catch_var_unused`, `binding_unused` |
 | `hoisting.py`  | scope, returns | `hoisted_vars`, `rune_vars`                               |
+| `ownership.py` | scope          | `ownership`, `region`, `escapes`                          |
 
 #### Phase 9: `middleend/__init__.py`
 
-Orchestrate phases 10–13. Run all analysis passes on the IR Module.
+Orchestrate phases 10–14. Run all analysis passes on the IR Module.
 
 #### Phase 10: `middleend/scope.py`
 
@@ -293,34 +298,83 @@ Variables need hoisting when:
 
 **Prior art:** [Go variable scoping](https://go.dev/ref/spec#Declarations_and_scope)
 
-## Backend (Phase 14)
+#### Phase 14: `middleend/ownership.py`
+
+Infer ownership and region annotations for memory-safe code generation. Since phase 2 guarantees
+no back-references, no borrowed field storage, and strict tree structures, ownership analysis
+reduces to simple patterns:
+
+| Pattern | Ownership | Region |
+|---------|-----------|--------|
+| Constructor call (`Foo()`) | owned | caller's region |
+| Factory function return | owned | caller's region |
+| Parameter | borrowed | caller's region |
+| Field access | borrowed | object's region |
+| Return value | owned (transfer) | caller's region |
+| Collection element | owned | collection's region |
+| Explicit `.copy()` call | owned (new) | caller's region |
+
+**Escape analysis** detects when borrowed references outlive their region:
+
+| Violation | Diagnostic |
+|-----------|------------|
+| Borrowed ref stored in field | Error: "cannot store borrowed `x` in field; use `.copy()` or take ownership" |
+| Borrowed ref returned | Error: "reference to `x` escapes function scope" |
+| Borrowed ref in collection | Error: "cannot add borrowed `x` to collection; transfer ownership or copy" |
+
+**Ambiguous ownership** (Lobster-style fallback): When inference cannot determine ownership
+statically, mark as `shared`. Backends emit:
+- Go: no change (GC handles)
+- Rust: `Rc<T>` or `Arc<T>`
+- C: reference-counted wrapper
+
+| Annotation         | Meaning                                           |
+| ------------------ | ------------------------------------------------- |
+| `VarDecl.ownership`| `owned`, `borrowed`, or `shared`                  |
+| `Param.ownership`  | `owned` (takes ownership) or `borrowed` (default) |
+| `Field.ownership`  | `owned` (default) or `weak` (back-reference)      |
+| `Expr.escapes`     | Expression's value escapes current scope          |
+
+**Postconditions:**
+- Every VarDecl, Param, Field annotated with ownership
+- No escaping borrowed references (or diagnostic emitted)
+- Ambiguous cases marked `shared` for runtime fallback
+- Backends can emit memory management without re-analysis
+
+**Prior art:** [Tofte-Talpin Region Inference](https://www.sciencedirect.com/science/article/pii/S0890540196926139), [Lobster Compile-Time RC](https://aardappel.github.io/lobster/memory_management.html), [Cyclone Regions](https://www.cs.umd.edu/projects/cyclone/papers/cyclone-regions.pdf)
+
+## Backend (Phase 15)
 
 Emit target language source from annotated IR. Each backend is a single module that walks the IR and produces output text.
 
-| Target | Module    | Output                  |
-| ------ | --------- | ----------------------- |
-| Go     | `go.py`   | `.go` source files      |
+| Target | Module    | Output                   |
+| ------ | --------- | ------------------------ |
+| Go     | `go.py`   | `.go` source files       |
 | C      | `c.py`    | `.c` / `.h` source files |
-| Rust   | `rust.py` | `.rs` source files      |
+| Rust   | `rust.py` | `.rs` source files       |
 
-#### Phase 14: `backend/<lang>.py`
+#### Phase 15: `backend/<lang>.py`
 
-Walk the annotated IR and emit target language source. The backend reads all annotations from phases 0–13 but adds none—pure output generation.
+Walk the annotated IR and emit target language source. The backend reads all annotations from phases 0–14 but adds none—pure output generation.
 
-| IR Node       | Go Output                | C Output                  |
-| ------------- | ------------------------ | ------------------------- |
-| `Function`    | `func name(...) { ... }` | `type name(...) { ... }`  |
-| `Struct`      | `type Name struct { }`   | `typedef struct { } Name` |
-| `VarDecl`     | `var x T` or `x := ...`  | `T x = ...`               |
-| `MethodCall`  | `obj.Method(args)`       | `Method(obj, args)`       |
+| IR Node       | Go Output                | C Output                  | Rust Output              |
+| ------------- | ------------------------ | ------------------------- | ------------------------ |
+| `Function`    | `func name(...) { ... }` | `type name(...) { ... }`  | `fn name(...) { ... }`   |
+| `Struct`      | `type Name struct { }`   | `typedef struct { } Name` | `struct Name { }`        |
+| `VarDecl`     | `var x T` or `x := ...`  | `T x = ...`               | `let mut x = ...`        |
+| `MethodCall`  | `obj.Method(args)`       | `Method(obj, args)`       | `obj.method(args)`       |
 
 The backend consumes middleend annotations:
-- `is_reassigned` → Go: `var` vs `:=`; TS: `let` vs `const`
+- `is_reassigned` → Go: `var` vs `:=`; Rust: `let mut` vs `let`; TS: `let` vs `const`
 - `hoisted_vars` → Go: emit declarations before control structure
 - `needs_named_returns` → Go: use named return values
 - `initial_value_unused` → Go: omit initializer, use zero value
 - `is_interface` → Go: direct `== nil` vs `_isNilInterface()` reflection
 - `narrowed_type` → Java/TS: omit redundant casts when type is known
 - `rune_vars` → Go: emit `[]rune` conversion at scope entry
+- `ownership=owned` → Rust: owned value; C: arena-allocated
+- `ownership=borrowed` → Rust: `&T`; C: pointer to caller's memory
+- `ownership=shared` → Rust: `Rc<T>`; C: refcounted wrapper
+- `ownership=weak` → Rust: `Weak<T>`; C: non-owning pointer (back-refs)
 
 **Postconditions:** Valid target language source emitted; all IR nodes consumed; output compiles with target toolchain.

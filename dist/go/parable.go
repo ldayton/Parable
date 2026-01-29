@@ -132,7 +132,7 @@ func _intToStr(n int) string {
 // _isNilInterface checks if an interface value is nil.
 // In Go, an interface is nil only when both type and value are nil.
 // This handles the case where interface contains a typed nil pointer.
-func _isNilInterface(i interface{}) bool {
+func _isNilInterfaceRef(i interface{}) bool {
 	if i == nil {
 		return true
 	}
@@ -965,7 +965,7 @@ func (self *Lexer) parseMatchedPair(openChar string, closeChar string, flags int
 				inDquote := (flags & MatchedPairFlagsDQUOTE) != 0
 				paramNode, paramText := self.parser.parseParamExpansion(inDquote)
 				self.syncFromParser()
-				if !_isNilInterface(paramNode) {
+				if !_isNilInterfaceRef(paramNode) {
 					chars = append(chars, paramText)
 					wasDollar = false
 					wasGtlt = false
@@ -983,7 +983,7 @@ func (self *Lexer) parseMatchedPair(openChar string, closeChar string, flags int
 				if self.Pos+2 < self.Length && _runeAt(self.Source, self.Pos+2) == "(" {
 					arithNode, arithText := self.parser.parseArithmeticExpansion()
 					self.syncFromParser()
-					if !_isNilInterface(arithNode) {
+					if !_isNilInterfaceRef(arithNode) {
 						chars = append(chars, arithText)
 						wasDollar = false
 						wasGtlt = false
@@ -991,7 +991,7 @@ func (self *Lexer) parseMatchedPair(openChar string, closeChar string, flags int
 						self.syncToParser()
 						cmdNode, cmdText = self.parser.parseCommandSubstitution()
 						self.syncFromParser()
-						if !_isNilInterface(cmdNode) {
+						if !_isNilInterfaceRef(cmdNode) {
 							chars = append(chars, cmdText)
 							wasDollar = false
 							wasGtlt = false
@@ -1005,7 +1005,7 @@ func (self *Lexer) parseMatchedPair(openChar string, closeChar string, flags int
 				} else {
 					cmdNode, cmdText = self.parser.parseCommandSubstitution()
 					self.syncFromParser()
-					if !_isNilInterface(cmdNode) {
+					if !_isNilInterfaceRef(cmdNode) {
 						chars = append(chars, cmdText)
 						wasDollar = false
 						wasGtlt = false
@@ -1022,7 +1022,7 @@ func (self *Lexer) parseMatchedPair(openChar string, closeChar string, flags int
 				self.syncToParser()
 				arithNode, arithText := self.parser.parseDeprecatedArithmetic()
 				self.syncFromParser()
-				if !_isNilInterface(arithNode) {
+				if !_isNilInterfaceRef(arithNode) {
 					chars = append(chars, arithText)
 					wasDollar = false
 					wasGtlt = false
@@ -1041,7 +1041,7 @@ func (self *Lexer) parseMatchedPair(openChar string, closeChar string, flags int
 			self.syncToParser()
 			procsubNode, procsubText := self.parser.parseProcessSubstitution()
 			self.syncFromParser()
-			if !_isNilInterface(procsubNode) {
+			if !_isNilInterfaceRef(procsubNode) {
 				chars = append(chars, procsubText)
 				wasDollar = false
 				wasGtlt = false
@@ -1198,7 +1198,7 @@ func (self *Lexer) readWordInternal(ctx int, atCommandStart bool, inArrayLiteral
 						self.syncToParser()
 						cmdsubResult0, cmdsubResult1 = self.parser.parseBacktickSubstitution()
 						self.syncFromParser()
-						if !_isNilInterface(cmdsubResult0) {
+						if !_isNilInterfaceRef(cmdsubResult0) {
 							parts = append(parts, cmdsubResult0)
 							chars = append(chars, cmdsubResult1)
 						} else {
@@ -1233,7 +1233,7 @@ func (self *Lexer) readWordInternal(ctx int, atCommandStart bool, inArrayLiteral
 		}
 		if ctx != WORDCTXREGEX && ch == "$" && self.Pos+1 < self.Length && _runeAt(self.Source, self.Pos+1) == "'" {
 			ansiResult0, ansiResult1 := self.readAnsiCQuote()
-			if !_isNilInterface(ansiResult0) {
+			if !_isNilInterfaceRef(ansiResult0) {
 				parts = append(parts, ansiResult0)
 				chars = append(chars, ansiResult1)
 			} else {
@@ -1243,7 +1243,7 @@ func (self *Lexer) readWordInternal(ctx int, atCommandStart bool, inArrayLiteral
 		}
 		if ctx != WORDCTXREGEX && ch == "$" && self.Pos+1 < self.Length && _runeAt(self.Source, self.Pos+1) == "\"" {
 			localeResult0, localeResult1, localeResult2 := self.readLocaleString()
-			if !_isNilInterface(localeResult0) {
+			if !_isNilInterfaceRef(localeResult0) {
 				parts = append(parts, localeResult0)
 				parts = append(parts, localeResult2...)
 				chars = append(chars, localeResult1)
@@ -1272,7 +1272,7 @@ func (self *Lexer) readWordInternal(ctx int, atCommandStart bool, inArrayLiteral
 			self.syncToParser()
 			cmdsubResult0, cmdsubResult1 = self.parser.parseBacktickSubstitution()
 			self.syncFromParser()
-			if !_isNilInterface(cmdsubResult0) {
+			if !_isNilInterfaceRef(cmdsubResult0) {
 				parts = append(parts, cmdsubResult0)
 				chars = append(chars, cmdsubResult1)
 			} else {
@@ -1284,7 +1284,7 @@ func (self *Lexer) readWordInternal(ctx int, atCommandStart bool, inArrayLiteral
 			self.syncToParser()
 			procsubResult0, procsubResult1 := self.parser.parseProcessSubstitution()
 			self.syncFromParser()
-			if !_isNilInterface(procsubResult0) {
+			if !_isNilInterfaceRef(procsubResult0) {
 				parts = append(parts, procsubResult0)
 				chars = append(chars, procsubResult1)
 			} else if procsubResult1 != "" {
@@ -1308,7 +1308,7 @@ func (self *Lexer) readWordInternal(ctx int, atCommandStart bool, inArrayLiteral
 				self.syncToParser()
 				arrayResult0, arrayResult1 := self.parser.parseArrayLiteral()
 				self.syncFromParser()
-				if !_isNilInterface(arrayResult0) {
+				if !_isNilInterfaceRef(arrayResult0) {
 					parts = append(parts, arrayResult0)
 					chars = append(chars, arrayResult1)
 				} else {
@@ -1505,14 +1505,14 @@ func (self *Lexer) readLocaleString() (Node, string, []Node) {
 			self.syncToParser()
 			arithNode, arithText := self.parser.parseArithmeticExpansion()
 			self.syncFromParser()
-			if !_isNilInterface(arithNode) {
+			if !_isNilInterfaceRef(arithNode) {
 				innerParts = append(innerParts, arithNode)
 				contentChars = append(contentChars, arithText)
 			} else {
 				self.syncToParser()
 				cmdsubNode, cmdsubText := self.parser.parseCommandSubstitution()
 				self.syncFromParser()
-				if !_isNilInterface(cmdsubNode) {
+				if !_isNilInterfaceRef(cmdsubNode) {
 					innerParts = append(innerParts, cmdsubNode)
 					contentChars = append(contentChars, cmdsubText)
 				} else {
@@ -1523,7 +1523,7 @@ func (self *Lexer) readLocaleString() (Node, string, []Node) {
 			self.syncToParser()
 			cmdsubNode, cmdsubText := self.parser.parseCommandSubstitution()
 			self.syncFromParser()
-			if !_isNilInterface(cmdsubNode) {
+			if !_isNilInterfaceRef(cmdsubNode) {
 				innerParts = append(innerParts, cmdsubNode)
 				contentChars = append(contentChars, cmdsubText)
 			} else {
@@ -1533,7 +1533,7 @@ func (self *Lexer) readLocaleString() (Node, string, []Node) {
 			self.syncToParser()
 			paramNode, paramText := self.parser.parseParamExpansion(false)
 			self.syncFromParser()
-			if !_isNilInterface(paramNode) {
+			if !_isNilInterfaceRef(paramNode) {
 				innerParts = append(innerParts, paramNode)
 				contentChars = append(contentChars, paramText)
 			} else {
@@ -1543,7 +1543,7 @@ func (self *Lexer) readLocaleString() (Node, string, []Node) {
 			self.syncToParser()
 			cmdsubNode, cmdsubText := self.parser.parseBacktickSubstitution()
 			self.syncFromParser()
-			if !_isNilInterface(cmdsubNode) {
+			if !_isNilInterfaceRef(cmdsubNode) {
 				innerParts = append(innerParts, cmdsubNode)
 				contentChars = append(contentChars, cmdsubText)
 			} else {
@@ -1962,7 +1962,7 @@ func (self *Lexer) readBracedParam(start int, inDquote bool) (Node, string) {
 			}()
 			subParser := NewParser(inner, true, self.parser.extglob)
 			parsed := subParser.ParseList(true)
-			if !_isNilInterface(parsed) && subParser.AtEnd() {
+			if !_isNilInterfaceRef(parsed) && subParser.AtEnd() {
 				formatted := formatCmdsubNode(parsed, 0, true, false, true)
 				arg = "(" + formatted + ")"
 			}
@@ -3066,7 +3066,7 @@ func (self *Word) formatCommandSubstitutions(value string, inArith bool) string 
 					parser = NewParser(inner, false, false)
 					parsed = parser.ParseList(true)
 					formatted = func() string {
-						if !_isNilInterface(parsed) {
+						if !_isNilInterfaceRef(parsed) {
 							return formatCmdsubNode(parsed, 0, false, false, false)
 						} else {
 							return ""
@@ -3209,7 +3209,7 @@ func (self *Word) formatCommandSubstitutions(value string, inArith bool) string 
 					}()
 					parser = NewParser(inner, false, false)
 					parsed = parser.ParseList(true)
-					if !_isNilInterface(parsed) && parser.Pos == _runeLen(inner) && !strings.Contains(inner, "\n") {
+					if !_isNilInterfaceRef(parsed) && parser.Pos == _runeLen(inner) && !strings.Contains(inner, "\n") {
 						compact = startsWithSubshell(parsed)
 						formatted = formatCmdsubNode(parsed, 0, true, compact, true)
 					} else {
@@ -3264,7 +3264,7 @@ func (self *Word) formatCommandSubstitutions(value string, inArith bool) string 
 					}()
 					parser = NewParser(strings.TrimLeft(inner, " \t\n|"), false, false)
 					parsed = parser.ParseList(true)
-					if !_isNilInterface(parsed) {
+					if !_isNilInterfaceRef(parsed) {
 						formatted = formatCmdsubNode(parsed, 0, false, false, false)
 						formatted = strings.TrimRight(formatted, ";")
 						var terminator string
@@ -3865,7 +3865,7 @@ func (self *If) GetKind() string { return self.Kind }
 
 func (self *If) ToSexp() string {
 	result := "(if " + self.Condition.ToSexp() + " " + self.ThenBody.ToSexp()
-	if !_isNilInterface(self.ElseBody) {
+	if !_isNilInterfaceRef(self.ElseBody) {
 		result = result + " " + self.ElseBody.ToSexp()
 	}
 	result = result + ")"
@@ -4109,7 +4109,7 @@ func (self *CasePattern) ToSexp() string {
 	}
 	patternStr := strings.Join(wordList, " ")
 	parts := []string{"(pattern (" + patternStr + ")"}
-	if !_isNilInterface(self.Body) {
+	if !_isNilInterfaceRef(self.Body) {
 		parts = append(parts, " "+self.Body.ToSexp())
 	} else {
 		parts = append(parts, " ()")
@@ -4478,7 +4478,7 @@ type Negation struct {
 func (self *Negation) GetKind() string { return self.Kind }
 
 func (self *Negation) ToSexp() string {
-	if _isNilInterface(self.Pipeline) {
+	if _isNilInterfaceRef(self.Pipeline) {
 		return "(negation (command))"
 	}
 	return "(negation " + self.Pipeline.ToSexp() + ")"
@@ -4493,7 +4493,7 @@ type Time struct {
 func (self *Time) GetKind() string { return self.Kind }
 
 func (self *Time) ToSexp() string {
-	if _isNilInterface(self.Pipeline) {
+	if _isNilInterfaceRef(self.Pipeline) {
 		if self.Posix {
 			return "(time -p (command))"
 		} else {
@@ -5014,7 +5014,7 @@ func (self *Parser) parseLoopBody(context string) Node {
 	}
 	if self.lexConsumeWord("do") {
 		body := self.ParseListUntil(map[string]struct{}{"done": {}})
-		if _isNilInterface(body) {
+		if _isNilInterfaceRef(body) {
 			panic(NewParseError("Expected commands after 'do'", self.lexPeekToken().Pos, 0))
 		}
 		self.SkipWhitespaceAndNewlines()
@@ -5124,13 +5124,13 @@ func (self *Parser) parseDollarExpansion(chars *[]string, parts *[]Node, inDquot
 	var result1 string
 	if self.Pos+2 < self.Length && _runeAt(self.Source, self.Pos+1) == "(" && _runeAt(self.Source, self.Pos+2) == "(" {
 		result0, result1 = self.parseArithmeticExpansion()
-		if !_isNilInterface(result0) {
+		if !_isNilInterfaceRef(result0) {
 			*parts = append(*parts, result0)
 			*chars = append(*chars, result1)
 			return true
 		}
 		result0, result1 = self.parseCommandSubstitution()
-		if !_isNilInterface(result0) {
+		if !_isNilInterfaceRef(result0) {
 			*parts = append(*parts, result0)
 			*chars = append(*chars, result1)
 			return true
@@ -5139,7 +5139,7 @@ func (self *Parser) parseDollarExpansion(chars *[]string, parts *[]Node, inDquot
 	}
 	if self.Pos+1 < self.Length && _runeAt(self.Source, self.Pos+1) == "[" {
 		result0, result1 = self.parseDeprecatedArithmetic()
-		if !_isNilInterface(result0) {
+		if !_isNilInterfaceRef(result0) {
 			*parts = append(*parts, result0)
 			*chars = append(*chars, result1)
 			return true
@@ -5148,7 +5148,7 @@ func (self *Parser) parseDollarExpansion(chars *[]string, parts *[]Node, inDquot
 	}
 	if self.Pos+1 < self.Length && _runeAt(self.Source, self.Pos+1) == "(" {
 		result0, result1 = self.parseCommandSubstitution()
-		if !_isNilInterface(result0) {
+		if !_isNilInterfaceRef(result0) {
 			*parts = append(*parts, result0)
 			*chars = append(*chars, result1)
 			return true
@@ -5156,7 +5156,7 @@ func (self *Parser) parseDollarExpansion(chars *[]string, parts *[]Node, inDquot
 		return false
 	}
 	result0, result1 = self.parseParamExpansion(inDquote)
-	if !_isNilInterface(result0) {
+	if !_isNilInterfaceRef(result0) {
 		*parts = append(*parts, result0)
 		*chars = append(*chars, result1)
 		return true
@@ -5206,7 +5206,7 @@ func (self *Parser) parseCommandSubstitution() (Node, string) {
 	self.setState((ParserStateFlagsPSTCMDSUBST | ParserStateFlagsPSTEOFTOKEN))
 	self.eofToken = ")"
 	cmd := self.ParseList(true)
-	if _isNilInterface(cmd) {
+	if _isNilInterfaceRef(cmd) {
 		cmd = &Empty{Kind: "empty"}
 	}
 	self.SkipWhitespaceAndNewlines()
@@ -5231,7 +5231,7 @@ func (self *Parser) parseFunsub(start int) (Node, string) {
 	self.setState((ParserStateFlagsPSTCMDSUBST | ParserStateFlagsPSTEOFTOKEN))
 	self.eofToken = "}"
 	cmd := self.ParseList(true)
-	if _isNilInterface(cmd) {
+	if _isNilInterfaceRef(cmd) {
 		cmd = &Empty{Kind: "empty"}
 	}
 	self.SkipWhitespaceAndNewlines()
@@ -5601,7 +5601,7 @@ func (self *Parser) parseProcessSubstitution() (result0 Node, result1 string) {
 		}
 	}()
 	cmd := self.ParseList(true)
-	if _isNilInterface(cmd) {
+	if _isNilInterfaceRef(cmd) {
 		cmd = &Empty{Kind: "empty"}
 	}
 	self.SkipWhitespaceAndNewlines()
@@ -7060,7 +7060,7 @@ func (self *Parser) ParseSubshell() *Subshell {
 	self.Advance()
 	self.setState(ParserStateFlagsPSTSUBSHELL)
 	body := self.ParseList(true)
-	if _isNilInterface(body) {
+	if _isNilInterfaceRef(body) {
 		self.clearState(ParserStateFlagsPSTSUBSHELL)
 		panic(NewParseError("Expected command in subshell", self.Pos, 0))
 	}
@@ -7247,7 +7247,7 @@ func (self *Parser) parseCondTerm() Node {
 	self.condSkipWhitespace()
 	if _mapHas(CONDUNARYOPS, word1.Value) {
 		operand = self.parseCondWord()
-		if _isNilInterface(operand) {
+		if _isNilInterfaceRef(operand) {
 			panic(NewParseError("Expected operand after "+word1.Value, self.Pos, 0))
 		}
 		return &UnaryTest{Op: word1.Value, Operand: operand, Kind: "unary-test"}
@@ -7320,7 +7320,7 @@ func (self *Parser) ParseBraceGroup() *BraceGroup {
 	}
 	self.SkipWhitespaceAndNewlines()
 	body := self.ParseList(true)
-	if _isNilInterface(body) {
+	if _isNilInterfaceRef(body) {
 		panic(NewParseError("Expected command in brace group", self.lexPeekToken().Pos, 0))
 	}
 	self.SkipWhitespace()
@@ -7336,7 +7336,7 @@ func (self *Parser) ParseIf() *If {
 		return nil
 	}
 	condition := self.ParseListUntil(map[string]struct{}{"then": {}})
-	if _isNilInterface(condition) {
+	if _isNilInterfaceRef(condition) {
 		panic(NewParseError("Expected condition after 'if'", self.lexPeekToken().Pos, 0))
 	}
 	self.SkipWhitespaceAndNewlines()
@@ -7344,7 +7344,7 @@ func (self *Parser) ParseIf() *If {
 		panic(NewParseError("Expected 'then' after if condition", self.lexPeekToken().Pos, 0))
 	}
 	thenBody := self.ParseListUntil(map[string]struct{}{"elif": {}, "else": {}, "fi": {}})
-	if _isNilInterface(thenBody) {
+	if _isNilInterfaceRef(thenBody) {
 		panic(NewParseError("Expected commands after 'then'", self.lexPeekToken().Pos, 0))
 	}
 	self.SkipWhitespaceAndNewlines()
@@ -7352,7 +7352,7 @@ func (self *Parser) ParseIf() *If {
 	if self.lexIsAtReservedWord("elif") {
 		self.lexConsumeWord("elif")
 		elifCondition := self.ParseListUntil(map[string]struct{}{"then": {}})
-		if _isNilInterface(elifCondition) {
+		if _isNilInterfaceRef(elifCondition) {
 			panic(NewParseError("Expected condition after 'elif'", self.lexPeekToken().Pos, 0))
 		}
 		self.SkipWhitespaceAndNewlines()
@@ -7360,7 +7360,7 @@ func (self *Parser) ParseIf() *If {
 			panic(NewParseError("Expected 'then' after elif condition", self.lexPeekToken().Pos, 0))
 		}
 		elifThenBody := self.ParseListUntil(map[string]struct{}{"elif": {}, "else": {}, "fi": {}})
-		if _isNilInterface(elifThenBody) {
+		if _isNilInterfaceRef(elifThenBody) {
 			panic(NewParseError("Expected commands after 'then'", self.lexPeekToken().Pos, 0))
 		}
 		self.SkipWhitespaceAndNewlines()
@@ -7370,7 +7370,7 @@ func (self *Parser) ParseIf() *If {
 		} else if self.lexIsAtReservedWord("else") {
 			self.lexConsumeWord("else")
 			innerElse = self.ParseListUntil(map[string]struct{}{"fi": {}})
-			if _isNilInterface(innerElse) {
+			if _isNilInterfaceRef(innerElse) {
 				panic(NewParseError("Expected commands after 'else'", self.lexPeekToken().Pos, 0))
 			}
 		}
@@ -7378,7 +7378,7 @@ func (self *Parser) ParseIf() *If {
 	} else if self.lexIsAtReservedWord("else") {
 		self.lexConsumeWord("else")
 		elseBody = self.ParseListUntil(map[string]struct{}{"fi": {}})
-		if _isNilInterface(elseBody) {
+		if _isNilInterfaceRef(elseBody) {
 			panic(NewParseError("Expected commands after 'else'", self.lexPeekToken().Pos, 0))
 		}
 	}
@@ -7392,7 +7392,7 @@ func (self *Parser) ParseIf() *If {
 func (self *Parser) parseElifChain() *If {
 	self.lexConsumeWord("elif")
 	condition := self.ParseListUntil(map[string]struct{}{"then": {}})
-	if _isNilInterface(condition) {
+	if _isNilInterfaceRef(condition) {
 		panic(NewParseError("Expected condition after 'elif'", self.lexPeekToken().Pos, 0))
 	}
 	self.SkipWhitespaceAndNewlines()
@@ -7400,7 +7400,7 @@ func (self *Parser) parseElifChain() *If {
 		panic(NewParseError("Expected 'then' after elif condition", self.lexPeekToken().Pos, 0))
 	}
 	thenBody := self.ParseListUntil(map[string]struct{}{"elif": {}, "else": {}, "fi": {}})
-	if _isNilInterface(thenBody) {
+	if _isNilInterfaceRef(thenBody) {
 		panic(NewParseError("Expected commands after 'then'", self.lexPeekToken().Pos, 0))
 	}
 	self.SkipWhitespaceAndNewlines()
@@ -7410,7 +7410,7 @@ func (self *Parser) parseElifChain() *If {
 	} else if self.lexIsAtReservedWord("else") {
 		self.lexConsumeWord("else")
 		elseBody = self.ParseListUntil(map[string]struct{}{"fi": {}})
-		if _isNilInterface(elseBody) {
+		if _isNilInterfaceRef(elseBody) {
 			panic(NewParseError("Expected commands after 'else'", self.lexPeekToken().Pos, 0))
 		}
 	}
@@ -7423,7 +7423,7 @@ func (self *Parser) ParseWhile() *While {
 		return nil
 	}
 	condition := self.ParseListUntil(map[string]struct{}{"do": {}})
-	if _isNilInterface(condition) {
+	if _isNilInterfaceRef(condition) {
 		panic(NewParseError("Expected condition after 'while'", self.lexPeekToken().Pos, 0))
 	}
 	self.SkipWhitespaceAndNewlines()
@@ -7431,7 +7431,7 @@ func (self *Parser) ParseWhile() *While {
 		panic(NewParseError("Expected 'do' after while condition", self.lexPeekToken().Pos, 0))
 	}
 	body := self.ParseListUntil(map[string]struct{}{"done": {}})
-	if _isNilInterface(body) {
+	if _isNilInterfaceRef(body) {
 		panic(NewParseError("Expected commands after 'do'", self.lexPeekToken().Pos, 0))
 	}
 	self.SkipWhitespaceAndNewlines()
@@ -7447,7 +7447,7 @@ func (self *Parser) ParseUntil() *Until {
 		return nil
 	}
 	condition := self.ParseListUntil(map[string]struct{}{"do": {}})
-	if _isNilInterface(condition) {
+	if _isNilInterfaceRef(condition) {
 		panic(NewParseError("Expected condition after 'until'", self.lexPeekToken().Pos, 0))
 	}
 	self.SkipWhitespaceAndNewlines()
@@ -7455,7 +7455,7 @@ func (self *Parser) ParseUntil() *Until {
 		panic(NewParseError("Expected 'do' after until condition", self.lexPeekToken().Pos, 0))
 	}
 	body := self.ParseListUntil(map[string]struct{}{"done": {}})
-	if _isNilInterface(body) {
+	if _isNilInterfaceRef(body) {
 		panic(NewParseError("Expected commands after 'do'", self.lexPeekToken().Pos, 0))
 	}
 	self.SkipWhitespaceAndNewlines()
@@ -7540,7 +7540,7 @@ func (self *Parser) ParseFor() Node {
 		panic(NewParseError("Expected 'do' in for loop", self.lexPeekToken().Pos, 0))
 	}
 	body := self.ParseListUntil(map[string]struct{}{"done": {}})
-	if _isNilInterface(body) {
+	if _isNilInterfaceRef(body) {
 		panic(NewParseError("Expected commands after 'do'", self.lexPeekToken().Pos, 0))
 	}
 	self.SkipWhitespaceAndNewlines()
@@ -7871,26 +7871,26 @@ func (self *Parser) ParseCoproc() *Coproc {
 	var body Node
 	if ch == "{" {
 		body = self.ParseBraceGroup()
-		if !_isNilInterface(body) {
+		if !_isNilInterfaceRef(body) {
 			return &Coproc{Command: body, Name: name, Kind: "coproc"}
 		}
 	}
 	if ch == "(" {
 		if self.Pos+1 < self.Length && _runeAt(self.Source, self.Pos+1) == "(" {
 			body = self.ParseArithmeticCommand()
-			if !_isNilInterface(body) {
+			if !_isNilInterfaceRef(body) {
 				return &Coproc{Command: body, Name: name, Kind: "coproc"}
 			}
 		}
 		body = self.ParseSubshell()
-		if !_isNilInterface(body) {
+		if !_isNilInterfaceRef(body) {
 			return &Coproc{Command: body, Name: name, Kind: "coproc"}
 		}
 	}
 	nextWord := self.lexPeekReservedWord()
 	if nextWord != "" && _mapHas(COMPOUNDKEYWORDS, nextWord) {
 		body = self.ParseCompoundCommand()
-		if !_isNilInterface(body) {
+		if !_isNilInterfaceRef(body) {
 			return &Coproc{Command: body, Name: name, Kind: "coproc"}
 		}
 	}
@@ -7910,7 +7910,7 @@ func (self *Parser) ParseCoproc() *Coproc {
 			if ch == "{" {
 				name = potentialName
 				body = self.ParseBraceGroup()
-				if !_isNilInterface(body) {
+				if !_isNilInterfaceRef(body) {
 					return &Coproc{Command: body, Name: name, Kind: "coproc"}
 				}
 			} else if ch == "(" {
@@ -7920,13 +7920,13 @@ func (self *Parser) ParseCoproc() *Coproc {
 				} else {
 					body = self.ParseSubshell()
 				}
-				if !_isNilInterface(body) {
+				if !_isNilInterfaceRef(body) {
 					return &Coproc{Command: body, Name: name, Kind: "coproc"}
 				}
 			} else if nextWord != "" && _mapHas(COMPOUNDKEYWORDS, nextWord) {
 				name = potentialName
 				body = self.ParseCompoundCommand()
-				if !_isNilInterface(body) {
+				if !_isNilInterfaceRef(body) {
 					return &Coproc{Command: body, Name: name, Kind: "coproc"}
 				}
 			}
@@ -7934,7 +7934,7 @@ func (self *Parser) ParseCoproc() *Coproc {
 		self.Pos = wordStart
 	}
 	body = self.ParseCommand()
-	if !_isNilInterface(body) {
+	if !_isNilInterfaceRef(body) {
 		return &Coproc{Command: body, Name: name, Kind: "coproc"}
 	}
 	panic(NewParseError("Expected command after coproc", self.Pos, 0))
@@ -7966,7 +7966,7 @@ func (self *Parser) ParseFunction() *Function {
 		}
 		self.SkipWhitespaceAndNewlines()
 		body = self.parseCompoundCommand()
-		if _isNilInterface(body) {
+		if _isNilInterfaceRef(body) {
 			panic(NewParseError("Expected function body", self.Pos, 0))
 		}
 		return &Function{Name: name, Body: body, Kind: "function"}
@@ -8025,7 +8025,7 @@ func (self *Parser) ParseFunction() *Function {
 	self.Advance()
 	self.SkipWhitespaceAndNewlines()
 	body = self.parseCompoundCommand()
-	if _isNilInterface(body) {
+	if _isNilInterfaceRef(body) {
 		panic(NewParseError("Expected function body", self.Pos, 0))
 	}
 	return &Function{Name: name, Body: body, Kind: "function"}
@@ -8033,45 +8033,45 @@ func (self *Parser) ParseFunction() *Function {
 
 func (self *Parser) parseCompoundCommand() Node {
 	var result Node = self.ParseBraceGroup()
-	if !_isNilInterface(result) {
+	if !_isNilInterfaceRef(result) {
 		return result
 	}
 	if !self.AtEnd() && self.Peek() == "(" && self.Pos+1 < self.Length && _runeAt(self.Source, self.Pos+1) == "(" {
 		result = self.ParseArithmeticCommand()
-		if !_isNilInterface(result) {
+		if !_isNilInterfaceRef(result) {
 			return result
 		}
 	}
 	result = self.ParseSubshell()
-	if !_isNilInterface(result) {
+	if !_isNilInterfaceRef(result) {
 		return result
 	}
 	result = self.ParseConditionalExpr()
-	if !_isNilInterface(result) {
+	if !_isNilInterfaceRef(result) {
 		return result
 	}
 	result = self.ParseIf()
-	if !_isNilInterface(result) {
+	if !_isNilInterfaceRef(result) {
 		return result
 	}
 	result = self.ParseWhile()
-	if !_isNilInterface(result) {
+	if !_isNilInterfaceRef(result) {
 		return result
 	}
 	result = self.ParseUntil()
-	if !_isNilInterface(result) {
+	if !_isNilInterfaceRef(result) {
 		return result
 	}
 	result = self.ParseFor()
-	if !_isNilInterface(result) {
+	if !_isNilInterfaceRef(result) {
 		return result
 	}
 	result = self.ParseCase()
-	if !_isNilInterface(result) {
+	if !_isNilInterfaceRef(result) {
 		return result
 	}
 	result = self.ParseSelect()
-	if !_isNilInterface(result) {
+	if !_isNilInterfaceRef(result) {
 		return result
 	}
 	return nil
@@ -8107,7 +8107,7 @@ func (self *Parser) ParseListUntil(stopWords map[string]struct{}) Node {
 		return nil
 	}
 	pipeline := self.ParsePipeline()
-	if _isNilInterface(pipeline) {
+	if _isNilInterfaceRef(pipeline) {
 		return nil
 	}
 	parts := []Node{pipeline}
@@ -8160,7 +8160,7 @@ func (self *Parser) ParseListUntil(stopWords map[string]struct{}) Node {
 			break
 		}
 		pipeline = self.ParsePipeline()
-		if _isNilInterface(pipeline) {
+		if _isNilInterfaceRef(pipeline) {
 			panic(NewParseError("Expected command after "+op, self.Pos, 0))
 		}
 		parts = append(parts, pipeline)
@@ -8180,7 +8180,7 @@ func (self *Parser) ParseCompoundCommand() Node {
 	var result Node
 	if ch == "(" && self.Pos+1 < self.Length && _runeAt(self.Source, self.Pos+1) == "(" {
 		result = self.ParseArithmeticCommand()
-		if !_isNilInterface(result) {
+		if !_isNilInterfaceRef(result) {
 			return result
 		}
 	}
@@ -8189,13 +8189,13 @@ func (self *Parser) ParseCompoundCommand() Node {
 	}
 	if ch == "{" {
 		result = self.ParseBraceGroup()
-		if !_isNilInterface(result) {
+		if !_isNilInterfaceRef(result) {
 			return result
 		}
 	}
 	if ch == "[" && self.Pos+1 < self.Length && _runeAt(self.Source, self.Pos+1) == "[" {
 		result = self.ParseConditionalExpr()
-		if !_isNilInterface(result) {
+		if !_isNilInterfaceRef(result) {
 			return result
 		}
 	}
@@ -8306,8 +8306,8 @@ func (self *Parser) ParsePipeline() Node {
 			self.Advance()
 			self.SkipWhitespace()
 			inner := self.ParsePipeline()
-			if !_isNilInterface(inner) && inner.GetKind() == "negation" {
-				if !_isNilInterface(inner.(*Negation).Pipeline) {
+			if !_isNilInterfaceRef(inner) && inner.GetKind() == "negation" {
+				if !_isNilInterfaceRef(inner.(*Negation).Pipeline) {
 					return inner.(*Negation).Pipeline
 				} else {
 					return &Command{Words: []*Word{}, Kind: "command"}
@@ -8327,7 +8327,7 @@ func (self *Parser) ParsePipeline() Node {
 	} else if prefixOrder == "negation_time" {
 		result = &Time{Pipeline: result, Posix: timePosix, Kind: "time"}
 		result = &Negation{Pipeline: result, Kind: "negation"}
-	} else if _isNilInterface(result) {
+	} else if _isNilInterfaceRef(result) {
 		return nil
 	}
 	return result
@@ -8335,7 +8335,7 @@ func (self *Parser) ParsePipeline() Node {
 
 func (self *Parser) parseSimplePipeline() Node {
 	cmd := self.ParseCompoundCommand()
-	if _isNilInterface(cmd) {
+	if _isNilInterfaceRef(cmd) {
 		return nil
 	}
 	commands := []Node{cmd}
@@ -8355,7 +8355,7 @@ func (self *Parser) parseSimplePipeline() Node {
 			commands = append(commands, &PipeBoth{Kind: "pipe-both"})
 		}
 		cmd = self.ParseCompoundCommand()
-		if _isNilInterface(cmd) {
+		if _isNilInterfaceRef(cmd) {
 			panic(NewParseError("Expected command after |", self.Pos, 0))
 		}
 		commands = append(commands, cmd)
@@ -8405,7 +8405,7 @@ func (self *Parser) ParseList(newlineAsSeparator bool) Node {
 		self.SkipWhitespace()
 	}
 	pipeline := self.ParsePipeline()
-	if _isNilInterface(pipeline) {
+	if _isNilInterfaceRef(pipeline) {
 		return nil
 	}
 	parts := []Node{pipeline}
@@ -8480,7 +8480,7 @@ func (self *Parser) ParseList(newlineAsSeparator bool) Node {
 			}
 		}
 		pipeline = self.ParsePipeline()
-		if _isNilInterface(pipeline) {
+		if _isNilInterfaceRef(pipeline) {
 			panic(NewParseError("Expected command after "+op, self.Pos, 0))
 		}
 		parts = append(parts, pipeline)
@@ -8521,13 +8521,13 @@ func (self *Parser) Parse() []Node {
 			break
 		}
 		comment := self.ParseComment()
-		if _isNilInterface(comment) {
+		if _isNilInterfaceRef(comment) {
 			break
 		}
 	}
 	for !self.AtEnd() {
 		result := self.ParseList(false)
-		if !_isNilInterface(result) {
+		if !_isNilInterfaceRef(result) {
 			results = append(results, result)
 		}
 		self.SkipWhitespace()
@@ -8882,7 +8882,7 @@ func startsWithSubshell(node Node) bool {
 }
 
 func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bool, procsubFirst bool) string {
-	if _isNilInterface(node) {
+	if _isNilInterfaceRef(node) {
 		return ""
 	}
 	sp := strings.Repeat(" ", indent)
@@ -9142,7 +9142,7 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 		cond := formatCmdsubNode(node.Condition, indent, false, false, false)
 		thenBody := formatCmdsubNode(node.ThenBody, indent+4, false, false, false)
 		result := "if " + cond + "; then\n" + innerSp + thenBody + ";"
-		if !_isNilInterface(node.ElseBody) {
+		if !_isNilInterfaceRef(node.ElseBody) {
 			elseBody := formatCmdsubNode(node.ElseBody, indent+4, false, false, false)
 			result = result + "\n" + sp + "else\n" + innerSp + elseBody + ";"
 		}
@@ -9219,7 +9219,7 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 			p := node.Patterns[i]
 			pat := strings.ReplaceAll(p.(*CasePattern).Pattern, "|", " | ")
 			var body string
-			if !_isNilInterface(p.(*CasePattern).Body) {
+			if !_isNilInterfaceRef(p.(*CasePattern).Body) {
 				body = formatCmdsubNode(p.(*CasePattern).Body, indent+8, false, false, false)
 			} else {
 				body = ""
@@ -9322,7 +9322,7 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 	}
 	switch node := node.(type) {
 	case *Negation:
-		if !_isNilInterface(node.Pipeline) {
+		if !_isNilInterfaceRef(node.Pipeline) {
 			return "! " + formatCmdsubNode(node.Pipeline, indent, false, false, false)
 		}
 		return "! "
@@ -9336,7 +9336,7 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 				return "time "
 			}
 		}()
-		if !_isNilInterface(node.Pipeline) {
+		if !_isNilInterfaceRef(node.Pipeline) {
 			return prefix + formatCmdsubNode(node.Pipeline, indent, false, false, false)
 		}
 		return prefix

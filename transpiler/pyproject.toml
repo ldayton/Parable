@@ -1,17 +1,16 @@
 [project]
-name = "parable-transpiler"
+name = "tongues"
 version = "0.1.0"
 requires-python = ">=3.14"
 
 [dependency-groups]
-dev = ["pytest"]
+dev = ["pytest", "ruff"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = []
 
 [project.scripts]
 transpile = "src.cli:main"
-
-# Run these with: uv run --script <name>
-# Or add them to justfile
-
-# Usage from transpiler/:
-#   uv run python -m src.cli ../src/parable.py          # emit Go to stdout
-#   uv run python -m src.cli ../src/parable.py | gofmt  # emit formatted Go

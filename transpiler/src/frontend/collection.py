@@ -5,7 +5,8 @@ import ast
 from typing import TYPE_CHECKING, Callable
 
 from . import type_inference
-from ..ir import StructInfo
+from ..ir import INT, Map, Set, STRING, StructInfo
+from ..type_overrides import MODULE_CONSTANTS
 
 if TYPE_CHECKING:
     from ..ir import SymbolTable
@@ -84,3 +85,36 @@ def build_kind_mapping(
             kind_value = info.const_fields["kind"]
             kind_to_struct[kind_value] = name
             kind_to_class[kind_value] = name
+
+
+def collect_constants(tree: ast.Module, symbols: SymbolTable) -> None:
+    """Pass 5: Collect module-level and class-level constants."""
+    # First, register overridden constants from type_overrides
+    for const_name, (const_type, _) in MODULE_CONSTANTS.items():
+        symbols.constants[const_name] = const_type
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            target = node.targets[0]
+            if isinstance(target, ast.Name) and target.id.isupper():
+                # Skip if already registered via MODULE_CONSTANTS
+                if target.id in MODULE_CONSTANTS:
+                    continue
+                # All-caps name = constant
+                if isinstance(node.value, ast.Constant) and isinstance(node.value.value, int):
+                    symbols.constants[target.id] = INT
+                # Set literal constants (e.g., ASSIGNMENT_BUILTINS = {"alias", ...})
+                elif isinstance(node.value, ast.Set):
+                    symbols.constants[target.id] = Set(STRING)
+                # Dict literal constants (e.g., ANSI_C_ESCAPES = {"a": 0x07, ...})
+                elif isinstance(node.value, ast.Dict):
+                    symbols.constants[target.id] = Map(STRING, INT)
+        # Collect class-level constants (e.g., TokenType.EOF = 0)
+        elif isinstance(node, ast.ClassDef):
+            for stmt in node.body:
+                if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
+                    target = stmt.targets[0]
+                    if isinstance(target, ast.Name) and target.id.isupper():
+                        if isinstance(stmt.value, ast.Constant) and isinstance(stmt.value.value, int):
+                            # Store as ClassName_CONST_NAME
+                            const_name = f"{node.name}_{target.id}"
+                            symbols.constants[const_name] = INT

@@ -50,6 +50,7 @@ from ..ir import (
 )
 from .context import TypeContext
 from . import type_inference
+from . import lowering
 
 if TYPE_CHECKING:
     pass
@@ -701,14 +702,7 @@ class Frontend:
 
     def _loc_from_node(self, node: ast.AST) -> Loc:
         """Create Loc from AST node."""
-        if hasattr(node, "lineno"):
-            return Loc(
-                line=node.lineno,
-                col=node.col_offset,
-                end_line=getattr(node, "end_lineno", node.lineno) or node.lineno,
-                end_col=getattr(node, "end_col_offset", node.col_offset) or node.col_offset,
-            )
-        return Loc.unknown()
+        return lowering.loc_from_node(node)
 
     def _get_base_name(self, base: ast.expr) -> str:
         """Extract base class name from AST node."""
@@ -2512,22 +2506,13 @@ class Frontend:
         return ir.SetLit(element_type=elem_type, elements=elements, typ=Set(elem_type), loc=self._loc_from_node(node))
 
     def _binop_to_str(self, op: ast.operator) -> str:
-        return {
-            ast.Add: "+", ast.Sub: "-", ast.Mult: "*", ast.Div: "/",
-            ast.FloorDiv: "/", ast.Mod: "%", ast.Pow: "**",
-            ast.LShift: "<<", ast.RShift: ">>",
-            ast.BitOr: "|", ast.BitXor: "^", ast.BitAnd: "&",
-        }.get(type(op), "+")
+        return lowering.binop_to_str(op)
 
     def _cmpop_to_str(self, op: ast.cmpop) -> str:
-        return {
-            ast.Eq: "==", ast.NotEq: "!=", ast.Lt: "<", ast.LtE: "<=",
-            ast.Gt: ">", ast.GtE: ">=", ast.Is: "==", ast.IsNot: "!=",
-            ast.In: "in", ast.NotIn: "not in",
-        }.get(type(op), "==")
+        return lowering.cmpop_to_str(op)
 
     def _unaryop_to_str(self, op: ast.unaryop) -> str:
-        return {ast.Not: "!", ast.USub: "-", ast.UAdd: "+", ast.Invert: "~"}.get(type(op), "-")
+        return lowering.unaryop_to_str(op)
 
     # ============================================================
     # STATEMENT LOWERING (Phase 3)

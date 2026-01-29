@@ -23,6 +23,37 @@ Middleend deficiencies (should be fixed in middleend.py):
 - VarDecl and Assign use "any" type because middleend doesn't track that the same
   variable may have different types in different branches. Middleend could compute
   union types or mark variables that need dynamic typing.
+
+UNCOMPENSATED DEFICIENCIES (non-idiomatic output)
+=================================================
+
+Frontend deficiencies (should be fixed in frontend.py):
+- Enum values emitted as prefixed constants (`const TokenType_EOF: number = 0`)
+  instead of TypeScript enums. Frontend should emit Enum IR nodes. (~90 constants)
+- Empty placeholder classes (`class TokenType {}`) for enum namespaces. Frontend
+  should not emit these or should emit them as namespace/const enum patterns.
+- ParseError doesn't extend Error - no stack traces, breaks `instanceof Error`.
+  Frontend should mark exception classes to inherit from language Error type.
+- Nullable fields typed without union (`body: Node = null` instead of
+  `Node | null = null`). Frontend should emit Optional/Nullable wrapper. (~38 fields)
+- Factory functions (`newParser`, `newLexer`, etc.) construct with dummy values
+  then overwrite all fields. Frontend should emit proper constructor calls. (~7 factories)
+
+Middleend deficiencies (should be fixed in middleend.py):
+- Local variables typed as `any` (~1135 instances). Middleend should infer types
+  from assignments and usage, emitting proper type annotations.
+- Redundant type casts (`as any`, `as Node[]`, `as unknown as X`) needed to satisfy
+  TypeScript. (~280 casts) Middleend should track precise types to avoid these.
+- Return types don't include `| null` for functions that return null. (~55 functions)
+  Middleend should track nullable returns and annotate function signatures.
+
+Backend deficiencies (TypeScript-specific, fixable in typescript.py):
+- Uses `var` instead of `let`/`const`. Backend should emit `const` for never-reassigned
+  variables, `let` otherwise. (~1163 var declarations)
+- Imperative loops with `.push()` instead of `.map()`. Backend could detect
+  accumulator patterns and emit functional transforms. (~600 push calls in 74 loops)
+- Unnecessary template literal wrapping of string literals (`${"text"}` instead of
+  just `"text"`). Backend string formatting creates these. (~68 instances)
 """
 
 from __future__ import annotations

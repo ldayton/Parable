@@ -13,16 +13,11 @@ from ..ir import (
     BYTE,
     FLOAT,
     INT,
-    RUNE,
     STRING,
-    VOID,
     FuncInfo,
-    Function,
     Loc,
     Module,
     Slice,
-    StructInfo,
-    Struct,
     SymbolTable,
     Type,
 )
@@ -96,16 +91,6 @@ class Frontend:
         )
         collection.collect_signatures(tree, self.symbols, callbacks)
 
-    def _collect_class_methods(self, node: ast.ClassDef) -> None:
-        """Collect method signatures for a class."""
-        callbacks = collection.CollectionCallbacks(
-            annotation_to_str=self._annotation_to_str,
-            py_type_to_ir=self._py_type_to_ir,
-            py_return_type_to_ir=self._py_return_type_to_ir,
-            lower_expr=self._lower_expr,
-        )
-        collection.collect_class_methods(node, self.symbols, callbacks)
-
     def _collect_fields(self, tree: ast.Module) -> None:
         """Pass 4: Collect struct fields from class definitions."""
         callbacks = collection.CollectionCallbacks(
@@ -116,44 +101,6 @@ class Frontend:
             infer_type_from_value=self._infer_type_from_value,
         )
         collection.collect_fields(tree, self.symbols, callbacks)
-
-    def _collect_class_fields(self, node: ast.ClassDef) -> None:
-        """Collect fields from class body and __init__."""
-        callbacks = collection.CollectionCallbacks(
-            annotation_to_str=self._annotation_to_str,
-            py_type_to_ir=self._py_type_to_ir,
-            py_return_type_to_ir=self._py_return_type_to_ir,
-            lower_expr=self._lower_expr,
-            infer_type_from_value=self._infer_type_from_value,
-        )
-        collection.collect_class_fields(node, self.symbols, callbacks)
-
-    def _collect_init_fields(self, init: ast.FunctionDef, info: StructInfo) -> None:
-        """Collect fields assigned in __init__."""
-        callbacks = collection.CollectionCallbacks(
-            annotation_to_str=self._annotation_to_str,
-            py_type_to_ir=self._py_type_to_ir,
-            py_return_type_to_ir=self._py_return_type_to_ir,
-            lower_expr=self._lower_expr,
-            infer_type_from_value=self._infer_type_from_value,
-        )
-        collection.collect_init_fields(init, info, callbacks)
-
-    def _detect_mutated_params(self, node: ast.FunctionDef) -> set[str]:
-        """Detect which parameters are mutated in the function body."""
-        return collection.detect_mutated_params(node)
-
-    def _extract_func_info(
-        self, node: ast.FunctionDef, is_method: bool = False
-    ) -> FuncInfo:
-        """Extract function signature information."""
-        callbacks = collection.CollectionCallbacks(
-            annotation_to_str=self._annotation_to_str,
-            py_type_to_ir=self._py_type_to_ir,
-            py_return_type_to_ir=self._py_return_type_to_ir,
-            lower_expr=self._lower_expr,
-        )
-        return collection.extract_func_info(node, callbacks, is_method)
 
     def _build_module(self, tree: ast.Module) -> Module:
         """Build IR Module from collected symbols."""
@@ -172,44 +119,6 @@ class Frontend:
         )
         return builders.build_module(tree, self.symbols, callbacks)
 
-    def _build_struct(self, node: ast.ClassDef, with_body: bool = False) -> tuple[Struct | None, Function | None]:
-        """Build IR Struct from class definition. Returns (struct, constructor_func)."""
-        callbacks = builders.BuilderCallbacks(
-            annotation_to_str=self._annotation_to_str,
-            py_type_to_ir=self._py_type_to_ir,
-            py_return_type_to_ir=self._py_return_type_to_ir,
-            lower_expr=self._lower_expr,
-            lower_stmts=self._lower_stmts,
-            collect_var_types=self._collect_var_types,
-            is_exception_subclass=self._is_exception_subclass,
-            extract_union_struct_names=lambda py_type: type_inference.extract_union_struct_names(py_type, self._node_types),
-            loc_from_node=self._loc_from_node,
-            setup_context=self._setup_context,
-            setup_and_lower_stmts=self._setup_and_lower_stmts,
-        )
-        return builders.build_struct(node, self.symbols, callbacks, with_body)
-
-    def _build_forwarding_constructor(self, class_name: str, parent_class: str) -> Function:
-        """Build a forwarding constructor for exception subclasses with no __init__."""
-        return builders.build_forwarding_constructor(class_name, parent_class, self.symbols)
-
-    def _build_constructor(self, class_name: str, init_ast: ast.FunctionDef, info: StructInfo) -> Function:
-        """Build a NewXxx constructor function from __init__ AST."""
-        callbacks = builders.BuilderCallbacks(
-            annotation_to_str=self._annotation_to_str,
-            py_type_to_ir=self._py_type_to_ir,
-            py_return_type_to_ir=self._py_return_type_to_ir,
-            lower_expr=self._lower_expr,
-            lower_stmts=self._lower_stmts,
-            collect_var_types=self._collect_var_types,
-            is_exception_subclass=self._is_exception_subclass,
-            extract_union_struct_names=lambda py_type: type_inference.extract_union_struct_names(py_type, self._node_types),
-            loc_from_node=self._loc_from_node,
-            setup_context=self._setup_context,
-            setup_and_lower_stmts=self._setup_and_lower_stmts,
-        )
-        return builders.build_constructor(class_name, init_ast, info, callbacks)
-
     def _setup_context(self, class_name: str, func_info: FuncInfo | None) -> None:
         """Set up class context for var type collection."""
         self._current_class_name = class_name
@@ -227,40 +136,6 @@ class Frontend:
         self._current_func_info = func_info
         self._type_ctx = type_ctx
         return self._lower_stmts(stmts)
-
-    def _build_function_shell(self, node: ast.FunctionDef, with_body: bool = False) -> Function:
-        """Build IR Function from AST. Set with_body=True to lower statements."""
-        callbacks = builders.BuilderCallbacks(
-            annotation_to_str=self._annotation_to_str,
-            py_type_to_ir=self._py_type_to_ir,
-            py_return_type_to_ir=self._py_return_type_to_ir,
-            lower_expr=self._lower_expr,
-            lower_stmts=self._lower_stmts,
-            collect_var_types=self._collect_var_types,
-            is_exception_subclass=self._is_exception_subclass,
-            extract_union_struct_names=lambda py_type: type_inference.extract_union_struct_names(py_type, self._node_types),
-            loc_from_node=self._loc_from_node,
-            setup_context=self._setup_context,
-            setup_and_lower_stmts=self._setup_and_lower_stmts,
-        )
-        return builders.build_function_shell(node, self.symbols, callbacks, with_body)
-
-    def _build_method_shell(self, node: ast.FunctionDef, class_name: str, with_body: bool = False) -> Function:
-        """Build IR Function for a method. Set with_body=True to lower statements."""
-        callbacks = builders.BuilderCallbacks(
-            annotation_to_str=self._annotation_to_str,
-            py_type_to_ir=self._py_type_to_ir,
-            py_return_type_to_ir=self._py_return_type_to_ir,
-            lower_expr=self._lower_expr,
-            lower_stmts=self._lower_stmts,
-            collect_var_types=self._collect_var_types,
-            is_exception_subclass=self._is_exception_subclass,
-            extract_union_struct_names=lambda py_type: type_inference.extract_union_struct_names(py_type, self._node_types),
-            loc_from_node=self._loc_from_node,
-            setup_context=self._setup_context,
-            setup_and_lower_stmts=self._setup_and_lower_stmts,
-        )
-        return builders.build_method_shell(node, class_name, self.symbols, callbacks, with_body)
 
     def _loc_from_node(self, node: ast.AST) -> Loc:
         """Create Loc from AST node."""

@@ -202,18 +202,12 @@ class Frontend:
 
     def _infer_element_type_from_append_arg(self, arg: ast.expr, var_types: dict[str, Type]) -> Type:
         """Infer slice element type from what's being appended."""
-        callbacks = collection.CollectionCallbacks(
-            annotation_to_str=self._annotation_to_str,
-            py_type_to_ir=self._py_type_to_ir,
-            py_return_type_to_ir=self._py_return_type_to_ir,
-            lower_expr=self._lower_expr,
-            infer_type_from_value=self._infer_type_from_value,
-            extract_struct_name=type_inference.extract_struct_name,
-            infer_container_type_from_ast=self._infer_container_type_from_ast,
-        )
+        cb = self._make_collection_callbacks_with_inference()
+        cb.extract_struct_name = type_inference.extract_struct_name
+        cb.infer_container_type_from_ast = self._infer_container_type_from_ast
         return collection.infer_element_type_from_append_arg(
             arg, var_types, self.symbols, self._current_class_name,
-            self._current_func_info, callbacks
+            self._current_func_info, cb
         )
 
     def _infer_container_type_from_ast(self, node: ast.expr, var_types: dict[str, Type]) -> Type:

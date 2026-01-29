@@ -27,6 +27,23 @@ Middleend deficiencies (should be fixed in middleend.py):
 UNCOMPENSATED DEFICIENCIES (non-idiomatic output)
 =================================================
 
+The dominant issue is incomplete type inference. Python's dynamic typing means
+the frontend often lacks type information, and middleend doesn't propagate types
+through assignments and control flow. The backend defensively emits `any` and
+casts (~2630 instances), but idiomatic TypeScript would have precise types:
+  `var result: any = getValue()` instead of `const result: Node = getValue()`
+Idiomatic TypeScript would:
+  1. Infer variable types from initializer expressions
+  2. Compute union types when variable has different types in branches
+  3. Track nullability through control flow for return types
+  4. Mark variables as const vs let based on reassignment analysis
+This would eliminate most `any` annotations and redundant casts.
+Downstream consequences of this missing analysis:
+  - ~1135 local variables typed as `any` instead of precise types
+  - ~280 redundant casts (`as any`, `as Node[]`, `as unknown as X`)
+  - ~55 functions missing `| null` in return types
+  - ~1163 `var` declarations instead of `const`/`let` (needs reassignment tracking)
+
 Frontend deficiencies (should be fixed in frontend.py):
 - Enum values emitted as prefixed constants (`const TokenType_EOF: number = 0`)
   instead of TypeScript enums. Frontend should emit Enum IR nodes. (~90 constants)
@@ -39,17 +56,7 @@ Frontend deficiencies (should be fixed in frontend.py):
 - Factory functions (`newParser`, `newLexer`, etc.) construct with dummy values
   then overwrite all fields. Frontend should emit proper constructor calls. (~7 factories)
 
-Middleend deficiencies (should be fixed in middleend.py):
-- Local variables typed as `any` (~1135 instances). Middleend should infer types
-  from assignments and usage, emitting proper type annotations.
-- Redundant type casts (`as any`, `as Node[]`, `as unknown as X`) needed to satisfy
-  TypeScript. (~280 casts) Middleend should track precise types to avoid these.
-- Return types don't include `| null` for functions that return null. (~55 functions)
-  Middleend should track nullable returns and annotate function signatures.
-
 Backend deficiencies (TypeScript-specific, fixable in typescript.py):
-- Uses `var` instead of `let`/`const`. Backend should emit `const` for never-reassigned
-  variables, `let` otherwise. (~1163 var declarations)
 - Imperative loops with `.push()` instead of `.map()`. Backend could detect
   accumulator patterns and emit functional transforms. (~600 push calls in 74 loops)
 - Unnecessary template literal wrapping of string literals (`${"text"}` instead of

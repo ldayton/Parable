@@ -29,13 +29,23 @@ Middleend deficiencies (should be fixed in middleend.py):
 UNCOMPENSATED DEFICIENCIES (non-idiomatic output)
 =================================================
 
+The dominant issue is char vs String conflation. Python has only strings; Java
+distinguishes char (primitive) from String (object). The backend defensively
+treats all single characters as String, causing verbose comparisons (~950 sites):
+  `String.valueOf(s.charAt(i)).equals("(")` instead of `s.charAt(i) == '('`
+Idiomatic Java would:
+  1. Track character vs string semantics in frontend
+  2. Emit char type for single-character literals and charAt() results
+  3. Use primitive `==` for char comparisons instead of .equals()
+  4. Emit `isDigit(char)` instead of `_isDigit(String)`
+This would eliminate String.valueOf() wrapping and enable direct comparisons.
+Downstream consequences of this missing analysis:
+  - ~556 single-char comparisons use .equals() instead of ==
+  - ~394 String.valueOf() calls to wrap chars for comparison
+  - Helper predicates take String instead of char: `_isWhitespace(String)`
+    should be `Character.isWhitespace(char)` (~356 helper call sites)
+
 Frontend deficiencies (should be fixed in frontend.py):
-- Helper function indirection: `ParableFunctions._substring(s, a, b)` instead of
-  `s.substring(a, b)`, `_isWhitespace(c)` instead of `Character.isWhitespace()`.
-  Frontend should emit generic IR that backends map to stdlib. (~356 call sites)
-- Character/string conflation: `String.valueOf(s.charAt(i)).equals("(")` instead
-  of `s.charAt(i) == '('`. Frontend should track char vs string types so backend
-  can emit `==` for characters. (~556 single-char comparisons, ~394 String.valueOf)
 - Factory field overwrites: `ParseError self = new ParseError("", 0, 0);` then
   assigns each field. Frontend should emit constructor calls or StructLit. (~7 factories)
 - Nullable fields without Optional: fields used with null but declared as bare

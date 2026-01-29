@@ -1,4 +1,5 @@
 """Collection utilities extracted from frontend.py."""
+
 from __future__ import annotations
 
 import ast
@@ -6,8 +7,32 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
 from . import type_inference
-from ..ir import BOOL, BYTE, FLOAT, INT, VOID, FieldInfo, FuncInfo, InterfaceRef, Map, Optional, ParamInfo, Pointer, Set, Slice, STRING, StructRef, StructInfo, Tuple
-from ..type_overrides import FIELD_TYPE_OVERRIDES, MODULE_CONSTANTS, PARAM_TYPE_OVERRIDES, RETURN_TYPE_OVERRIDES
+from ..ir import (
+    BOOL,
+    BYTE,
+    FLOAT,
+    INT,
+    VOID,
+    FieldInfo,
+    FuncInfo,
+    InterfaceRef,
+    Map,
+    Optional,
+    ParamInfo,
+    Pointer,
+    Set,
+    Slice,
+    STRING,
+    StructRef,
+    StructInfo,
+    Tuple,
+)
+from ..type_overrides import (
+    FIELD_TYPE_OVERRIDES,
+    MODULE_CONSTANTS,
+    PARAM_TYPE_OVERRIDES,
+    RETURN_TYPE_OVERRIDES,
+)
 
 if TYPE_CHECKING:
     from .. import ir
@@ -17,6 +42,7 @@ if TYPE_CHECKING:
 @dataclass
 class CollectionCallbacks:
     """Callbacks for collection phase that need lowering/type conversion."""
+
     annotation_to_str: Callable[[ast.expr | None], str]
     py_type_to_ir: Callable[[str, bool], "Type"]
     py_return_type_to_ir: Callable[[str], "Type"]
@@ -28,7 +54,9 @@ class CollectionCallbacks:
     is_kind_check: Callable[[ast.expr], tuple[str, str] | None] | None = None
     infer_call_return_type: Callable[[ast.Call], "Type"] | None = None
     infer_iterable_type: Callable[[ast.expr, dict[str, "Type"]], "Type"] | None = None
-    infer_element_type_from_append_arg: Callable[[ast.expr, dict[str, "Type"]], "Type"] | None = None
+    infer_element_type_from_append_arg: Callable[[ast.expr, dict[str, "Type"]], "Type"] | None = (
+        None
+    )
 
 
 def is_exception_subclass(name: str, symbols: SymbolTable) -> bool:
@@ -133,7 +161,9 @@ def collect_constants(tree: ast.Module, symbols: SymbolTable) -> None:
                 if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
                     target = stmt.targets[0]
                     if isinstance(target, ast.Name) and target.id.isupper():
-                        if isinstance(stmt.value, ast.Constant) and isinstance(stmt.value.value, int):
+                        if isinstance(stmt.value, ast.Constant) and isinstance(
+                            stmt.value.value, int
+                        ):
                             # Store as ClassName_CONST_NAME
                             const_name = f"{node.name}_{target.id}"
                             symbols.constants[const_name] = INT
@@ -168,7 +198,9 @@ def extract_func_info(
             default_idx = i - (n_params - n_defaults)
             if node.args.defaults and default_idx < len(node.args.defaults):
                 default_value = callbacks.lower_expr(node.args.defaults[default_idx])
-        params.append(ParamInfo(name=arg.arg, typ=typ, has_default=has_default, default_value=default_value))
+        params.append(
+            ParamInfo(name=arg.arg, typ=typ, has_default=has_default, default_value=default_value)
+        )
     return_type = VOID
     if node.returns:
         py_return = callbacks.annotation_to_str(node.returns)
@@ -258,9 +290,13 @@ def collect_init_fields(
                 ):
                     field_name = target.attr
                     # Track param-to-field mapping: self.field = param
-                    is_simple_param = isinstance(stmt.value, ast.Name) and stmt.value.id in info.init_params
+                    is_simple_param = (
+                        isinstance(stmt.value, ast.Name) and stmt.value.id in info.init_params
+                    )
                     # Track constant string assignments: self.kind = "operator"
-                    is_const_str = isinstance(stmt.value, ast.Constant) and isinstance(stmt.value.value, str)
+                    is_const_str = isinstance(stmt.value, ast.Constant) and isinstance(
+                        stmt.value.value, str
+                    )
                     if is_simple_param:
                         info.param_to_field[stmt.value.id] = field_name
                     elif is_const_str:
@@ -302,9 +338,7 @@ def collect_class_fields(
             override_key = (info.name, field_name)
             if override_key in FIELD_TYPE_OVERRIDES:
                 typ = FIELD_TYPE_OVERRIDES[override_key]
-            info.fields[field_name] = FieldInfo(
-                name=field_name, typ=typ, py_name=field_name
-            )
+            info.fields[field_name] = FieldInfo(name=field_name, typ=typ, py_name=field_name)
     # Collect fields from __init__
     for stmt in node.body:
         if isinstance(stmt, ast.FunctionDef) and stmt.name == "__init__":
@@ -386,7 +420,9 @@ def collect_branch_var_types(
                 if isinstance(stmt.value, ast.Constant):
                     if isinstance(stmt.value.value, str):
                         branch_vars[var_name] = STRING
-                    elif isinstance(stmt.value.value, int) and not isinstance(stmt.value.value, bool):
+                    elif isinstance(stmt.value.value, int) and not isinstance(
+                        stmt.value.value, bool
+                    ):
                         branch_vars[var_name] = INT
                     elif isinstance(stmt.value.value, bool):
                         branch_vars[var_name] = BOOL
@@ -394,7 +430,9 @@ def collect_branch_var_types(
                     # String concatenation -> STRING
                     if isinstance(stmt.value.op, ast.Add):
                         left_type = infer_branch_expr_type(stmt.value.left, var_types, branch_vars)
-                        right_type = infer_branch_expr_type(stmt.value.right, var_types, branch_vars)
+                        right_type = infer_branch_expr_type(
+                            stmt.value.right, var_types, branch_vars
+                        )
                         if left_type == STRING or right_type == STRING:
                             branch_vars[var_name] = STRING
                         elif left_type == INT or right_type == INT:
@@ -406,9 +444,19 @@ def collect_branch_var_types(
                     elif stmt.value.id in branch_vars:
                         branch_vars[var_name] = branch_vars[stmt.value.id]
                 # Method calls (e.g., x.to_sexp() returns STRING)
-                elif isinstance(stmt.value, ast.Call) and isinstance(stmt.value.func, ast.Attribute):
+                elif isinstance(stmt.value, ast.Call) and isinstance(
+                    stmt.value.func, ast.Attribute
+                ):
                     method = stmt.value.func.attr
-                    if method in ("to_sexp", "format", "strip", "lower", "upper", "replace", "join"):
+                    if method in (
+                        "to_sexp",
+                        "format",
+                        "strip",
+                        "lower",
+                        "upper",
+                        "replace",
+                        "join",
+                    ):
                         branch_vars[var_name] = STRING
     return branch_vars
 
@@ -470,15 +518,27 @@ def infer_element_type_from_append_arg(
     if isinstance(arg, ast.Tuple):
         elem_types = []
         for elt in arg.elts:
-            elem_types.append(infer_element_type_from_append_arg(
-                elt, var_types, symbols, current_class_name, current_func_info, callbacks
-            ))
+            elem_types.append(
+                infer_element_type_from_append_arg(
+                    elt, var_types, symbols, current_class_name, current_func_info, callbacks
+                )
+            )
         return Tuple(tuple(elem_types))
     # Method calls
     if isinstance(arg, ast.Call) and isinstance(arg.func, ast.Attribute):
         method = arg.func.attr
         # String methods that return string
-        if method in ("strip", "lstrip", "rstrip", "lower", "upper", "replace", "join", "format", "to_sexp"):
+        if method in (
+            "strip",
+            "lstrip",
+            "rstrip",
+            "lower",
+            "upper",
+            "replace",
+            "join",
+            "format",
+            "to_sexp",
+        ):
             return STRING
         # .Copy() returns same type
         if method == "Copy":
@@ -563,12 +623,26 @@ def collect_var_types(
                     elif stmt.value.func.id == "str":
                         vars_all_types[var_name].append(STRING)
                 # String method calls: x = "".join(...), etc.
-                elif isinstance(stmt.value, ast.Call) and isinstance(stmt.value.func, ast.Attribute):
+                elif isinstance(stmt.value, ast.Call) and isinstance(
+                    stmt.value.func, ast.Attribute
+                ):
                     method = stmt.value.func.attr
-                    if method in ("join", "strip", "lstrip", "rstrip", "lower", "upper", "replace", "format"):
+                    if method in (
+                        "join",
+                        "strip",
+                        "lstrip",
+                        "rstrip",
+                        "lower",
+                        "upper",
+                        "replace",
+                        "format",
+                    ):
                         vars_all_types[var_name].append(STRING)
                     # self.method() calls - check return type
-                    elif isinstance(stmt.value.func.value, ast.Name) and stmt.value.func.value.id == "self":
+                    elif (
+                        isinstance(stmt.value.func.value, ast.Name)
+                        and stmt.value.func.value.id == "self"
+                    ):
                         if current_class_name and current_class_name in symbols.structs:
                             method_info = symbols.structs[current_class_name].methods.get(method)
                             if method_info:
@@ -589,8 +663,13 @@ def collect_var_types(
         else:
             # Multiple types - check if all are Node-related
             all_node = all(
-                t == InterfaceRef("Node") or t == StructRef("Node") or
-                (isinstance(t, Pointer) and isinstance(t.target, StructRef) and t.target.name in node_types)
+                t == InterfaceRef("Node")
+                or t == StructRef("Node")
+                or (
+                    isinstance(t, Pointer)
+                    and isinstance(t.target, StructRef)
+                    and t.target.name in node_types
+                )
                 for t in unique_types
             )
             if all_node:
@@ -602,9 +681,11 @@ def collect_var_types(
             if isinstance(stmt.target, ast.Name):
                 loop_var = stmt.target.id
                 # Check for range() call - loop variable is INT
-                if (isinstance(stmt.iter, ast.Call) and
-                    isinstance(stmt.iter.func, ast.Name) and
-                    stmt.iter.func.id == "range"):
+                if (
+                    isinstance(stmt.iter, ast.Call)
+                    and isinstance(stmt.iter.func, ast.Name)
+                    and stmt.iter.func.id == "range"
+                ):
                     var_types[loop_var] = INT
                 else:
                     assert callbacks.infer_iterable_type is not None
@@ -625,8 +706,13 @@ def collect_var_types(
             py_type = callbacks.annotation_to_str(stmt.annotation)
             typ = callbacks.py_type_to_ir(py_type, False)
             # int | None = None uses -1 sentinel, so track as INT not Optional
-            if (isinstance(typ, Optional) and typ.inner == INT and
-                stmt.value and isinstance(stmt.value, ast.Constant) and stmt.value.value is None):
+            if (
+                isinstance(typ, Optional)
+                and typ.inner == INT
+                and stmt.value
+                and isinstance(stmt.value, ast.Constant)
+                and stmt.value.value is None
+            ):
                 var_types[stmt.target.id] = INT
                 sentinel_ints.add(stmt.target.id)
             else:
@@ -688,7 +774,9 @@ def collect_var_types(
                     elif isinstance(stmt.value.op, ast.Add):
                         # Could be int or string - check operands
                         assert callbacks.is_len_call is not None
-                        if callbacks.is_len_call(stmt.value.left) or callbacks.is_len_call(stmt.value.right):
+                        if callbacks.is_len_call(stmt.value.left) or callbacks.is_len_call(
+                            stmt.value.right
+                        ):
                             var_types[var_name] = INT
                 # Infer from list/dict literals - element type inferred later from appends
                 elif isinstance(stmt.value, ast.List):
@@ -748,12 +836,16 @@ def collect_var_types(
                         var_types[var_name] = container_type.value
                     elif isinstance(container_type, Tuple):
                         # Indexing a tuple with constant gives element type
-                        if isinstance(stmt.value.slice, ast.Constant) and isinstance(stmt.value.slice.value, int):
+                        if isinstance(stmt.value.slice, ast.Constant) and isinstance(
+                            stmt.value.slice.value, int
+                        ):
                             idx = stmt.value.slice.value
                             if 0 <= idx < len(container_type.elements):
                                 var_types[var_name] = container_type.elements[idx]
                 # Infer from method calls: var = obj.method() -> method return type
-                elif isinstance(stmt.value, ast.Call) and isinstance(stmt.value.func, ast.Attribute):
+                elif isinstance(stmt.value, ast.Call) and isinstance(
+                    stmt.value.func, ast.Attribute
+                ):
                     method_name = stmt.value.func.attr
                     obj_type: "Type" = InterfaceRef("any")
                     if isinstance(stmt.value.func.value, ast.Name):
@@ -763,7 +855,14 @@ def collect_var_types(
                         elif obj_name in var_types:
                             obj_type = var_types[obj_name]
                         # Handle known string functions
-                        elif obj_name == "strings" and method_name in ("Join", "Replace", "ToLower", "ToUpper", "Trim", "TrimSpace"):
+                        elif obj_name == "strings" and method_name in (
+                            "Join",
+                            "Replace",
+                            "ToLower",
+                            "ToUpper",
+                            "Trim",
+                            "TrimSpace",
+                        ):
                             var_types[var_name] = STRING
                             continue
                     assert callbacks.extract_struct_name is not None
@@ -823,7 +922,9 @@ def collect_var_types(
                         if current_elem != InterfaceRef("any"):
                             continue  # Skip - already has specific element type
                     assert callbacks.infer_element_type_from_append_arg is not None
-                    elem_type = callbacks.infer_element_type_from_append_arg(call.args[0], var_types)
+                    elem_type = callbacks.infer_element_type_from_append_arg(
+                        call.args[0], var_types
+                    )
                     if elem_type != InterfaceRef("any"):
                         var_types[var_name] = Slice(elem_type)
     # Third-and-a-half pass: detect kind-guarded appends to track list element union types
@@ -839,11 +940,16 @@ def collect_var_types(
                 checked_var, struct_name = kind_check
                 # Look for append calls in the body
                 for body_stmt in stmt.body:
-                    if (isinstance(body_stmt, ast.Expr) and isinstance(body_stmt.value, ast.Call)):
+                    if isinstance(body_stmt, ast.Expr) and isinstance(body_stmt.value, ast.Call):
                         call = body_stmt.value
-                        if (isinstance(call.func, ast.Attribute) and call.func.attr == "append" and
-                            isinstance(call.func.value, ast.Name) and call.args and
-                            isinstance(call.args[0], ast.Name) and call.args[0].id == checked_var):
+                        if (
+                            isinstance(call.func, ast.Attribute)
+                            and call.func.attr == "append"
+                            and isinstance(call.func.value, ast.Name)
+                            and call.args
+                            and isinstance(call.args[0], ast.Name)
+                            and call.args[0].id == checked_var
+                        ):
                             list_var = call.func.value.id
                             if list_var not in list_element_unions:
                                 list_element_unions[list_var] = []
@@ -867,7 +973,9 @@ def collect_var_types(
                         if isinstance(container_type, Slice):
                             var_types[var_name] = container_type.element
                         elif isinstance(container_type, Tuple):
-                            if isinstance(stmt.value.slice, ast.Constant) and isinstance(stmt.value.slice.value, int):
+                            if isinstance(stmt.value.slice, ast.Constant) and isinstance(
+                                stmt.value.slice.value, int
+                            ):
                                 idx = stmt.value.slice.value
                                 if 0 <= idx < len(container_type.elements):
                                     var_types[var_name] = container_type.elements[idx]

@@ -154,6 +154,7 @@ from src.ir import (
     While,
 )
 
+
 class GoBackend:
     """Emit Go code from IR Module."""
 
@@ -232,7 +233,7 @@ class GoBackend:
 
     def _emit_string_helpers(self) -> None:
         """Emit helper functions for Python string methods."""
-        helpers = '''
+        helpers = """
 func _strIsAlnum(s string) bool {
 	for _, r := range s {
 		if !unicode.IsLetter(r) && !unicode.IsDigit(r) {
@@ -409,8 +410,8 @@ func _Substring(s string, start int, end int) string {
 	}
 	return s[byteStart:byteEnd]
 }
-'''
-        for line in helpers.strip().split('\n'):
+"""
+        for line in helpers.strip().split("\n"):
             self._line_raw(line)
         self._line("")
 
@@ -471,11 +472,9 @@ func _Substring(s string, start int, end int) string {
         self._current_return_type = func.ret
         self._named_returns = None
         self._in_catch_body = False
-        params = ", ".join(
-            f"{go_to_camel(p.name)} {self._type_to_go(p.typ)}" for p in func.params
-        )
+        params = ", ".join(f"{go_to_camel(p.name)} {self._type_to_go(p.typ)}" for p in func.params)
         # Check if we need named return parameters (for TryCatch with catch-body returns)
-        needs_named_returns = getattr(func, 'needs_named_returns', False)
+        needs_named_returns = getattr(func, "needs_named_returns", False)
         if needs_named_returns and func.ret != VOID:
             ret = self._named_return_type_to_go(func.ret)
         else:
@@ -487,7 +486,9 @@ func _Substring(s string, start int, end int) string {
             recv_type = self._type_to_go(func.receiver.typ)
             if func.receiver.pointer:
                 recv_type = "*" + recv_type.lstrip("*")
-            self._line(f"func ({recv_name} {recv_type}) {go_to_pascal(func.name)}({params}) {ret} {{")
+            self._line(
+                f"func ({recv_name} {recv_type}) {go_to_pascal(func.name)}({params}) {ret} {{"
+            )
         else:
             self._receiver_name = ""
             name = go_to_pascal(func.name)
@@ -527,7 +528,9 @@ func _Substring(s string, start int, end int) string {
                 n = len(stmt.typ.elements)
                 tmp_vars = ", ".join(f"_t{i}" for i in range(n))
                 field_vals = ", ".join(f"_t{i}" for i in range(n))
-                self._line(f"var {name} {go_type} = func() {go_type} {{ {tmp_vars} := {call_expr}; return {go_type}{{{field_vals}}} }}()")
+                self._line(
+                    f"var {name} {go_type} = func() {go_type} {{ {tmp_vars} := {call_expr}; return {go_type}{{{field_vals}}} }}()"
+                )
                 return
         if stmt.value:
             # nil assignments need explicit var type (Go's nil is untyped)
@@ -536,7 +539,9 @@ func _Substring(s string, start int, end int) string {
                 return
             val = self._emit_expr(stmt.value)
             # Use short declaration for simple types, explicit var for complex types
-            if isinstance(stmt.typ, (Tuple, Slice, Map, Set)) and not isinstance(stmt.value, (SliceLit, MapLit, SetLit, MakeSlice, MakeMap)):
+            if isinstance(stmt.typ, (Tuple, Slice, Map, Set)) and not isinstance(
+                stmt.value, (SliceLit, MapLit, SetLit, MakeSlice, MakeMap)
+            ):
                 self._line(f"var {name} {go_type} = {val}")
             else:
                 self._line(f"{name} := {val}")
@@ -545,18 +550,18 @@ func _Substring(s string, start int, end int) string {
 
     def _emit_stmt_Assign(self, stmt: Assign) -> None:
         target = self._emit_lvalue(stmt.target)
-        if getattr(stmt, 'is_declaration', False):
+        if getattr(stmt, "is_declaration", False):
             # Check if this var was hoisted - use = instead of :=
             is_hoisted = isinstance(stmt.target, VarLV) and stmt.target.name in self._hoisted_in_try
             # Check if there's a declaration type override
-            decl_typ = getattr(stmt, 'decl_typ', None)
+            decl_typ = getattr(stmt, "decl_typ", None)
             # nil assignments need explicit var type (Go's nil is untyped)
             if isinstance(stmt.value, NilLit):
                 if is_hoisted:
                     # Variable was hoisted, just assign nil
                     self._line(f"{target} = nil")
                     return
-                var_type = decl_typ or getattr(stmt.value, 'typ', None)
+                var_type = decl_typ or getattr(stmt.value, "typ", None)
                 if var_type:
                     go_type = self._type_to_go(var_type)
                     self._line(f"var {target} {go_type}")
@@ -577,7 +582,7 @@ func _Substring(s string, start int, end int) string {
     def _emit_stmt_TupleAssign(self, stmt: TupleAssign) -> None:
         """Emit tuple unpacking: a, b := func()"""
         targets = []
-        unused_indices = getattr(stmt, 'unused_indices', [])
+        unused_indices = getattr(stmt, "unused_indices", [])
         for i, t in enumerate(stmt.targets):
             if i in unused_indices:
                 targets.append("_")
@@ -590,12 +595,11 @@ func _Substring(s string, start int, end int) string {
                 targets.append(self._emit_lvalue(t))
         target_str = ", ".join(targets)
         value = self._emit_expr(stmt.value)
-        is_decl = getattr(stmt, 'is_declaration', False)
-        new_targets = getattr(stmt, 'new_targets', [])
+        is_decl = getattr(stmt, "is_declaration", False)
+        new_targets = getattr(stmt, "new_targets", [])
         # Check if ANY target was hoisted - those use = instead of :=
         any_hoisted = any(
-            isinstance(t, VarLV) and t.name in self._hoisted_in_try
-            for t in stmt.targets
+            isinstance(t, VarLV) and t.name in self._hoisted_in_try for t in stmt.targets
         )
         # Go's := handles mixed declarations - if ANY target is new (and not hoisted), use :=
         has_new_unhoisted = any(
@@ -628,7 +632,7 @@ func _Substring(s string, start int, end int) string {
         if isinstance(stmt.expr, MethodCall) and stmt.expr.method == "append" and stmt.expr.args:
             obj = self._emit_expr(stmt.expr.obj)
             arg = self._emit_expr(stmt.expr.args[0])
-            arg_type = stmt.expr.args[0].typ if hasattr(stmt.expr.args[0], 'typ') else None
+            arg_type = stmt.expr.args[0].typ if hasattr(stmt.expr.args[0], "typ") else None
             recv_type = stmt.expr.receiver_type
 
             def needs_deref(arg_type, elem_type):
@@ -686,7 +690,9 @@ func _Substring(s string, start int, end int) string {
             obj = self._emit_expr(stmt.expr.obj)
             arg = self._emit_expr(stmt.expr.args[0])
             # Check if receiver is a pointer to slice - need to dereference
-            if isinstance(stmt.expr.receiver_type, Pointer) and isinstance(stmt.expr.receiver_type.target, Slice):
+            if isinstance(stmt.expr.receiver_type, Pointer) and isinstance(
+                stmt.expr.receiver_type.target, Slice
+            ):
                 self._line(f"*{obj} = append(*{obj}, {arg}...)")
             else:
                 self._line(f"{obj} = append({obj}, {arg}...)")
@@ -747,11 +753,14 @@ func _Substring(s string, start int, end int) string {
             else:
                 val = self._emit_expr(stmt.value)
                 # If function returns Optional (pointer) but value is a non-pointer type, add &
-                ret_type = getattr(self, '_current_return_type', None)
-                val_type = getattr(stmt.value, 'typ', None)
-                if (isinstance(ret_type, Optional) and
-                    val_type and not isinstance(val_type, (Optional, Pointer)) and
-                    not isinstance(stmt.value, NilLit)):
+                ret_type = getattr(self, "_current_return_type", None)
+                val_type = getattr(stmt.value, "typ", None)
+                if (
+                    isinstance(ret_type, Optional)
+                    and val_type
+                    and not isinstance(val_type, (Optional, Pointer))
+                    and not isinstance(stmt.value, NilLit)
+                ):
                     val = f"&{val}"
                 self._line(f"return {val}")
         else:
@@ -759,7 +768,7 @@ func _Substring(s string, start int, end int) string {
 
     def _emit_stmt_If(self, stmt: If) -> None:
         # Emit hoisted variable declarations before the if
-        hoisted_vars = getattr(stmt, 'hoisted_vars', [])
+        hoisted_vars = getattr(stmt, "hoisted_vars", [])
         for name, typ in hoisted_vars:
             type_str = self._type_to_go(typ) if typ else "interface{}"
             # If type is interface{} but function returns a tuple, try to infer
@@ -822,7 +831,7 @@ func _Substring(s string, start int, end int) string {
 
     def _emit_stmt_While(self, stmt: While) -> None:
         # Emit hoisted variable declarations before the loop
-        hoisted_vars = getattr(stmt, 'hoisted_vars', [])
+        hoisted_vars = getattr(stmt, "hoisted_vars", [])
         for name, typ in hoisted_vars:
             go_name = go_to_camel(name)
             if typ is not None:
@@ -842,7 +851,7 @@ func _Substring(s string, start int, end int) string {
 
     def _emit_stmt_ForRange(self, stmt: ForRange) -> None:
         # Emit hoisted variable declarations before the for loop
-        hoisted_vars = getattr(stmt, 'hoisted_vars', [])
+        hoisted_vars = getattr(stmt, "hoisted_vars", [])
         for name, typ in hoisted_vars:
             type_str = self._type_to_go(typ) if typ else "interface{}"
             go_name = go_to_camel(name)
@@ -912,7 +921,7 @@ func _Substring(s string, start int, end int) string {
 
     def _emit_stmt_Block(self, stmt: Block) -> None:
         # Check if this block should emit without braces (for statement sequences)
-        no_scope = getattr(stmt, 'no_scope', False)
+        no_scope = getattr(stmt, "no_scope", False)
         if not no_scope:
             self._line("{")
             self.indent += 1
@@ -924,14 +933,14 @@ func _Substring(s string, start int, end int) string {
 
     def _emit_stmt_TryCatch(self, stmt: TryCatch) -> None:
         # Emit hoisted variable declarations before the try/catch
-        hoisted_vars = getattr(stmt, 'hoisted_vars', [])
+        hoisted_vars = getattr(stmt, "hoisted_vars", [])
         for name, typ in hoisted_vars:
             type_str = self._type_to_go(typ) if typ else "interface{}"
             go_name = go_to_camel(name)
             self._line(f"var {go_name} {type_str}")
             self._hoisted_in_try.add(name)
-        has_returns = getattr(stmt, 'has_returns', False)
-        has_catch_returns = getattr(stmt, 'has_catch_returns', False)
+        has_returns = getattr(stmt, "has_returns", False)
+        has_catch_returns = getattr(stmt, "has_catch_returns", False)
         if has_returns:
             # When try/catch contains return statements, don't wrap in IIFE
             # Return statements will return from the enclosing function
@@ -997,7 +1006,7 @@ func _Substring(s string, start int, end int) string {
             if pos != "0":
                 self._line(f'panic(fmt.Sprintf("%s at position %d", {msg}, {pos}))')
             else:
-                self._line(f'panic({msg})')
+                self._line(f"panic({msg})")
 
     def _emit_stmt_SoftFail(self, stmt: SoftFail) -> None:
         self._line("return nil")
@@ -1005,6 +1014,7 @@ func _Substring(s string, start int, end int) string {
     def _uses_node_methods(self, stmts: list[Stmt], binding: str) -> bool:
         """Check if binding variable is used with Node interface methods in statements."""
         NODE_METHODS = {"ToSexp", "GetKind", "to_sexp", "get_kind"}
+
         def check_expr(expr) -> bool:
             if expr is None:
                 return False
@@ -1017,18 +1027,28 @@ func _Substring(s string, start int, end int) string {
                 if check_expr(expr.left) or check_expr(expr.right):
                     return True
             # Check other attributes
-            for attr in ('operand', 'cond', 'then_expr', 'else_expr', 'expr', 'index', 'obj', 'value'):
+            for attr in (
+                "operand",
+                "cond",
+                "then_expr",
+                "else_expr",
+                "expr",
+                "index",
+                "obj",
+                "value",
+            ):
                 if hasattr(expr, attr) and check_expr(getattr(expr, attr)):
                     return True
-            if hasattr(expr, 'args'):
+            if hasattr(expr, "args"):
                 for arg in expr.args:
                     if check_expr(arg):
                         return True
-            if hasattr(expr, 'parts'):
+            if hasattr(expr, "parts"):
                 for part in expr.parts:
                     if check_expr(part):
                         return True
             return False
+
         def check_stmt(stmt: Stmt) -> bool:
             if isinstance(stmt, (Assign, OpAssign)):
                 return check_expr(stmt.value)
@@ -1043,6 +1063,7 @@ func _Substring(s string, start int, end int) string {
                     if check_stmt(s):
                         return True
             return False
+
         for stmt in stmts:
             if check_stmt(stmt):
                 return True
@@ -1050,7 +1071,7 @@ func _Substring(s string, start int, end int) string {
 
     def _emit_stmt_TypeSwitch(self, stmt: TypeSwitch) -> None:
         # Emit hoisted variable declarations before the switch
-        hoisted_vars = getattr(stmt, 'hoisted_vars', [])
+        hoisted_vars = getattr(stmt, "hoisted_vars", [])
         for name, typ in hoisted_vars:
             type_str = self._type_to_go(typ) if typ else "interface{}"
             go_name = go_to_camel(name)
@@ -1059,15 +1080,17 @@ func _Substring(s string, start int, end int) string {
         # Special case: single case with default that's just a break.
         # Emit as type assertion if/else to avoid break-in-switch bug
         # (break inside switch default only exits switch, not enclosing loop).
-        if (len(stmt.cases) == 1 and
-            len(stmt.default) == 1 and
-            isinstance(stmt.default[0], Break) and
-            stmt.default[0].label is None):
+        if (
+            len(stmt.cases) == 1
+            and len(stmt.default) == 1
+            and isinstance(stmt.default[0], Break)
+            and stmt.default[0].label is None
+        ):
             self._emit_type_switch_as_assertion(stmt)
             return
         expr = self._emit_expr(stmt.expr)
-        binding_unused = getattr(stmt, 'binding_unused', False)
-        binding_reassigned = getattr(stmt, 'binding_reassigned', False)
+        binding_unused = getattr(stmt, "binding_unused", False)
+        binding_reassigned = getattr(stmt, "binding_reassigned", False)
         # If binding is unused or reassigned, emit without binding to avoid Go errors
         if binding_unused or binding_reassigned:
             self._line(f"switch {expr}.(type) {{")
@@ -1108,7 +1131,7 @@ func _Substring(s string, start int, end int) string {
             needs_node_assertion = False
             if not binding_unused and not binding_reassigned:
                 binding = go_to_camel(stmt.binding)
-                expr_typ = getattr(stmt.expr, 'typ', None)
+                expr_typ = getattr(stmt.expr, "typ", None)
                 if expr_typ:
                     type_str = self._type_to_go(expr_typ)
                     if type_str not in ("interface{}", "any"):
@@ -1167,12 +1190,12 @@ func _Substring(s string, start int, end int) string {
         # For types like 'ArithVar', extract 'Var' (after common prefixes)
         for prefix in ("Arith", "Cond", ""):
             if name.startswith(prefix) and len(name) > len(prefix):
-                return name[len(prefix):]
+                return name[len(prefix) :]
         return name
 
     def _emit_stmt_Match(self, stmt: Match) -> None:
         # Emit hoisted variable declarations before the switch
-        hoisted_vars = getattr(stmt, 'hoisted_vars', [])
+        hoisted_vars = getattr(stmt, "hoisted_vars", [])
         for name, typ in hoisted_vars:
             type_str = self._type_to_go(typ) if typ else "interface{}"
             go_name = go_to_camel(name)
@@ -1241,10 +1264,9 @@ func _Substring(s string, start int, end int) string {
         obj = self._emit_expr(expr.obj)
         field = go_to_pascal(expr.field)
         # Interface fields must be accessed via getter methods
-        obj_type = getattr(expr.obj, 'typ', None)
-        is_node_type = (
-            (isinstance(obj_type, InterfaceRef) and obj_type.name == "Node") or
-            (isinstance(obj_type, StructRef) and obj_type.name == "Node")
+        obj_type = getattr(expr.obj, "typ", None)
+        is_node_type = (isinstance(obj_type, InterfaceRef) and obj_type.name == "Node") or (
+            isinstance(obj_type, StructRef) and obj_type.name == "Node"
         )
         if is_node_type and expr.field == "kind":
             return f"{obj}.GetKind()"
@@ -1261,14 +1283,14 @@ func _Substring(s string, start int, end int) string {
                 if var_name in self._tuple_vars:
                     return f"{obj}.F{expr.index.value}"
             # Check if indexing into a tuple type (struct with F0, F1, etc.)
-            if hasattr(expr, 'obj_type') and isinstance(expr.obj_type, Tuple):
+            if hasattr(expr, "obj_type") and isinstance(expr.obj_type, Tuple):
                 return f"{obj}.F{expr.index.value}"
-        obj_type = getattr(expr.obj, 'typ', None)
+        obj_type = getattr(expr.obj, "typ", None)
         # String indexing: use _runeAt when result is used as character/string,
         # but keep byte indexing when result is used as byte/int (e.g., for ord())
         if obj_type == STRING:
             # If result type is BYTE or expr is being cast to int, use byte indexing
-            result_type = getattr(expr, 'typ', None)
+            result_type = getattr(expr, "typ", None)
             if result_type == BYTE or result_type == INT:
                 # Byte-based indexing for byte operations
                 return f"{obj}[{idx}]"
@@ -1278,7 +1300,7 @@ func _Substring(s string, start int, end int) string {
 
     def _emit_expr_SliceExpr(self, expr: SliceExpr) -> str:
         obj = self._emit_expr(expr.obj)
-        obj_type = getattr(expr.obj, 'typ', None)
+        obj_type = getattr(expr.obj, "typ", None)
         # Use rune-based slicing for strings (Python s[a:b] uses character indices)
         if obj_type == STRING:
             low = self._emit_expr(expr.low) if expr.low else "0"
@@ -1308,7 +1330,20 @@ func _Substring(s string, start int, end int) string {
             end = self._emit_expr(expr.args[2])
             return f"{lst}[{start}:{end}]"
         # Go builtins and our helpers stay as-is
-        if expr.func in ("append", "cap", "close", "copy", "delete", "panic", "recover", "print", "println", "_parseInt", "_intToStr", "_intPtr"):
+        if expr.func in (
+            "append",
+            "cap",
+            "close",
+            "copy",
+            "delete",
+            "panic",
+            "recover",
+            "print",
+            "println",
+            "_parseInt",
+            "_intToStr",
+            "_intPtr",
+        ):
             func = expr.func
         # Known function parameter names that are called as functions - keep lowercase
         elif expr.func in ("parsefn",):
@@ -1334,7 +1369,7 @@ func _Substring(s string, start int, end int) string {
             if method == "append" and expr.args:
                 arg = self._emit_expr(expr.args[0])
                 # If appending pointer to slice of values/interfaces, dereference
-                arg_type = expr.args[0].typ if hasattr(expr.args[0], 'typ') else None
+                arg_type = expr.args[0].typ if hasattr(expr.args[0], "typ") else None
                 elem_type = expr.receiver_type.element
                 needs_deref = False
                 if isinstance(arg_type, Pointer) and isinstance(arg_type.target, StructRef):
@@ -1342,7 +1377,10 @@ func _Substring(s string, start int, end int) string {
                     if isinstance(elem_type, StructRef) and arg_type.target.name == elem_type.name:
                         needs_deref = True
                     # Or element is Interface with same name (Node interface)
-                    elif isinstance(elem_type, InterfaceRef) and arg_type.target.name == elem_type.name:
+                    elif (
+                        isinstance(elem_type, InterfaceRef)
+                        and arg_type.target.name == elem_type.name
+                    ):
                         needs_deref = True
                 if needs_deref:
                     return f"append({obj}, *{arg})"
@@ -1377,7 +1415,9 @@ func _Substring(s string, start int, end int) string {
             # Handle tuple argument: s.startswith((" ", "\n")) -> HasPrefix(s," ")||HasPrefix(s,"\n")
             arg_node = expr.args[0]
             if isinstance(arg_node, TupleLit):
-                parts = [f"strings.HasPrefix({obj}, {self._emit_expr(e)})" for e in arg_node.elements]
+                parts = [
+                    f"strings.HasPrefix({obj}, {self._emit_expr(e)})" for e in arg_node.elements
+                ]
                 return " || ".join(parts)
             arg = self._emit_expr(arg_node)
             # Handle position argument: s.startswith(prefix, pos) -> strings.HasPrefix(s[pos:], prefix)
@@ -1389,7 +1429,9 @@ func _Substring(s string, start int, end int) string {
             # Handle tuple argument: s.endswith((" ", "\n")) -> HasSuffix(s," ")||HasSuffix(s,"\n")
             arg_node = expr.args[0]
             if isinstance(arg_node, TupleLit):
-                parts = [f"strings.HasSuffix({obj}, {self._emit_expr(e)})" for e in arg_node.elements]
+                parts = [
+                    f"strings.HasSuffix({obj}, {self._emit_expr(e)})" for e in arg_node.elements
+                ]
                 return " || ".join(parts)
             arg = self._emit_expr(arg_node)
             return f"strings.HasSuffix({obj}, {arg})"
@@ -1408,12 +1450,12 @@ func _Substring(s string, start int, end int) string {
             if expr.args:
                 arg = self._emit_expr(expr.args[0])
                 return f"strings.TrimLeft({obj}, {arg})"
-            return f"strings.TrimLeft({obj}, \" \\t\\n\\r\")"
+            return f'strings.TrimLeft({obj}, " \\t\\n\\r")'
         if method == "rstrip":
             if expr.args:
                 arg = self._emit_expr(expr.args[0])
                 return f"strings.TrimRight({obj}, {arg})"
-            return f"strings.TrimRight({obj}, \" \\t\\n\\r\")"
+            return f'strings.TrimRight({obj}, " \\t\\n\\r")'
         if method == "split":
             if expr.args:
                 arg = self._emit_expr(expr.args[0])
@@ -1462,12 +1504,12 @@ func _Substring(s string, start int, end int) string {
         right = self._emit_expr(expr.right)
         # Handle 'in' and 'not in' operators
         if expr.op == "in":
-            right_type = getattr(expr.right, 'typ', None)
+            right_type = getattr(expr.right, "typ", None)
             if isinstance(right_type, (Set, Map)):
                 return f"_mapHas({right}, {left})"
             return f"strings.Contains({right}, {left})"
         if expr.op == "not in":
-            right_type = getattr(expr.right, 'typ', None)
+            right_type = getattr(expr.right, "typ", None)
             if isinstance(right_type, (Set, Map)):
                 return f"!_mapHas({right}, {left})"
             return f"!strings.Contains({right}, {left})"
@@ -1522,9 +1564,14 @@ func _Substring(s string, start int, end int) string {
             inner = expr.operand
             # !(x != "") -> x == ""
             if inner.op == "!=" and isinstance(inner.right, StringLit) and inner.right.value == "":
-                return f"{self._emit_expr(inner.left)} == \"\""
+                return f'{self._emit_expr(inner.left)} == ""'
             # !(len(x) > 0) -> len(x) == 0
-            if inner.op == ">" and isinstance(inner.left, Len) and isinstance(inner.right, IntLit) and inner.right.value == 0:
+            if (
+                inner.op == ">"
+                and isinstance(inner.left, Len)
+                and isinstance(inner.right, IntLit)
+                and inner.right.value == 0
+            ):
                 return f"len({self._emit_expr(inner.left.expr)}) == 0"
             # !((x & Y) != 0) -> (x & Y) == 0
             if inner.op == "!=" and isinstance(inner.right, IntLit) and inner.right.value == 0:
@@ -1535,7 +1582,7 @@ func _Substring(s string, start int, end int) string {
         # Remove double negation with IsNil: !(!_isNilInterfaceRef(x)) -> _isNilInterfaceRef(x)
         if op == "!" and isinstance(expr.operand, IsNil) and expr.operand.negated:
             inner = self._emit_expr(expr.operand.expr)
-            expr_type = getattr(expr.operand.expr, 'typ', None)
+            expr_type = getattr(expr.operand.expr, "typ", None)
             if isinstance(expr_type, InterfaceRef):
                 return f"_isNilInterfaceRef({inner})"
             return f"{inner} == nil"
@@ -1553,8 +1600,8 @@ func _Substring(s string, start int, end int) string {
         # When ternary type is any but both branches have same concrete type, use that
         result_type = expr.typ
         if isinstance(result_type, InterfaceRef) and result_type.name == "any":
-            then_type = getattr(expr.then_expr, 'typ', None)
-            else_type = getattr(expr.else_expr, 'typ', None)
+            then_type = getattr(expr.then_expr, "typ", None)
+            else_type = getattr(expr.else_expr, "typ", None)
             if then_type is not None and then_type == else_type:
                 result_type = then_type
         go_type = self._type_to_go(result_type)
@@ -1565,7 +1612,7 @@ func _Substring(s string, start int, end int) string {
         to_type = self._type_to_go(expr.to_type)
         # Skip redundant string() wrapper around _runeAt (which already returns string)
         if to_type == "string" and isinstance(expr.expr, Index):
-            obj_type = getattr(expr.expr.obj, 'typ', None)
+            obj_type = getattr(expr.expr.obj, "typ", None)
             if obj_type == STRING:
                 # _runeAt already returns string, no wrapper needed
                 return inner
@@ -1586,7 +1633,7 @@ func _Substring(s string, start int, end int) string {
         # Check if the expression type is an interface type
         # In Go, interface nil check requires reflection when interface might
         # contain a typed nil pointer (e.g., var x SomeInterface = (*Impl)(nil))
-        expr_type = getattr(expr.expr, 'typ', None)
+        expr_type = getattr(expr.expr, "typ", None)
         is_interface = isinstance(expr_type, InterfaceRef)
         if is_interface:
             # Use helper function that handles typed nil pointers
@@ -1600,7 +1647,7 @@ func _Substring(s string, start int, end int) string {
     def _emit_expr_Len(self, expr: Len) -> str:
         inner = self._emit_expr(expr.expr)
         # Use rune-based length for strings (Python len() counts characters, not bytes)
-        inner_type = getattr(expr.expr, 'typ', None)
+        inner_type = getattr(expr.expr, "typ", None)
         if inner_type == STRING:
             return f"_runeLen({inner})"
         return f"len({inner})"
@@ -1629,9 +1676,7 @@ func _Substring(s string, start int, end int) string {
     def _emit_expr_MapLit(self, expr: MapLit) -> str:
         key_type = self._type_to_go(expr.key_type)
         val_type = self._type_to_go(expr.value_type)
-        entries = ", ".join(
-            f"{self._emit_expr(k)}: {self._emit_expr(v)}" for k, v in expr.entries
-        )
+        entries = ", ".join(f"{self._emit_expr(k)}: {self._emit_expr(v)}" for k, v in expr.entries)
         return f"map[{key_type}]{val_type}{{{entries}}}"
 
     def _emit_expr_SetLit(self, expr: SetLit) -> str:
@@ -1676,7 +1721,7 @@ func _Substring(s string, start int, end int) string {
     def _emit_expr_StringFormat(self, expr: StringFormat) -> str:
         args = ", ".join(self._emit_expr(a) for a in expr.args)
         # Convert Python-style {0}, {1} placeholders to Go-style %v
-        template = re.sub(r'\{(\d+)\}', '%v', expr.template)
+        template = re.sub(r"\{(\d+)\}", "%v", expr.template)
         escaped = escape_string(template)
         if args:
             return f'fmt.Sprintf("{escaped}", {args})'
@@ -1794,6 +1839,7 @@ func _Substring(s string, start int, end int) string {
     def _infer_tuple_element_type(self, var_name: str, stmt: If, ret_type: Tuple) -> Type | None:
         """Infer which tuple element a variable corresponds to by scanning returns."""
         from src.ir import Return, TupleLit, Var
+
         def scan_for_return_position(stmts: list) -> int | None:
             for s in stmts:
                 if isinstance(s, Return) and s.value and isinstance(s.value, TupleLit):
@@ -1808,6 +1854,7 @@ func _Substring(s string, start int, end int) string {
                     if pos is not None:
                         return pos
             return None
+
         pos = scan_for_return_position(stmt.then_body)
         if pos is None:
             pos = scan_for_return_position(stmt.else_body)

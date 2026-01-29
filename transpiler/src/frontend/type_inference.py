@@ -1,4 +1,5 @@
 """Type inference utilities extracted from frontend.py."""
+
 from __future__ import annotations
 
 import ast
@@ -441,13 +442,29 @@ def synthesize_method_return_type(
 ) -> Type:
     """Look up method return type from struct info."""
     # String methods that return string
-    if obj_type == STRING and method in ("join", "replace", "lower", "upper", "strip", "lstrip", "rstrip", "format"):
+    if obj_type == STRING and method in (
+        "join",
+        "replace",
+        "lower",
+        "upper",
+        "strip",
+        "lstrip",
+        "rstrip",
+        "format",
+    ):
         return STRING
     # String methods that return int
     if obj_type == STRING and method in ("find", "rfind", "index", "rindex", "count"):
         return INT
     # String methods that return bool
-    if obj_type == STRING and method in ("startswith", "endswith", "isdigit", "isalpha", "isalnum", "isspace"):
+    if obj_type == STRING and method in (
+        "startswith",
+        "endswith",
+        "isdigit",
+        "isalpha",
+        "isalnum",
+        "isspace",
+    ):
         return BOOL
     # Node interface methods
     if is_node_interface_type(obj_type):
@@ -484,6 +501,7 @@ def synthesize_type(
 ) -> Type:
     """Bottom-up type synthesis: compute type from expression structure."""
     from .. import ir
+
     # Literals have known types
     if isinstance(expr, (ir.IntLit, ir.FloatLit, ir.StringLit, ir.BoolLit)):
         return expr.typ
@@ -651,6 +669,7 @@ def coerce(
 ) -> "ir.Expr":
     """Apply type coercions when synthesized type doesn't match expected."""
     from .. import ir
+
     # byte → string: wrap with string() cast
     if from_type == BYTE and to_type == STRING:
         return ir.Cast(expr=expr, to_type=STRING, typ=STRING, loc=expr.loc)
@@ -662,7 +681,9 @@ def coerce(
         expr.typ = to_type
         return expr
     # nil → nilable types: update NilLit type (interfaces, pointers, and slices are nilable in Go)
-    if isinstance(expr, ir.NilLit) and isinstance(to_type, (InterfaceRef, StructRef, Pointer, Slice)):
+    if isinstance(expr, ir.NilLit) and isinstance(
+        to_type, (InterfaceRef, StructRef, Pointer, Slice)
+    ):
         expr.typ = to_type
         return expr
     # []interface{} → []T: use typed slice
@@ -673,7 +694,9 @@ def coerce(
             if isinstance(expr, ir.SliceLit):
                 expr.element_type = to_type.element
         # []*Subtype → []Node: for Node interface covariance (Go slices aren't covariant)
-        elif is_node_subtype(from_type.element, node_types) and is_node_interface_type(to_type.element):
+        elif is_node_subtype(from_type.element, node_types) and is_node_interface_type(
+            to_type.element
+        ):
             expr.typ = to_type
             if isinstance(expr, ir.SliceLit):
                 expr.element_type = to_type.element
@@ -682,8 +705,20 @@ def coerce(
         new_elements = []
         for i, elem in enumerate(expr.elements):
             if i < len(to_type.elements):
-                elem_from_type = synthesize_type(elem, type_ctx, current_func_info, symbols, node_types)
-                new_elements.append(coerce(elem, elem_from_type, to_type.elements[i], type_ctx, current_func_info, symbols, node_types))
+                elem_from_type = synthesize_type(
+                    elem, type_ctx, current_func_info, symbols, node_types
+                )
+                new_elements.append(
+                    coerce(
+                        elem,
+                        elem_from_type,
+                        to_type.elements[i],
+                        type_ctx,
+                        current_func_info,
+                        symbols,
+                        node_types,
+                    )
+                )
             else:
                 new_elements.append(elem)
         expr.elements = new_elements

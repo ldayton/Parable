@@ -48,7 +48,7 @@ def _analyze_initial_value_in_stmts(stmts: list[Stmt]) -> None:
     """Analyze statements for VarDecls with unused initial values."""
     for i, stmt in enumerate(stmts):
         if isinstance(stmt, VarDecl) and stmt.value is not None:
-            stmt.initial_value_unused = _is_written_before_read(stmt.name, stmts[i + 1:])
+            stmt.initial_value_unused = _is_written_before_read(stmt.name, stmts[i + 1 :])
         # Recurse into nested structures
         if isinstance(stmt, If):
             _analyze_initial_value_in_stmts(stmt.then_body)
@@ -224,24 +224,44 @@ def _expr_reads(name: str, expr) -> bool:
     if isinstance(expr, Var):
         return expr.name == name
     # Check all expression children
-    for attr in ('obj', 'left', 'right', 'operand', 'cond', 'then_expr', 'else_expr',
-                 'expr', 'index', 'low', 'high', 'ptr', 'value', 'message', 'pos',
-                 'iterable', 'target', 'inner', 'on_type', 'length', 'capacity'):
+    for attr in (
+        "obj",
+        "left",
+        "right",
+        "operand",
+        "cond",
+        "then_expr",
+        "else_expr",
+        "expr",
+        "index",
+        "low",
+        "high",
+        "ptr",
+        "value",
+        "message",
+        "pos",
+        "iterable",
+        "target",
+        "inner",
+        "on_type",
+        "length",
+        "capacity",
+    ):
         if hasattr(expr, attr) and _expr_reads(name, getattr(expr, attr)):
             return True
-    if hasattr(expr, 'args'):
+    if hasattr(expr, "args"):
         for arg in expr.args:
             if _expr_reads(name, arg):
                 return True
-    if hasattr(expr, 'elements'):
+    if hasattr(expr, "elements"):
         for elem in expr.elements:
             if _expr_reads(name, elem):
                 return True
-    if hasattr(expr, 'parts'):
+    if hasattr(expr, "parts"):
         for part in expr.parts:
             if _expr_reads(name, part):
                 return True
-    if hasattr(expr, 'entries'):
+    if hasattr(expr, "entries"):
         entries = expr.entries
         if isinstance(entries, dict):
             for v in entries.values():
@@ -252,7 +272,7 @@ def _expr_reads(name: str, expr) -> bool:
                 if isinstance(item, tuple) and len(item) == 2:
                     if _expr_reads(name, item[1]):
                         return True
-    if hasattr(expr, 'fields') and isinstance(expr.fields, dict):
+    if hasattr(expr, "fields") and isinstance(expr.fields, dict):
         for v in expr.fields.values():
             if _expr_reads(name, v):
                 return True

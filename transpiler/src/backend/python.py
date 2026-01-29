@@ -119,17 +119,78 @@ from src.ir import (
 
 
 # Python builtins that shouldn't be shadowed by variable names
-_PYTHON_BUILTINS = frozenset({
-    "abs", "all", "any", "ascii", "bin", "bool", "breakpoint", "bytearray",
-    "bytes", "callable", "chr", "classmethod", "compile", "complex", "delattr",
-    "dict", "dir", "divmod", "enumerate", "eval", "exec", "filter", "float",
-    "format", "frozenset", "getattr", "globals", "hasattr", "hash", "help",
-    "hex", "id", "input", "int", "isinstance", "issubclass", "iter", "len",
-    "list", "locals", "map", "max", "memoryview", "min", "next", "object",
-    "oct", "open", "ord", "pow", "print", "property", "range", "repr",
-    "reversed", "round", "set", "setattr", "slice", "sorted", "staticmethod",
-    "str", "sum", "super", "tuple", "type", "vars", "zip",
-})
+_PYTHON_BUILTINS = frozenset(
+    {
+        "abs",
+        "all",
+        "any",
+        "ascii",
+        "bin",
+        "bool",
+        "breakpoint",
+        "bytearray",
+        "bytes",
+        "callable",
+        "chr",
+        "classmethod",
+        "compile",
+        "complex",
+        "delattr",
+        "dict",
+        "dir",
+        "divmod",
+        "enumerate",
+        "eval",
+        "exec",
+        "filter",
+        "float",
+        "format",
+        "frozenset",
+        "getattr",
+        "globals",
+        "hasattr",
+        "hash",
+        "help",
+        "hex",
+        "id",
+        "input",
+        "int",
+        "isinstance",
+        "issubclass",
+        "iter",
+        "len",
+        "list",
+        "locals",
+        "map",
+        "max",
+        "memoryview",
+        "min",
+        "next",
+        "object",
+        "oct",
+        "open",
+        "ord",
+        "pow",
+        "print",
+        "property",
+        "range",
+        "repr",
+        "reversed",
+        "round",
+        "set",
+        "setattr",
+        "slice",
+        "sorted",
+        "staticmethod",
+        "str",
+        "sum",
+        "super",
+        "tuple",
+        "type",
+        "vars",
+        "zip",
+    }
+)
 
 
 def _safe_name(name: str) -> str:
@@ -340,9 +401,7 @@ class PythonBackend:
                     self._emit_stmt(s)
                 self.indent -= 1
                 self._emit_else_body(else_body)
-            case TypeSwitch(
-                expr=expr, binding=binding, cases=cases, default=default
-            ):
+            case TypeSwitch(expr=expr, binding=binding, cases=cases, default=default):
                 self._emit_type_switch(expr, binding, cases, default)
             case Match(expr=expr, cases=cases, default=default):
                 self._emit_match(expr, cases, default)
@@ -365,9 +424,7 @@ class PythonBackend:
             case Block(body=body):
                 for s in body:
                     self._emit_stmt(s)
-            case TryCatch(
-                body=body, catch_var=catch_var, catch_body=catch_body, reraise=reraise
-            ):
+            case TryCatch(body=body, catch_var=catch_var, catch_body=catch_body, reraise=reraise):
                 self._emit_try_catch(body, catch_var, catch_body, reraise)
             case Raise(error_type=error_type, message=message, pos=pos, reraise_var=reraise_var):
                 if reraise_var:
@@ -599,7 +656,9 @@ class PythonBackend:
                 left_str = self._maybe_paren(left, op, is_left=True)
                 right_str = self._maybe_paren(right, op, is_left=False)
                 return f"{left_str} {py_op} {right_str}"
-            case UnaryOp(op="!", operand=BinaryOp(op=">", left=Len(expr=inner), right=IntLit(value=0))):
+            case UnaryOp(
+                op="!", operand=BinaryOp(op=">", left=Len(expr=inner), right=IntLit(value=0))
+            ):
                 # Convert !(len(x) > 0) back to "not x" for Python
                 return f"not {self._expr(inner)}"
             case UnaryOp(op="!", operand=BinaryOp(op="!=", left=left, right=StringLit(value=""))):
@@ -624,7 +683,11 @@ class PythonBackend:
                 if isinstance(to_type, Slice) and to_type.element == Primitive(kind="byte"):
                     return f'{self._expr(inner)}.encode("utf-8")'
                 # Cast from string/char/byte to int is ord() in Python
-                if to_type == Primitive(kind="int") and inner.typ in (Primitive(kind="string"), Primitive(kind="byte"), Primitive(kind="rune")):
+                if to_type == Primitive(kind="int") and inner.typ in (
+                    Primitive(kind="string"),
+                    Primitive(kind="byte"),
+                    Primitive(kind="rune"),
+                ):
                     return f"ord({self._expr(inner)})"
                 # Most casts in Python are no-ops
                 return self._expr(inner)
@@ -652,9 +715,7 @@ class PythonBackend:
             case MapLit(entries=entries):
                 if not entries:
                     return "{}"
-                pairs = ", ".join(
-                    f"{self._expr(k)}: {self._expr(v)}" for k, v in entries
-                )
+                pairs = ", ".join(f"{self._expr(k)}: {self._expr(v)}" for k, v in entries)
                 return f"{{{pairs}}}"
             case SetLit(elements=elements):
                 if not elements:
@@ -706,6 +767,7 @@ class PythonBackend:
 
     def _format_string(self, template: str, args: list[Expr]) -> str:
         import re
+
         # First escape literal braces that aren't placeholders
         # Replace {N} with a marker, escape all other braces, then restore
         markers = {}
@@ -892,11 +954,21 @@ def _unary_op(op: str) -> str:
 
 # Precedence levels (higher = binds tighter)
 _PRECEDENCE = {
-    "or": 1, "||": 1,
-    "and": 2, "&&": 2,
-    "==": 3, "!=": 3, "<": 3, ">": 3, "<=": 3, ">=": 3,
-    "+": 4, "-": 4,
-    "*": 5, "/": 5, "%": 5,
+    "or": 1,
+    "||": 1,
+    "and": 2,
+    "&&": 2,
+    "==": 3,
+    "!=": 3,
+    "<": 3,
+    ">": 3,
+    "<=": 3,
+    ">=": 3,
+    "+": 4,
+    "-": 4,
+    "*": 5,
+    "/": 5,
+    "%": 5,
 }
 
 

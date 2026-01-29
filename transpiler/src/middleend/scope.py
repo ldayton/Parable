@@ -84,21 +84,41 @@ def _collect_used_vars(stmts: list[Stmt]) -> set[str]:
         if isinstance(expr, Var):
             result.add(expr.name)
         # Recursively visit all expression attributes
-        for attr in ('obj', 'left', 'right', 'operand', 'cond', 'then_expr', 'else_expr',
-                     'expr', 'index', 'low', 'high', 'ptr', 'value', 'message', 'pos',
-                     'iterable', 'target', 'inner', 'on_type', 'length', 'capacity'):
+        for attr in (
+            "obj",
+            "left",
+            "right",
+            "operand",
+            "cond",
+            "then_expr",
+            "else_expr",
+            "expr",
+            "index",
+            "low",
+            "high",
+            "ptr",
+            "value",
+            "message",
+            "pos",
+            "iterable",
+            "target",
+            "inner",
+            "on_type",
+            "length",
+            "capacity",
+        ):
             if hasattr(expr, attr):
                 visit_expr(getattr(expr, attr))
-        if hasattr(expr, 'args'):
+        if hasattr(expr, "args"):
             for arg in expr.args:
                 visit_expr(arg)
-        if hasattr(expr, 'elements'):
+        if hasattr(expr, "elements"):
             for elem in expr.elements:
                 visit_expr(elem)
-        if hasattr(expr, 'parts'):
+        if hasattr(expr, "parts"):
             for part in expr.parts:
                 visit_expr(part)
-        if hasattr(expr, 'entries'):
+        if hasattr(expr, "entries"):
             entries = expr.entries
             if isinstance(entries, dict):
                 for v in entries.values():
@@ -107,7 +127,7 @@ def _collect_used_vars(stmts: list[Stmt]) -> set[str]:
                 for item in entries:
                     if isinstance(item, tuple) and len(item) == 2:
                         visit_expr(item[1])
-        if hasattr(expr, 'fields') and isinstance(expr.fields, dict):
+        if hasattr(expr, "fields") and isinstance(expr.fields, dict):
             for v in expr.fields.values():
                 visit_expr(v)
 
@@ -119,11 +139,11 @@ def _collect_used_vars(stmts: list[Stmt]) -> set[str]:
             visit_expr(stmt.value)
             # Also check lvalue targets for variable usage
             target = stmt.target
-            if hasattr(target, 'obj'):
+            if hasattr(target, "obj"):
                 visit_expr(target.obj)
-            if hasattr(target, 'index'):
+            if hasattr(target, "index"):
                 visit_expr(target.index)
-            if hasattr(target, 'ptr'):
+            if hasattr(target, "ptr"):
                 visit_expr(target.ptr)
         elif isinstance(stmt, TupleAssign):
             visit_expr(stmt.value)
@@ -260,8 +280,12 @@ def _analyze_function(func: Function) -> None:
             new_targets: list[str] = []
             for target in stmt.targets:
                 if isinstance(target, VarLV):
-                    if (target.name in assigned or target.name in declared or
-                        target.name in params or target.name in local_assigned):
+                    if (
+                        target.name in assigned
+                        or target.name in declared
+                        or target.name in params
+                        or target.name in local_assigned
+                    ):
                         all_new = False
                     else:
                         new_targets.append(target.name)

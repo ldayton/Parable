@@ -70,22 +70,90 @@ from src.backend.util import escape_string, to_camel, to_pascal, to_screaming_sn
 from src.type_overrides import FIELD_TYPE_OVERRIDES, VAR_TYPE_OVERRIDES
 
 # Java reserved words that need escaping
-_JAVA_RESERVED = frozenset({
-    "abstract", "assert", "boolean", "break", "byte", "case", "catch", "char",
-    "class", "const", "continue", "default", "do", "double", "else", "enum",
-    "extends", "final", "finally", "float", "for", "goto", "if", "implements",
-    "import", "instanceof", "int", "interface", "long", "native", "new",
-    "package", "private", "protected", "public", "return", "short", "static",
-    "strictfp", "super", "switch", "synchronized", "this", "throw", "throws",
-    "transient", "try", "void", "volatile", "while", "true", "false", "null",
-})
+_JAVA_RESERVED = frozenset(
+    {
+        "abstract",
+        "assert",
+        "boolean",
+        "break",
+        "byte",
+        "case",
+        "catch",
+        "char",
+        "class",
+        "const",
+        "continue",
+        "default",
+        "do",
+        "double",
+        "else",
+        "enum",
+        "extends",
+        "final",
+        "finally",
+        "float",
+        "for",
+        "goto",
+        "if",
+        "implements",
+        "import",
+        "instanceof",
+        "int",
+        "interface",
+        "long",
+        "native",
+        "new",
+        "package",
+        "private",
+        "protected",
+        "public",
+        "return",
+        "short",
+        "static",
+        "strictfp",
+        "super",
+        "switch",
+        "synchronized",
+        "this",
+        "throw",
+        "throws",
+        "transient",
+        "try",
+        "void",
+        "volatile",
+        "while",
+        "true",
+        "false",
+        "null",
+    }
+)
 
 # Java standard library classes that conflict with user-defined types
-_JAVA_STDLIB_CLASSES = frozenset({
-    "List", "Map", "Set", "String", "Integer", "Boolean", "Double", "Float",
-    "Long", "Short", "Byte", "Character", "Object", "Class", "System",
-    "Runtime", "Thread", "Exception", "Error", "Throwable", "Optional",
-})
+_JAVA_STDLIB_CLASSES = frozenset(
+    {
+        "List",
+        "Map",
+        "Set",
+        "String",
+        "Integer",
+        "Boolean",
+        "Double",
+        "Float",
+        "Long",
+        "Short",
+        "Byte",
+        "Character",
+        "Object",
+        "Class",
+        "System",
+        "Runtime",
+        "Thread",
+        "Exception",
+        "Error",
+        "Throwable",
+        "Optional",
+    }
+)
 
 
 def _java_safe_name(name: str) -> str:
@@ -101,6 +169,8 @@ def _java_safe_class(name: str) -> str:
     if name in _JAVA_STDLIB_CLASSES:
         return name + "Node"
     return name
+
+
 from src.ir import (
     Array,
     Assign,
@@ -192,7 +262,9 @@ class JavaBackend:
         self.tuple_records: dict[tuple, str] = {}  # tuple signature -> record name
         self.tuple_counter = 0
         self.optional_tuples: set[tuple] = set()  # (T, bool) patterns -> use Optional<T>
-        self.struct_fields: dict[str, list[tuple[str, Type]]] = {}  # struct name -> [(field_name, type)]
+        self.struct_fields: dict[
+            str, list[tuple[str, Type]]
+        ] = {}  # struct name -> [(field_name, type)]
         self.temp_counter: int = 0  # for unique temp variable names
         self._type_switch_binding_rename: dict[str, str] = {}  # binding -> narrowed name
         self._hoisted_vars: set[str] = set()  # Variables hoisted from control flow blocks
@@ -218,7 +290,7 @@ class JavaBackend:
 
     def _emit_hoisted_vars(self, stmt) -> None:
         """Emit declarations for hoisted variables before a control flow construct."""
-        hoisted_vars = getattr(stmt, 'hoisted_vars', [])
+        hoisted_vars = getattr(stmt, "hoisted_vars", [])
         for name, typ in hoisted_vars:
             java_type = self._type(typ) if typ else "Object"
             var_name = _java_safe_name(name)
@@ -233,6 +305,7 @@ class JavaBackend:
 
     def _collect_tuple_types(self, module: Module) -> None:
         """Collect all unique tuple types used in the module."""
+
         def register_tuple(typ: Tuple) -> None:
             sig = tuple(self._type(t) for t in typ.elements)
             # Note: We don't use Optional<T> for (T, bool) in Java because:
@@ -251,11 +324,11 @@ class JavaBackend:
                 for elem in typ.elements:
                     visit_type(elem)
             elif isinstance(typ, (Slice, Optional, Pointer)):
-                if hasattr(typ, 'element'):
+                if hasattr(typ, "element"):
                     visit_type(typ.element)
-                elif hasattr(typ, 'inner'):
+                elif hasattr(typ, "inner"):
                     visit_type(typ.inner)
-                elif hasattr(typ, 'target'):
+                elif hasattr(typ, "target"):
                     visit_type(typ.target)
             elif isinstance(typ, Map):
                 visit_type(typ.key)
@@ -265,34 +338,53 @@ class JavaBackend:
             if expr is None:
                 return
             # Visit the expression's type if it has one
-            if hasattr(expr, 'typ') and expr.typ:
+            if hasattr(expr, "typ") and expr.typ:
                 visit_type(expr.typ)
             # Visit all child expressions and their types
-            for attr in ('obj', 'left', 'right', 'operand', 'cond', 'then_expr', 'else_expr',
-                         'expr', 'index', 'low', 'high', 'ptr', 'value', 'message', 'pos',
-                         'iterable', 'target', 'inner', 'length', 'capacity'):
+            for attr in (
+                "obj",
+                "left",
+                "right",
+                "operand",
+                "cond",
+                "then_expr",
+                "else_expr",
+                "expr",
+                "index",
+                "low",
+                "high",
+                "ptr",
+                "value",
+                "message",
+                "pos",
+                "iterable",
+                "target",
+                "inner",
+                "length",
+                "capacity",
+            ):
                 if hasattr(expr, attr):
                     child = getattr(expr, attr)
                     if child is not None:
                         visit_expr(child)
             # Visit args, elements, parts
-            if hasattr(expr, 'args'):
+            if hasattr(expr, "args"):
                 for arg in expr.args:
                     visit_expr(arg)
-            if hasattr(expr, 'elements'):
+            if hasattr(expr, "elements"):
                 for elem in expr.elements:
                     visit_expr(elem)
-            if hasattr(expr, 'parts'):
+            if hasattr(expr, "parts"):
                 for part in expr.parts:
                     visit_expr(part)
-            if hasattr(expr, 'entries'):
+            if hasattr(expr, "entries"):
                 entries = expr.entries
                 if isinstance(entries, list):
                     for item in entries:
                         if isinstance(item, tuple) and len(item) == 2:
                             visit_expr(item[0])
                             visit_expr(item[1])
-            if hasattr(expr, 'fields') and isinstance(expr.fields, dict):
+            if hasattr(expr, "fields") and isinstance(expr.fields, dict):
                 for v in expr.fields.values():
                     visit_expr(v)
 
@@ -304,7 +396,7 @@ class JavaBackend:
             elif isinstance(stmt, (Assign, OpAssign)):
                 visit_expr(stmt.value)
                 # Check decl_typ for hoisted variable types
-                if hasattr(stmt, 'decl_typ'):
+                if hasattr(stmt, "decl_typ"):
                     visit_type(stmt.decl_typ)
             elif isinstance(stmt, TupleAssign):
                 visit_expr(stmt.value)
@@ -471,9 +563,7 @@ class JavaBackend:
         if not struct.fields:
             return
         class_name = _java_safe_class(struct.name)
-        params = ", ".join(
-            f"{self._type(f.typ)} {_java_safe_name(f.name)}" for f in struct.fields
-        )
+        params = ", ".join(f"{self._type(f.typ)} {_java_safe_name(f.name)}" for f in struct.fields)
         self._line(f"{class_name}({params}) {{")
         self.indent += 1
         for f in struct.fields:
@@ -575,14 +665,18 @@ class JavaBackend:
                     lv = self._lvalue(target)
                     target_name = target.name if isinstance(target, VarLV) else None
                     is_hoisted = target_name and target_name in self._hoisted_vars
-                    if getattr(stmt, 'is_declaration', False) and not is_hoisted:
+                    if getattr(stmt, "is_declaration", False) and not is_hoisted:
                         # First assignment to variable - need type declaration
                         # Check for type override first
-                        override_key = (self._current_func, target_name) if self._current_func and target_name else None
+                        override_key = (
+                            (self._current_func, target_name)
+                            if self._current_func and target_name
+                            else None
+                        )
                         if override_key and override_key in VAR_TYPE_OVERRIDES:
                             java_type = self._type(VAR_TYPE_OVERRIDES[override_key])
                         else:
-                            value_type = getattr(value, 'typ', None)
+                            value_type = getattr(value, "typ", None)
                             if value_type:
                                 java_type = self._type(value_type)
                             else:
@@ -598,9 +692,9 @@ class JavaBackend:
             case TupleAssign(targets=targets, value=value):
                 # Java doesn't have destructuring - emit individual assignments
                 val_str = self._expr(value)
-                value_type = getattr(value, 'typ', None)
-                is_decl = getattr(stmt, 'is_declaration', False)
-                new_targets = getattr(stmt, 'new_targets', [])
+                value_type = getattr(value, "typ", None)
+                is_decl = getattr(stmt, "is_declaration", False)
+                new_targets = getattr(stmt, "new_targets", [])
                 # For tuple types, access fields with .f0(), .f1(), etc.
                 if isinstance(value_type, Tuple):
                     # Store tuple in temp variable if it's a complex expression
@@ -614,8 +708,14 @@ class JavaBackend:
                         lv = self._lvalue(target)
                         target_name = target.name if isinstance(target, VarLV) else None
                         is_hoisted = target_name and target_name in self._hoisted_vars
-                        if (is_decl or (target_name and target_name in new_targets)) and not is_hoisted:
-                            elem_type = self._type(value_type.elements[i]) if i < len(value_type.elements) else "Object"
+                        if (
+                            is_decl or (target_name and target_name in new_targets)
+                        ) and not is_hoisted:
+                            elem_type = (
+                                self._type(value_type.elements[i])
+                                if i < len(value_type.elements)
+                                else "Object"
+                            )
                             self._line(f"{elem_type} {lv} = {val_str}.f{i}();")
                         else:
                             self._line(f"{lv} = {val_str}.f{i}();")
@@ -625,12 +725,16 @@ class JavaBackend:
                         lv = self._lvalue(target)
                         target_name = target.name if isinstance(target, VarLV) else None
                         is_hoisted = target_name and target_name in self._hoisted_vars
-                        if (is_decl or (target_name and target_name in new_targets)) and not is_hoisted:
+                        if (
+                            is_decl or (target_name and target_name in new_targets)
+                        ) and not is_hoisted:
                             self._line(f"Object {lv} = {val_str}[{i}];")
                         else:
                             self._line(f"{lv} = {val_str}[{i}];")
             case ExprStmt(expr=Var(name=name)) if name in (
-                "_skip_docstring", "_pass", "_skip_super_init"
+                "_skip_docstring",
+                "_pass",
+                "_skip_super_init",
             ):
                 pass  # Skip marker statements
             case ExprStmt(expr=expr):
@@ -699,7 +803,7 @@ class JavaBackend:
                     self._line("continue;")
             case Block(body=body):
                 # Check if this block should emit without braces (for statement sequences)
-                no_scope = getattr(stmt, 'no_scope', False)
+                no_scope = getattr(stmt, "no_scope", False)
                 if not no_scope:
                     self._line("{")
                     self.indent += 1
@@ -790,7 +894,7 @@ class JavaBackend:
     ) -> None:
         self._emit_hoisted_vars(stmt)
         iter_expr = self._expr(iterable)
-        iter_type = getattr(iterable, 'typ', None)
+        iter_type = getattr(iterable, "typ", None)
         # Look up field type from FIELD_TYPE_OVERRIDES when iter_type is None
         if iter_type is None and isinstance(iterable, FieldAccess):
             field_key = (self.current_class, iterable.field)
@@ -948,7 +1052,9 @@ class JavaBackend:
                 if name in self._type_switch_binding_rename:
                     return self._type_switch_binding_rename[name]
                 # Check if this is a constant (all uppercase, or ClassName_CONSTANT pattern)
-                if name.isupper() or (name[0].isupper() and "_" in name and name.split("_", 1)[1].isupper()):
+                if name.isupper() or (
+                    name[0].isupper() and "_" in name and name.split("_", 1)[1].isupper()
+                ):
                     return f"Constants.{to_screaming_snake(name)}"
                 return _java_safe_name(name)
             case FieldAccess(obj=obj, field=field):
@@ -956,10 +1062,14 @@ class JavaBackend:
                 # Tuple record fields are accessed as methods in Java records
                 # Field names F0/f0, F1/f1, etc. are tuple field accessors - use method syntax
                 lower_field = field.lower()
-                if lower_field.startswith("f") and len(lower_field) > 1 and lower_field[1:].isdigit():
+                if (
+                    lower_field.startswith("f")
+                    and len(lower_field) > 1
+                    and lower_field[1:].isdigit()
+                ):
                     return f"{obj_str}.{lower_field}()"
                 # For .kind on Node interface, use getKind() method
-                obj_type = getattr(obj, 'typ', None)
+                obj_type = getattr(obj, "typ", None)
                 if field == "kind" and isinstance(obj_type, (InterfaceRef, StructRef)):
                     return f"{obj_str}.getKind()"
                 # Method reference on self: _arith_parse_* -> () -> this._arithParse*()
@@ -1006,7 +1116,7 @@ class JavaBackend:
                     return f"String.valueOf({args_str})"
                 if func == "len":
                     arg = self._expr(args[0])
-                    arg_type = getattr(args[0], 'typ', None)
+                    arg_type = getattr(args[0], "typ", None)
                     if isinstance(arg_type, Primitive) and arg_type.kind == "string":
                         return f"{arg}.length()"
                     return f"{arg}.size()"
@@ -1044,7 +1154,9 @@ class JavaBackend:
                 # Module-level functions are in {ModuleName}Functions class
                 func_class = f"{to_pascal(self._module_name)}Functions"
                 return f"{func_class}.{to_camel(func)}({args_str})"
-            case MethodCall(obj=obj, method=method, args=[TupleLit(elements=elements)], receiver_type=_) if method in ("startswith", "endswith"):
+            case MethodCall(
+                obj=obj, method=method, args=[TupleLit(elements=elements)], receiver_type=_
+            ) if method in ("startswith", "endswith"):
                 # Python str.startswith/endswith with tuple → disjunction of checks
                 java_method = "startsWith" if method == "startswith" else "endsWith"
                 obj_str = self._expr(obj)
@@ -1084,11 +1196,15 @@ class JavaBackend:
                         return f"{inner_str}.isEmpty()"
                 # Char comparison: s.charAt(i) == 'c' instead of String.valueOf(...).equals(...)
                 # Pattern: Index(string, i) == StringLit(single_char) or Cast(Index(...)) == StringLit
-                if java_op in ("==", "!=") and isinstance(right, StringLit) and len(right.value) == 1:
+                if (
+                    java_op in ("==", "!=")
+                    and isinstance(right, StringLit)
+                    and len(right.value) == 1
+                ):
                     # Unwrap Cast if present (frontend wraps string indexing in Cast)
                     inner_left = left.expr if isinstance(left, Cast) else left
                     if isinstance(inner_left, Index):
-                        obj_type = getattr(inner_left.obj, 'typ', None)
+                        obj_type = getattr(inner_left.obj, "typ", None)
                         if isinstance(obj_type, Primitive) and obj_type.kind == "string":
                             obj_str = self._expr(inner_left.obj)
                             idx_str = self._expr(inner_left.index)
@@ -1122,7 +1238,7 @@ class JavaBackend:
                 return self._expr(operand)  # Java has no pointer dereference
             case UnaryOp(op="!", operand=operand):
                 # Java ! only works on booleans; for ints, use == 0
-                operand_type = getattr(operand, 'typ', None)
+                operand_type = getattr(operand, "typ", None)
                 if isinstance(operand_type, Primitive) and operand_type.kind == "int":
                     return f"({self._expr(operand)} == 0)"
                 # For object types (not primitive bool), Python "not x" means "x is falsy/null"
@@ -1132,7 +1248,15 @@ class JavaBackend:
                 if isinstance(operand, BinaryOp) and operand.op == "&":
                     return f"({self._expr(operand)} == 0)"
                 # Check for arithmetic ops (e.g., !pos + 1) - result is int
-                if isinstance(operand, BinaryOp) and operand.op in ("+", "-", "*", "/", "%", "|", "^"):
+                if isinstance(operand, BinaryOp) and operand.op in (
+                    "+",
+                    "-",
+                    "*",
+                    "/",
+                    "%",
+                    "|",
+                    "^",
+                ):
                     return f"({self._expr(operand)} == 0)"
                 # Check for Var with unknown type - if name looks like an object var, use null check
                 if isinstance(operand, Var) and operand_type is None:
@@ -1160,8 +1284,11 @@ class JavaBackend:
                 # Special case: !x != null (where x is an object) should be just x == null
                 # This handles Python's "not x" being translated to IsNil(UnaryOp("!", x), negated=True)
                 if negated and isinstance(inner, UnaryOp) and inner.op == "!":
-                    inner_type = getattr(inner.operand, 'typ', None)
-                    if isinstance(inner_type, (InterfaceRef, StructRef, Pointer)) or inner_type is None:
+                    inner_type = getattr(inner.operand, "typ", None)
+                    if (
+                        isinstance(inner_type, (InterfaceRef, StructRef, Pointer))
+                        or inner_type is None
+                    ):
                         return f"({self._expr(inner.operand)} == null)"
                 if negated:
                     return f"{self._expr(inner)} != null"
@@ -1193,9 +1320,7 @@ class JavaBackend:
                     return "new HashMap<>()"
                 # Map.of() only supports up to 10 entries; use ofEntries for more
                 if len(entries) <= 10:
-                    pairs = ", ".join(
-                        f"{self._expr(k)}, {self._expr(v)}" for k, v in entries
-                    )
+                    pairs = ", ".join(f"{self._expr(k)}, {self._expr(v)}" for k, v in entries)
                     return f"new HashMap<>(Map.of({pairs}))"
                 else:
                     entries_str = ", ".join(
@@ -1217,7 +1342,11 @@ class JavaBackend:
                         if field_name in fields:
                             field_val = fields[field_name]
                             # Handle null for int fields - use -1 sentinel
-                            if isinstance(field_val, NilLit) and isinstance(field_type, Primitive) and field_type.kind == "int":
+                            if (
+                                isinstance(field_val, NilLit)
+                                and isinstance(field_type, Primitive)
+                                and field_type.kind == "int"
+                            ):
                                 ordered_args.append("-1")
                             else:
                                 ordered_args.append(self._expr(field_val))
@@ -1277,12 +1406,12 @@ class JavaBackend:
             if method == "lstrip":
                 if args:
                     # lstrip with chars argument - use regex
-                    return f"{obj_str}.replaceFirst(\"^[\" + {args_str} + \"]+\", \"\")"
+                    return f'{obj_str}.replaceFirst("^[" + {args_str} + "]+", "")'
                 return f"{obj_str}.stripLeading()"
             if method == "rstrip":
                 if args:
                     # rstrip with chars argument - use regex
-                    return f"{obj_str}.replaceFirst(\"[\" + {args_str} + \"]+$\", \"\")"
+                    return f'{obj_str}.replaceFirst("[" + {args_str} + "]+$", "")'
                 return f"{obj_str}.stripTrailing()"
             if method == "lower":
                 return f"{obj_str}.toLowerCase()"
@@ -1357,7 +1486,7 @@ class JavaBackend:
         """Generate containment check: `x in y` or `x not in y`."""
         item_str = self._expr(item)
         container_str = self._expr(container)
-        container_type = getattr(container, 'typ', None)
+        container_type = getattr(container, "typ", None)
         neg = "!" if negated else ""
         # For sets and maps, use contains/containsKey
         if isinstance(container_type, Set):
@@ -1386,7 +1515,7 @@ class JavaBackend:
                 return f"String.valueOf({inner_str})"
         # Handle String -> List<Byte> (encoding)
         if isinstance(to_type, Slice):
-            inner_type = getattr(inner, 'typ', None)
+            inner_type = getattr(inner, "typ", None)
             if isinstance(inner_type, Primitive) and inner_type.kind == "string":
                 if isinstance(to_type.element, Primitive) and to_type.element.kind == "byte":
                     return f"ParableFunctions._stringToBytes({inner_str})"
@@ -1394,10 +1523,17 @@ class JavaBackend:
 
     def _format_string(self, template: str, args: list[Expr]) -> str:
         import re
+
         # Convert {0}, {1}, etc. to %s
-        result = re.sub(r'\{\d+\}', '%s', template)
+        result = re.sub(r"\{\d+\}", "%s", template)
         result = result.replace("%v", "%s")
-        escaped = result.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n").replace("\r", "\\r").replace("\t", "\\t")
+        escaped = (
+            result.replace("\\", "\\\\")
+            .replace('"', '\\"')
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+            .replace("\t", "\\t")
+        )
         args_str = ", ".join(self._expr(a) for a in args)
         if args_str:
             return f'String.format("{escaped}", {args_str})'

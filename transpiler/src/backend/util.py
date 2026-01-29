@@ -5,11 +5,35 @@ from __future__ import annotations
 import re
 
 # Go reserved words that need renaming
-GO_RESERVED = frozenset({
-    "break", "case", "chan", "const", "continue", "default", "defer", "else",
-    "fallthrough", "for", "func", "go", "goto", "if", "import", "interface",
-    "map", "package", "range", "return", "select", "struct", "switch", "type", "var",
-})
+GO_RESERVED = frozenset(
+    {
+        "break",
+        "case",
+        "chan",
+        "const",
+        "continue",
+        "default",
+        "defer",
+        "else",
+        "fallthrough",
+        "for",
+        "func",
+        "go",
+        "goto",
+        "if",
+        "import",
+        "interface",
+        "map",
+        "package",
+        "range",
+        "return",
+        "select",
+        "struct",
+        "switch",
+        "type",
+        "var",
+    }
+)
 
 
 def go_to_pascal(name: str) -> str:
@@ -38,9 +62,11 @@ def go_to_camel(name: str) -> str:
     parts = name.split("_")
     if not parts:
         return name
+
     # Use upper on first char only (not capitalize which lowercases rest)
     def upper_first(s: str) -> str:
         return (s[0].upper() + s[1:]) if s else ""
+
     # All-caps names (constants) should use PascalCase in Go
     if name.isupper():
         return "".join(upper_first(p) for p in parts)

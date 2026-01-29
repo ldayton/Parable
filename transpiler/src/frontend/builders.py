@@ -1,11 +1,29 @@
 """Builder utilities extracted from frontend.py."""
+
 from __future__ import annotations
 
 import ast
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
-from ..ir import INT, Constant, Field, Function, InterfaceDef, InterfaceRef, Loc, MethodSig, Module, Param, Pointer, Receiver, STRING, Struct, StructRef, VOID
+from ..ir import (
+    INT,
+    Constant,
+    Field,
+    Function,
+    InterfaceDef,
+    InterfaceRef,
+    Loc,
+    MethodSig,
+    Module,
+    Param,
+    Pointer,
+    Receiver,
+    STRING,
+    Struct,
+    StructRef,
+    VOID,
+)
 from ..type_overrides import MODULE_CONSTANTS, PARAM_TYPE_OVERRIDES
 
 if TYPE_CHECKING:
@@ -17,6 +35,7 @@ if TYPE_CHECKING:
 @dataclass
 class BuilderCallbacks:
     """Callbacks for builder phase that need lowering/type conversion."""
+
     annotation_to_str: Callable[[ast.expr | None], str]
     py_type_to_ir: Callable[[str, bool], "Type"]
     py_return_type_to_ir: Callable[[str], "Type"]
@@ -29,7 +48,9 @@ class BuilderCallbacks:
     # Set up class context before collect_var_types (sets _current_class_name, _current_func_info)
     setup_context: Callable[[str, "FuncInfo | None"], None]
     # Combined callback: set up type context then lower statements
-    setup_and_lower_stmts: Callable[[str, "FuncInfo | None", "TypeContext", list[ast.stmt]], list["ir.Stmt"]]
+    setup_and_lower_stmts: Callable[
+        [str, "FuncInfo | None", "TypeContext", list[ast.stmt]], list["ir.Stmt"]
+    ]
 
 
 def build_forwarding_constructor(
@@ -39,6 +60,7 @@ def build_forwarding_constructor(
 ) -> Function:
     """Build a forwarding constructor for exception subclasses with no __init__."""
     from .. import ir
+
     # Get parent class info to copy its parameters
     parent_info = symbols.structs.get(parent_class)
     if not parent_info:
@@ -68,7 +90,10 @@ def build_forwarding_constructor(
     # Create parent struct literal
     parent_lit = ir.StructLit(
         struct_name=parent_class,
-        fields={param_name: ir.Var(name=param_name, typ=params[i].typ) for i, param_name in enumerate(parent_info.init_params)},
+        fields={
+            param_name: ir.Var(name=param_name, typ=params[i].typ)
+            for i, param_name in enumerate(parent_info.init_params)
+        },
         typ=StructRef(parent_class),
     )
     # Create struct with embedded parent - typ=Pointer makes backend emit &
@@ -99,6 +124,7 @@ def build_constructor(
     """Build a NewXxx constructor function from __init__ AST."""
     from .. import ir
     from .context import TypeContext
+
     # Build parameters (same as __init__ excluding self)
     params: list[Param] = []
     param_types: dict[str, "Type"] = {}
@@ -128,7 +154,9 @@ def build_constructor(
     # Set up context first (needed by collect_var_types)
     callbacks.setup_context(class_name, None)
     # Collect variable types and build type context
-    var_types, tuple_vars, sentinel_ints, list_element_unions = callbacks.collect_var_types(init_ast.body)
+    var_types, tuple_vars, sentinel_ints, list_element_unions = callbacks.collect_var_types(
+        init_ast.body
+    )
     var_types.update(param_types)
     var_types["self"] = Pointer(StructRef(class_name))
     type_ctx = TypeContext(
@@ -160,10 +188,12 @@ def build_constructor(
     init_body = callbacks.setup_and_lower_stmts(class_name, None, type_ctx, init_ast.body)
     body.extend(init_body)
     # Return self
-    body.append(ir.Return(
-        value=ir.Var(name="self", typ=Pointer(StructRef(class_name)), loc=Loc.unknown()),
-        loc=Loc.unknown(),
-    ))
+    body.append(
+        ir.Return(
+            value=ir.Var(name="self", typ=Pointer(StructRef(class_name)), loc=Loc.unknown()),
+            loc=Loc.unknown(),
+        )
+    )
     return Function(
         name=f"New{class_name}",
         params=params,
@@ -182,20 +212,21 @@ def build_method_shell(
 ) -> Function:
     """Build IR Function for a method. Set with_body=True to lower statements."""
     from .context import TypeContext
+
     info = symbols.structs.get(class_name)
     func_info = info.methods.get(node.name) if info else None
     params = []
     if func_info:
         for p in func_info.params:
-            params.append(
-                Param(name=p.name, typ=p.typ, default=p.default_value, loc=Loc.unknown())
-            )
+            params.append(Param(name=p.name, typ=p.typ, default=p.default_value, loc=Loc.unknown()))
     body: list["ir.Stmt"] = []
     if with_body:
         # Set up context first (needed by collect_var_types)
         callbacks.setup_context(class_name, func_info)
         # Collect variable types from body and add parameters + self
-        var_types, tuple_vars, sentinel_ints, list_element_unions = callbacks.collect_var_types(node.body)
+        var_types, tuple_vars, sentinel_ints, list_element_unions = callbacks.collect_var_types(
+            node.body
+        )
         if func_info:
             for p in func_info.params:
                 var_types[p.name] = p.typ
@@ -240,19 +271,20 @@ def build_function_shell(
 ) -> Function:
     """Build IR Function from AST. Set with_body=True to lower statements."""
     from .context import TypeContext
+
     func_info = symbols.functions.get(node.name)
     params = []
     if func_info:
         for p in func_info.params:
-            params.append(
-                Param(name=p.name, typ=p.typ, default=p.default_value, loc=Loc.unknown())
-            )
+            params.append(Param(name=p.name, typ=p.typ, default=p.default_value, loc=Loc.unknown()))
     body: list["ir.Stmt"] = []
     if with_body:
         # Set up context first (needed by collect_var_types) - empty class name for functions
         callbacks.setup_context("", func_info)
         # Collect variable types from body and add parameters
-        var_types, tuple_vars, sentinel_ints, list_element_unions = callbacks.collect_var_types(node.body)
+        var_types, tuple_vars, sentinel_ints, list_element_unions = callbacks.collect_var_types(
+            node.body
+        )
         if func_info:
             for p in func_info.params:
                 var_types[p.name] = p.typ
@@ -314,7 +346,9 @@ def build_struct(
             if stmt.name == "__init__":
                 init_ast = stmt
             else:
-                method = build_method_shell(stmt, node.name, symbols, callbacks, with_body=with_body)
+                method = build_method_shell(
+                    stmt, node.name, symbols, callbacks, with_body=with_body
+                )
                 methods.append(method)
     implements = []
     if info.is_node:
@@ -351,6 +385,7 @@ def build_module(
 ) -> Module:
     """Build IR Module from collected symbols."""
     from .. import ir
+
     module = Module(name="parable")
     # Build constants from MODULE_CONSTANTS overrides
     for const_name, (const_type, go_value) in MODULE_CONSTANTS.items():
@@ -371,7 +406,12 @@ def build_module(
                 value = callbacks.lower_expr(node.value)
                 const_type = symbols.constants[target.id]
                 module.constants.append(
-                    Constant(name=target.id, typ=const_type, value=value, loc=callbacks.loc_from_node(node))
+                    Constant(
+                        name=target.id,
+                        typ=const_type,
+                        value=value,
+                        loc=callbacks.loc_from_node(node),
+                    )
                 )
         elif isinstance(node, ast.ClassDef):
             # Build class-level constants
@@ -383,7 +423,12 @@ def build_module(
                         if const_name in symbols.constants:
                             value = callbacks.lower_expr(stmt.value)
                             module.constants.append(
-                                Constant(name=const_name, typ=INT, value=value, loc=callbacks.loc_from_node(stmt))
+                                Constant(
+                                    name=const_name,
+                                    typ=INT,
+                                    value=value,
+                                    loc=callbacks.loc_from_node(stmt),
+                                )
                             )
     # Build Node interface (abstract base for AST nodes)
     node_interface = InterfaceDef(

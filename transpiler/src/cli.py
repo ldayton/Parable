@@ -35,6 +35,7 @@ def main() -> None:
 
     if args.check_style:
         from .check_style import find_python_files, check_file
+
         src_dir = args.check_style
         if not Path(src_dir).is_dir():
             print("Directory not found: " + src_dir)

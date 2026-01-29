@@ -44,27 +44,29 @@ def _merge_var_types(result: dict[str, Type | None], new_vars: dict[str, Type | 
             result[name] = typ
 
 
-def _vars_first_assigned_in(stmts: list[Stmt], already_declared: set[str]) -> dict[str, Type | None]:
+def _vars_first_assigned_in(
+    stmts: list[Stmt], already_declared: set[str]
+) -> dict[str, Type | None]:
     """Find variables first assigned in these statements (not already declared)."""
     result: dict[str, Type | None] = {}
     for stmt in stmts:
-        if isinstance(stmt, Assign) and getattr(stmt, 'is_declaration', False):
+        if isinstance(stmt, Assign) and getattr(stmt, "is_declaration", False):
             if isinstance(stmt.target, VarLV):
                 name = stmt.target.name
                 if name not in already_declared:
                     # Prefer decl_typ (unified type from frontend) over value.typ
-                    new_type = getattr(stmt, 'decl_typ', None) or getattr(stmt.value, 'typ', None)
+                    new_type = getattr(stmt, "decl_typ", None) or getattr(stmt.value, "typ", None)
                     if name in result:
                         result[name] = join_types(result[name], new_type)
                     else:
                         result[name] = new_type
-        elif isinstance(stmt, TupleAssign) and getattr(stmt, 'is_declaration', False):
+        elif isinstance(stmt, TupleAssign) and getattr(stmt, "is_declaration", False):
             for i, target in enumerate(stmt.targets):
                 if isinstance(target, VarLV):
                     name = target.name
                     if name not in already_declared and name not in result:
                         # Type from tuple element if available
-                        val_typ = getattr(stmt.value, 'typ', None)
+                        val_typ = getattr(stmt.value, "typ", None)
                         if isinstance(val_typ, Tuple) and i < len(val_typ.elements):
                             result[name] = val_typ.elements[i]
                         else:
@@ -77,13 +79,21 @@ def _vars_first_assigned_in(stmts: list[Stmt], already_declared: set[str]) -> di
             _merge_var_types(result, _vars_first_assigned_in(stmt.then_body, branch_declared))
             _merge_var_types(result, _vars_first_assigned_in(stmt.else_body, branch_declared))
         elif isinstance(stmt, While):
-            _merge_var_types(result, _vars_first_assigned_in(stmt.body, already_declared | set(result.keys())))
+            _merge_var_types(
+                result, _vars_first_assigned_in(stmt.body, already_declared | set(result.keys()))
+            )
         elif isinstance(stmt, ForRange):
-            _merge_var_types(result, _vars_first_assigned_in(stmt.body, already_declared | set(result.keys())))
+            _merge_var_types(
+                result, _vars_first_assigned_in(stmt.body, already_declared | set(result.keys()))
+            )
         elif isinstance(stmt, ForClassic):
-            _merge_var_types(result, _vars_first_assigned_in(stmt.body, already_declared | set(result.keys())))
+            _merge_var_types(
+                result, _vars_first_assigned_in(stmt.body, already_declared | set(result.keys()))
+            )
         elif isinstance(stmt, Block):
-            _merge_var_types(result, _vars_first_assigned_in(stmt.body, already_declared | set(result.keys())))
+            _merge_var_types(
+                result, _vars_first_assigned_in(stmt.body, already_declared | set(result.keys()))
+            )
         elif isinstance(stmt, TryCatch):
             # For try/catch, use the same pattern as if/else - both branches start fresh
             branch_declared = already_declared | set(result.keys())
@@ -101,7 +111,9 @@ def _analyze_hoisting(func: Function) -> None:
         if isinstance(stmt, VarDecl):
             func_declared.add(stmt.name)
 
-    def apply_type_overrides(hoisted: list[tuple[str, Type | None]]) -> list[tuple[str, Type | None]]:
+    def apply_type_overrides(
+        hoisted: list[tuple[str, Type | None]],
+    ) -> list[tuple[str, Type | None]]:
         """Apply VAR_TYPE_OVERRIDES to hoisted variables."""
         result = []
         for name, typ in hoisted:
@@ -119,17 +131,14 @@ def _analyze_hoisting(func: Function) -> None:
         for i, stmt in enumerate(stmts):
             if isinstance(stmt, TryCatch):
                 # Find vars first assigned inside try/catch bodies
-                inner_new = _vars_first_assigned_in(
-                    stmt.body + stmt.catch_body, declared
-                )
+                inner_new = _vars_first_assigned_in(stmt.body + stmt.catch_body, declared)
 
                 # Find vars used after this statement
-                used_after = _collect_used_vars(stmts[i + 1:])
+                used_after = _collect_used_vars(stmts[i + 1 :])
 
                 # Vars needing hoisting = first assigned inside AND used after
                 needs_hoisting = [
-                    (name, typ) for name, typ in inner_new.items()
-                    if name in used_after
+                    (name, typ) for name, typ in inner_new.items() if name in used_after
                 ]
                 stmt.hoisted_vars = apply_type_overrides(needs_hoisting)
 
@@ -142,12 +151,10 @@ def _analyze_hoisting(func: Function) -> None:
 
             elif isinstance(stmt, If):
                 # Find vars first assigned inside if branches
-                inner_new = _vars_first_assigned_in(
-                    stmt.then_body + stmt.else_body, declared
-                )
+                inner_new = _vars_first_assigned_in(stmt.then_body + stmt.else_body, declared)
 
                 # Find vars used after this statement
-                used_after = _collect_used_vars(stmts[i + 1:])
+                used_after = _collect_used_vars(stmts[i + 1 :])
 
                 # Find vars assigned in then_body but used in else_body (cross-branch)
                 then_new = _vars_first_assigned_in(stmt.then_body, declared)
@@ -173,10 +180,10 @@ def _analyze_hoisting(func: Function) -> None:
 
             elif isinstance(stmt, VarDecl):
                 declared.add(stmt.name)
-            elif isinstance(stmt, Assign) and getattr(stmt, 'is_declaration', False):
+            elif isinstance(stmt, Assign) and getattr(stmt, "is_declaration", False):
                 if isinstance(stmt.target, VarLV):
                     declared.add(stmt.target.name)
-            elif isinstance(stmt, TupleAssign) and getattr(stmt, 'is_declaration', False):
+            elif isinstance(stmt, TupleAssign) and getattr(stmt, "is_declaration", False):
                 for target in stmt.targets:
                     if isinstance(target, VarLV):
                         declared.add(target.name)
@@ -184,11 +191,10 @@ def _analyze_hoisting(func: Function) -> None:
                 # Find vars first assigned inside while body
                 inner_new = _vars_first_assigned_in(stmt.body, declared)
                 # Find vars used after this statement
-                used_after = _collect_used_vars(stmts[i + 1:])
+                used_after = _collect_used_vars(stmts[i + 1 :])
                 # Vars needing hoisting = first assigned inside AND used after
                 needs_hoisting = [
-                    (name, typ) for name, typ in inner_new.items()
-                    if name in used_after
+                    (name, typ) for name, typ in inner_new.items() if name in used_after
                 ]
                 stmt.hoisted_vars = apply_type_overrides(needs_hoisting)
                 # These are now effectively declared for subsequent analysis
@@ -198,11 +204,10 @@ def _analyze_hoisting(func: Function) -> None:
                 # Find vars first assigned inside for body
                 inner_new = _vars_first_assigned_in(stmt.body, declared)
                 # Find vars used after this statement
-                used_after = _collect_used_vars(stmts[i + 1:])
+                used_after = _collect_used_vars(stmts[i + 1 :])
                 # Vars needing hoisting = first assigned inside AND used after
                 needs_hoisting = [
-                    (name, typ) for name, typ in inner_new.items()
-                    if name in used_after
+                    (name, typ) for name, typ in inner_new.items() if name in used_after
                 ]
                 stmt.hoisted_vars = apply_type_overrides(needs_hoisting)
                 # These are now effectively declared for subsequent analysis
@@ -226,11 +231,10 @@ def _analyze_hoisting(func: Function) -> None:
                 # Find vars first assigned inside non-returning branches
                 inner_new = _vars_first_assigned_in(non_returning_stmts, declared)
                 # Find vars used after this statement
-                used_after = _collect_used_vars(stmts[i + 1:])
+                used_after = _collect_used_vars(stmts[i + 1 :])
                 # Vars needing hoisting = first assigned inside AND used after
                 needs_hoisting = [
-                    (name, typ) for name, typ in inner_new.items()
-                    if name in used_after
+                    (name, typ) for name, typ in inner_new.items() if name in used_after
                 ]
                 stmt.hoisted_vars = apply_type_overrides(needs_hoisting)
                 # Update declared set

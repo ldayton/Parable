@@ -1,4 +1,5 @@
 """Context objects for frontend lowering."""
+
 from __future__ import annotations
 
 import ast
@@ -13,6 +14,7 @@ if TYPE_CHECKING:
 @dataclass
 class TypeContext:
     """Context for bidirectional type inference (Pierce & Turner style)."""
+
     expected: Type | None = None
     var_types: dict[str, Type] = field(default_factory=dict)
     return_type: Type | None = None
@@ -28,6 +30,7 @@ class TypeContext:
 @dataclass
 class FrontendContext:
     """Immutable-ish context passed through lowering."""
+
     symbols: "SymbolTable"
     type_ctx: TypeContext
     current_func_info: "FuncInfo | None"
@@ -54,6 +57,7 @@ class LoweringDispatch:
     - merge_keyword_args/fill_default_args/etc: Pass lower_expr/infer callbacks
     - set_catch_var: Mutates Frontend instance state
     """
+
     # Recursive lowering (MUST STAY - recursive)
     lower_expr: Callable[[ast.expr], "ir.Expr"]
     lower_expr_as_bool: Callable[[ast.expr], "ir.Expr"]

@@ -156,7 +156,9 @@ class TsBackend:
         self.lines: list[str] = []
         self.receiver_name: str | None = None
         self.current_struct: str | None = None  # Track current struct for method binding
-        self.struct_fields: dict[str, list[tuple[str, Type]]] = {}  # struct name -> [(field_name, type)]
+        self.struct_fields: dict[
+            str, list[tuple[str, Type]]
+        ] = {}  # struct name -> [(field_name, type)]
 
     def emit(self, module: Module) -> str:
         """Emit TypeScript code from IR Module."""
@@ -301,7 +303,9 @@ class TsBackend:
             name = _camel(fld.name)
             # For array/slice fields, convert null to empty array (Python passes None, JS needs [])
             # But don't do this for Optional(Slice(...)) - null has semantic meaning there
-            is_nullable_slice = isinstance(fld.typ, Optional) and isinstance(fld.typ.inner, (Slice, Array))
+            is_nullable_slice = isinstance(fld.typ, Optional) and isinstance(
+                fld.typ.inner, (Slice, Array)
+            )
             if isinstance(fld.typ, (Slice, Array)) and not is_nullable_slice:
                 self._line(f"this.{name} = {name} ?? [];")
             else:
@@ -377,7 +381,7 @@ class TsBackend:
             case Assign(target=target, value=value):
                 lv = self._lvalue(target)
                 val = self._expr(value)
-                if getattr(stmt, 'is_declaration', False):
+                if getattr(stmt, "is_declaration", False):
                     # Use var for function-scoped semantics; use 'any' type because
                     # the same variable may be re-assigned with different types in
                     # different branches (TypeScript var requires consistent types)
@@ -387,8 +391,8 @@ class TsBackend:
             case TupleAssign(targets=targets, value=value):
                 lvalues = ", ".join(self._lvalue(t) for t in targets)
                 val = self._expr(value)
-                value_type = getattr(value, 'typ', None)
-                if getattr(stmt, 'is_declaration', False):
+                value_type = getattr(value, "typ", None)
+                if getattr(stmt, "is_declaration", False):
                     # Use var for function-scoped semantics, with tuple element types
                     # This is safe because tuple destructuring assigns all at once
                     if isinstance(value_type, Tuple) and value_type.elements:
@@ -398,7 +402,7 @@ class TsBackend:
                         self._line(f"var [{lvalues}] = {val};")
                 else:
                     # Check for new_targets - variables that need pre-declaration
-                    new_targets = getattr(stmt, 'new_targets', [])
+                    new_targets = getattr(stmt, "new_targets", [])
                     for name in new_targets:
                         # Use any - variable may have different types in different branches
                         self._line(f"var {_camel(name)}: any;")
@@ -408,7 +412,9 @@ class TsBackend:
                 val = self._expr(value)
                 self._line(f"{lv} {op}= {val};")
             case ExprStmt(expr=Var(name=name)) if name in (
-                "_skip_docstring", "_pass", "_skip_super_init"
+                "_skip_docstring",
+                "_pass",
+                "_skip_super_init",
             ):
                 pass  # Skip marker statements
             case ExprStmt(expr=expr):
@@ -433,9 +439,7 @@ class TsBackend:
                         self._emit_stmt(s)
                     self.indent -= 1
                 self._line("}")
-            case TypeSwitch(
-                expr=expr, binding=binding, cases=cases, default=default
-            ):
+            case TypeSwitch(expr=expr, binding=binding, cases=cases, default=default):
                 self._emit_type_switch(expr, binding, cases, default)
             case Match(expr=expr, cases=cases, default=default):
                 self._emit_match(expr, cases, default)
@@ -467,9 +471,7 @@ class TsBackend:
                     self._emit_stmt(s)
                 self.indent -= 1
                 self._line("}")
-            case TryCatch(
-                body=body, catch_var=catch_var, catch_body=catch_body, reraise=reraise
-            ):
+            case TryCatch(body=body, catch_var=catch_var, catch_body=catch_body, reraise=reraise):
                 self._emit_try_catch(body, catch_var, catch_body, reraise)
             case Raise(error_type=error_type, message=message, pos=pos, reraise_var=reraise_var):
                 if reraise_var:
@@ -483,11 +485,17 @@ class TsBackend:
                     p = self._expr(pos)
                     if isinstance(message, StringLit):
                         # Inline string literals directly (escape for template literal)
-                        msg_val = message.value.replace("\\", "\\\\").replace("`", "\\`").replace("$", "\\$")
+                        msg_val = (
+                            message.value.replace("\\", "\\\\")
+                            .replace("`", "\\`")
+                            .replace("$", "\\$")
+                        )
                         self._line(f"throw new {error_type}(`{msg_val} at position ${{{p}}}`, {p})")
                     else:
                         msg = self._expr(message)
-                        self._line(f"throw new {error_type}(`${{{msg}}} at position ${{{p}}}`, {p})")
+                        self._line(
+                            f"throw new {error_type}(`${{{msg}}} at position ${{{p}}}`, {p})"
+                        )
             case SoftFail():
                 self._line("return null;")
             case _:
@@ -556,11 +564,13 @@ class TsBackend:
         if self._try_emit_map(index, value, iterable, body):
             return
         iter_expr = self._expr(iterable)
-        iter_type = getattr(iterable, 'typ', None)
+        iter_type = getattr(iterable, "typ", None)
         elem_type = self._element_type(iter_type)
         is_string = isinstance(iter_type, Primitive) and iter_type.kind == "string"
         if index is not None and value is not None:
-            self._line(f"for (let {_camel(index)} = 0; {_camel(index)} < {iter_expr}.length; {_camel(index)}++) {{")
+            self._line(
+                f"for (let {_camel(index)} = 0; {_camel(index)} < {iter_expr}.length; {_camel(index)}++) {{"
+            )
             self.indent += 1
             self._line(f"const {_camel(value)}: {elem_type} = {iter_expr}[{_camel(index)}];")
         elif value is not None:
@@ -571,7 +581,9 @@ class TsBackend:
                 self._line(f"for (const {_camel(value)} of {iter_expr} as {elem_type}[]) {{")
             self.indent += 1
         elif index is not None:
-            self._line(f"for (let {_camel(index)} = 0; {_camel(index)} < {iter_expr}.length; {_camel(index)}++) {{")
+            self._line(
+                f"for (let {_camel(index)} = 0; {_camel(index)} < {iter_expr}.length; {_camel(index)}++) {{"
+            )
             self.indent += 1
         else:
             self._line(f"for (const _ of {iter_expr}) {{")
@@ -637,15 +649,21 @@ class TsBackend:
         if isinstance(expr, FieldAccess):
             return self._expr_uses_var(expr.obj, var_name)
         if isinstance(expr, Index):
-            return self._expr_uses_var(expr.obj, var_name) or self._expr_uses_var(expr.index, var_name)
+            return self._expr_uses_var(expr.obj, var_name) or self._expr_uses_var(
+                expr.index, var_name
+            )
         if isinstance(expr, BinaryOp):
-            return self._expr_uses_var(expr.left, var_name) or self._expr_uses_var(expr.right, var_name)
+            return self._expr_uses_var(expr.left, var_name) or self._expr_uses_var(
+                expr.right, var_name
+            )
         if isinstance(expr, UnaryOp):
             return self._expr_uses_var(expr.operand, var_name)
         if isinstance(expr, Ternary):
-            return (self._expr_uses_var(expr.cond, var_name) or
-                    self._expr_uses_var(expr.then_expr, var_name) or
-                    self._expr_uses_var(expr.else_expr, var_name))
+            return (
+                self._expr_uses_var(expr.cond, var_name)
+                or self._expr_uses_var(expr.then_expr, var_name)
+                or self._expr_uses_var(expr.else_expr, var_name)
+            )
         if isinstance(expr, Cast):
             return self._expr_uses_var(expr.expr, var_name)
         if isinstance(expr, SliceLit):
@@ -679,12 +697,15 @@ class TsBackend:
                 if value is not None:
                     return f"var {_camel(name)}: any = {self._expr(value)}"
                 return f"var {_camel(name)}: any"
-            case Assign(target=VarLV(name=name), value=BinaryOp(op=op, left=Var(name=left_name), right=IntLit(value=1))) if name == left_name and op in ("+", "-"):
+            case Assign(
+                target=VarLV(name=name),
+                value=BinaryOp(op=op, left=Var(name=left_name), right=IntLit(value=1)),
+            ) if name == left_name and op in ("+", "-"):
                 return f"{_camel(name)}++" if op == "+" else f"{_camel(name)}--"
             case Assign(target=target, value=value):
                 lv = self._lvalue(target)
                 val = self._expr(value)
-                if getattr(stmt, 'is_declaration', False):
+                if getattr(stmt, "is_declaration", False):
                     # Use any - same variable may have different types in different branches
                     return f"var {lv}: any = {val}"
                 return f"{lv} = {val}"
@@ -742,10 +763,14 @@ class TsBackend:
                 # Check if this is a method reference on 'this' (needs .bind(this))
                 # If accessing 'this.method' where method is not a struct field,
                 # it's a method reference being passed as a callback
-                struct_field_names = [name for name, _ in self.struct_fields.get(self.current_struct, [])]
-                if (obj_str == "this" and
-                    self.current_struct is not None and
-                    field not in struct_field_names):
+                struct_field_names = [
+                    name for name, _ in self.struct_fields.get(self.current_struct, [])
+                ]
+                if (
+                    obj_str == "this"
+                    and self.current_struct is not None
+                    and field not in struct_field_names
+                ):
                     return f"{obj_str}.{field_str}.bind(this)"
                 return f"{obj_str}.{field_str}"
             case Index(obj=obj, index=index, typ=typ):
@@ -753,8 +778,12 @@ class TsBackend:
                 idx_str = self._expr(index)
                 # String indexing returns char code (number) in our IR
                 # Check for byte/rune/int result type since ord() produces BYTE
-                obj_type = getattr(obj, 'typ', None)
-                if obj_type == STRING and isinstance(typ, Primitive) and typ.kind in ("int", "byte", "rune"):
+                obj_type = getattr(obj, "typ", None)
+                if (
+                    obj_type == STRING
+                    and isinstance(typ, Primitive)
+                    and typ.kind in ("int", "byte", "rune")
+                ):
                     return f"{obj_str}.charCodeAt({idx_str})"
                 return f"{obj_str}[{idx_str}]"
             case SliceExpr(obj=obj, low=low, high=high):
@@ -776,10 +805,14 @@ class TsBackend:
                 # "sep".join(arr) → arr.join("sep")
                 # Python's join is a string method; always swap receiver and arg for TypeScript
                 return f"{self._expr(arr)}.join({self._expr(obj)})"
-            case MethodCall(obj=obj, method="extend", args=[other], receiver_type=receiver_type) if _is_array_type(receiver_type):
+            case MethodCall(
+                obj=obj, method="extend", args=[other], receiver_type=receiver_type
+            ) if _is_array_type(receiver_type):
                 # arr.extend(other) → arr.push(...other)
                 return f"{self._expr(obj)}.push(...{self._expr(other)})"
-            case MethodCall(obj=obj, method="copy", args=[], receiver_type=receiver_type) if _is_array_type(receiver_type):
+            case MethodCall(obj=obj, method="copy", args=[], receiver_type=receiver_type) if (
+                _is_array_type(receiver_type)
+            ):
                 # arr.copy() → arr.slice()
                 return f"{self._expr(obj)}.slice()"
             case MethodCall(obj=obj, method="isalnum", args=_, receiver_type=_):
@@ -790,27 +823,41 @@ class TsBackend:
                 return f"/^[a-zA-Z]$/.test({self._expr(obj)})"
             case MethodCall(obj=obj, method="isspace", args=_, receiver_type=_):
                 return f"/^\\s$/.test({self._expr(obj)})"
-            case MethodCall(obj=obj, method="lstrip", args=[StringLit(value=chars)], receiver_type=_):
+            case MethodCall(
+                obj=obj, method="lstrip", args=[StringLit(value=chars)], receiver_type=_
+            ):
                 # Python lstrip with chars → regex replace (JS trimStart takes no args)
                 escaped = _escape_regex_class(chars)
                 return f"{self._expr(obj)}.replace(/^[{escaped}]+/, '')"
-            case MethodCall(obj=obj, method="rstrip", args=[StringLit(value=chars)], receiver_type=_):
+            case MethodCall(
+                obj=obj, method="rstrip", args=[StringLit(value=chars)], receiver_type=_
+            ):
                 # Python rstrip with chars → regex replace (JS trimEnd takes no args)
                 escaped = _escape_regex_class(chars)
                 return f"{self._expr(obj)}.replace(/[{escaped}]+$/, '')"
-            case MethodCall(obj=obj, method="strip", args=[StringLit(value=chars)], receiver_type=_):
+            case MethodCall(
+                obj=obj, method="strip", args=[StringLit(value=chars)], receiver_type=_
+            ):
                 # Python strip with chars → regex replace (JS trim takes no args)
                 escaped = _escape_regex_class(chars)
-                return f"{self._expr(obj)}.replace(/^[{escaped}]+/, '').replace(/[{escaped}]+$/, '')"
-            case MethodCall(obj=obj, method="get", args=[key, default], receiver_type=receiver_type) if isinstance(receiver_type, Map):
+                return (
+                    f"{self._expr(obj)}.replace(/^[{escaped}]+/, '').replace(/[{escaped}]+$/, '')"
+                )
+            case MethodCall(
+                obj=obj, method="get", args=[key, default], receiver_type=receiver_type
+            ) if isinstance(receiver_type, Map):
                 # Python dict.get(key, default) → JS Map.get(key) ?? default
                 return f"{self._expr(obj)}.get({self._expr(key)}) ?? {self._expr(default)}"
-            case MethodCall(obj=obj, method="replace", args=[StringLit(value=old_str), new], receiver_type=_):
+            case MethodCall(
+                obj=obj, method="replace", args=[StringLit(value=old_str), new], receiver_type=_
+            ):
                 # Python str.replace replaces ALL occurrences; JS replace only replaces first
                 # Use regex with global flag for all-occurrence replacement
                 escaped = _escape_regex_literal(old_str)
                 return f"{self._expr(obj)}.replace(/{escaped}/g, {self._expr(new)})"
-            case MethodCall(obj=obj, method=method, args=[TupleLit(elements=elements)], receiver_type=_) if method in ("startswith", "endswith"):
+            case MethodCall(
+                obj=obj, method=method, args=[TupleLit(elements=elements)], receiver_type=_
+            ) if method in ("startswith", "endswith"):
                 # Python str.startswith/endswith with tuple → disjunction of checks
                 # s.endswith((" ", "\n")) → (s.endsWith(" ") || s.endsWith("\n"))
                 ts_method = "startsWith" if method == "startswith" else "endsWith"
@@ -859,36 +906,46 @@ class TsBackend:
                 return f"({self._expr(cond)} ? {self._expr(then_expr)} : {self._expr(else_expr)})"
             case Cast(expr=inner, to_type=to_type):
                 ts_type = self._type(to_type)
-                from_type = self._type(inner.typ) if hasattr(inner, 'typ') else None
+                from_type = self._type(inner.typ) if hasattr(inner, "typ") else None
                 if from_type == ts_type:
                     return self._expr(inner)
                 # String indexing to string is redundant in TypeScript (s[i] returns string)
-                if (isinstance(to_type, Primitive) and to_type.kind == "string" and
-                    isinstance(inner, Index) and
-                    hasattr(inner.obj, 'typ') and inner.obj.typ == STRING):
+                if (
+                    isinstance(to_type, Primitive)
+                    and to_type.kind == "string"
+                    and isinstance(inner, Index)
+                    and hasattr(inner.obj, "typ")
+                    and inner.obj.typ == STRING
+                ):
                     return self._expr(inner)
                 # string to []byte: use TextEncoder for proper UTF-8 encoding
-                if (isinstance(to_type, Slice) and
-                    isinstance(to_type.element, Primitive) and
-                    to_type.element.kind == "byte" and
-                    hasattr(inner, 'typ') and
-                    isinstance(inner.typ, Primitive) and
-                    inner.typ.kind == "string"):
+                if (
+                    isinstance(to_type, Slice)
+                    and isinstance(to_type.element, Primitive)
+                    and to_type.element.kind == "byte"
+                    and hasattr(inner, "typ")
+                    and isinstance(inner.typ, Primitive)
+                    and inner.typ.kind == "string"
+                ):
                     return f"Array.from(new TextEncoder().encode({self._expr(inner)}))"
                 # []byte to string: use TextDecoder for proper UTF-8 decoding
-                if (isinstance(to_type, Primitive) and
-                    to_type.kind == "string" and
-                    hasattr(inner, 'typ') and
-                    isinstance(inner.typ, Slice) and
-                    isinstance(inner.typ.element, Primitive) and
-                    inner.typ.element.kind == "byte"):
+                if (
+                    isinstance(to_type, Primitive)
+                    and to_type.kind == "string"
+                    and hasattr(inner, "typ")
+                    and isinstance(inner.typ, Slice)
+                    and isinstance(inner.typ.element, Primitive)
+                    and inner.typ.element.kind == "byte"
+                ):
                     return f"new TextDecoder().decode(new Uint8Array({self._expr(inner)}))"
                 # rune/int to string: use String.fromCodePoint for proper Unicode handling
-                if (isinstance(to_type, Primitive) and
-                    to_type.kind == "string" and
-                    hasattr(inner, 'typ') and
-                    isinstance(inner.typ, Primitive) and
-                    inner.typ.kind in ("rune", "int")):
+                if (
+                    isinstance(to_type, Primitive)
+                    and to_type.kind == "string"
+                    and hasattr(inner, "typ")
+                    and isinstance(inner.typ, Primitive)
+                    and inner.typ.kind in ("rune", "int")
+                ):
                     return f"String.fromCodePoint({self._expr(inner)})"
                 # Use 'as unknown as' to allow any type conversion
                 return f"({self._expr(inner)} as unknown as {ts_type})"
@@ -918,9 +975,7 @@ class TsBackend:
             case MapLit(entries=entries):
                 if not entries:
                     return "new Map()"
-                pairs = ", ".join(
-                    f"[{self._expr(k)}, {self._expr(v)}]" for k, v in entries
-                )
+                pairs = ", ".join(f"[{self._expr(k)}, {self._expr(v)}]" for k, v in entries)
                 return f"new Map([{pairs}])"
             case SetLit(elements=elements):
                 elems = ", ".join(self._expr(e) for e in elements)
@@ -949,6 +1004,7 @@ class TsBackend:
                     if " ?? " in expr_str:
                         return f"({expr_str})"
                     return expr_str
+
                 return " + ".join(wrap_part(p) for p in parts)
             case StringFormat(template=template, args=args):
                 return self._format_string(template, args)
@@ -961,7 +1017,7 @@ class TsBackend:
         """Generate containment check: `x in y` or `x not in y`."""
         item_str = self._expr(item)
         container_str = self._expr(container)
-        container_type = getattr(container, 'typ', None)
+        container_type = getattr(container, "typ", None)
         neg = "!" if negated else ""
         if isinstance(container_type, (Set, Map)):
             return f"{neg}{container_str}.has({item_str})"
@@ -1064,9 +1120,7 @@ class TsBackend:
                 parts = " | ".join(self._type(v) for v in variants)
                 return f"({parts})"
             case FuncType(params=params, ret=ret):
-                params_str = ", ".join(
-                    f"p{i}: {self._type(p)}" for i, p in enumerate(params)
-                )
+                params_str = ", ".join(f"p{i}: {self._type(p)}" for i, p in enumerate(params))
                 return f"(({params_str}) => {self._type(ret)})"
             case StringSlice():
                 return "string"
@@ -1152,9 +1206,25 @@ def _camel(name: str, is_receiver_ref: bool = False) -> str:
 
 # TypeScript reserved words and built-in type names that may be used as identifiers in source
 _TS_RESERVED = {
-    "var", "let", "const", "function", "class", "interface", "type", "enum",
-    "Array", "Function", "Object", "String", "Number", "Boolean", "Symbol",
-    "Map", "Set", "Promise", "Error",
+    "var",
+    "let",
+    "const",
+    "function",
+    "class",
+    "interface",
+    "type",
+    "enum",
+    "Array",
+    "Function",
+    "Object",
+    "String",
+    "Number",
+    "Boolean",
+    "Symbol",
+    "Map",
+    "Set",
+    "Promise",
+    "Error",
 }
 
 

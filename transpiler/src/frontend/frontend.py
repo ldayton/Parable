@@ -24,8 +24,8 @@ from ..ir import (
     FuncInfo,
     FuncType,
     Function,
-    Interface,
     InterfaceDef,
+    InterfaceRef,
     Loc,
     Map,
     MethodSig,
@@ -375,7 +375,7 @@ class Frontend:
         """Create a default value expression for a given type."""
         from .. import ir
         # Pointer and interface types use nil
-        if isinstance(typ, (Pointer, Optional, Interface)):
+        if isinstance(typ, (Pointer, Optional, InterfaceRef)):
             return ir.NilLit(typ=typ, loc=loc)
         # Primitive types use their zero values
         if isinstance(typ, Primitive):

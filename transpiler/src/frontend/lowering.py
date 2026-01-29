@@ -4,7 +4,7 @@ from __future__ import annotations
 import ast
 from typing import TYPE_CHECKING, Callable
 
-from ..ir import BOOL, BYTE, FLOAT, INT, RUNE, STRING, VOID, Interface, Loc, Map, Optional, Pointer, Set, Slice, StringFormat, StructRef, Tuple
+from ..ir import BOOL, BYTE, FLOAT, INT, RUNE, STRING, VOID, InterfaceRef, Loc, Map, Optional, Pointer, Set, Slice, StringFormat, StructRef, Tuple
 from ..type_overrides import NODE_METHOD_TYPES, VAR_TYPE_OVERRIDES
 
 if TYPE_CHECKING:
@@ -200,13 +200,13 @@ def resolve_type_name(
     name: str, type_map: dict[str, "ir.Type"], symbols: "ir.SymbolTable"
 ) -> "ir.Type":
     """Resolve a class name to an IR type (for isinstance checks)."""
-    from ..ir import Interface, Pointer, StructRef
+    from ..ir import Pointer, StructRef
     # Handle primitive types
     if name in type_map:
         return type_map[name]
     if name in symbols.structs:
         return Pointer(StructRef(name))
-    return Interface(name)
+    return InterfaceRef(name)
 
 
 # ============================================================
@@ -445,7 +445,6 @@ def deref_for_func_slice_params(
 def coerce_args_to_node(func_info: "FuncInfo", args: list) -> list:
     """Add type assertions when passing interface{} to Node parameter."""
     from .. import ir
-    from ..ir import Interface
     result = list(args)
     for i, arg in enumerate(result):
         if i >= len(func_info.params):
@@ -453,13 +452,13 @@ def coerce_args_to_node(func_info: "FuncInfo", args: list) -> list:
         param = func_info.params[i]
         param_type = param.typ
         # Check if param expects Node but arg is interface{}
-        if isinstance(param_type, Interface) and param_type.name == "Node":
+        if isinstance(param_type, InterfaceRef) and param_type.name == "Node":
             arg_type = getattr(arg, 'typ', None)
-            # interface{} is represented as Interface("any")
-            if arg_type == Interface("any"):
+            # interface{} is represented as InterfaceRef("any")
+            if arg_type == InterfaceRef("any"):
                 result[i] = ir.TypeAssert(
-                    expr=arg, asserted=Interface("Node"), safe=True,
-                    typ=Interface("Node"), loc=arg.loc if hasattr(arg, 'loc') else Loc.unknown()
+                    expr=arg, asserted=InterfaceRef("Node"), safe=True,
+                    typ=InterfaceRef("Node"), loc=arg.loc if hasattr(arg, 'loc') else Loc.unknown()
                 )
     return result
 
@@ -533,8 +532,8 @@ def lower_expr_Constant(node: ast.Constant) -> "ir.Expr":
     if isinstance(node.value, str):
         return ir.StringLit(value=node.value, typ=STRING, loc=loc_from_node(node))
     if node.value is None:
-        return ir.NilLit(typ=Interface("any"), loc=loc_from_node(node))
-    return ir.Var(name=f"TODO_Constant_{type(node.value)}", typ=Interface("any"))
+        return ir.NilLit(typ=InterfaceRef("any"), loc=loc_from_node(node))
+    return ir.Var(name=f"TODO_Constant_{type(node.value)}", typ=InterfaceRef("any"))
 
 
 def lower_expr_Name(
@@ -549,14 +548,14 @@ def lower_expr_Name(
     if node.id == "False":
         return ir.BoolLit(value=False, typ=BOOL, loc=loc_from_node(node))
     if node.id == "None":
-        return ir.NilLit(typ=Interface("any"), loc=loc_from_node(node))
+        return ir.NilLit(typ=InterfaceRef("any"), loc=loc_from_node(node))
     # Handle expanded tuple variables: result -> TupleLit(result0, result1)
     if node.id in type_ctx.tuple_vars:
         synthetic_names = type_ctx.tuple_vars[node.id]
         elements = []
         elem_types = []
         for syn_name in synthetic_names:
-            typ = type_ctx.var_types.get(syn_name, Interface("any"))
+            typ = type_ctx.var_types.get(syn_name, InterfaceRef("any"))
             elements.append(ir.Var(name=syn_name, typ=typ, loc=loc_from_node(node)))
             elem_types.append(typ)
         return ir.TupleLit(
@@ -567,7 +566,7 @@ def lower_expr_Name(
     # Look up variable type from context, or constants for module-level constants
     var_type = type_ctx.var_types.get(node.id)
     if var_type is None:
-        var_type = symbols.constants.get(node.id, Interface("any"))
+        var_type = symbols.constants.get(node.id, InterfaceRef("any"))
     return ir.Var(name=node.id, typ=var_type, loc=loc_from_node(node))
 
 
@@ -627,7 +626,7 @@ def lower_expr_Attribute(
                 typ=asserted_type, loc=loc_from_node(node.value)
             )
     # Infer field type for self.field accesses
-    field_type: "Type" = Interface("any")
+    field_type: "Type" = InterfaceRef("any")
     if isinstance(node.value, ast.Name) and node.value.id == "self":
         if current_class_name in symbols.structs:
             struct_info = symbols.structs[current_class_name]
@@ -644,7 +643,7 @@ def lower_expr_Attribute(
                 if field_info:
                     field_type = field_info.typ
     # Look up field type from object's type (for variables with known struct types)
-    if field_type == Interface("any") and obj_type is not None:
+    if field_type == InterfaceRef("any") and obj_type is not None:
         struct_name = None
         if isinstance(obj_type, Pointer) and isinstance(obj_type.target, StructRef):
             struct_name = obj_type.target.name
@@ -676,7 +675,7 @@ def lower_expr_Subscript(
             synthetic_names = type_ctx.tuple_vars[var_name]
             if 0 <= idx < len(synthetic_names):
                 syn_name = synthetic_names[idx]
-                typ = type_ctx.var_types.get(syn_name, Interface("any"))
+                typ = type_ctx.var_types.get(syn_name, InterfaceRef("any"))
                 return ir.Var(name=syn_name, typ=typ, loc=loc_from_node(node))
     obj = lower_expr(node.value)
     if isinstance(node.slice, ast.Slice):
@@ -684,14 +683,14 @@ def lower_expr_Subscript(
         high = convert_negative_index(node.slice.upper, obj, node) if node.slice.upper else None
         # Slicing preserves type - string slice is still string, slice of slice is still slice
         slice_type: "Type" = infer_expr_type_from_ast(node.value)
-        if slice_type == Interface("any"):
-            slice_type = obj.typ if hasattr(obj, 'typ') else Interface("any")
+        if slice_type == InterfaceRef("any"):
+            slice_type = obj.typ if hasattr(obj, 'typ') else InterfaceRef("any")
         return ir.SliceExpr(
             obj=obj, low=low, high=high, typ=slice_type, loc=loc_from_node(node)
         )
     idx = convert_negative_index(node.slice, obj, node)
     # Infer element type from slice type
-    elem_type: "Type" = Interface("any")
+    elem_type: "Type" = InterfaceRef("any")
     obj_type = getattr(obj, 'typ', None)
     if isinstance(obj_type, Slice):
         elem_type = obj_type.element
@@ -729,7 +728,7 @@ def lower_expr_BinOp(
     right = lower_expr(node.right)
     op = binop_to_str(node.op)
     # Infer result type based on operator
-    result_type: "Type" = Interface("any")
+    result_type: "Type" = InterfaceRef("any")
     if isinstance(node.op, (ast.BitAnd, ast.BitOr, ast.BitXor, ast.LShift, ast.RShift)):
         result_type = INT
     elif isinstance(node.op, (ast.Add, ast.Sub, ast.Mult, ast.FloorDiv, ast.Mod)):
@@ -889,7 +888,7 @@ def lower_expr_UnaryOp(
         return ir.UnaryOp(op="!", operand=operand, typ=BOOL, loc=loc_from_node(node))
     operand = lower_expr(node.operand)
     op = unaryop_to_str(node.op)
-    return ir.UnaryOp(op=op, operand=operand, typ=Interface("any"), loc=loc_from_node(node))
+    return ir.UnaryOp(op=op, operand=operand, typ=InterfaceRef("any"), loc=loc_from_node(node))
 
 
 # ============================================================
@@ -908,7 +907,7 @@ def lower_expr_List(
     from .. import ir
     elements = [lower_expr(e) for e in node.elts]
     # Prefer expected type when available (bidirectional type inference)
-    element_type: "Type" = Interface("any")
+    element_type: "Type" = InterfaceRef("any")
     if expected_type is not None and isinstance(expected_type, Slice):
         element_type = expected_type.element
     elif expected_type_ctx is not None and isinstance(expected_type_ctx, Slice):
@@ -944,7 +943,7 @@ def lower_list_call_with_expected_type(
         # Need conversion if: source is *Struct, target is interface/Node
         if (source_elem != target_elem and
             isinstance(source_elem_unwrapped, StructRef) and
-            isinstance(target_elem, (Interface, StructRef))):
+            isinstance(target_elem, (InterfaceRef, StructRef))):
             return ir.SliceConvert(
                 source=arg,
                 target_element_type=target_elem,
@@ -954,8 +953,8 @@ def lower_list_call_with_expected_type(
     # Fall through to normal copy
     return ir.MethodCall(
         obj=arg, method="copy", args=[],
-        receiver_type=source_type if isinstance(source_type, Slice) else Slice(Interface("any")),
-        typ=source_type if isinstance(source_type, Slice) else Slice(Interface("any")),
+        receiver_type=source_type if isinstance(source_type, Slice) else Slice(InterfaceRef("any")),
+        typ=source_type if isinstance(source_type, Slice) else Slice(InterfaceRef("any")),
         loc=loc_from_node(node)
     )
 
@@ -973,7 +972,7 @@ def lower_expr_Dict(
             entries.append((lower_expr(k), lower_expr(v)))
     # Infer key and value types from first entry if available
     key_type: "Type" = STRING
-    value_type: "Type" = Interface("any")
+    value_type: "Type" = InterfaceRef("any")
     if node.values and node.values[0]:
         first_val = node.values[0]
         value_type = infer_expr_type_from_ast(first_val)
@@ -1103,7 +1102,7 @@ def lower_expr_as_bool(
     # Non-boolean expression - needs truthy check
     expr = lower_expr(node)
     # Use the IR expression's type if available, otherwise infer from AST
-    expr_type = expr.typ if hasattr(expr, 'typ') and expr.typ != Interface("any") else infer_expr_type_from_ast(node)
+    expr_type = expr.typ if hasattr(expr, 'typ') and expr.typ != InterfaceRef("any") else infer_expr_type_from_ast(node)
     # Bool expressions don't need nil check
     if expr_type == BOOL:
         return expr
@@ -1120,7 +1119,7 @@ def lower_expr_as_bool(
     if isinstance(expr_type, Optional) and isinstance(expr_type.inner, (Slice, Map, Set)):
         return ir.BinaryOp(op=">", left=ir.Len(expr=expr, typ=INT, loc=loc_from_node(node)), right=ir.IntLit(value=0, typ=INT), typ=BOOL, loc=loc_from_node(node))
     # Interface truthy check: x != nil
-    if isinstance(expr_type, Interface):
+    if isinstance(expr_type, InterfaceRef):
         return ir.IsNil(expr=expr, negated=True, typ=BOOL, loc=loc_from_node(node))
     # Pointer/Optional truthy check: x != nil
     if isinstance(expr_type, (Pointer, Optional)):
@@ -1128,7 +1127,7 @@ def lower_expr_as_bool(
     # Check name that might be pointer or interface - use nil check
     if isinstance(node, ast.Name):
         # If type is interface, use nil check (interfaces are nilable)
-        if isinstance(expr_type, Interface):
+        if isinstance(expr_type, InterfaceRef):
             return ir.IsNil(expr=expr, negated=True, typ=BOOL, loc=loc_from_node(node))
         # If type is a pointer, use nil check
         if isinstance(expr_type, (Pointer, Optional)):
@@ -1162,10 +1161,10 @@ def lower_expr_IfExp(
     else_expr = lower_expr(node.orelse)
     # Use type from lowered expressions (prefer then branch, fall back to else)
     result_type = getattr(then_expr, 'typ', None)
-    if result_type is None or result_type == Interface("any"):
+    if result_type is None or result_type == InterfaceRef("any"):
         result_type = getattr(else_expr, 'typ', None)
     if result_type is None:
-        result_type = Interface("any")
+        result_type = InterfaceRef("any")
     return ir.Ternary(
         cond=cond, then_expr=then_expr, else_expr=else_expr,
         typ=result_type, loc=loc_from_node(node)
@@ -1375,7 +1374,7 @@ def lower_expr_Call(
             # list.append(x) -> append(list, x) in Go (handled via MethodCall for now)
             return ir.MethodCall(
                 obj=obj, method="append", args=coerced_args,
-                receiver_type=obj_type if obj_type != Interface("any") else Slice(Interface("any")),
+                receiver_type=obj_type if obj_type != InterfaceRef("any") else Slice(InterfaceRef("any")),
                 typ=VOID, loc=loc_from_node(node)
             )
         # Infer receiver type for proper method lookup
@@ -1442,7 +1441,7 @@ def lower_expr_Call(
             if isinstance(source_type, Slice):
                 result_type = source_type
             else:
-                result_type = Slice(Interface("any"))
+                result_type = Slice(InterfaceRef("any"))
             return ir.MethodCall(
                 obj=args[0], method="copy", args=[],
                 receiver_type=result_type, typ=result_type, loc=loc_from_node(node)
@@ -1573,7 +1572,7 @@ def lower_expr_Call(
                         param_name = struct_info.init_params[i]
                         field_name = struct_info.param_to_field.get(param_name, param_name)
                         field_info = struct_info.fields.get(field_name)
-                        field_type = field_info.typ if field_info else Interface("any")
+                        field_type = field_info.typ if field_info else InterfaceRef("any")
                         ctor_args[i] = dispatch.make_default_value(field_type, loc_from_node(node))
                 return ir.Call(
                     func=f"New{func_name}",
@@ -1625,7 +1624,7 @@ def lower_expr_Call(
                 typ=Pointer(StructRef(func_name)), loc=loc_from_node(node)
             )
         # Look up function return type and fill default args from symbol table
-        ret_type: "Type" = Interface("any")
+        ret_type: "Type" = InterfaceRef("any")
         if func_name in ctx.symbols.functions:
             func_info = ctx.symbols.functions[func_name]
             ret_type = func_info.return_type
@@ -1638,7 +1637,7 @@ def lower_expr_Call(
             # Add type assertions for interface{} -> Node coercion
             args = dispatch.coerce_args_to_node(func_info, args)
         return ir.Call(func=func_name, args=args, typ=ret_type, loc=loc_from_node(node))
-    return ir.Var(name="TODO_Call", typ=Interface("any"))
+    return ir.Var(name="TODO_Call", typ=InterfaceRef("any"))
 
 
 def lower_stmt_Assign(
@@ -1739,7 +1738,7 @@ def lower_stmt_Assign(
                     entry_var = ir.Var(name="_entry", typ=entry_type)
                     return ir.Block(body=[
                         ir.VarDecl(name="_entry", typ=entry_type, value=ir.Index(obj=obj, index=len_minus_1, typ=entry_type)),
-                        ir.Assign(target=obj_lval, value=ir.SliceExpr(obj=obj, high=len_minus_1, typ=Interface("any"))),
+                        ir.Assign(target=obj_lval, value=ir.SliceExpr(obj=obj, high=len_minus_1, typ=InterfaceRef("any"))),
                         ir.Assign(target=lval0, value=ir.FieldAccess(obj=entry_var, field="F0", typ=f0_type)),
                         ir.Assign(target=lval1, value=ir.FieldAccess(obj=entry_var, field="F1", typ=f1_type)),
                     ], loc=loc_from_node(node))
@@ -1764,7 +1763,7 @@ def lower_stmt_Assign(
             # Tuple unpacking from index: a, b = list[idx] where list is []Tuple
             if isinstance(node.value, ast.Subscript):
                 # Infer tuple element type from the list's type
-                entry_type: "Type" = Tuple((Interface("any"), Interface("any")))  # Default
+                entry_type: "Type" = Tuple((InterfaceRef("any"), InterfaceRef("any")))  # Default
                 if isinstance(node.value.value, ast.Name):
                     var_name = node.value.value.id
                     if var_name in type_ctx.var_types:
@@ -1772,8 +1771,8 @@ def lower_stmt_Assign(
                         if isinstance(list_type, Slice) and isinstance(list_type.element, Tuple):
                             entry_type = list_type.element
                 # Get field types from entry_type
-                f0_type = entry_type.elements[0] if isinstance(entry_type, Tuple) and len(entry_type.elements) > 0 else Interface("any")
-                f1_type = entry_type.elements[1] if isinstance(entry_type, Tuple) and len(entry_type.elements) > 1 else Interface("any")
+                f0_type = entry_type.elements[0] if isinstance(entry_type, Tuple) and len(entry_type.elements) > 0 else InterfaceRef("any")
+                f1_type = entry_type.elements[1] if isinstance(entry_type, Tuple) and len(entry_type.elements) > 1 else InterfaceRef("any")
                 lval0 = dispatch.lower_lvalue(target.elts[0])
                 lval1 = dispatch.lower_lvalue(target.elts[1])
                 entry_var = ir.Var(name="_entry", typ=entry_type)
@@ -1832,7 +1831,7 @@ def lower_stmt_Assign(
                 # - Variable not yet tracked, or
                 # - Variable was RUNE from for-loop but now assigned STRING (from method call)
                 current_type = type_ctx.var_types.get(target.id)
-                if value_type != Interface("any"):
+                if value_type != InterfaceRef("any"):
                     if current_type is None or (current_type == RUNE and value_type == STRING):
                         type_ctx.var_types[target.id] = value_type
         # Propagate narrowed status: if assigning from a narrowed var, target is also narrowed
@@ -1854,7 +1853,7 @@ def lower_stmt_Assign(
                 if list_var in type_ctx.list_element_unions:
                     type_ctx.union_types[target.id] = type_ctx.list_element_unions[list_var]
                     # Also reset var_types to Node so union_types logic is used for field access
-                    type_ctx.var_types[target.id] = Interface("Node")
+                    type_ctx.var_types[target.id] = InterfaceRef("Node")
         lval = dispatch.lower_lvalue(target)
         assign = ir.Assign(target=lval, value=value, loc=loc_from_node(node))
         # Add declaration type if VAR_TYPE_OVERRIDE applies or if var_types has a unified Node type
@@ -1866,7 +1865,7 @@ def lower_stmt_Assign(
             elif target.id in type_ctx.var_types:
                 # Use unified Node type from var_types for hoisted variables
                 unified_type = type_ctx.var_types[target.id]
-                if unified_type == Interface("Node"):
+                if unified_type == InterfaceRef("Node"):
                     expr_type = dispatch.synthesize_type(value)
                     if unified_type != expr_type:
                         assign.decl_typ = unified_type
@@ -1879,7 +1878,7 @@ def lower_stmt_Assign(
         # Track variable type
         if isinstance(target, ast.Name):
             value_type = dispatch.synthesize_type(value)
-            if value_type != Interface("any"):
+            if value_type != InterfaceRef("any"):
                 type_ctx.var_types[target.id] = value_type
     if len(stmts) == 1:
         return stmts[0]
@@ -2119,7 +2118,7 @@ def lower_stmt_For(
             # Prepend unpacking assignments
             unpack_stmts: list[ir.Stmt] = []
             for i, var_name in unpack_vars:
-                field_type = elem_type.elements[i] if i < len(elem_type.elements) else Interface("any")
+                field_type = elem_type.elements[i] if i < len(elem_type.elements) else InterfaceRef("any")
                 field_access = ir.FieldAccess(
                     obj=ir.Var(name=item_var, typ=elem_type, loc=loc_from_node(node)),
                     field=f"F{i}",
@@ -2301,7 +2300,7 @@ def lower_expr(node: ast.expr, ctx: "FrontendContext", dispatch: "LoweringDispat
     handler = EXPR_HANDLERS.get(type(node))
     if handler:
         return handler(node, ctx, dispatch)
-    return ir.Var(name=f"TODO_{node.__class__.__name__}", typ=Interface("any"))
+    return ir.Var(name=f"TODO_{node.__class__.__name__}", typ=InterfaceRef("any"))
 
 
 def _lower_stmt_Expr_dispatch(node: ast.Expr, ctx: "FrontendContext", d: "LoweringDispatch") -> "ir.Stmt":
@@ -2370,7 +2369,7 @@ def lower_stmt(node: ast.stmt, ctx: "FrontendContext", dispatch: "LoweringDispat
     handler = STMT_HANDLERS.get(type(node))
     if handler:
         return handler(node, ctx, dispatch)
-    return ir.ExprStmt(expr=ir.Var(name=f"TODO_{node.__class__.__name__}", typ=Interface("any")))
+    return ir.ExprStmt(expr=ir.Var(name=f"TODO_{node.__class__.__name__}", typ=InterfaceRef("any")))
 
 
 def lower_stmts(stmts: list[ast.stmt], ctx: "FrontendContext", dispatch: "LoweringDispatch") -> list["ir.Stmt"]:

@@ -93,8 +93,8 @@ from src.ir import (
     Index,
     IndexLV,
     IntLit,
-    Interface,
     InterfaceDef,
+    InterfaceRef,
     IsNil,
     IsType,
     Len,
@@ -1056,7 +1056,7 @@ class TsBackend:
                 return f"{self._type(inner)} | null"
             case StructRef(name=name):
                 return _safe_name(name)
-            case Interface(name=name):
+            case InterfaceRef(name=name):
                 return _safe_name(name)
             case Union(name=name, variants=variants):
                 if name:
@@ -1077,7 +1077,7 @@ class TsBackend:
         match typ:
             case StructRef(name=name):
                 return _safe_name(name)
-            case Interface(name=name):
+            case InterfaceRef(name=name):
                 return _safe_name(name)
             case _:
                 return self._type(typ)

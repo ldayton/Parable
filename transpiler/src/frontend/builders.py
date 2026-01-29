@@ -5,7 +5,7 @@ import ast
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
-from ..ir import INT, Constant, Field, Function, Interface, InterfaceDef, Loc, MethodSig, Module, Param, Pointer, Receiver, STRING, Struct, StructRef, VOID
+from ..ir import INT, Constant, Field, Function, InterfaceDef, InterfaceRef, Loc, MethodSig, Module, Param, Pointer, Receiver, STRING, Struct, StructRef, VOID
 from ..type_overrides import MODULE_CONSTANTS, PARAM_TYPE_OVERRIDES
 
 if TYPE_CHECKING:
@@ -106,7 +106,7 @@ def build_constructor(
         if arg.arg == "self":
             continue
         py_type = callbacks.annotation_to_str(arg.annotation) if arg.annotation else ""
-        typ = callbacks.py_type_to_ir(py_type, False) if py_type else Interface("any")
+        typ = callbacks.py_type_to_ir(py_type, False) if py_type else InterfaceRef("any")
         # Check for parameter type overrides
         override_key = (f"New{class_name}", arg.arg)
         if override_key in PARAM_TYPE_OVERRIDES:

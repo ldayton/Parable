@@ -53,7 +53,7 @@ Frontend deficiencies (should be fixed in frontend.py):
   StructLit with all fields when translating __init__ methods. (~7 factories)
 
 Middleend deficiencies (should be fixed in middleend.py):
-- _isNilInterface() uses reflection for interface nil checks (~92 sites).
+- _isNilInterfaceRef() uses reflection for interface nil checks (~92 sites).
   Middleend could track when expressions are definitely interface{} vs typed
   nil pointers, allowing direct `== nil` comparison in simple cases.
 
@@ -97,8 +97,8 @@ from src.ir import (
     Index,
     IndexLV,
     IntLit,
-    Interface,
     InterfaceDef,
+    InterfaceRef,
     IsNil,
     IsType,
     Len,
@@ -354,7 +354,7 @@ func _intToStr(n int) string {
 // _isNilInterface checks if an interface value is nil.
 // In Go, an interface is nil only when both type and value are nil.
 // This handles the case where interface contains a typed nil pointer.
-func _isNilInterface(i interface{}) bool {
+func _isNilInterfaceRef(i interface{}) bool {
 	if i == nil {
 		return true
 	}
@@ -637,7 +637,7 @@ func _Substring(s string, start int, end int) string {
                     return False
                 if isinstance(elem_type, StructRef) and arg_type.target.name == elem_type.name:
                     return True
-                if isinstance(elem_type, Interface) and arg_type.target.name == elem_type.name:
+                if isinstance(elem_type, InterfaceRef) and arg_type.target.name == elem_type.name:
                     return True
                 return False
 
@@ -652,7 +652,7 @@ func _Substring(s string, start int, end int) string {
                 if elem_type == STRING:
                     return True
                 # Rune appended to []interface{} also needs conversion (common pattern)
-                if isinstance(elem_type, Interface) and elem_type.name == "any":
+                if isinstance(elem_type, InterfaceRef) and elem_type.name == "any":
                     return True
                 return False
 
@@ -1243,7 +1243,7 @@ func _Substring(s string, start int, end int) string {
         # Interface fields must be accessed via getter methods
         obj_type = getattr(expr.obj, 'typ', None)
         is_node_type = (
-            (isinstance(obj_type, Interface) and obj_type.name == "Node") or
+            (isinstance(obj_type, InterfaceRef) and obj_type.name == "Node") or
             (isinstance(obj_type, StructRef) and obj_type.name == "Node")
         )
         if is_node_type and expr.field == "kind":
@@ -1342,7 +1342,7 @@ func _Substring(s string, start int, end int) string {
                     if isinstance(elem_type, StructRef) and arg_type.target.name == elem_type.name:
                         needs_deref = True
                     # Or element is Interface with same name (Node interface)
-                    elif isinstance(elem_type, Interface) and arg_type.target.name == elem_type.name:
+                    elif isinstance(elem_type, InterfaceRef) and arg_type.target.name == elem_type.name:
                         needs_deref = True
                 if needs_deref:
                     return f"append({obj}, *{arg})"
@@ -1532,12 +1532,12 @@ func _Substring(s string, start int, end int) string {
         # Remove double negation: !!x -> x
         if op == "!" and isinstance(expr.operand, UnaryOp) and expr.operand.op == "!":
             return self._emit_expr(expr.operand.operand)
-        # Remove double negation with IsNil: !(!_isNilInterface(x)) -> _isNilInterface(x)
+        # Remove double negation with IsNil: !(!_isNilInterfaceRef(x)) -> _isNilInterfaceRef(x)
         if op == "!" and isinstance(expr.operand, IsNil) and expr.operand.negated:
             inner = self._emit_expr(expr.operand.expr)
             expr_type = getattr(expr.operand.expr, 'typ', None)
-            if isinstance(expr_type, Interface):
-                return f"_isNilInterface({inner})"
+            if isinstance(expr_type, InterfaceRef):
+                return f"_isNilInterfaceRef({inner})"
             return f"{inner} == nil"
         operand = self._emit_expr(expr.operand)
         # Wrap complex operands in parens for ! operator
@@ -1552,7 +1552,7 @@ func _Substring(s string, start int, end int) string {
         else_expr = self._emit_expr(expr.else_expr)
         # When ternary type is any but both branches have same concrete type, use that
         result_type = expr.typ
-        if isinstance(result_type, Interface) and result_type.name == "any":
+        if isinstance(result_type, InterfaceRef) and result_type.name == "any":
             then_type = getattr(expr.then_expr, 'typ', None)
             else_type = getattr(expr.else_expr, 'typ', None)
             if then_type is not None and then_type == else_type:
@@ -1587,12 +1587,12 @@ func _Substring(s string, start int, end int) string {
         # In Go, interface nil check requires reflection when interface might
         # contain a typed nil pointer (e.g., var x SomeInterface = (*Impl)(nil))
         expr_type = getattr(expr.expr, 'typ', None)
-        is_interface = isinstance(expr_type, Interface)
+        is_interface = isinstance(expr_type, InterfaceRef)
         if is_interface:
             # Use helper function that handles typed nil pointers
             if expr.negated:
-                return f"!_isNilInterface({inner})"
-            return f"_isNilInterface({inner})"
+                return f"!_isNilInterfaceRef({inner})"
+            return f"_isNilInterfaceRef({inner})"
         if expr.negated:
             return f"{inner} != nil"
         return f"{inner} == nil"
@@ -1764,7 +1764,7 @@ func _Substring(s string, start int, end int) string {
             if inner.startswith("*"):
                 return inner
             # Interface types can already be nil, don't wrap in pointer
-            if isinstance(typ.inner, Interface):
+            if isinstance(typ.inner, InterfaceRef):
                 return inner
             # Slice types can already be nil, don't wrap in pointer
             if isinstance(typ.inner, Slice):
@@ -1772,7 +1772,7 @@ func _Substring(s string, start int, end int) string {
             return f"*{inner}"
         if isinstance(typ, StructRef):
             return typ.name
-        if isinstance(typ, Interface):
+        if isinstance(typ, InterfaceRef):
             if typ.name == "any":
                 return "interface{}"
             if typ.name == "None":

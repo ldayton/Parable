@@ -9,7 +9,7 @@ from .ir import (
     BYTE,
     INT,
     STRING,
-    Interface,
+    InterfaceRef,
     Optional,
     Pointer,
     Slice,
@@ -58,7 +58,7 @@ FIELD_TYPE_OVERRIDES: dict[tuple[str, str], Type] = {
     # Token.word is *Word, not Node interface
     ("Token", "word"): Pointer(StructRef("Word")),
     # Pipeline.commands is []Node
-    ("Pipeline", "commands"): Slice(Interface("Node")),
+    ("Pipeline", "commands"): Slice(InterfaceRef("Node")),
     # Command.words is []*Word (Go slices aren't covariant)
     ("Command", "words"): Slice(Pointer(StructRef("Word"))),
     # For/Select.words is []*Word | None - null indicates "no in clause" (iterate $@)
@@ -158,20 +158,20 @@ VAR_TYPE_OVERRIDES: dict[tuple[str, str], Type] = {
     # _parse_function.body, _parse_coproc.body, parse_compound_command.result:
     # auto-inferred from multiple Node-subtype assignments
     # _format_cmdsub_node hoisted variables
-    ("_format_cmdsub_node", "cmd"): Interface("Node"),
-    ("_format_cmdsub_node", "h"): Interface("Node"),
+    ("_format_cmdsub_node", "cmd"): InterfaceRef("Node"),
+    ("_format_cmdsub_node", "h"): InterfaceRef("Node"),
     # Empty list variables that need concrete element types
     ("_format_cmdsub_node", "heredocs"): Slice(Pointer(StructRef("HereDoc"))),
-    ("_format_cmdsub_node", "cmds"): Slice(Tuple((Interface("Node"), BOOL))),
+    ("_format_cmdsub_node", "cmds"): Slice(Tuple((InterfaceRef("Node"), BOOL))),
     # String list variables in _format_cmdsub_node
     ("_format_cmdsub_node", "word_vals"): Slice(STRING),
     ("_format_cmdsub_node", "patterns"): Slice(STRING),
     ("_format_cmdsub_node", "redirect_parts"): Slice(STRING),
     # _parseCompoundCommand returns various Node subtypes
-    ("_parse_compound_command", "result"): Interface("Node"),
+    ("_parse_compound_command", "result"): InterfaceRef("Node"),
     # Arithmetic parsing variables
     ("_arith_parse_assign", "op"): STRING,
-    ("_arith_parse_left_assoc", "left"): Interface("Node"),
+    ("_arith_parse_left_assoc", "left"): InterfaceRef("Node"),
 }
 
 # Fields that use -1 sentinel value instead of nil pointer for int | None

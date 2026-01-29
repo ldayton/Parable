@@ -127,8 +127,8 @@ from src.ir import (
     Index,
     IndexLV,
     IntLit,
-    Interface,
     InterfaceDef,
+    InterfaceRef,
     IsNil,
     IsType,
     Len,
@@ -960,7 +960,7 @@ class JavaBackend:
                     return f"{obj_str}.{lower_field}()"
                 # For .kind on Node interface, use getKind() method
                 obj_type = getattr(obj, 'typ', None)
-                if field == "kind" and isinstance(obj_type, (Interface, StructRef)):
+                if field == "kind" and isinstance(obj_type, (InterfaceRef, StructRef)):
                     return f"{obj_str}.getKind()"
                 # Method reference on self: _arith_parse_* -> () -> this._arithParse*()
                 # This handles bound method references in Python that are passed as callbacks
@@ -1126,7 +1126,7 @@ class JavaBackend:
                 if isinstance(operand_type, Primitive) and operand_type.kind == "int":
                     return f"({self._expr(operand)} == 0)"
                 # For object types (not primitive bool), Python "not x" means "x is falsy/null"
-                if isinstance(operand_type, (Interface, StructRef, Pointer)):
+                if isinstance(operand_type, (InterfaceRef, StructRef, Pointer)):
                     return f"({self._expr(operand)} == null)"
                 # Check for bitwise & operand (result is int even if typ not set)
                 if isinstance(operand, BinaryOp) and operand.op == "&":
@@ -1161,7 +1161,7 @@ class JavaBackend:
                 # This handles Python's "not x" being translated to IsNil(UnaryOp("!", x), negated=True)
                 if negated and isinstance(inner, UnaryOp) and inner.op == "!":
                     inner_type = getattr(inner.operand, 'typ', None)
-                    if isinstance(inner_type, (Interface, StructRef, Pointer)) or inner_type is None:
+                    if isinstance(inner_type, (InterfaceRef, StructRef, Pointer)) or inner_type is None:
                         return f"({self._expr(inner.operand)} == null)"
                 if negated:
                     return f"{self._expr(inner)} != null"
@@ -1450,7 +1450,7 @@ class JavaBackend:
                 return _box_type(self._type(inner))
             case StructRef(name=name):
                 return _java_safe_class(name)
-            case Interface(name=name):
+            case InterfaceRef(name=name):
                 if name == "any":
                     return "Object"
                 return _java_safe_class(name)
@@ -1460,7 +1460,7 @@ class JavaBackend:
                 return "Object"
             case FuncType(params=params, ret=ret):
                 # Use NodeSupplier for () -> Node pattern
-                if not params and isinstance(ret, (Interface, StructRef)):
+                if not params and isinstance(ret, (InterfaceRef, StructRef)):
                     return "NodeSupplier"
                 return "Object"
             case StringSlice():
@@ -1472,7 +1472,7 @@ class JavaBackend:
         match typ:
             case StructRef(name=name):
                 return _java_safe_class(name)
-            case Interface(name=name):
+            case InterfaceRef(name=name):
                 return _java_safe_class(name)
             case Pointer(target=target):
                 return self._type_name_for_check(target)

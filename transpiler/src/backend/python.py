@@ -63,8 +63,8 @@ from src.ir import (
     Index,
     IndexLV,
     IntLit,
-    Interface,
     InterfaceDef,
+    InterfaceRef,
     IsNil,
     IsType,
     Len,
@@ -774,7 +774,7 @@ class PythonBackend:
                 return f"{self._type(inner)} | None"
             case StructRef(name=name):
                 return name
-            case Interface(name=name):
+            case InterfaceRef(name=name):
                 return name
             case Union(name=name, variants=variants):
                 if name:
@@ -794,7 +794,7 @@ class PythonBackend:
         match typ:
             case StructRef(name=name):
                 return name
-            case Interface(name=name):
+            case InterfaceRef(name=name):
                 return name
             case _:
                 return self._type(typ)

@@ -13,7 +13,7 @@ from ..ir import (
     VOID,
     FuncInfo,
     FuncType,
-    Interface,
+    InterfaceRef,
     Map,
     Optional,
     Pointer,
@@ -99,8 +99,8 @@ def is_node_interface_type(typ: Type | None) -> bool:
     """Check if a type is the Node interface type."""
     if typ is None:
         return False
-    # Interface("Node")
-    if isinstance(typ, Interface) and typ.name == "Node":
+    # InterfaceRef("Node")
+    if isinstance(typ, InterfaceRef) and typ.name == "Node":
         return True
     # StructRef("Node")
     if isinstance(typ, StructRef) and typ.name == "Node":
@@ -156,7 +156,7 @@ def parse_callable_type(
                 )
                 return FuncType(params=param_types, ret=ret)
             return FuncType(params=(), ret=ret)
-    return Interface("any")
+    return InterfaceRef("any")
 
 
 def py_type_to_ir(
@@ -167,19 +167,19 @@ def py_type_to_ir(
 ) -> Type:
     """Convert Python type string to IR Type."""
     if not py_type:
-        return Interface("any")
+        return InterfaceRef("any")
     # Handle simple types
     if py_type in TYPE_MAP:
         return TYPE_MAP[py_type]
     # Handle bare "list" without type args
     if py_type == "list":
-        return Slice(Interface("any"))
+        return Slice(InterfaceRef("any"))
     # Handle bare "dict" without type args
     if py_type == "dict":
-        return Map(STRING, Interface("any"))
+        return Map(STRING, InterfaceRef("any"))
     # Handle bare "set" without type args
     if py_type == "set":
-        return Set(Interface("any"))
+        return Set(InterfaceRef("any"))
     # Handle X | None -> Optional[base type]
     if " | " in py_type:
         parts = split_union_types(py_type)
@@ -189,7 +189,7 @@ def py_type_to_ir(
                 inner = py_type_to_ir(parts[0], symbols, node_types, concrete_nodes)
                 # For Node | None, use Node interface (interfaces are nilable in Go)
                 if parts[0] == "Node" or is_node_subclass(parts[0], symbols):
-                    return Interface("Node")
+                    return InterfaceRef("Node")
                 # For str | None, just use string (empty string represents None)
                 if inner == STRING:
                     return STRING
@@ -199,8 +199,8 @@ def py_type_to_ir(
                 return Optional(inner)
             # If all parts are Node subclasses, return Node interface (nilable)
             if all(is_node_subclass(p, symbols) for p in parts):
-                return Interface("Node")
-            return Interface("any")
+                return InterfaceRef("Node")
+            return InterfaceRef("any")
     # Handle list[X]
     if py_type.startswith("list["):
         inner = py_type[5:-1]
@@ -233,26 +233,26 @@ def py_type_to_ir(
         if info.is_node or py_type == "Node":
             if concrete_nodes and py_type != "Node":
                 return Pointer(StructRef(py_type))
-            return Interface("Node")
+            return InterfaceRef("Node")
         return Pointer(StructRef(py_type))
     # Known internal types
     if py_type in ("Token", "QuoteState", "ParseContext", "Lexer", "Parser"):
         return Pointer(StructRef(py_type))
     # Type aliases - union types of Node subtypes
     if py_type in ("ArithNode", "CondNode"):
-        return Interface("Node")
+        return InterfaceRef("Node")
     # Python builtin aliases
     if py_type == "bytearray":
         return Slice(BYTE)
     if py_type == "tuple":
-        return Interface("any")
+        return InterfaceRef("any")
     # Type alias mappings
     if py_type == "CommandSub":
         return Pointer(StructRef("CommandSubstitution"))
     if py_type == "ProcessSub":
         return Pointer(StructRef("ProcessSubstitution"))
     # Unknown type - return as interface
-    return Interface(py_type)
+    return InterfaceRef(py_type)
 
 
 def py_return_type_to_ir(
@@ -273,7 +273,7 @@ def py_return_type_to_ir(
             # Check if all parts are Node subclasses -> return Node interface
             if all(p in node_types for p in parts):
                 return StructRef("Node")
-            return Interface("any")
+            return InterfaceRef("any")
     # Handle tuple[...] specially for return types
     if py_type.startswith("tuple["):
         inner = py_type[6:-1]
@@ -299,29 +299,29 @@ def infer_type_from_value(
         case ast.Constant(value=str()):
             return STRING
         case ast.Constant(value=None):
-            return Interface("any")
+            return InterfaceRef("any")
         case ast.List(elts=[first, *_]):
             return Slice(infer_type_from_value(first, param_types, symbols, node_types))
         case ast.List():
-            return Slice(Interface("any"))
+            return Slice(InterfaceRef("any"))
         case ast.Dict(values=values) if values and all(
             isinstance(v, ast.Constant) and isinstance(v.value, str) for v in values
         ):
             return Map(STRING, STRING)
         case ast.Dict():
-            return Map(STRING, Interface("any"))
+            return Map(STRING, InterfaceRef("any"))
         case ast.Name(id=name) if name in param_types:
             return py_type_to_ir(param_types[name], symbols, node_types)
         case ast.Name(id="True" | "False"):
             return BOOL
         case ast.Name(id="None"):
-            return Interface("any")
+            return InterfaceRef("any")
         case ast.Call(func=ast.Name(id="len")):
             return INT
         case ast.Call(func=ast.Name(id=func_name)) if func_name in symbols.structs:
             info = symbols.structs[func_name]
             if info.is_node:
-                return Interface("Node")
+                return InterfaceRef("Node")
             return Pointer(StructRef(func_name))
         case ast.Call(func=ast.Name(id="QuoteState")):
             return Pointer(StructRef("QuoteState"))
@@ -336,7 +336,7 @@ def infer_type_from_value(
             "ParseContext",
         ):
             return INT
-    return Interface("any")
+    return InterfaceRef("any")
 
 
 def infer_iterable_type(
@@ -358,7 +358,7 @@ def infer_iterable_type(
     if isinstance(node, ast.Name):
         if node.id in var_types:
             return var_types[node.id]
-    return Interface("any")
+    return InterfaceRef("any")
 
 
 def infer_container_type_from_ast(
@@ -392,7 +392,7 @@ def infer_container_type_from_ast(
                     field_info = symbols.structs[struct_name].fields.get(node.attr)
                     if field_info:
                         return field_info.typ
-    return Interface("any")
+    return InterfaceRef("any")
 
 
 def synthesize_field_type(
@@ -414,7 +414,7 @@ def synthesize_field_type(
             field_info = symbols.structs[obj_type.name].fields.get(field)
             if field_info:
                 return field_info.typ
-    return Interface("any")
+    return InterfaceRef("any")
 
 
 def synthesize_method_return_type(
@@ -445,7 +445,7 @@ def synthesize_method_return_type(
         method_info = symbols.structs[struct_name].methods.get(method)
         if method_info:
             return method_info.return_type
-    return Interface("any")
+    return InterfaceRef("any")
 
 
 def synthesize_index_type(obj_type: Type) -> Type:
@@ -456,7 +456,7 @@ def synthesize_index_type(obj_type: Type) -> Type:
         return obj_type.value
     if obj_type == STRING:
         return BYTE  # string[i] returns byte in Go
-    return Interface("any")
+    return InterfaceRef("any")
 
 
 def synthesize_type(
@@ -594,7 +594,7 @@ def infer_expr_type_from_ast(
             )
             if left_type == INT or right_type == INT:
                 return INT
-    return Interface("any")
+    return InterfaceRef("any")
 
 
 def infer_call_return_type(
@@ -621,7 +621,7 @@ def infer_call_return_type(
         func_name = node.func.id
         if func_name in symbols.functions:
             return symbols.functions[func_name].return_type
-    return Interface("any")
+    return InterfaceRef("any")
 
 
 def coerce(
@@ -646,12 +646,12 @@ def coerce(
         expr.typ = to_type
         return expr
     # nil → nilable types: update NilLit type (interfaces, pointers, and slices are nilable in Go)
-    if isinstance(expr, ir.NilLit) and isinstance(to_type, (Interface, StructRef, Pointer, Slice)):
+    if isinstance(expr, ir.NilLit) and isinstance(to_type, (InterfaceRef, StructRef, Pointer, Slice)):
         expr.typ = to_type
         return expr
     # []interface{} → []T: use typed slice
     if isinstance(from_type, Slice) and isinstance(to_type, Slice):
-        if from_type.element == Interface("any"):
+        if from_type.element == InterfaceRef("any"):
             # Update the expression's type to the expected slice type
             expr.typ = to_type
             if isinstance(expr, ir.SliceLit):

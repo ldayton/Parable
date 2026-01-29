@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
 from . import type_inference
-from ..ir import BOOL, BYTE, FLOAT, INT, VOID, FieldInfo, FuncInfo, Interface, Map, Optional, ParamInfo, Pointer, Set, Slice, STRING, StructRef, StructInfo, Tuple
+from ..ir import BOOL, BYTE, FLOAT, INT, VOID, FieldInfo, FuncInfo, InterfaceRef, Map, Optional, ParamInfo, Pointer, Set, Slice, STRING, StructRef, StructInfo, Tuple
 from ..type_overrides import FIELD_TYPE_OVERRIDES, MODULE_CONSTANTS, PARAM_TYPE_OVERRIDES, RETURN_TYPE_OVERRIDES
 
 if TYPE_CHECKING:
@@ -152,7 +152,7 @@ def extract_func_info(
     n_defaults = len(node.args.defaults) if node.args.defaults else 0
     for i, arg in enumerate(non_self_args):
         py_type = callbacks.annotation_to_str(arg.annotation) if arg.annotation else ""
-        typ = callbacks.py_type_to_ir(py_type, False) if py_type else Interface("any")
+        typ = callbacks.py_type_to_ir(py_type, False) if py_type else InterfaceRef("any")
         # Check for overrides first (takes precedence)
         override_key = (node.name, arg.arg)
         if override_key in PARAM_TYPE_OVERRIDES:
@@ -367,7 +367,7 @@ def infer_branch_expr_type(
             return STRING
         if left == INT or right == INT:
             return INT
-    return Interface("any")
+    return InterfaceRef("any")
 
 
 def collect_branch_var_types(
@@ -497,7 +497,7 @@ def infer_element_type_from_append_arg(
         if func_name in symbols.structs:
             info = symbols.structs[func_name]
             if info.is_node:
-                return Interface("Node")
+                return InterfaceRef("Node")
             return Pointer(StructRef(func_name))
         # Function return types
         if func_name in symbols.functions:
@@ -521,7 +521,7 @@ def infer_element_type_from_append_arg(
                 method_info = symbols.structs[struct_name].methods.get(method_name)
                 if method_info:
                     return method_info.return_type
-    return Interface("any")
+    return InterfaceRef("any")
 
 
 def collect_var_types(
@@ -589,12 +589,12 @@ def collect_var_types(
         else:
             # Multiple types - check if all are Node-related
             all_node = all(
-                t == Interface("Node") or t == StructRef("Node") or
+                t == InterfaceRef("Node") or t == StructRef("Node") or
                 (isinstance(t, Pointer) and isinstance(t.target, StructRef) and t.target.name in node_types)
                 for t in unique_types
             )
             if all_node:
-                vars_concrete_type[var_name] = Interface("Node")
+                vars_concrete_type[var_name] = InterfaceRef("Node")
             # Otherwise, no unified type (will fall back to default inference)
     # First pass: collect For loop variable types (needed for append inference)
     for stmt in ast.walk(ast.Module(body=stmts, type_ignores=[])):
@@ -692,15 +692,15 @@ def collect_var_types(
                             var_types[var_name] = INT
                 # Infer from list/dict literals - element type inferred later from appends
                 elif isinstance(stmt.value, ast.List):
-                    var_types[var_name] = Slice(Interface("any"))
+                    var_types[var_name] = Slice(InterfaceRef("any"))
                 elif isinstance(stmt.value, ast.Dict):
-                    var_types[var_name] = Map(STRING, Interface("any"))
+                    var_types[var_name] = Map(STRING, InterfaceRef("any"))
                 # Infer from field access: var = obj.field -> var has field's type
                 elif isinstance(stmt.value, ast.Attribute):
                     # Look up field type using local var_types (not self._type_ctx)
                     attr_node = stmt.value
                     field_name = attr_node.attr
-                    obj_type: "Type" = Interface("any")
+                    obj_type: "Type" = InterfaceRef("any")
                     if isinstance(attr_node.value, ast.Name):
                         obj_name = attr_node.value.id
                         if obj_name == "self" and current_class_name:
@@ -715,7 +715,7 @@ def collect_var_types(
                             var_types[var_name] = field_info.typ
                 # Infer from subscript/slice: var = container[...] -> element type
                 elif isinstance(stmt.value, ast.Subscript):
-                    container_type: "Type" = Interface("any")
+                    container_type: "Type" = InterfaceRef("any")
                     if isinstance(stmt.value.value, ast.Name):
                         container_name = stmt.value.value.id
                         if container_name in var_types:
@@ -755,7 +755,7 @@ def collect_var_types(
                 # Infer from method calls: var = obj.method() -> method return type
                 elif isinstance(stmt.value, ast.Call) and isinstance(stmt.value.func, ast.Attribute):
                     method_name = stmt.value.func.attr
-                    obj_type: "Type" = Interface("any")
+                    obj_type: "Type" = InterfaceRef("any")
                     if isinstance(stmt.value.func.value, ast.Name):
                         obj_name = stmt.value.func.value.id
                         if obj_name == "self" and current_class_name:
@@ -805,9 +805,9 @@ def collect_var_types(
                     elif class_name == "bytearray":
                         var_types[target.id] = Slice(BYTE)
                     elif class_name == "list":
-                        var_types[target.id] = Slice(Interface("any"))
+                        var_types[target.id] = Slice(InterfaceRef("any"))
                     elif class_name == "dict":
-                        var_types[target.id] = Map(Interface("any"), Interface("any"))
+                        var_types[target.id] = Map(InterfaceRef("any"), InterfaceRef("any"))
     # Third pass: infer types from append() calls (after all variable types are collected)
     # Note: don't overwrite already-known specific slice types (e.g., bytearray -> []byte)
     for stmt in ast.walk(ast.Module(body=stmts, type_ignores=[])):
@@ -820,11 +820,11 @@ def collect_var_types(
                     # But DO infer if current type is generic Slice(any)
                     if var_name in var_types and isinstance(var_types[var_name], Slice):
                         current_elem = var_types[var_name].element
-                        if current_elem != Interface("any"):
+                        if current_elem != InterfaceRef("any"):
                             continue  # Skip - already has specific element type
                     assert callbacks.infer_element_type_from_append_arg is not None
                     elem_type = callbacks.infer_element_type_from_append_arg(call.args[0], var_types)
-                    if elem_type != Interface("any"):
+                    if elem_type != InterfaceRef("any"):
                         var_types[var_name] = Slice(elem_type)
     # Third-and-a-half pass: detect kind-guarded appends to track list element union types
     # Pattern: if/elif p.kind == "something": list_var.append(p)
@@ -859,7 +859,7 @@ def collect_var_types(
                 if isinstance(target, ast.Name):
                     var_name = target.id
                     if isinstance(stmt.value, ast.Subscript):
-                        container_type: "Type" = Interface("any")
+                        container_type: "Type" = InterfaceRef("any")
                         if isinstance(stmt.value.value, ast.Name):
                             container_name = stmt.value.value.id
                             if container_name in var_types:
@@ -879,7 +879,7 @@ def collect_var_types(
             unified = unify_branch_types(then_vars, else_vars)
             for var, typ in unified.items():
                 # Only update if not already set or currently generic
-                if var not in var_types or var_types[var] == Interface("any"):
+                if var not in var_types or var_types[var] == InterfaceRef("any"):
                     var_types[var] = typ
     # Sixth pass: variables assigned both None and typed value
     # For strings, use empty string as sentinel (not pointer)
@@ -894,9 +894,9 @@ def collect_var_types(
                 # Int with None -> use sentinel (-1 = None)
                 var_types[var_name] = INT
                 sentinel_ints.add(var_name)
-            elif concrete_type == Interface("Node"):
+            elif concrete_type == InterfaceRef("Node"):
                 # Node with None -> use Node interface (nilable in Go)
-                var_types[var_name] = Interface("Node")
+                var_types[var_name] = InterfaceRef("Node")
             else:
                 # Other types -> use Optional (pointer)
                 var_types[var_name] = Optional(concrete_type)
@@ -904,6 +904,6 @@ def collect_var_types(
     # These are variables assigned different Node subtypes in branches or sequentially
     # The unified Node type takes precedence over any single assignment's type
     for var_name, concrete_type in vars_concrete_type.items():
-        if var_name not in vars_assigned_none and concrete_type == Interface("Node"):
-            var_types[var_name] = Interface("Node")
+        if var_name not in vars_assigned_none and concrete_type == InterfaceRef("Node"):
+            var_types[var_name] = InterfaceRef("Node")
     return var_types, tuple_vars, sentinel_ints, list_element_unions

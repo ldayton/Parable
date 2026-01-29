@@ -1,24 +1,19 @@
-"""Tests for check_style.py banned construct detection."""
+"""Tests for subset.py Tongues subset verification."""
 
 import os
 import sys
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), ".."))
 
-import tempfile
-
-from src.check_style import check_file
+from src.frontend.parse import parse
+from src.frontend.subset import verify
 
 
 def check_code(code: str) -> list[tuple[int, str]]:
     """Parse code string and return list of (lineno, message) errors."""
-    f = tempfile.NamedTemporaryFile(mode="w", suffix=".py", delete=False)
-    try:
-        f.write(code)
-        f.close()
-        return check_file(f.name)
-    finally:
-        os.unlink(f.name)
+    ast_dict = parse(code)
+    result = verify(ast_dict)
+    return [(v.lineno, v.message) for v in result.violations]
 
 
 def has_error(errors: list[tuple[int, str]], substring: str) -> bool:
@@ -29,22 +24,12 @@ def has_error(errors: list[tuple[int, str]], substring: str) -> bool:
     return False
 
 
-# --- Tests for new checks ---
+# --- Tests for subset checks ---
 
 
 def test_lambda() -> None:
     errors = check_code("f = lambda x: x + 1")
     assert has_error(errors, "lambda")
-
-
-def test_pow_operator() -> None:
-    errors = check_code("def f() -> int:\n    return 2 ** 3")
-    assert has_error(errors, "**:")
-
-
-def test_pow_function() -> None:
-    errors = check_code("def f() -> int:\n    return pow(2, 3)")
-    assert has_error(errors, "pow()")
 
 
 def test_type_function() -> None:

@@ -94,4 +94,14 @@ errors backend="go":
 
 # Check style constraints on Python source
 style dir="../src":
-    uv run python -m src.check_style "{{dir}}"
+    #!/usr/bin/env bash
+    set -euo pipefail
+    failed=0
+    for f in $(fd -e py . "{{dir}}"); do
+        if ! uv run python -m src.cli --verify < "$f" 2>/dev/null; then
+            echo "FAIL: $f"
+            uv run python -m src.cli --verify < "$f" 2>&1 | head -5
+            failed=1
+        fi
+    done
+    exit $failed

@@ -5,6 +5,8 @@ from __future__ import annotations
 import sys
 
 from .frontend import Frontend
+from .frontend.parse import parse
+from .frontend.subset import verify as verify_subset
 from .middleend import analyze
 from .backend.go import GoBackend
 from .backend.java import JavaBackend
@@ -63,10 +65,20 @@ def main() -> int:
         print("error: unknown target: " + target, file=sys.stderr)
         return 1
     source = sys.stdin.read()
+    if verify:
+        ast_dict = parse(source)
+        result = verify_subset(ast_dict)
+        errors = result.errors()
+        if len(errors) > 0:
+            i = 0
+            while i < len(errors):
+                e = errors[i]
+                print(str(e), file=sys.stderr)
+                i += 1
+            return 1
+        return 0
     fe = Frontend()
     module = fe.transpile(source)
-    if verify:
-        return 0
     analyze(module)
     be = BACKENDS[target]()
     code = be.emit(module)

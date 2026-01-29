@@ -229,7 +229,6 @@ from src.ir import (
     StringConcat,
     StringFormat,
     StringLit,
-    StringSlice,
     Struct,
     StructLit,
     StructRef,
@@ -1599,8 +1598,6 @@ class JavaBackend:
                 if not params and isinstance(ret, (InterfaceRef, StructRef)):
                     return "NodeSupplier"
                 return "Object"
-            case StringSlice():
-                return "String"
             case _:
                 return "Object"
 
@@ -1729,11 +1726,7 @@ def _binary_op(op: str) -> str:
 
 
 def _is_string_type(typ: Type) -> bool:
-    if isinstance(typ, Primitive) and typ.kind == "string":
-        return True
-    if isinstance(typ, StringSlice):
-        return True
-    return False
+    return isinstance(typ, Primitive) and typ.kind == "string"
 
 
 def _string_literal(value: str) -> str:

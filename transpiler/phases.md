@@ -137,7 +137,10 @@ Analyze `__init__` bodies to infer field types. Since phase 2 guarantees annotat
 
 No full dataflow needed. Walk `__init__` assignments, resolve RHS types via SigTable.
 
-**Postconditions:** FieldTable maps every class to `[(field_name, type)]`; all fields typed; init order captured.
+**Postconditions:**
+- FieldTable maps every class to `[(field_name, type)]`; all fields typed; init order captured
+- Fields assigned `None` or conditionally assigned wrapped in `Optional[T]}`
+- No manual type override tables needed; types inferred from `__init__` patterns
 
 **Prior art:** [Java definite assignment](https://docs.oracle.com/javase/specs/jls/se9/html/jls-16.html), [TypeScript strictPropertyInitialization](https://www.typescriptlang.org/docs/handbook/2/classes.html)
 
@@ -167,7 +170,16 @@ Assign types to every expression and statement using bidirectional type inferenc
 
 Since all signatures are annotated (SigTable) and fields typed (FieldTable), most work is synthesis. Checking happens at function arguments, return statements, and typed assignments.
 
-**Postconditions:** TypedAST complete (every expr has a type); all checks pass; subsumption applied where needed.
+**Postconditions:**
+- TypedAST complete (every expr has a type); all checks pass; subsumption applied where needed
+- String expressions annotated with indexing semantics: `byte` vs `char` (enables Go `[]rune`, Java `char`)
+- Variables assigned different types in branches typed as union
+- Nullability propagates through control flow; nullable exprs typed `Optional[T]`
+- Single-char literals and `s[i]` results distinguished from multi-char strings
+- Method receivers have precise type (not widened to `interface{}` / `any`)
+- String variables indexed by character typed as `CharSequence` (enables Go `[]rune`, Java `char[]`); single conversion point inferred at scope entry
+- Predicate parameters receiving single-char arguments typed as `Char` (not `String`)
+- Expressions have precise narrowed type after type guards; no widening to `interface{}`
 
 **Prior art:** [Bidirectional Typing](https://arxiv.org/abs/1908.05839), [Local Type Inference](https://www.cis.upenn.edu/~bcpierce/papers/lti-toplas.pdf)
 
@@ -181,7 +193,29 @@ Translate TypedAST to IR. Lowering only reads types, never computes them—if ph
 | `Call(f, args)` : `T`    | `ir.Call(f, [lower(a) for a in args])` |
 | `Attribute(obj, field)`  | `ir.FieldAccess(lower(obj), field)`    |
 
-**Postconditions:** IR Module complete; all IR nodes typed; no AST remnants in output.
+**Postconditions:**
+- IR Module complete; all IR nodes typed; no AST remnants in output
+- Truthy checks (`if x`, `if s`) emit `Truthy(expr)`, not `BinaryOp(Len(x), ">", 0)`
+- No marker variables (`_pass`, `_skip_docstring`); use `NoOp` or omit
+- Bound method references emit `FuncRef(obj, method)`, not `FieldAccess`
+- String operations emit semantic IR: `CharAt`, `CharLen`, `Substring` (not Python method names)
+- Character classification emits semantic IR: `IsAlnum`, `IsDigit`, `IsAlpha`, `IsSpace`, `IsUpper`, `IsLower`; backends map to `unicode.IsLetter`/`Character.isDigit`/regex
+- String trimming with char set emits `TrimChars(expr, chars, mode)` where mode is `left`/`right`/`both`; backends map to regex or stdlib
+- `TryCatch` carries exception type for catch clause
+- Constructors emit `StructLit` with all fields (not field-by-field assignment)
+- `range()` iteration emits `ForClassic` (not `Call` to range helper)
+- While loops with index iteration pattern (`while i < len(x): ... x[i] ... i += 1`) emit `ForRange` or `ForClassic`; enables Go `for i, c := range` and avoids manual index management
+- Module exports emit `Export` nodes (not hardcoded in backend)
+- Enum definitions emit `Enum` IR (not prefixed constants)
+- Exception classes marked with `extends_error: bool` for target Error inheritance
+- Numeric conversion emits `ParseInt(expr)` / `IntToStr(expr)` semantic IR (not helper function names); backends map to `int()`/`strconv.Atoi()`/`Integer.parseInt()`
+- Sentinel-to-optional conversion emits `SentinelToOptional(expr, sentinel)` IR; backends map to `None if x == sentinel else x` / `if x == sentinel { return nil }`
+- Index with `-1` emits `LastElement(expr)` IR; backends map to `[-1]`/`[len-1]`/`getLast()`
+- Conditional expressions emit `Ternary(cond, then, else)` with `needs_statement: bool` flag; backends without ternary operator emit if/else variable assignment
+- Pointer creation emits `AddrOf(expr)` semantic IR (not helper function)
+- Interface definitions emit `InterfaceDef` with explicit field list (not inferred by backend); includes discriminant fields like `kind: string` for tagged unions
+- Type switch emits `TypeSwitch` with `binding` field containing the narrowed variable name; no hardcoded naming conventions in backend
+- Slice covariance emits `SliceConvert(source, target_element_type)` when element types differ but are compatible; backends handle covariant/invariant semantics per language
 
 **Prior art:** [Three-address code](https://en.wikipedia.org/wiki/Three-address_code), [Cornell CS 4120 IR notes](https://www.cs.cornell.edu/courses/cs4120/2023sp/notes/ir/)
 
@@ -191,10 +225,10 @@ Read-only analysis passes that annotate IR nodes in place. No transformations—
 
 | Module         | Depends on     | Annotations added                                         |
 | -------------- | -------------- | --------------------------------------------------------- |
-| `scope.py`     | —              | `is_reassigned`, `is_modified`, `is_unused`, `is_declaration` |
+| `scope.py`     | —              | `is_reassigned`, `is_modified`, `is_unused`, `is_declaration`, `is_interface`, `narrowed_type` |
 | `returns.py`   | —              | `needs_named_returns`                                     |
 | `liveness.py`  | scope, returns | `initial_value_unused`, `catch_var_unused`, `binding_unused` |
-| `hoisting.py`  | scope, returns | `hoisted_vars`                                            |
+| `hoisting.py`  | scope, returns | `hoisted_vars`, `rune_vars`                               |
 
 #### Phase 9: `middleend/__init__.py`
 
@@ -210,8 +244,14 @@ Analyze variable scope: declarations, reassignments, parameter modifications. Wa
 | `Param.is_modified`      | Parameter assigned/mutated in function body  |
 | `Param.is_unused`        | Parameter never referenced                   |
 | `Assign.is_declaration`  | First assignment to a new variable           |
+| `Expr.is_interface`      | Expression statically typed as interface     |
+| `Name.narrowed_type`     | Precise type at use site after type guards   |
 
-**Postconditions:** Every VarDecl, Param, and Assign annotated; reassignment counts accurate.
+**Postconditions:**
+- Every VarDecl, Param, and Assign annotated; reassignment counts accurate
+- Variables annotated with `is_const` (never reassigned after declaration); enables `const`/`let` in TS, `final` in Java
+- Expressions annotated with `is_interface: bool` when statically typed as interface; enables direct `== nil` vs reflection-based nil check in Go
+- Variables annotated with precise narrowed type at each use site (not just declaration type); eliminates redundant casts when type is statically known
 
 #### Phase 11: `middleend/returns.py`
 
@@ -245,7 +285,11 @@ Variables need hoisting when:
 - First assigned inside a control structure (if/try/while/for/match)
 - Used after that control structure exits
 
-**Postconditions:** `If.hoisted_vars`, `TryCatch.hoisted_vars`, `While.hoisted_vars`, etc. contain `[(name, type)]` for variables needing hoisting.
+**Postconditions:**
+- `If.hoisted_vars`, `TryCatch.hoisted_vars`, `While.hoisted_vars`, etc. contain `[(name, type)]` for variables needing hoisting
+- All hoisted vars have concrete type (no `None`/`interface{}`/`any` fallback)
+- Type derived from all assignment sites, not just first encountered
+- String variables needing character indexing listed in `Function.rune_vars: list[str]`; Go backend emits `runes := []rune(s)` at scope entry, uses `runes[i]` thereafter
 
 **Prior art:** [Go variable scoping](https://go.dev/ref/spec#Declarations_and_scope)
 
@@ -271,9 +315,12 @@ Walk the annotated IR and emit target language source. The backend reads all ann
 | `MethodCall`  | `obj.Method(args)`       | `Method(obj, args)`       |
 
 The backend consumes middleend annotations:
-- `is_reassigned` → Go: `var` vs `:=`
+- `is_reassigned` → Go: `var` vs `:=`; TS: `let` vs `const`
 - `hoisted_vars` → Go: emit declarations before control structure
 - `needs_named_returns` → Go: use named return values
 - `initial_value_unused` → Go: omit initializer, use zero value
+- `is_interface` → Go: direct `== nil` vs `_isNilInterface()` reflection
+- `narrowed_type` → Java/TS: omit redundant casts when type is known
+- `rune_vars` → Go: emit `[]rune` conversion at scope entry
 
 **Postconditions:** Valid target language source emitted; all IR nodes consumed; output compiles with target toolchain.

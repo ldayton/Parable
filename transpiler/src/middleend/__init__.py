@@ -3,7 +3,7 @@
 from src.ir import Module
 
 from .hoisting import analyze_hoisting
-from .liveness import analyze_liveness, iter_all_stmts
+from .liveness import analyze_liveness
 from .returns import analyze_returns
 from .scope import analyze_scope
 

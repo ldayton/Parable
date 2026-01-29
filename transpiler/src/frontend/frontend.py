@@ -2864,132 +2864,34 @@ class Frontend:
 
     def _is_isinstance_call(self, node: ast.expr) -> tuple[str, str] | None:
         """Check if node is isinstance(var, Type). Returns (var_name, type_name) or None."""
-        if not isinstance(node, ast.Call):
-            return None
-        if not isinstance(node.func, ast.Name) or node.func.id != "isinstance":
-            return None
-        if len(node.args) != 2:
-            return None
-        if not isinstance(node.args[0], ast.Name):
-            return None
-        if not isinstance(node.args[1], ast.Name):
-            return None
-        return (node.args[0].id, node.args[1].id)
+        return lowering.is_isinstance_call(node)
 
     def _is_kind_check(self, node: ast.expr) -> tuple[str, str] | None:
         """Check if node is x.kind == "typename". Returns (var_name, class_name) or None."""
-        if not isinstance(node, ast.Compare):
-            return None
-        if len(node.ops) != 1 or not isinstance(node.ops[0], ast.Eq):
-            return None
-        if len(node.comparators) != 1:
-            return None
-        # Check for x.kind on left side
-        if not isinstance(node.left, ast.Attribute) or node.left.attr != "kind":
-            return None
-        if not isinstance(node.left.value, ast.Name):
-            return None
-        var_name = node.left.value.id
-        # Check for string constant on right side
-        comparator = node.comparators[0]
-        if not isinstance(comparator, ast.Constant) or not isinstance(comparator.value, str):
-            return None
-        kind_value = comparator.value
-        # Map kind string to class name
-        if kind_value not in self._kind_to_class:
-            return None
-        return (var_name, self._kind_to_class[kind_value])
+        return lowering.is_kind_check(node, self._kind_to_class)
 
     def _extract_isinstance_or_chain(self, node: ast.expr) -> tuple[str, list[str]] | None:
         """Extract isinstance/kind checks from expression. Returns (var_name, [type_names]) or None."""
-        # Handle simple isinstance call
-        simple = self._is_isinstance_call(node)
-        if simple:
-            return (simple[0], [simple[1]])
-        # Handle x.kind == "typename" pattern
-        kind_check = self._is_kind_check(node)
-        if kind_check:
-            return (kind_check[0], [kind_check[1]])
-        # Handle isinstance(x, A) or isinstance(x, B) or ...
-        if isinstance(node, ast.BoolOp) and isinstance(node.op, ast.Or):
-            var_name: str | None = None
-            type_names: list[str] = []
-            for value in node.values:
-                check = self._is_isinstance_call(value) or self._is_kind_check(value)
-                if not check:
-                    return None  # Not all are isinstance/kind calls
-                if var_name is None:
-                    var_name = check[0]
-                elif var_name != check[0]:
-                    return None  # Different variables
-                type_names.append(check[1])
-            if var_name and type_names:
-                return (var_name, type_names)
-        return None
+        return lowering.extract_isinstance_or_chain(node, self._kind_to_class)
 
     def _extract_isinstance_from_and(self, node: ast.expr) -> tuple[str, str] | None:
         """Extract isinstance(var, Type) from compound AND expression.
         Returns (var_name, type_name) or None if no isinstance found."""
-        if not isinstance(node, ast.BoolOp) or not isinstance(node.op, ast.And):
-            return None
-        # Check each value in the AND chain for isinstance
-        for value in node.values:
-            result = self._is_isinstance_call(value)
-            if result:
-                return result
-        return None
+        return lowering.extract_isinstance_from_and(node)
 
     def _extract_kind_check(self, node: ast.expr) -> tuple[str, str] | None:
         """Extract kind-based type narrowing from `kind == "value"` or `node.kind == "value"`.
         Returns (node_var_name, struct_name) or None if not a kind check."""
-        # Match: kind == "value" where kind was previously assigned from node.kind
-        if isinstance(node, ast.Compare) and len(node.ops) == 1 and isinstance(node.ops[0], ast.Eq):
-            left = node.left
-            right = node.comparators[0]
-            # Check for var == "kind_value" pattern
-            if isinstance(left, ast.Name) and isinstance(right, ast.Constant) and isinstance(right.value, str):
-                kind_var = left.id
-                kind_value = right.value
-                if kind_value in self._kind_to_struct:
-                    # Look up which Node-typed variable this kind var came from
-                    if kind_var in self._type_ctx.kind_source_vars:
-                        node_var = self._type_ctx.kind_source_vars[kind_var]
-                        return (node_var, self._kind_to_struct[kind_value])
-            # Check for node.kind == "value" pattern
-            if isinstance(left, ast.Attribute) and left.attr == "kind" and isinstance(left.value, ast.Name):
-                node_var = left.value.id
-                if isinstance(right, ast.Constant) and isinstance(right.value, str):
-                    kind_value = right.value
-                    if kind_value in self._kind_to_struct:
-                        return (node_var, self._kind_to_struct[kind_value])
-        return None
+        return lowering.extract_kind_check(node, self._kind_to_struct, self._type_ctx.kind_source_vars)
 
     def _extract_attr_kind_check(self, node: ast.expr) -> tuple[tuple[str, ...], str] | None:
         """Extract kind check for attribute paths like `node.body.kind == "value"`.
         Returns (attr_path_tuple, struct_name) or None."""
-        if isinstance(node, ast.Compare) and len(node.ops) == 1 and isinstance(node.ops[0], ast.Eq):
-            left = node.left
-            right = node.comparators[0]
-            # Check for expr.kind == "value" pattern where expr is an attribute chain
-            if (isinstance(left, ast.Attribute) and left.attr == "kind"
-                and isinstance(right, ast.Constant) and isinstance(right.value, str)):
-                kind_value = right.value
-                if kind_value in self._kind_to_struct:
-                    # Extract the attribute path (e.g., node.body -> ("node", "body"))
-                    attr_path = self._get_attr_path(left.value)
-                    if attr_path and len(attr_path) > 1:  # Only for chains, not simple vars
-                        return (attr_path, self._kind_to_struct[kind_value])
-        return None
+        return lowering.extract_attr_kind_check(node, self._kind_to_struct)
 
     def _get_attr_path(self, node: ast.expr) -> tuple[str, ...] | None:
         """Extract attribute path as tuple (e.g., node.body -> ("node", "body"))."""
-        if isinstance(node, ast.Name):
-            return (node.id,)
-        elif isinstance(node, ast.Attribute) and isinstance(node.value, (ast.Name, ast.Attribute)):
-            base = self._get_attr_path(node.value)
-            if base:
-                return base + (node.attr,)
-        return None
+        return lowering.get_attr_path(node)
 
     def _collect_isinstance_chain(self, node: ast.If, var_name: str) -> tuple[list["ir.TypeCase"], list["ir.Stmt"]]:
         """Collect isinstance checks on same variable into TypeSwitch cases."""
@@ -3035,12 +2937,7 @@ class Frontend:
 
     def _resolve_type_name(self, name: str) -> Type:
         """Resolve a class name to an IR type (for isinstance checks)."""
-        # Handle primitive types
-        if name in TYPE_MAP:
-            return TYPE_MAP[name]
-        if name in self.symbols.structs:
-            return Pointer(StructRef(name))
-        return Interface(name)
+        return lowering.resolve_type_name(name, TYPE_MAP, self.symbols)
 
     def _lower_stmt_If(self, node: ast.If) -> "ir.Stmt":
         from .. import ir

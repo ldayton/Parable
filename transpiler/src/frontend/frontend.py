@@ -118,12 +118,7 @@ class Frontend:
 
     def _is_node_subclass(self, name: str) -> bool:
         """Check if a class is a Node subclass (directly or transitively)."""
-        if name == "Node":
-            return True
-        info = self.symbols.structs.get(name)
-        if not info:
-            return False
-        return any(self._is_node_subclass(base) for base in info.bases)
+        return type_inference.is_node_subclass(name, self.symbols)
 
     def _mark_exception_subclasses(self) -> None:
         """Pass 2b: Mark classes that inherit from Exception."""
@@ -754,142 +749,15 @@ class Frontend:
 
     def _py_type_to_ir(self, py_type: str, concrete_nodes: bool = False) -> Type:
         """Convert Python type string to IR Type."""
-        if not py_type:
-            return Interface("any")
-        # Handle simple types
-        if py_type in TYPE_MAP:
-            return TYPE_MAP[py_type]
-        # Handle bare "list" without type args
-        if py_type == "list":
-            return Slice(Interface("any"))
-        # Handle bare "dict" without type args
-        if py_type == "dict":
-            return Map(STRING, Interface("any"))
-        # Handle bare "set" without type args
-        if py_type == "set":
-            return Set(Interface("any"))
-        # Handle X | None -> Optional[base type]
-        if " | " in py_type:
-            parts = self._split_union_types(py_type)
-            if len(parts) > 1:
-                parts = [p for p in parts if p != "None"]
-                if len(parts) == 1:
-                    inner = self._py_type_to_ir(parts[0], concrete_nodes)
-                    # For Node | None, use Node interface (interfaces are nilable in Go)
-                    if parts[0] == "Node" or self._is_node_subclass(parts[0]):
-                        return Interface("Node")
-                    # For str | None, just use string (empty string represents None)
-                    if inner == STRING:
-                        return STRING
-                    # For int | None, use int with -1 sentinel (handled elsewhere)
-                    if inner == INT:
-                        return Optional(inner)
-                    return Optional(inner)
-                # If all parts are Node subclasses, return Node interface (nilable)
-                if all(self._is_node_subclass(p) for p in parts):
-                    return Interface("Node")
-                return Interface("any")
-        # Handle list[X]
-        if py_type.startswith("list["):
-            inner = py_type[5:-1]
-            return Slice(self._py_type_to_ir(inner, concrete_nodes))
-        # Handle dict[K, V]
-        if py_type.startswith("dict["):
-            inner = py_type[5:-1]
-            parts = self._split_type_args(inner)
-            if len(parts) == 2:
-                return Map(
-                    self._py_type_to_ir(parts[0], concrete_nodes),
-                    self._py_type_to_ir(parts[1], concrete_nodes),
-                )
-        # Handle set[X]
-        if py_type.startswith("set["):
-            inner = py_type[4:-1]
-            return Set(self._py_type_to_ir(inner, concrete_nodes))
-        # Handle tuple[...] - parse element types for typed tuples
-        if py_type.startswith("tuple["):
-            inner = py_type[6:-1]
-            parts = self._split_type_args(inner)
-            from ..ir import Tuple
-            elements = tuple(self._py_type_to_ir(p, concrete_nodes) for p in parts)
-            return Tuple(elements)
-        # Handle Callable
-        if py_type.startswith("Callable["):
-            return self._parse_callable_type(py_type, concrete_nodes)
-        # Handle class names
-        if py_type in self.symbols.structs:
-            info = self.symbols.structs[py_type]
-            if info.is_node or py_type == "Node":
-                if concrete_nodes and py_type != "Node":
-                    return Pointer(StructRef(py_type))
-                return Interface("Node")
-            return Pointer(StructRef(py_type))
-        # Known internal types
-        if py_type in ("Token", "QuoteState", "ParseContext", "Lexer", "Parser"):
-            return Pointer(StructRef(py_type))
-        # Type aliases - union types of Node subtypes
-        if py_type in ("ArithNode", "CondNode"):
-            return Interface("Node")
-        # Python builtin aliases
-        if py_type == "bytearray":
-            return Slice(BYTE)
-        if py_type == "tuple":
-            return Interface("any")
-        # Type alias mappings
-        if py_type == "CommandSub":
-            return Pointer(StructRef("CommandSubstitution"))
-        if py_type == "ProcessSub":
-            return Pointer(StructRef("ProcessSubstitution"))
-        # Unknown type - return as interface
-        return Interface(py_type)
+        return type_inference.py_type_to_ir(py_type, self.symbols, self._node_types, concrete_nodes)
 
     def _py_return_type_to_ir(self, py_type: str) -> Type:
         """Convert Python return type to IR, handling tuples as multiple returns."""
-        if not py_type or py_type == "None":
-            return VOID
-        # Handle unions before tuple
-        if " | " in py_type:
-            parts = self._split_union_types(py_type)
-            if len(parts) > 1:
-                parts = [p for p in parts if p != "None"]
-                if len(parts) == 1:
-                    return self._py_return_type_to_ir(parts[0])
-                # Check if all parts are Node subclasses -> return Node interface
-                if all(p in self._node_types for p in parts):
-                    return StructRef("Node")
-                return Interface("any")
-        # Handle tuple[...] specially for return types
-        if py_type.startswith("tuple["):
-            inner = py_type[6:-1]
-            parts = self._split_type_args(inner)
-            from ..ir import Tuple
-            elements = tuple(self._py_type_to_ir(p, concrete_nodes=True) for p in parts)
-            return Tuple(elements)
-        # For non-tuples, use standard conversion with concrete node types
-        return self._py_type_to_ir(py_type, concrete_nodes=True)
+        return type_inference.py_return_type_to_ir(py_type, self.symbols, self._node_types)
 
     def _parse_callable_type(self, py_type: str, concrete_nodes: bool) -> Type:
         """Parse Callable[[], ReturnType] -> FuncType."""
-        inner = py_type[9:-1]  # Remove "Callable[" and "]"
-        parts = self._split_type_args(inner)
-        if len(parts) >= 2:
-            args_str = parts[0]
-            ret_type = parts[-1]
-            ret = self._py_type_to_ir(ret_type, concrete_nodes)
-            # Handle empty args list "[]"
-            if args_str == "[]":
-                return FuncType(params=(), ret=ret)
-            # Handle args list like "[int, str]"
-            if args_str.startswith("[") and args_str.endswith("]"):
-                args_inner = args_str[1:-1]
-                if args_inner:
-                    param_types = tuple(
-                        self._py_type_to_ir(a.strip(), concrete_nodes)
-                        for a in args_inner.split(",")
-                    )
-                    return FuncType(params=param_types, ret=ret)
-                return FuncType(params=(), ret=ret)
-        return Interface("any")
+        return type_inference.parse_callable_type(py_type, concrete_nodes, self.symbols, self._node_types)
 
     def _extract_union_struct_names(self, py_type: str) -> list[str] | None:
         """Extract struct names from a union type like 'Redirect | HereDoc'.

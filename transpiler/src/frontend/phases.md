@@ -4,6 +4,7 @@ Sequential pipeline with clean phase boundaries. Each phase completes before the
 
 | Phase | Module          | Description                                                   |
 | :---: | --------------- | ------------------------------------------------------------- |
+|  -1   | `parse.py`      | Tokenize and parse source; produce dict-based AST             |
 |   0   | `__init__.py`   | Entry point; orchestrates phases                              |
 |   1   | `verify.py`     | Subset verification; reject unsupported Python features early |
 |   2   | `names.py`      | Scope analysis and name binding                               |
@@ -24,6 +25,7 @@ Sequential pipeline with clean phase boundaries. Each phase completes before the
 
 | Module          | Knows about types? | Knows about IR? |
 | --------------- | :----------------: | :-------------: |
+| `parse.py`      |         no         |       no        |
 | `verify.py`     |         no         |       no        |
 | `names.py`      |         no         |       no        |
 | `signatures.py` |   yes (parsing)    |       no        |
@@ -35,7 +37,12 @@ Sequential pipeline with clean phase boundaries. Each phase completes before the
 ## Data Flow
 
 ```
-         AST
+      Source Code
+          │
+          ▼
+┌─────────────────┐
+│  -1. parse      │──▶ dict-based AST
+└────────┬────────┘
           │
           ▼
 ┌─────────────────┐
@@ -74,6 +81,41 @@ Sequential pipeline with clean phase boundaries. Each phase completes before the
 ```
 
 ## Future Work
+
+### Phase -1: `parse.py`
+
+Tokenize source code and parse into dict-based AST. Enables self-hosting by removing CPython bootstrap dependency.
+
+**Academic terms:** lexical analysis, tokenization, context-free grammar, LR parsing, shift-reduce, DFA (deterministic finite automaton).
+
+**Prior art:**
+- [Dragon Book Ch. 3-4](https://en.wikipedia.org/wiki/Compilers:_Principles,_Techniques,_and_Tools) — Lexical/syntax analysis fundamentals
+- [pgen2](https://github.com/python/cpython/tree/main/Parser/pgen) — Python's original LL(1) parser generator
+- [parso](https://github.com/davidhalter/parso) — Error-recovering Python parser with pgen2-style grammars
+
+**Simplification for Tongues:** The restricted subset eliminates major parsing pain points:
+
+| Tongues Constraint      | Parser Simplification                              |
+| ----------------------- | -------------------------------------------------- |
+| No f-strings            | Tokenizer is straightforward string handling       |
+| No generators           | Tokenizer returns `list[Token]`, not lazy iterator |
+| No nested functions     | No closure/scope tracking during parse             |
+| No walrus operator      | No `:=` ambiguity in expressions                   |
+| No async/await          | No context-dependent keyword handling              |
+| Single grammar version  | No version switching; one static grammar           |
+
+**Architecture:**
+
+| Component      | Lines | Description                                    |
+| -------------- | ----- | ---------------------------------------------- |
+| `tokenize.py`  | ~350  | While-loop state machine; returns `list[Token]`|
+| `grammar.py`   | ~250  | Pre-compiled DFA tables as static data         |
+| `parse.py`     | ~175  | LR shift-reduce parser; stack-based            |
+| `ast_build.py` | ~250  | Grammar rules → dict nodes matching `ast` module |
+
+The tokenizer uses explicit `while i < len(...)` loops (no generators). Grammar tables are pre-compiled under CPython once, then embedded as data. The parser is a simple stack machine consuming tokens and emitting dict-based AST nodes.
+
+**Postconditions:** Source code parsed to dict-based AST; structure matches `ast.parse()` output; all tokens consumed; syntax errors reported with line/column.
 
 ### Phase 0: `__init__.py`
 

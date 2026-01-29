@@ -34,17 +34,17 @@ Functions receive what they need:
 
 ## Chunks
 
-### 0. Extract `context.py`
+### 0. Extract `context.py` ✅
 
 Create context dataclasses that bundle related state.
 
-- Move `TypeContext` from frontend.py
-- Create `FrontendContext` to bundle what lowering needs
-- Define helper to build context from Frontend instance
+- ✅ Move `TypeContext` from frontend.py
+- ✅ Create `FrontendContext` to bundle what lowering needs
+- Define helper to build context from Frontend instance (deferred to chunk 5)
 
-~50 lines, foundation for everything else.
+**Completed:** `1e85cae frontend: extract context.py with TypeContext and FrontendContext`
 
-### 1. Extract `type_inference.py`
+### 1. Extract `type_inference.py` ← NEXT
 
 Pure functions for type inference and coercion.
 

@@ -58,9 +58,6 @@ Middleend deficiencies (should be fixed in middleend.py):
   Middleend could track when expressions are definitely interface{} vs typed
   nil pointers, allowing direct `== nil` comparison in simple cases.
 
-Backend deficiencies (Go-specific, fixable in go.py):
-- Emits `repeatStr(s, n)` helper instead of `strings.Repeat(s, n)`. (~6 sites)
-- Emits `sublist(lst, a, b)` helper instead of inline `lst[a:b]`. (~9 sites)
 """
 
 from __future__ import annotations

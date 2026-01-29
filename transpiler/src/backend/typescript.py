@@ -59,8 +59,6 @@ Frontend deficiencies (should be fixed in frontend.py):
 Backend deficiencies (TypeScript-specific, fixable in typescript.py):
 - Imperative loops with `.push()` instead of `.map()`. Backend could detect
   accumulator patterns and emit functional transforms. (~600 push calls in 74 loops)
-- Unnecessary template literal wrapping of string literals (`${"text"}` instead of
-  just `"text"`). Backend string formatting creates these. (~68 instances)
 """
 
 from __future__ import annotations

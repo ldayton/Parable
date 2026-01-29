@@ -5,7 +5,7 @@ import ast
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
-from ..ir import INT, Function, Interface, Loc, Param, Pointer, Receiver, StructRef, VOID
+from ..ir import INT, Field, Function, Interface, Loc, Param, Pointer, Receiver, Struct, StructRef, VOID
 from ..type_overrides import PARAM_TYPE_OVERRIDES
 
 if TYPE_CHECKING:
@@ -281,3 +281,64 @@ def build_function_shell(
         body=body,
         loc=callbacks.loc_from_node(node),
     )
+
+
+def build_struct(
+    node: ast.ClassDef,
+    symbols: "SymbolTable",
+    callbacks: BuilderCallbacks,
+    with_body: bool = False,
+) -> tuple[Struct | None, Function | None]:
+    """Build IR Struct from class definition. Returns (struct, constructor_func)."""
+    # Node is emitted as InterfaceDef, not Struct
+    if node.name == "Node":
+        return None, None
+    info = symbols.structs.get(node.name)
+    if not info:
+        return None, None
+    # Build fields
+    fields = []
+    for name, field_info in info.fields.items():
+        fields.append(
+            Field(
+                name=name,
+                typ=field_info.typ,
+                loc=Loc.unknown(),
+            )
+        )
+    # Build methods
+    methods = []
+    init_ast: ast.FunctionDef | None = None
+    for stmt in node.body:
+        if isinstance(stmt, ast.FunctionDef):
+            if stmt.name == "__init__":
+                init_ast = stmt
+            else:
+                method = build_method_shell(stmt, node.name, symbols, callbacks, with_body=with_body)
+                methods.append(method)
+    implements = []
+    if info.is_node:
+        implements.append("Node")
+    # Determine embedded type for exception inheritance
+    embedded_type = None
+    if info.is_exception and info.bases:
+        base = info.bases[0]
+        if base != "Exception" and callbacks.is_exception_subclass(base):
+            embedded_type = base
+    struct = Struct(
+        name=node.name,
+        fields=fields,
+        methods=methods,
+        implements=implements,
+        loc=callbacks.loc_from_node(node),
+        is_exception=info.is_exception,
+        embedded_type=embedded_type,
+    )
+    # Generate constructor function if needed
+    ctor_func: Function | None = None
+    if with_body and info.needs_constructor and init_ast:
+        ctor_func = build_constructor(node.name, init_ast, info, callbacks)
+    elif with_body and info.needs_constructor and embedded_type and not init_ast:
+        # Exception subclass with no __init__ - forward to parent constructor
+        ctor_func = build_forwarding_constructor(node.name, embedded_type, symbols)
+    return struct, ctor_func

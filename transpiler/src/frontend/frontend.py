@@ -268,58 +268,20 @@ class Frontend:
 
     def _build_struct(self, node: ast.ClassDef, with_body: bool = False) -> tuple[Struct | None, Function | None]:
         """Build IR Struct from class definition. Returns (struct, constructor_func)."""
-        # Node is emitted as InterfaceDef, not Struct
-        if node.name == "Node":
-            return None, None
-        info = self.symbols.structs.get(node.name)
-        if not info:
-            return None, None
-        # Build fields
-        fields = []
-        for name, field_info in info.fields.items():
-            fields.append(
-                Field(
-                    name=name,
-                    typ=field_info.typ,
-                    loc=Loc.unknown(),
-                )
-            )
-        # Build methods
-        methods = []
-        init_ast: ast.FunctionDef | None = None
-        for stmt in node.body:
-            if isinstance(stmt, ast.FunctionDef):
-                if stmt.name == "__init__":
-                    init_ast = stmt
-                else:
-                    method = self._build_method_shell(stmt, node.name, with_body=with_body)
-                    methods.append(method)
-        implements = []
-        if info.is_node:
-            implements.append("Node")
-        # Determine embedded type for exception inheritance
-        embedded_type = None
-        if info.is_exception and info.bases:
-            base = info.bases[0]
-            if base != "Exception" and self._is_exception_subclass(base):
-                embedded_type = base
-        struct = Struct(
-            name=node.name,
-            fields=fields,
-            methods=methods,
-            implements=implements,
-            loc=self._loc_from_node(node),
-            is_exception=info.is_exception,
-            embedded_type=embedded_type,
+        callbacks = builders.BuilderCallbacks(
+            annotation_to_str=self._annotation_to_str,
+            py_type_to_ir=self._py_type_to_ir,
+            py_return_type_to_ir=self._py_return_type_to_ir,
+            lower_expr=self._lower_expr,
+            lower_stmts=self._lower_stmts,
+            collect_var_types=self._collect_var_types,
+            is_exception_subclass=self._is_exception_subclass,
+            extract_union_struct_names=self._extract_union_struct_names,
+            loc_from_node=self._loc_from_node,
+            setup_context=self._setup_context,
+            setup_and_lower_stmts=self._setup_and_lower_stmts,
         )
-        # Generate constructor function if needed
-        ctor_func: Function | None = None
-        if with_body and info.needs_constructor and init_ast:
-            ctor_func = self._build_constructor(node.name, init_ast, info)
-        elif with_body and info.needs_constructor and embedded_type and not init_ast:
-            # Exception subclass with no __init__ - forward to parent constructor
-            ctor_func = self._build_forwarding_constructor(node.name, embedded_type)
-        return struct, ctor_func
+        return builders.build_struct(node, self.symbols, callbacks, with_body)
 
     def _build_forwarding_constructor(self, class_name: str, parent_class: str) -> Function:
         """Build a forwarding constructor for exception subclasses with no __init__."""

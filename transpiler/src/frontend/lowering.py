@@ -5,7 +5,7 @@ import ast
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
-from ..ir import BOOL, FLOAT, INT, STRING, Interface, Loc, Optional, Pointer, Slice, Tuple
+from ..ir import BOOL, FLOAT, INT, STRING, Interface, Loc, Optional, Pointer, Slice, StructRef, Tuple
 
 if TYPE_CHECKING:
     from .. import ir
@@ -579,3 +579,145 @@ def lower_expr_Name(
     if var_type is None:
         var_type = symbols.constants.get(node.id, Interface("any"))
     return ir.Var(name=node.id, typ=var_type, loc=loc_from_node(node))
+
+
+def lower_expr_Attribute(
+    node: ast.Attribute,
+    symbols: "SymbolTable",
+    type_ctx: "TypeContext",
+    current_class_name: str,
+    node_field_types: dict[str, list[str]],
+    lower_expr: Callable[[ast.expr], "ir.Expr"],
+    is_node_interface_type: Callable[["Type | None"], bool],
+) -> "ir.Expr":
+    """Lower Python attribute access to IR field access."""
+    from .. import ir
+    # Check for class constant access (e.g., TokenType.EOF -> TokenType_EOF)
+    if isinstance(node.value, ast.Name):
+        class_name = node.value.id
+        const_name = f"{class_name}_{node.attr}"
+        if const_name in symbols.constants:
+            return ir.Var(name=const_name, typ=INT, loc=loc_from_node(node))
+    obj = lower_expr(node.value)
+    # If accessing field on a narrowed variable, wrap in TypeAssert
+    if isinstance(node.value, ast.Name) and node.value.id in type_ctx.narrowed_vars:
+        var_type = type_ctx.var_types.get(node.value.id)
+        if var_type and isinstance(var_type, Pointer) and isinstance(var_type.target, StructRef):
+            obj = ir.TypeAssert(
+                expr=obj, asserted=var_type, safe=True,
+                typ=var_type, loc=loc_from_node(node.value)
+            )
+    # Check if accessing a field on a Node-typed expression that isn't in the interface
+    # Node interface only has Kind() method, so any other field needs a type assertion
+    obj_type = getattr(obj, 'typ', None)
+    if is_node_interface_type(obj_type) and node.attr != "kind":
+        # Look up which struct types have this field
+        if node.attr in node_field_types:
+            struct_names = node_field_types[node.attr]
+            # If the variable is from a union type, prefer a struct from the union
+            chosen_struct = struct_names[0]  # Default: first in NODE_FIELD_TYPES
+            # Check if the object expression has a narrowed type from a kind check
+            obj_attr_path = get_attr_path(node.value)
+            if obj_attr_path and obj_attr_path in type_ctx.narrowed_attr_paths:
+                narrowed_struct = type_ctx.narrowed_attr_paths[obj_attr_path]
+                if narrowed_struct in struct_names:
+                    chosen_struct = narrowed_struct
+            elif isinstance(node.value, ast.Name):
+                var_name = node.value.id
+                if var_name in type_ctx.union_types:
+                    union_structs = type_ctx.union_types[var_name]
+                    # Find intersection of union structs and field structs
+                    for s in union_structs:
+                        if s in struct_names:
+                            chosen_struct = s
+                            break
+            asserted_type = Pointer(StructRef(chosen_struct))
+            obj = ir.TypeAssert(
+                expr=obj, asserted=asserted_type, safe=True,
+                typ=asserted_type, loc=loc_from_node(node.value)
+            )
+    # Infer field type for self.field accesses
+    field_type: "Type" = Interface("any")
+    if isinstance(node.value, ast.Name) and node.value.id == "self":
+        if current_class_name in symbols.structs:
+            struct_info = symbols.structs[current_class_name]
+            field_info = struct_info.fields.get(node.attr)
+            if field_info:
+                field_type = field_info.typ
+    # Also look up field type from the asserted struct type
+    if isinstance(obj, ir.TypeAssert):
+        asserted = obj.asserted
+        if isinstance(asserted, Pointer) and isinstance(asserted.target, StructRef):
+            struct_name = asserted.target.name
+            if struct_name in symbols.structs:
+                field_info = symbols.structs[struct_name].fields.get(node.attr)
+                if field_info:
+                    field_type = field_info.typ
+    # Look up field type from object's type (for variables with known struct types)
+    if field_type == Interface("any") and obj_type is not None:
+        struct_name = None
+        if isinstance(obj_type, Pointer) and isinstance(obj_type.target, StructRef):
+            struct_name = obj_type.target.name
+        elif isinstance(obj_type, StructRef):
+            struct_name = obj_type.name
+        if struct_name and struct_name in symbols.structs:
+            field_info = symbols.structs[struct_name].fields.get(node.attr)
+            if field_info:
+                field_type = field_info.typ
+    return ir.FieldAccess(
+        obj=obj, field=node.attr, typ=field_type, loc=loc_from_node(node)
+    )
+
+
+def lower_expr_Subscript(
+    node: ast.Subscript,
+    type_ctx: "TypeContext",
+    lower_expr: Callable[[ast.expr], "ir.Expr"],
+    convert_negative_index: Callable[[ast.expr, "ir.Expr", ast.AST], "ir.Expr"],
+    infer_expr_type_from_ast: Callable[[ast.expr], "Type"],
+) -> "ir.Expr":
+    """Lower Python subscript access to IR index or slice expression."""
+    from .. import ir
+    # Check for tuple var indexing: cmdsub_result[0] -> cmdsub_result0
+    if isinstance(node.value, ast.Name) and isinstance(node.slice, ast.Constant):
+        var_name = node.value.id
+        if var_name in type_ctx.tuple_vars and isinstance(node.slice.value, int):
+            idx = node.slice.value
+            synthetic_names = type_ctx.tuple_vars[var_name]
+            if 0 <= idx < len(synthetic_names):
+                syn_name = synthetic_names[idx]
+                typ = type_ctx.var_types.get(syn_name, Interface("any"))
+                return ir.Var(name=syn_name, typ=typ, loc=loc_from_node(node))
+    obj = lower_expr(node.value)
+    if isinstance(node.slice, ast.Slice):
+        low = convert_negative_index(node.slice.lower, obj, node) if node.slice.lower else None
+        high = convert_negative_index(node.slice.upper, obj, node) if node.slice.upper else None
+        # Slicing preserves type - string slice is still string, slice of slice is still slice
+        slice_type: "Type" = infer_expr_type_from_ast(node.value)
+        if slice_type == Interface("any"):
+            slice_type = obj.typ if hasattr(obj, 'typ') else Interface("any")
+        return ir.SliceExpr(
+            obj=obj, low=low, high=high, typ=slice_type, loc=loc_from_node(node)
+        )
+    idx = convert_negative_index(node.slice, obj, node)
+    # Infer element type from slice type
+    elem_type: "Type" = Interface("any")
+    obj_type = getattr(obj, 'typ', None)
+    if isinstance(obj_type, Slice):
+        elem_type = obj_type.element
+    # Handle tuple indexing: tuple[0] -> tuple.F0 (as FieldAccess)
+    if isinstance(obj_type, Tuple) and isinstance(node.slice, ast.Constant) and isinstance(node.slice.value, int):
+        field_idx = node.slice.value
+        if 0 <= field_idx < len(obj_type.elements):
+            elem_type = obj_type.elements[field_idx]
+            return ir.FieldAccess(obj=obj, field=f"F{field_idx}", typ=elem_type, loc=loc_from_node(node))
+    index_expr = ir.Index(obj=obj, index=idx, typ=elem_type, loc=loc_from_node(node))
+    # Check if indexing a string - if so, wrap with Cast to string
+    # In Go, string[i] returns byte, but Python returns str
+    # Check both AST inference and lowered expression type
+    is_string = infer_expr_type_from_ast(node.value) == STRING
+    if not is_string and hasattr(obj, 'typ') and obj.typ == STRING:
+        is_string = True
+    if is_string:
+        return ir.Cast(expr=index_expr, to_type=STRING, typ=STRING, loc=loc_from_node(node))
+    return index_expr

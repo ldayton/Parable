@@ -300,17 +300,13 @@ class ContextStack {
 
   copyStack(): ParseContext[] {
     var result: any = [];
-    for (const ctx of this.Stack as ParseContext[]) {
-      result.push(ctx.copy());
-    }
+    result.push(...this.Stack.map(ctx => ctx.copy()));
     return result;
   }
 
   restoreFrom(savedStack: ParseContext[]): void {
     var result: any = [];
-    for (const ctx of savedStack as ParseContext[]) {
-      result.push(ctx.copy());
-    }
+    result.push(...savedStack.map(ctx => ctx.copy()));
     this.Stack = result;
   }
 }
@@ -3472,12 +3468,8 @@ class Command implements Node {
 
   toSexp(): string {
     var parts: any = [];
-    for (const w of this.words as Word[]) {
-      parts.push(w.toSexp());
-    }
-    for (const r of this.redirects as Node[]) {
-      parts.push(r.toSexp());
-    }
+    parts.push(...this.words.map(w => w.toSexp()));
+    parts.push(...this.redirects.map(r => r.toSexp()));
     var inner: any = parts.join(" ");
     if (inner === "") {
       return "(command)";
@@ -3546,12 +3538,8 @@ class Pipeline implements Node {
     }
     if (cmd instanceof Command) {
       var parts: any = [];
-      for (const w of cmd.words as Word[]) {
-        parts.push(w.toSexp());
-      }
-      for (const r of cmd.redirects as Node[]) {
-        parts.push(r.toSexp());
-      }
+      parts.push(...cmd.words.map(w => w.toSexp()));
+      parts.push(...cmd.redirects.map(r => r.toSexp()));
       parts.push("(redirect \">&\" 1)");
       return "(command " + parts.join(" ") + ")";
     }
@@ -4017,9 +4005,7 @@ class For implements Node {
     var suffix: any = "";
     if (this.redirects.length > 0) {
       var redirectParts: any = [];
-      for (const r of this.redirects as Node[]) {
-        redirectParts.push(r.toSexp());
-      }
+      redirectParts.push(...this.redirects.map(r => r.toSexp()));
       suffix = " " + redirectParts.join(" ");
     }
     var tempWord: any = new Word(this.varName as any, [] as any, "word" as any);
@@ -4032,9 +4018,7 @@ class For implements Node {
         return "(for (word \"" + varEscaped + "\") (in) " + this.body.toSexp() + ")" + suffix;
       } else {
         var wordParts: any = [];
-        for (const w of this.words as Word[]) {
-          wordParts.push(w.toSexp());
-        }
+        wordParts.push(...this.words.map(w => w.toSexp()));
         var wordStrs: any = wordParts.join(" ");
         return "(for (word \"" + varEscaped + "\") (in " + wordStrs + ") " + this.body.toSexp() + ")" + suffix;
       }
@@ -4067,9 +4051,7 @@ class ForArith implements Node {
     var suffix: any = "";
     if (this.redirects.length > 0) {
       var redirectParts: any = [];
-      for (const r of this.redirects as Node[]) {
-        redirectParts.push(r.toSexp());
-      }
+      redirectParts.push(...this.redirects.map(r => r.toSexp()));
       suffix = " " + redirectParts.join(" ");
     }
     var initVal: any = (this.init !== "" ? this.init : "1");
@@ -4106,17 +4088,13 @@ class Select implements Node {
     var suffix: any = "";
     if (this.redirects.length > 0) {
       var redirectParts: any = [];
-      for (const r of this.redirects as Node[]) {
-        redirectParts.push(r.toSexp());
-      }
+      redirectParts.push(...this.redirects.map(r => r.toSexp()));
       suffix = " " + redirectParts.join(" ");
     }
     var varEscaped: any = this.varName.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
     if (this.words !== null) {
       var wordParts: any = [];
-      for (const w of this.words as Word[]) {
-        wordParts.push(w.toSexp());
-      }
+      wordParts.push(...this.words.map(w => w.toSexp()));
       var wordStrs: any = wordParts.join(" ");
       if (this.words.length > 0) {
         var inClause: any = "(in " + wordStrs + ")";
@@ -4150,9 +4128,7 @@ class Case implements Node {
   toSexp(): string {
     var parts: any = [];
     parts.push("(case " + this.word.toSexp());
-    for (const p of this.patterns as Node[]) {
-      parts.push(p.toSexp());
-    }
+    parts.push(...this.patterns.map(p => p.toSexp()));
     var base: any = parts.join(" ") + ")";
     return AppendRedirects(base, this.redirects);
   }
@@ -4242,9 +4218,7 @@ class CasePattern implements Node {
     }
     alternatives.push(current.join(""));
     var wordList: any = [];
-    for (const alt of alternatives as string[]) {
-      wordList.push(new Word(alt as any, [], "word" as any).toSexp());
-    }
+    wordList.push(...alternatives.map(alt => new Word(alt as any, [], "word" as any).toSexp()));
     var patternStr: any = wordList.join(" ");
     var parts: any = ["(pattern (" + patternStr + ")"];
     if (this.body !== null) {
@@ -4429,9 +4403,7 @@ class ArithmeticCommand implements Node {
     var result: any = "(arith (word \"" + escaped + "\"))";
     if (this.redirects.length > 0) {
       var redirectParts: any = [];
-      for (const r of this.redirects as Node[]) {
-        redirectParts.push(r.toSexp());
-      }
+      redirectParts.push(...this.redirects.map(r => r.toSexp()));
       var redirectSexps: any = redirectParts.join(" ");
       return result + " " + redirectSexps;
     }
@@ -4741,9 +4713,7 @@ class ArithConcat implements Node {
 
   toSexp(): string {
     var sexps: any = [];
-    for (const p of this.parts as Node[]) {
-      sexps.push(p.toSexp());
-    }
+    sexps.push(...this.parts.map(p => p.toSexp()));
     return "(arith-concat " + sexps.join(" ") + ")";
   }
 }
@@ -4882,9 +4852,7 @@ class ConditionalExpr implements Node {
     }
     if (this.redirects.length > 0) {
       var redirectParts: any = [];
-      for (const r of this.redirects as Node[]) {
-        redirectParts.push(r.toSexp());
-      }
+      redirectParts.push(...this.redirects.map(r => r.toSexp()));
       var redirectSexps: any = redirectParts.join(" ");
       return result + " " + redirectSexps;
     }
@@ -5031,9 +4999,7 @@ class ArrayName implements Node {
       return "(array)";
     }
     var parts: any = [];
-    for (const e of this.elements as Word[]) {
-      parts.push(e.toSexp());
-    }
+    parts.push(...this.elements.map(e => e.toSexp()));
     var inner: any = parts.join(" ");
     return "(array " + inner + ")";
   }
@@ -9240,9 +9206,7 @@ function StripLineContinuationsCommentAware(text: string): string {
 function AppendRedirects(base: string, redirects: Node[]): string {
   if (redirects.length > 0) {
     var parts: any = [];
-    for (const r of redirects as Node[]) {
-      parts.push(r.toSexp());
-    }
+    parts.push(...redirects.map(r => r.toSexp()));
     return base + " " + parts.join(" ");
   }
   return base;
@@ -9425,9 +9389,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
         heredocs.push(r);
       }
     }
-    for (const r of node.redirects as Node[]) {
-      parts.push(FormatRedirect(r, compactRedirects, true));
-    }
+    parts.push(...node.redirects.map(r => FormatRedirect(r, compactRedirects, true)));
     if (compactRedirects && node.words.length > 0 && node.redirects.length > 0) {
       var wordParts: any = parts.slice(0, node.words.length);
       var redirectParts: any = parts.slice(node.words.length);
@@ -9669,9 +9631,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
     var body: any = FormatCmdsubNode(node.body, indent + 4, false, false, false);
     if (node.words !== null) {
       var wordVals: any = [];
-      for (const w of node.words as Word[]) {
-        wordVals.push(w.value);
-      }
+      wordVals.push(...node.words.map(w => w.value));
       var words: any = wordVals.join(" ");
       if (words !== "") {
         var result: any = "for " + varName + " in " + words + ";\n" + sp + "do\n" + innerSp + body + ";\n" + sp + "done";
@@ -9725,9 +9685,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
     var redirects: any = "";
     if (node.redirects.length > 0) {
       var redirectParts: any = [];
-      for (const r of node.redirects as Node[]) {
-        redirectParts.push(FormatRedirect(r, false, false));
-      }
+      redirectParts.push(...node.redirects.map(r => FormatRedirect(r, false, false)));
       redirects = " " + redirectParts.join(" ");
     }
     return "case " + word + " in" + patternStr + "\n" + sp + "esac" + redirects;
@@ -9746,9 +9704,7 @@ ${innerSp}${body}
     var redirects: any = "";
     if (node.redirects.length > 0) {
       var redirectParts: any = [];
-      for (const r of node.redirects as Node[]) {
-        redirectParts.push(FormatRedirect(r, false, false));
-      }
+      redirectParts.push(...node.redirects.map(r => FormatRedirect(r, false, false)));
       redirects = redirectParts.join(" ");
     }
     if (procsubFirst) {
@@ -9769,9 +9725,7 @@ ${innerSp}${body}
     var redirects: any = "";
     if (node.redirects.length > 0) {
       var redirectParts: any = [];
-      for (const r of node.redirects as Node[]) {
-        redirectParts.push(FormatRedirect(r, false, false));
-      }
+      redirectParts.push(...node.redirects.map(r => FormatRedirect(r, false, false)));
       redirects = redirectParts.join(" ");
     }
     if (redirects !== "") {

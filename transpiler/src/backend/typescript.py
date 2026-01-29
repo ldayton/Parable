@@ -57,8 +57,9 @@ Frontend deficiencies (should be fixed in frontend.py):
   then overwrite all fields. Frontend should emit proper constructor calls. (~7 factories)
 
 Backend deficiencies (TypeScript-specific, fixable in typescript.py):
-- Imperative loops with `.push()` instead of `.map()`. Backend could detect
-  accumulator patterns and emit functional transforms. (~600 push calls in 74 loops)
+- Most imperative loops with `.push()` remain. The backend now transforms simple
+  single-statement accumulator loops to `.map()` (~23 transformed), but complex
+  patterns with multiple statements, index usage, or conditionals still use loops.
 """
 
 from __future__ import annotations
@@ -551,6 +552,9 @@ class TsBackend:
         iterable: Expr,
         body: list[Stmt],
     ) -> None:
+        # Try to emit as .map() if this is a simple accumulator pattern
+        if self._try_emit_map(index, value, iterable, body):
+            return
         iter_expr = self._expr(iterable)
         iter_type = getattr(iterable, 'typ', None)
         elem_type = self._element_type(iter_type)
@@ -576,6 +580,81 @@ class TsBackend:
             self._emit_stmt(s)
         self.indent -= 1
         self._line("}")
+
+    def _try_emit_map(
+        self,
+        index: str | None,
+        value: str | None,
+        iterable: Expr,
+        body: list[Stmt],
+    ) -> bool:
+        """Try to emit ForRange as .map(). Returns True if successful."""
+        # Pattern: for value in iterable: accumulator.append(transform(value))
+        # Requirements:
+        # - No index variable (value-only iteration)
+        # - Single statement in body
+        # - Statement is ExprStmt(MethodCall(method="append"))
+        # - Transform expression uses the loop variable
+        if index is not None or value is None:
+            return False
+        if len(body) != 1:
+            return False
+        stmt = body[0]
+        if not isinstance(stmt, ExprStmt):
+            return False
+        expr = stmt.expr
+        if not isinstance(expr, MethodCall):
+            return False
+        if expr.method != "append":
+            return False
+        if len(expr.args) != 1:
+            return False
+        # Check that accumulator is a simple variable
+        if not isinstance(expr.obj, Var):
+            return False
+        # Check that the transform expression uses the loop variable
+        transform_expr = expr.args[0]
+        if not self._expr_uses_var(transform_expr, value):
+            return False
+        # Emit as: accumulator.push(...iterable.map(value => transform))
+        # This preserves mutation semantics while using functional style
+        accumulator = self._expr(expr.obj)
+        iter_expr = self._expr(iterable)
+        transform = self._expr(transform_expr)
+        self._line(f"{accumulator}.push(...{iter_expr}.map({_camel(value)} => {transform}));")
+        return True
+
+    def _expr_uses_var(self, expr: Expr, var_name: str) -> bool:
+        """Check if an expression uses a variable (shallow check)."""
+        if isinstance(expr, Var):
+            return expr.name == var_name
+        if isinstance(expr, MethodCall):
+            if self._expr_uses_var(expr.obj, var_name):
+                return True
+            return any(self._expr_uses_var(a, var_name) for a in expr.args)
+        if isinstance(expr, Call):
+            return any(self._expr_uses_var(a, var_name) for a in expr.args)
+        if isinstance(expr, FieldAccess):
+            return self._expr_uses_var(expr.obj, var_name)
+        if isinstance(expr, Index):
+            return self._expr_uses_var(expr.obj, var_name) or self._expr_uses_var(expr.index, var_name)
+        if isinstance(expr, BinaryOp):
+            return self._expr_uses_var(expr.left, var_name) or self._expr_uses_var(expr.right, var_name)
+        if isinstance(expr, UnaryOp):
+            return self._expr_uses_var(expr.operand, var_name)
+        if isinstance(expr, Ternary):
+            return (self._expr_uses_var(expr.cond, var_name) or
+                    self._expr_uses_var(expr.then_expr, var_name) or
+                    self._expr_uses_var(expr.else_expr, var_name))
+        if isinstance(expr, Cast):
+            return self._expr_uses_var(expr.expr, var_name)
+        if isinstance(expr, SliceLit):
+            return any(self._expr_uses_var(e, var_name) for e in expr.elements)
+        if isinstance(expr, TupleLit):
+            return any(self._expr_uses_var(e, var_name) for e in expr.elements)
+        if isinstance(expr, StructLit):
+            return any(self._expr_uses_var(v, var_name) for v in expr.fields.values())
+        return False
 
     def _emit_for_classic(
         self,

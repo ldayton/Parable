@@ -309,18 +309,12 @@ var ContextStack = /** @class */ (function () {
     };
     ContextStack.prototype.copyStack = function () {
         var result = [];
-        for (var _i = 0, _a = this.Stack; _i < _a.length; _i++) {
-            var ctx = _a[_i];
-            result.push(ctx.copy());
-        }
+        result.push.apply(result, this.Stack.map(function (ctx) { return ctx.copy(); }));
         return result;
     };
     ContextStack.prototype.restoreFrom = function (savedStack) {
         var result = [];
-        for (var _i = 0, _a = savedStack; _i < _a.length; _i++) {
-            var ctx = _a[_i];
-            result.push(ctx.copy());
-        }
+        result.push.apply(result, savedStack.map(function (ctx) { return ctx.copy(); }));
         this.Stack = result;
     };
     return ContextStack;
@@ -3658,14 +3652,8 @@ var Command = /** @class */ (function () {
     };
     Command.prototype.toSexp = function () {
         var parts = [];
-        for (var _i = 0, _a = this.words; _i < _a.length; _i++) {
-            var w = _a[_i];
-            parts.push(w.toSexp());
-        }
-        for (var _b = 0, _c = this.redirects; _b < _c.length; _b++) {
-            var r = _c[_b];
-            parts.push(r.toSexp());
-        }
+        parts.push.apply(parts, this.words.map(function (w) { return w.toSexp(); }));
+        parts.push.apply(parts, this.redirects.map(function (r) { return r.toSexp(); }));
         var inner = parts.join(" ");
         if (inner === "") {
             return "(command)";
@@ -3731,14 +3719,8 @@ var Pipeline = /** @class */ (function () {
         }
         if (cmd instanceof Command) {
             var parts = [];
-            for (var _i = 0, _a = cmd.words; _i < _a.length; _i++) {
-                var w = _a[_i];
-                parts.push(w.toSexp());
-            }
-            for (var _b = 0, _c = cmd.redirects; _b < _c.length; _b++) {
-                var r = _c[_b];
-                parts.push(r.toSexp());
-            }
+            parts.push.apply(parts, cmd.words.map(function (w) { return w.toSexp(); }));
+            parts.push.apply(parts, cmd.redirects.map(function (r) { return r.toSexp(); }));
             parts.push("(redirect \">&\" 1)");
             return "(command " + parts.join(" ") + ")";
         }
@@ -4176,10 +4158,7 @@ var For = /** @class */ (function () {
         var suffix = "";
         if (this.redirects.length > 0) {
             var redirectParts = [];
-            for (var _i = 0, _a = this.redirects; _i < _a.length; _i++) {
-                var r = _a[_i];
-                redirectParts.push(r.toSexp());
-            }
+            redirectParts.push.apply(redirectParts, this.redirects.map(function (r) { return r.toSexp(); }));
             suffix = " " + redirectParts.join(" ");
         }
         var tempWord = new Word(this.varName, [], "word");
@@ -4194,10 +4173,7 @@ var For = /** @class */ (function () {
             }
             else {
                 var wordParts = [];
-                for (var _b = 0, _c = this.words; _b < _c.length; _b++) {
-                    var w = _c[_b];
-                    wordParts.push(w.toSexp());
-                }
+                wordParts.push.apply(wordParts, this.words.map(function (w) { return w.toSexp(); }));
                 var wordStrs = wordParts.join(" ");
                 return "(for (word \"" + varEscaped + "\") (in " + wordStrs + ") " + this.body.toSexp() + ")" + suffix;
             }
@@ -4227,10 +4203,7 @@ var ForArith = /** @class */ (function () {
         var suffix = "";
         if (this.redirects.length > 0) {
             var redirectParts = [];
-            for (var _i = 0, _a = this.redirects; _i < _a.length; _i++) {
-                var r = _a[_i];
-                redirectParts.push(r.toSexp());
-            }
+            redirectParts.push.apply(redirectParts, this.redirects.map(function (r) { return r.toSexp(); }));
             suffix = " " + redirectParts.join(" ");
         }
         var initVal = (this.init !== "" ? this.init : "1");
@@ -4264,19 +4237,13 @@ var Select = /** @class */ (function () {
         var suffix = "";
         if (this.redirects.length > 0) {
             var redirectParts = [];
-            for (var _i = 0, _a = this.redirects; _i < _a.length; _i++) {
-                var r = _a[_i];
-                redirectParts.push(r.toSexp());
-            }
+            redirectParts.push.apply(redirectParts, this.redirects.map(function (r) { return r.toSexp(); }));
             suffix = " " + redirectParts.join(" ");
         }
         var varEscaped = this.varName.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
         if (this.words !== null) {
             var wordParts = [];
-            for (var _b = 0, _c = this.words; _b < _c.length; _b++) {
-                var w = _c[_b];
-                wordParts.push(w.toSexp());
-            }
+            wordParts.push.apply(wordParts, this.words.map(function (w) { return w.toSexp(); }));
             var wordStrs = wordParts.join(" ");
             if (this.words.length > 0) {
                 var inClause = "(in " + wordStrs + ")";
@@ -4309,10 +4276,7 @@ var Case = /** @class */ (function () {
     Case.prototype.toSexp = function () {
         var parts = [];
         parts.push("(case " + this.word.toSexp());
-        for (var _i = 0, _a = this.patterns; _i < _a.length; _i++) {
-            var p = _a[_i];
-            parts.push(p.toSexp());
-        }
+        parts.push.apply(parts, this.patterns.map(function (p) { return p.toSexp(); }));
         var base = parts.join(" ") + ")";
         return AppendRedirects(base, this.redirects);
     };
@@ -4408,10 +4372,7 @@ var CasePattern = /** @class */ (function () {
         }
         alternatives.push(current.join(""));
         var wordList = [];
-        for (var _i = 0, _d = alternatives; _i < _d.length; _i++) {
-            var alt = _d[_i];
-            wordList.push(new Word(alt, [], "word").toSexp());
-        }
+        wordList.push.apply(wordList, alternatives.map(function (alt) { return new Word(alt, [], "word").toSexp(); }));
         var patternStr = wordList.join(" ");
         var parts = ["(pattern (" + patternStr + ")"];
         if (this.body !== null) {
@@ -4578,10 +4539,7 @@ var ArithmeticCommand = /** @class */ (function () {
         var result = "(arith (word \"" + escaped + "\"))";
         if (this.redirects.length > 0) {
             var redirectParts = [];
-            for (var _i = 0, _a = this.redirects; _i < _a.length; _i++) {
-                var r = _a[_i];
-                redirectParts.push(r.toSexp());
-            }
+            redirectParts.push.apply(redirectParts, this.redirects.map(function (r) { return r.toSexp(); }));
             var redirectSexps = redirectParts.join(" ");
             return result + " " + redirectSexps;
         }
@@ -4843,10 +4801,7 @@ var ArithConcat = /** @class */ (function () {
     };
     ArithConcat.prototype.toSexp = function () {
         var sexps = [];
-        for (var _i = 0, _a = this.parts; _i < _a.length; _i++) {
-            var p = _a[_i];
-            sexps.push(p.toSexp());
-        }
+        sexps.push.apply(sexps, this.parts.map(function (p) { return p.toSexp(); }));
         return "(arith-concat " + sexps.join(" ") + ")";
     };
     return ArithConcat;
@@ -4969,10 +4924,7 @@ var ConditionalExpr = /** @class */ (function () {
         }
         if (this.redirects.length > 0) {
             var redirectParts = [];
-            for (var _i = 0, _a = this.redirects; _i < _a.length; _i++) {
-                var r = _a[_i];
-                redirectParts.push(r.toSexp());
-            }
+            redirectParts.push.apply(redirectParts, this.redirects.map(function (r) { return r.toSexp(); }));
             var redirectSexps = redirectParts.join(" ");
             return result + " " + redirectSexps;
         }
@@ -5098,10 +5050,7 @@ var ArrayName = /** @class */ (function () {
             return "(array)";
         }
         var parts = [];
-        for (var _i = 0, _a = this.elements; _i < _a.length; _i++) {
-            var e = _a[_i];
-            parts.push(e.toSexp());
-        }
+        parts.push.apply(parts, this.elements.map(function (e) { return e.toSexp(); }));
         var inner = parts.join(" ");
         return "(array " + inner + ")";
     };
@@ -9366,10 +9315,7 @@ function StripLineContinuationsCommentAware(text) {
 function AppendRedirects(base, redirects) {
     if (redirects.length > 0) {
         var parts = [];
-        for (var _i = 0, _a = redirects; _i < _a.length; _i++) {
-            var r = _a[_i];
-            parts.push(r.toSexp());
-        }
+        parts.push.apply(parts, redirects.map(function (r) { return r.toSexp(); }));
         return base + " " + parts.join(" ");
     }
     return base;
@@ -9547,10 +9493,7 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
                 heredocs.push(r);
             }
         }
-        for (var _d = 0, _f = node.redirects; _d < _f.length; _d++) {
-            var r = _f[_d];
-            parts.push(FormatRedirect(r, compactRedirects, true));
-        }
+        parts.push.apply(parts, node.redirects.map(function (r) { return FormatRedirect(r, compactRedirects, true); }));
         if (compactRedirects && node.words.length > 0 && node.redirects.length > 0) {
             var wordParts = parts.slice(0, node.words.length);
             var redirectParts = parts.slice(node.words.length);
@@ -9559,8 +9502,8 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
         else {
             var result = parts.join(" ");
         }
-        for (var _g = 0, _h = heredocs; _g < _h.length; _g++) {
-            var h = _h[_g];
+        for (var _d = 0, _f = heredocs; _d < _f.length; _d++) {
+            var h = _f[_d];
             var result = result + FormatHeredocBody(h);
         }
         return result;
@@ -9590,8 +9533,8 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
             var isLast = idx === cmds.length - 1;
             var hasHeredoc = false;
             if (cmd.kind === "command" && cmd.redirects.length > 0) {
-                for (var _j = 0, _k = cmd.redirects; _j < _k.length; _j++) {
-                    var r = _k[_j];
+                for (var _g = 0, _h = cmd.redirects; _g < _h.length; _g++) {
+                    var r = _h[_g];
                     if (r instanceof HereDoc) {
                         hasHeredoc = true;
                         break;
@@ -9651,11 +9594,11 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
     }
     if (node instanceof List) {
         var hasHeredoc = false;
-        for (var _l = 0, _m = node.parts; _l < _m.length; _l++) {
-            var p_1 = _m[_l];
+        for (var _j = 0, _k = node.parts; _j < _k.length; _j++) {
+            var p_1 = _k[_j];
             if (p_1.kind === "command" && p_1.redirects.length > 0) {
-                for (var _o = 0, _p = p_1.redirects; _o < _p.length; _o++) {
-                    var r = _p[_o];
+                for (var _l = 0, _m = p_1.redirects; _l < _m.length; _l++) {
+                    var r = _m[_l];
                     if (r instanceof HereDoc) {
                         hasHeredoc = true;
                         break;
@@ -9664,11 +9607,11 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
             }
             else {
                 if (p_1 instanceof Pipeline) {
-                    for (var _q = 0, _r = p_1.commands; _q < _r.length; _q++) {
-                        var cmd_1 = _r[_q];
+                    for (var _o = 0, _p = p_1.commands; _o < _p.length; _o++) {
+                        var cmd_1 = _p[_o];
                         if (cmd_1.kind === "command" && cmd_1.redirects.length > 0) {
-                            for (var _s = 0, _t = cmd_1.redirects; _s < _t.length; _s++) {
-                                var r = _t[_s];
+                            for (var _q = 0, _r = cmd_1.redirects; _q < _r.length; _q++) {
+                                var r = _r[_q];
                                 if (r instanceof HereDoc) {
                                     hasHeredoc = true;
                                     break;
@@ -9685,8 +9628,8 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
         var result = [];
         var skippedSemi = false;
         var cmdCount = 0;
-        for (var _u = 0, _v = node.parts; _u < _v.length; _u++) {
-            var p_2 = _v[_u];
+        for (var _s = 0, _t = node.parts; _s < _t.length; _s++) {
+            var p_2 = _t[_s];
             if (p_2 instanceof Operator) {
                 if (p_2.op === ";") {
                     if (result.length > 0 && result[result.length - 1].endsWith("\n")) {
@@ -9792,8 +9735,8 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
         var body = FormatCmdsubNode(node.body, indent + 4, false, false, false);
         var result = "while " + cond + "; do\n" + innerSp + body + ";\n" + sp + "done";
         if (node.redirects.length > 0) {
-            for (var _w = 0, _x = node.redirects; _w < _x.length; _w++) {
-                var r = _x[_w];
+            for (var _u = 0, _v = node.redirects; _u < _v.length; _u++) {
+                var r = _v[_u];
                 result = result + " " + FormatRedirect(r, false, false);
             }
         }
@@ -9804,8 +9747,8 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
         var body = FormatCmdsubNode(node.body, indent + 4, false, false, false);
         var result = "until " + cond + "; do\n" + innerSp + body + ";\n" + sp + "done";
         if (node.redirects.length > 0) {
-            for (var _y = 0, _z = node.redirects; _y < _z.length; _y++) {
-                var r = _z[_y];
+            for (var _w = 0, _x = node.redirects; _w < _x.length; _w++) {
+                var r = _x[_w];
                 result = result + " " + FormatRedirect(r, false, false);
             }
         }
@@ -9816,10 +9759,7 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
         var body = FormatCmdsubNode(node.body, indent + 4, false, false, false);
         if (node.words !== null) {
             var wordVals = [];
-            for (var _0 = 0, _1 = node.words; _0 < _1.length; _0++) {
-                var w = _1[_0];
-                wordVals.push(w.value);
-            }
+            wordVals.push.apply(wordVals, node.words.map(function (w) { return w.value; }));
             var words = wordVals.join(" ");
             if (words !== "") {
                 var result = "for " + varName + " in " + words + ";\n" + sp + "do\n" + innerSp + body + ";\n" + sp + "done";
@@ -9832,8 +9772,8 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
             var result = "for " + varName + " in \"$@\";\n" + sp + "do\n" + innerSp + body + ";\n" + sp + "done";
         }
         if (node.redirects.length > 0) {
-            for (var _2 = 0, _3 = node.redirects; _2 < _3.length; _2++) {
-                var r = _3[_2];
+            for (var _y = 0, _z = node.redirects; _y < _z.length; _y++) {
+                var r = _z[_y];
                 var result = result + " " + FormatRedirect(r, false, false);
             }
         }
@@ -9843,8 +9783,8 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
         var body = FormatCmdsubNode(node.body, indent + 4, false, false, false);
         var result = "for ((" + node.init + "; " + node.cond + "; " + node.incr + "))\ndo\n" + innerSp + body + ";\n" + sp + "done";
         if (node.redirects.length > 0) {
-            for (var _4 = 0, _5 = node.redirects; _4 < _5.length; _4++) {
-                var r = _5[_4];
+            for (var _0 = 0, _1 = node.redirects; _0 < _1.length; _0++) {
+                var r = _1[_0];
                 result = result + " " + FormatRedirect(r, false, false);
             }
         }
@@ -9879,10 +9819,7 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
         var redirects = "";
         if (node.redirects.length > 0) {
             var redirectParts = [];
-            for (var _6 = 0, _7 = node.redirects; _6 < _7.length; _6++) {
-                var r = _7[_6];
-                redirectParts.push(FormatRedirect(r, false, false));
-            }
+            redirectParts.push.apply(redirectParts, node.redirects.map(function (r) { return FormatRedirect(r, false, false); }));
             redirects = " " + redirectParts.join(" ");
         }
         return "case " + word + " in" + patternStr + "\n" + sp + "esac" + redirects;
@@ -9898,10 +9835,7 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
         var redirects = "";
         if (node.redirects.length > 0) {
             var redirectParts = [];
-            for (var _8 = 0, _9 = node.redirects; _8 < _9.length; _8++) {
-                var r = _9[_8];
-                redirectParts.push(FormatRedirect(r, false, false));
-            }
+            redirectParts.push.apply(redirectParts, node.redirects.map(function (r) { return FormatRedirect(r, false, false); }));
             redirects = redirectParts.join(" ");
         }
         if (procsubFirst) {
@@ -9922,10 +9856,7 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
         var redirects = "";
         if (node.redirects.length > 0) {
             var redirectParts = [];
-            for (var _10 = 0, _11 = node.redirects; _10 < _11.length; _10++) {
-                var r = _11[_10];
-                redirectParts.push(FormatRedirect(r, false, false));
-            }
+            redirectParts.push.apply(redirectParts, node.redirects.map(function (r) { return FormatRedirect(r, false, false); }));
             redirects = redirectParts.join(" ");
         }
         if (redirects !== "") {

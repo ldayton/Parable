@@ -5,7 +5,7 @@ import ast
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
-from ..ir import INT, Loc, Optional, Pointer, Slice
+from ..ir import BOOL, FLOAT, INT, STRING, Interface, Loc, Optional, Pointer, Slice, Tuple
 
 if TYPE_CHECKING:
     from .. import ir
@@ -524,3 +524,58 @@ def coerce_sentinel_to_ptr(
                     # Wrap in _intPtr() call
                     result[i] = ir.Call(func="_intPtr", args=[arg], typ=param.typ, loc=arg.loc)
     return result
+
+
+# ============================================================
+# SIMPLE EXPRESSION LOWERING
+# ============================================================
+
+
+def lower_expr_Constant(node: ast.Constant) -> "ir.Expr":
+    """Lower Python constant to IR literal."""
+    from .. import ir
+    if isinstance(node.value, bool):
+        return ir.BoolLit(value=node.value, typ=BOOL, loc=loc_from_node(node))
+    if isinstance(node.value, int):
+        return ir.IntLit(value=node.value, typ=INT, loc=loc_from_node(node))
+    if isinstance(node.value, float):
+        return ir.FloatLit(value=node.value, typ=FLOAT, loc=loc_from_node(node))
+    if isinstance(node.value, str):
+        return ir.StringLit(value=node.value, typ=STRING, loc=loc_from_node(node))
+    if node.value is None:
+        return ir.NilLit(typ=Interface("any"), loc=loc_from_node(node))
+    return ir.Var(name=f"TODO_Constant_{type(node.value)}", typ=Interface("any"))
+
+
+def lower_expr_Name(
+    node: ast.Name,
+    type_ctx: "TypeContext",
+    symbols: "SymbolTable",
+) -> "ir.Expr":
+    """Lower Python name to IR variable."""
+    from .. import ir
+    if node.id == "True":
+        return ir.BoolLit(value=True, typ=BOOL, loc=loc_from_node(node))
+    if node.id == "False":
+        return ir.BoolLit(value=False, typ=BOOL, loc=loc_from_node(node))
+    if node.id == "None":
+        return ir.NilLit(typ=Interface("any"), loc=loc_from_node(node))
+    # Handle expanded tuple variables: result -> TupleLit(result0, result1)
+    if node.id in type_ctx.tuple_vars:
+        synthetic_names = type_ctx.tuple_vars[node.id]
+        elements = []
+        elem_types = []
+        for syn_name in synthetic_names:
+            typ = type_ctx.var_types.get(syn_name, Interface("any"))
+            elements.append(ir.Var(name=syn_name, typ=typ, loc=loc_from_node(node)))
+            elem_types.append(typ)
+        return ir.TupleLit(
+            elements=elements,
+            typ=Tuple(tuple(elem_types)),
+            loc=loc_from_node(node)
+        )
+    # Look up variable type from context, or constants for module-level constants
+    var_type = type_ctx.var_types.get(node.id)
+    if var_type is None:
+        var_type = symbols.constants.get(node.id, Interface("any"))
+    return ir.Var(name=node.id, typ=var_type, loc=loc_from_node(node))

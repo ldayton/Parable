@@ -1572,46 +1572,10 @@ class Frontend:
         return ir.Var(name=f"TODO_{node.__class__.__name__}", typ=Interface("any"))
 
     def _lower_expr_Constant(self, node: ast.Constant) -> "ir.Expr":
-        from .. import ir
-        if isinstance(node.value, bool):
-            return ir.BoolLit(value=node.value, typ=BOOL, loc=self._loc_from_node(node))
-        if isinstance(node.value, int):
-            return ir.IntLit(value=node.value, typ=INT, loc=self._loc_from_node(node))
-        if isinstance(node.value, float):
-            return ir.FloatLit(value=node.value, typ=FLOAT, loc=self._loc_from_node(node))
-        if isinstance(node.value, str):
-            return ir.StringLit(value=node.value, typ=STRING, loc=self._loc_from_node(node))
-        if node.value is None:
-            return ir.NilLit(typ=Interface("any"), loc=self._loc_from_node(node))
-        return ir.Var(name=f"TODO_Constant_{type(node.value)}", typ=Interface("any"))
+        return lowering.lower_expr_Constant(node)
 
     def _lower_expr_Name(self, node: ast.Name) -> "ir.Expr":
-        from .. import ir
-        if node.id == "True":
-            return ir.BoolLit(value=True, typ=BOOL, loc=self._loc_from_node(node))
-        if node.id == "False":
-            return ir.BoolLit(value=False, typ=BOOL, loc=self._loc_from_node(node))
-        if node.id == "None":
-            return ir.NilLit(typ=Interface("any"), loc=self._loc_from_node(node))
-        # Handle expanded tuple variables: result -> TupleLit(result0, result1)
-        if node.id in self._type_ctx.tuple_vars:
-            synthetic_names = self._type_ctx.tuple_vars[node.id]
-            elements = []
-            elem_types = []
-            for syn_name in synthetic_names:
-                typ = self._type_ctx.var_types.get(syn_name, Interface("any"))
-                elements.append(ir.Var(name=syn_name, typ=typ, loc=self._loc_from_node(node)))
-                elem_types.append(typ)
-            return ir.TupleLit(
-                elements=elements,
-                typ=Tuple(tuple(elem_types)),
-                loc=self._loc_from_node(node)
-            )
-        # Look up variable type from context, or constants for module-level constants
-        var_type = self._type_ctx.var_types.get(node.id)
-        if var_type is None:
-            var_type = self.symbols.constants.get(node.id, Interface("any"))
-        return ir.Var(name=node.id, typ=var_type, loc=self._loc_from_node(node))
+        return lowering.lower_expr_Name(node, self._type_ctx, self.symbols)
 
     def _lower_expr_Attribute(self, node: ast.Attribute) -> "ir.Expr":
         from .. import ir

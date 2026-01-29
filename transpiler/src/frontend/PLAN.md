@@ -238,14 +238,97 @@ Depends on: context.py, type_inference.py, lowering.py, collection.py
 
 ### 5. Slim `frontend.py` ← NEXT
 
-What remains:
+Goal: Reduce frontend.py from ~1567 lines to ~200 lines of orchestration.
 
+What remains after completion:
 - `Frontend` class with `__init__` and `transpile`
 - Holds `SymbolTable` and mutable state
-- Builds `FrontendContext` and passes to functions
+- Builds context and passes to functions
 - Orchestrates: collect → build → return Module
 
-~200 lines of orchestration.
+**Detailed extraction plan (8 iterations):**
+
+#### Iteration 5.1: Create `LoweringContext` dataclass in context.py
+Bundle mutable state needed by complex lowering methods:
+```python
+@dataclass
+class LoweringContext:
+    """Mutable context for lowering phase."""
+    type_ctx: TypeContext
+    symbols: SymbolTable
+    node_types: set[str]
+    kind_to_struct: dict[str, str]
+    kind_to_class: dict[str, str]
+    current_class_name: str
+    current_func_info: FuncInfo | None
+    current_catch_var: str | None
+```
+
+Also create `LoweringDispatch` callback dataclass for recursive lowering:
+```python
+@dataclass
+class LoweringDispatch:
+    """Callbacks for recursive lowering."""
+    lower_expr: Callable[[ast.expr], ir.Expr]
+    lower_expr_as_bool: Callable[[ast.expr], ir.Expr]
+    lower_stmts: Callable[[list[ast.stmt]], list[ir.Stmt]]
+    lower_lvalue: Callable[[ast.expr], ir.LValue]
+    lower_expr_List: Callable[[ast.List, Type | None], ir.Expr]
+    # Type inference callbacks
+    infer_expr_type_from_ast: Callable[[ast.expr], Type]
+    synthesize_type: Callable[[ir.Expr], Type]
+    coerce: Callable[[ir.Expr, Type, Type], ir.Expr]
+    # Helper callbacks
+    annotation_to_str: Callable[[ast.expr | None], str]
+    py_type_to_ir: Callable[[str, bool], Type]
+    make_default_value: Callable[[Type, Loc], ir.Expr]
+    extract_struct_name: Callable[[Type], str | None]
+    is_exception_subclass: Callable[[str], bool]
+```
+
+#### Iteration 5.2: Extract `lower_expr_Call`
+Move ~300 line `_lower_expr_Call` to lowering.py:
+- `lower_expr_Call(node, ctx: LoweringContext, dispatch: LoweringDispatch) -> ir.Expr`
+- Handles method calls, free functions, constructors
+- Uses dispatch callbacks for recursive lowering
+
+#### Iteration 5.3: Extract `lower_stmt_Assign`
+Move ~230 line `_lower_stmt_Assign` to lowering.py:
+- `lower_stmt_Assign(node, ctx: LoweringContext, dispatch: LoweringDispatch) -> ir.Stmt`
+- Handles tuple unpacking, type tracking, sentinel ints
+- Mutates ctx.type_ctx for variable type tracking
+
+#### Iteration 5.4: Extract `lower_stmt_AnnAssign`
+Move ~60 line `_lower_stmt_AnnAssign` to lowering.py:
+- `lower_stmt_AnnAssign(node, ctx: LoweringContext, dispatch: LoweringDispatch) -> ir.Stmt`
+
+#### Iteration 5.5: Extract `lower_stmt_If` + `collect_isinstance_chain`
+Move isinstance chain handling to lowering.py:
+- `collect_isinstance_chain(node, var_name, ctx, dispatch) -> tuple[list[TypeCase], list[Stmt]]`
+- `lower_stmt_If(node, ctx: LoweringContext, dispatch: LoweringDispatch) -> ir.Stmt`
+
+#### Iteration 5.6: Extract `lower_stmt_For` and `lower_stmt_Try`
+Move For loop and Try/Catch lowering to lowering.py:
+- `lower_stmt_For(node, ctx: LoweringContext, dispatch: LoweringDispatch) -> ir.Stmt`
+- `lower_stmt_Try(node, ctx: LoweringContext, dispatch: LoweringDispatch) -> ir.Stmt`
+
+#### Iteration 5.7: Extract dispatchers and remaining helpers
+Move to lowering.py:
+- `lower_expr(node, ctx, dispatch) -> ir.Expr` (dispatcher)
+- `lower_stmt(node, ctx, dispatch) -> ir.Stmt` (dispatcher)
+- `lower_stmts(stmts, ctx, dispatch) -> list[ir.Stmt]`
+
+Move to type_inference.py:
+- `annotation_to_str(node) -> str`
+- `make_default_value(typ, loc) -> ir.Expr`
+- `extract_union_struct_names(py_type, symbols, node_types) -> list[str] | None`
+
+#### Iteration 5.8: Remove thin wrappers and consolidate Frontend
+Remove all thin wrapper methods. Final Frontend class:
+- `__init__()`: Initialize symbols, node_types, kind mappings
+- `transpile(source)`: Orchestrate collection → building → return Module
+- Build `LoweringContext` and `LoweringDispatch` internally
+- ~200 lines total
 
 ## Execution Order
 

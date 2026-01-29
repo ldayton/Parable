@@ -1135,78 +1135,15 @@ class Frontend:
 
     def _unify_branch_types(self, then_vars: dict[str, Type], else_vars: dict[str, Type]) -> dict[str, Type]:
         """Unify variable types from if/else branches."""
-        unified: dict[str, Type] = {}
-        for var in set(then_vars) | set(else_vars):
-            t1, t2 = then_vars.get(var), else_vars.get(var)
-            if t1 == t2 and t1 is not None:
-                unified[var] = t1
-            elif t1 is not None and t2 is None:
-                unified[var] = t1
-            elif t2 is not None and t1 is None:
-                unified[var] = t2
-        return unified
+        return collection.unify_branch_types(then_vars, else_vars)
 
     def _collect_branch_var_types(self, stmts: list[ast.stmt], var_types: dict[str, Type]) -> dict[str, Type]:
         """Collect variable types assigned in a list of statements (for branch analysis)."""
-        branch_vars: dict[str, Type] = {}
-        # Walk entire subtree to find all assignments (may be nested in for/while/etc)
-        for stmt in ast.walk(ast.Module(body=stmts, type_ignores=[])):
-            if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
-                target = stmt.targets[0]
-                if isinstance(target, ast.Name):
-                    var_name = target.id
-                    # Infer type from value
-                    if isinstance(stmt.value, ast.Constant):
-                        if isinstance(stmt.value.value, str):
-                            branch_vars[var_name] = STRING
-                        elif isinstance(stmt.value.value, int) and not isinstance(stmt.value.value, bool):
-                            branch_vars[var_name] = INT
-                        elif isinstance(stmt.value.value, bool):
-                            branch_vars[var_name] = BOOL
-                    elif isinstance(stmt.value, ast.BinOp):
-                        # String concatenation -> STRING
-                        if isinstance(stmt.value.op, ast.Add):
-                            left_type = self._infer_branch_expr_type(stmt.value.left, var_types, branch_vars)
-                            right_type = self._infer_branch_expr_type(stmt.value.right, var_types, branch_vars)
-                            if left_type == STRING or right_type == STRING:
-                                branch_vars[var_name] = STRING
-                            elif left_type == INT or right_type == INT:
-                                branch_vars[var_name] = INT
-                    elif isinstance(stmt.value, ast.Name):
-                        # Assign from another variable
-                        if stmt.value.id in var_types:
-                            branch_vars[var_name] = var_types[stmt.value.id]
-                        elif stmt.value.id in branch_vars:
-                            branch_vars[var_name] = branch_vars[stmt.value.id]
-                    # Method calls (e.g., x.to_sexp() returns STRING)
-                    elif isinstance(stmt.value, ast.Call) and isinstance(stmt.value.func, ast.Attribute):
-                        method = stmt.value.func.attr
-                        if method in ("to_sexp", "format", "strip", "lower", "upper", "replace", "join"):
-                            branch_vars[var_name] = STRING
-        return branch_vars
+        return collection.collect_branch_var_types(stmts, var_types)
 
     def _infer_branch_expr_type(self, node: ast.expr, var_types: dict[str, Type], branch_vars: dict[str, Type]) -> Type:
         """Infer type of expression during branch analysis."""
-        if isinstance(node, ast.Constant):
-            if isinstance(node.value, str):
-                return STRING
-            if isinstance(node.value, int) and not isinstance(node.value, bool):
-                return INT
-            if isinstance(node.value, bool):
-                return BOOL
-        if isinstance(node, ast.Name):
-            if node.id in branch_vars:
-                return branch_vars[node.id]
-            if node.id in var_types:
-                return var_types[node.id]
-        if isinstance(node, ast.BinOp):
-            left = self._infer_branch_expr_type(node.left, var_types, branch_vars)
-            right = self._infer_branch_expr_type(node.right, var_types, branch_vars)
-            if left == STRING or right == STRING:
-                return STRING
-            if left == INT or right == INT:
-                return INT
-        return Interface("any")
+        return collection.infer_branch_expr_type(node, var_types, branch_vars)
 
     def _synthesize_type(self, expr: "ir.Expr") -> Type:
         """Bottom-up type synthesis: compute type from expression structure."""

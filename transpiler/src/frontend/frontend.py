@@ -1607,140 +1607,27 @@ class Frontend:
         )
 
     def _lower_expr_BinOp(self, node: ast.BinOp) -> "ir.Expr":
-        from .. import ir
-        left = self._lower_expr(node.left)
-        right = self._lower_expr(node.right)
-        op = self._binop_to_str(node.op)
-        # Infer result type based on operator
-        result_type: Type = Interface("any")
-        if isinstance(node.op, (ast.BitAnd, ast.BitOr, ast.BitXor, ast.LShift, ast.RShift)):
-            result_type = INT
-        elif isinstance(node.op, (ast.Add, ast.Sub, ast.Mult, ast.FloorDiv, ast.Mod)):
-            left_type = self._infer_expr_type_from_ast(node.left)
-            right_type = self._infer_expr_type_from_ast(node.right)
-            # String concatenation
-            if left_type == STRING or right_type == STRING:
-                result_type = STRING
-            elif left_type == INT or right_type == INT:
-                result_type = INT
-        return ir.BinaryOp(op=op, left=left, right=right, typ=result_type, loc=self._loc_from_node(node))
+        return lowering.lower_expr_BinOp(node, self._lower_expr, self._infer_expr_type_from_ast)
 
     def _is_sentinel_int(self, node: ast.expr) -> bool:
         """Check if an expression is a sentinel int (uses a sentinel value for None)."""
-        return self._get_sentinel_value(node) is not None
+        return lowering.is_sentinel_int(node, self._type_ctx, self._current_class_name, SENTINEL_INT_FIELDS)
 
     def _get_sentinel_value(self, node: ast.expr) -> int | None:
         """Get the sentinel value for a sentinel int expression, or None if not a sentinel int."""
-        # Local variable sentinel ints (always use -1)
-        if isinstance(node, ast.Name) and node.id in self._type_ctx.sentinel_ints:
-            return -1
-        # Field sentinel ints: self.field
-        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name) and node.value.id == "self":
-            class_name = self._current_class_name
-            field_name = node.attr
-            if (class_name, field_name) in SENTINEL_INT_FIELDS:
-                return SENTINEL_INT_FIELDS[(class_name, field_name)]
-        return None
+        return lowering.get_sentinel_value(node, self._type_ctx, self._current_class_name, SENTINEL_INT_FIELDS)
 
     def _lower_expr_Compare(self, node: ast.Compare) -> "ir.Expr":
-        from .. import ir
-        # Handle simple comparisons
-        if len(node.ops) == 1 and len(node.comparators) == 1:
-            left = self._lower_expr(node.left)
-            right = self._lower_expr(node.comparators[0])
-            op = self._cmpop_to_str(node.ops[0])
-            # Special case for "is None" / "is not None"
-            if isinstance(node.ops[0], ast.Is) and isinstance(node.comparators[0], ast.Constant) and node.comparators[0].value is None:
-                # For strings, compare to empty string; for bools, compare to false
-                left_type = self._infer_expr_type_from_ast(node.left)
-                if left_type == STRING:
-                    cmp_op = "=="
-                    return ir.BinaryOp(op=cmp_op, left=left, right=ir.StringLit(value="", typ=STRING), typ=BOOL, loc=self._loc_from_node(node))
-                if left_type == BOOL:
-                    return ir.UnaryOp(op="!", operand=left, typ=BOOL, loc=self._loc_from_node(node))
-                # For sentinel ints, compare to the sentinel value
-                sentinel = self._get_sentinel_value(node.left)
-                if sentinel is not None:
-                    return ir.BinaryOp(op="==", left=left, right=ir.IntLit(value=sentinel, typ=INT), typ=BOOL, loc=self._loc_from_node(node))
-                return ir.IsNil(expr=left, negated=False, typ=BOOL, loc=self._loc_from_node(node))
-            if isinstance(node.ops[0], ast.IsNot) and isinstance(node.comparators[0], ast.Constant) and node.comparators[0].value is None:
-                # For strings, compare to non-empty string; for bools, just use the bool itself
-                left_type = self._infer_expr_type_from_ast(node.left)
-                if left_type == STRING:
-                    cmp_op = "!="
-                    return ir.BinaryOp(op=cmp_op, left=left, right=ir.StringLit(value="", typ=STRING), typ=BOOL, loc=self._loc_from_node(node))
-                if left_type == BOOL:
-                    return left  # bool is its own truthy value
-                # For sentinel ints, compare to the sentinel value
-                sentinel = self._get_sentinel_value(node.left)
-                if sentinel is not None:
-                    return ir.BinaryOp(op="!=", left=left, right=ir.IntLit(value=sentinel, typ=INT), typ=BOOL, loc=self._loc_from_node(node))
-                return ir.IsNil(expr=left, negated=True, typ=BOOL, loc=self._loc_from_node(node))
-            # Handle "x in (a, b, c)" -> "x == a || x == b || x == c"
-            if isinstance(node.ops[0], (ast.In, ast.NotIn)) and isinstance(node.comparators[0], ast.Tuple):
-                negated = isinstance(node.ops[0], ast.NotIn)
-                cmp_op = "!=" if negated else "=="
-                join_op = "&&" if negated else "||"
-                elts = node.comparators[0].elts
-                if elts:
-                    result = ir.BinaryOp(op=cmp_op, left=left, right=self._lower_expr(elts[0]), typ=BOOL, loc=self._loc_from_node(node))
-                    for elt in elts[1:]:
-                        cmp = ir.BinaryOp(op=cmp_op, left=left, right=self._lower_expr(elt), typ=BOOL, loc=self._loc_from_node(node))
-                        result = ir.BinaryOp(op=join_op, left=result, right=cmp, typ=BOOL, loc=self._loc_from_node(node))
-                    return result
-                return ir.BoolLit(value=not negated, typ=BOOL, loc=self._loc_from_node(node))
-            # Handle string vs pointer/optional string comparison: dereference the pointer side
-            left_type = self._infer_expr_type_from_ast(node.left)
-            right_type = self._infer_expr_type_from_ast(node.comparators[0])
-            if left_type == STRING and isinstance(right_type, (Optional, Pointer)):
-                inner = right_type.inner if isinstance(right_type, Optional) else right_type.target
-                if inner == STRING:
-                    right = ir.UnaryOp(op="*", operand=right, typ=STRING, loc=self._loc_from_node(node))
-            elif right_type == STRING and isinstance(left_type, (Optional, Pointer)):
-                inner = left_type.inner if isinstance(left_type, Optional) else left_type.target
-                if inner == STRING:
-                    left = ir.UnaryOp(op="*", operand=left, typ=STRING, loc=self._loc_from_node(node))
-            # Handle int vs pointer/optional int comparison: dereference the pointer side
-            elif left_type == INT and isinstance(right_type, (Optional, Pointer)):
-                inner = right_type.inner if isinstance(right_type, Optional) else right_type.target
-                if inner == INT:
-                    right = ir.UnaryOp(op="*", operand=right, typ=INT, loc=self._loc_from_node(node))
-            elif right_type == INT and isinstance(left_type, (Optional, Pointer)):
-                inner = left_type.inner if isinstance(left_type, Optional) else left_type.target
-                if inner == INT:
-                    left = ir.UnaryOp(op="*", operand=left, typ=INT, loc=self._loc_from_node(node))
-            return ir.BinaryOp(op=op, left=left, right=right, typ=BOOL, loc=self._loc_from_node(node))
-        # Chain comparisons - convert to AND of pairwise comparisons
-        result = None
-        prev = self._lower_expr(node.left)
-        for op, comp in zip(node.ops, node.comparators):
-            curr = self._lower_expr(comp)
-            cmp = ir.BinaryOp(op=self._cmpop_to_str(op), left=prev, right=curr, typ=BOOL, loc=self._loc_from_node(node))
-            if result is None:
-                result = cmp
-            else:
-                result = ir.BinaryOp(op="&&", left=result, right=cmp, typ=BOOL, loc=self._loc_from_node(node))
-            prev = curr
-        return result or ir.BoolLit(value=True, typ=BOOL)
+        return lowering.lower_expr_Compare(
+            node, self._lower_expr, self._infer_expr_type_from_ast,
+            self._type_ctx, self._current_class_name, SENTINEL_INT_FIELDS
+        )
 
     def _lower_expr_BoolOp(self, node: ast.BoolOp) -> "ir.Expr":
-        from .. import ir
-        op = "&&" if isinstance(node.op, ast.And) else "||"
-        result = self._lower_expr_as_bool(node.values[0])
-        for val in node.values[1:]:
-            right = self._lower_expr_as_bool(val)
-            result = ir.BinaryOp(op=op, left=result, right=right, typ=BOOL, loc=self._loc_from_node(node))
-        return result
+        return lowering.lower_expr_BoolOp(node, self._lower_expr_as_bool)
 
     def _lower_expr_UnaryOp(self, node: ast.UnaryOp) -> "ir.Expr":
-        from .. import ir
-        # For 'not' operator, convert operand to boolean first
-        if isinstance(node.op, ast.Not):
-            operand = self._lower_expr_as_bool(node.operand)
-            return ir.UnaryOp(op="!", operand=operand, typ=BOOL, loc=self._loc_from_node(node))
-        operand = self._lower_expr(node.operand)
-        op = self._unaryop_to_str(node.op)
-        return ir.UnaryOp(op=op, operand=operand, typ=Interface("any"), loc=self._loc_from_node(node))
+        return lowering.lower_expr_UnaryOp(node, self._lower_expr, self._lower_expr_as_bool)
 
     def _lower_expr_Call(self, node: ast.Call) -> "ir.Expr":
         from .. import ir

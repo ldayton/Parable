@@ -2518,7 +2518,7 @@ def collect_isinstance_chain(
         check = extract_isinstance_or_chain(current.get("test"), ctx.kind_to_class)
         if not check or check[0] != var_name:
             break
-        _, type_names = check
+        type_names = check[1]
         # Lower body once, generate case for each type
         # For or chains, duplicate the body for each type
         for type_name in type_names:

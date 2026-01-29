@@ -265,6 +265,8 @@ class Verifier:
         # Context flags for eager iteration
         self.in_eager_consumer: bool = False
         self.in_for_iter: bool = False
+        # Variables guarded by `if var:` condition (for tuple unpacking)
+        self.guarded_vars: set[str] = set()
 
     def error(self, node: ASTNode, category: str, message: str) -> None:
         lineno = node.get("lineno", 0)
@@ -305,6 +307,8 @@ class Verifier:
             self.visit_For(node)
         elif node_type == "While":
             self.visit_While(node)
+        elif node_type == "If":
+            self.visit_If(node)
         elif node_type == "Try":
             self.visit_Try(node)
         elif node_type == "ExceptHandler":
@@ -666,11 +670,13 @@ class Verifier:
         """Check assignment constraints."""
         targets = node.get("targets", [])
         value = node.get("value", {})
-        # Check tuple unpack from variable
+        # Check tuple unpack from variable (allowed if guarded by `if var:`)
         if len(targets) == 1:
             target = targets[0]
             if target.get("_type") == "Tuple" and value.get("_type") == "Name":
-                self.error(node, "expression", "tuple unpack from variable: unpack directly from call")
+                var_name = value.get("id", "")
+                if var_name not in self.guarded_vars:
+                    self.error(node, "expression", "tuple unpack from variable: unpack directly from call")
         # Check unannotated field assigns in class
         if self.in_class:
             i = 0
@@ -762,6 +768,55 @@ class Verifier:
         while i < len(body):
             self.visit(body[i])
             i += 1
+        j = 0
+        while j < len(orelse):
+            self.visit(orelse[j])
+            j += 1
+
+    def visit_If(self, node: ASTNode) -> None:
+        """Check if statement and track guarded variables for tuple unpacking."""
+        test = node.get("test")
+        body = node.get("body", [])
+        orelse = node.get("orelse", [])
+        # Check if condition guards a variable for tuple unpacking
+        # Patterns: `if var:`, `if var is not None:`, `if (var := call()) is not None:`
+        guarded_var: str | None = None
+        if test is not None:
+            test_type = test.get("_type", "")
+            if test_type == "Name":
+                # Simple: `if var:`
+                guarded_var = test.get("id")
+            elif test_type == "Compare":
+                # Check for `var is not None` or `(var := ...) is not None`
+                left = test.get("left", {})
+                ops = test.get("ops", [])
+                comparators = test.get("comparators", [])
+                if len(ops) == 1 and len(comparators) == 1:
+                    op = ops[0]
+                    comp = comparators[0]
+                    if op.get("_type") == "IsNot" and is_none_constant(comp):
+                        # Left side is the guarded expression
+                        left_type = left.get("_type", "")
+                        if left_type == "Name":
+                            guarded_var = left.get("id")
+                        elif left_type == "NamedExpr":
+                            # Walrus operator: (var := call()) is not None
+                            target = left.get("target", {})
+                            if target.get("_type") == "Name":
+                                guarded_var = target.get("id")
+        # Visit condition
+        if test is not None:
+            self.visit(test)
+        # Visit then-branch with guarded variable in scope
+        if guarded_var is not None:
+            self.guarded_vars.add(guarded_var)
+        i = 0
+        while i < len(body):
+            self.visit(body[i])
+            i += 1
+        if guarded_var is not None:
+            self.guarded_vars.discard(guarded_var)
+        # Visit else-branch (no guarding)
         j = 0
         while j < len(orelse):
             self.visit(orelse[j])

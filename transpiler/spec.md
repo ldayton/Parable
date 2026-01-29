@@ -214,12 +214,22 @@ Iteration constructs are allowed when statically analyzable as eager (non-lazy).
 
 Not allowed: `g = (x for x in iter)` (assigned), `foo(x for x in iter)` (unknown consumer), `return (x for x in iter)` (returned).
 
-**enumerate / zip** — allowed only in for-loop headers:
+**enumerate / zip** — allowed only in for-loop headers or eager consumers:
 
 | Allowed | Not allowed |
 |---------|-------------|
 | `for i, x in enumerate(iter):` | `e = enumerate(iter)` |
 | `for a, b in zip(xs, ys):` | `foo(zip(xs, ys))` |
+| `list(enumerate(iter))` | `return enumerate(iter)` |
+
+**Tuple unpacking** — from call result or guarded variable:
+
+| Allowed | Not allowed |
+|---------|-------------|
+| `a, b = func()` | `a, b = some_var` |
+| `x = func(); if x: a, b = x` | `x = func(); a, b = x` |
+
+Unpacking from a variable is allowed only when the variable is the condition of an enclosing `if` statement and the unpack occurs in the then-branch. This proves the variable is non-None when the tuple contains an optional result.
 
 **Dataclasses:**
 

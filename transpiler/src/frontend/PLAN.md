@@ -99,25 +99,92 @@ Functions for lowering Python AST to IR.
 
 Depends on: context.py, type_inference.py
 
-### 3. Extract `collection.py` ← NEXT
+### 3. Extract `collection.py` ✅
 
-Functions for multi-pass symbol/type collection.
+Functions for multi-pass symbol/type collection (signature gathering, field discovery, var type inference).
 
-Functions:
-- `collect_class_names(tree, symbols) -> None` (mutates symbols)
-- `collect_signatures(tree, symbols) -> None`
-- `collect_fields(tree, symbols) -> None`
-- `collect_constants(tree, symbols) -> None`
-- `collect_var_types(stmts, symbols, type_ctx) -> tuple[dict, dict, set, dict]`
-- `mark_node_subclasses(symbols) -> set[str]`
-- `mark_exception_subclasses(symbols) -> None`
-- `build_kind_mapping(symbols) -> tuple[dict, dict]`
-- `extract_func_info(node, symbols, class_name) -> FuncInfo`
+**Completed:** commits `a396e5c` through `e494a8b`
+
+**Detailed extraction plan (13 iterations):**
+
+#### Iteration 3.1: Create `collection.py` skeleton + `is_exception_subclass`
+Create module with imports. Extract first standalone function:
+- `is_exception_subclass(name, symbols) -> bool` (recursive, no other deps)
+
+#### Iteration 3.2: Extract `detect_mutated_params`
+Pure AST analysis, no dependencies:
 - `detect_mutated_params(node) -> set[str]`
+
+#### Iteration 3.3: Extract `collect_class_names`
+Simple pass 1 collector:
+- `collect_class_names(tree, symbols, get_base_name) -> None`
+- Needs callback: `get_base_name(base) -> str`
+
+#### Iteration 3.4: Extract `mark_node_subclasses`
+Pass 2 marker using type_inference:
+- `mark_node_subclasses(symbols) -> set[str]`
+- Uses `type_inference.is_node_subclass`
+
+#### Iteration 3.5: Extract `mark_exception_subclasses`
+Pass 2b marker:
+- `mark_exception_subclasses(symbols) -> None`
+- Uses `is_exception_subclass` (local)
+
+#### Iteration 3.6: Extract `build_kind_mapping`
+Pass: build kind -> struct mappings:
+- `build_kind_mapping(symbols) -> tuple[dict[str, str], dict[str, str]]`
+
+#### Iteration 3.7: Extract `collect_constants`
+Pass 5 constant collector:
+- `collect_constants(tree, symbols) -> None`
+
+#### Iteration 3.8: Extract `extract_func_info`
+Signature extraction (complex - needs callbacks):
+- `extract_func_info(node, symbols, is_method, annotation_to_str, py_type_to_ir, py_return_type_to_ir, lower_expr, detect_mutated_params) -> FuncInfo`
+- Consider: define a `CollectionCallbacks` dataclass similar to `LoweringDispatch`
+
+#### Iteration 3.9: Extract `collect_signatures` + `collect_class_methods`
+Pass 3 signature collectors:
+- `collect_signatures(tree, symbols, extract_func_info) -> None`
+- `collect_class_methods(node, symbols, extract_func_info) -> None`
+
+#### Iteration 3.10: Extract `collect_init_fields`
+Init field collection:
+- `collect_init_fields(init, info, annotation_to_str, py_type_to_ir, infer_type_from_value) -> None`
+
+#### Iteration 3.11: Extract `collect_class_fields` + `collect_fields`
+Pass 4 field collectors:
+- `collect_class_fields(node, symbols, annotation_to_str, py_type_to_ir, collect_init_fields) -> None`
+- `collect_fields(tree, symbols, ...) -> None`
+
+#### Iteration 3.12: Extract branch type helpers
+Small helpers for `_collect_var_types`:
+- `unify_branch_types(then_vars, else_vars) -> dict[str, Type]`
+- `infer_branch_expr_type(node, var_types, branch_vars) -> Type`
+- `collect_branch_var_types(stmts, var_types, infer_branch_expr_type) -> dict[str, Type]`
+- `infer_element_type_from_append_arg(arg, var_types, symbols, current_class_name, current_func_info) -> Type`
+
+#### Iteration 3.13: Extract `collect_var_types`
+The big one (~365 lines) - main var type inference:
+- `collect_var_types(stmts, symbols, type_ctx, current_class_name, current_func_info, ...) -> tuple[dict, dict, set, dict]`
+- Consider: may need a `VarTypeContext` dataclass to bundle parameters
+
+**Callback strategy:**
+Define in collection.py:
+```python
+@dataclass
+class CollectionCallbacks:
+    """Callbacks for collection phase that need lowering."""
+    annotation_to_str: Callable[[ast.expr | None], str]
+    py_type_to_ir: Callable[[str, bool], Type]
+    py_return_type_to_ir: Callable[[str], Type]
+    infer_type_from_value: Callable[[ast.expr, dict], Type]
+    lower_expr: Callable[[ast.expr], ir.Expr]  # for default values
+```
 
 Depends on: symbols, type_inference.py (for field type inference)
 
-### 4. Extract `builders.py`
+### 4. Extract `builders.py` ← NEXT
 
 Functions for constructing IR nodes.
 

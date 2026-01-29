@@ -25,12 +25,12 @@ from typing import Literal
 Ownership = Literal["owned", "borrowed", "shared", "weak"]
 """Ownership classification for values and references.
 
-| Kind     | Meaning                          | C                    | Go      | Java    | Rust        | TS      |
-|----------|----------------------------------|----------------------|---------|---------|-------------|---------|
-| owned    | Value owned by this binding      | arena-allocated      | (GC)    | (GC)    | T / Box<T>  | (GC)    |
-| borrowed | Reference to caller's value      | pointer (no free)    | (GC)    | (GC)    | &T          | (GC)    |
-| shared   | Runtime-managed (inference fail) | refcounted           | (GC)    | (GC)    | Rc<T>       | (GC)    |
-| weak     | Back-reference (no ownership)    | non-owning pointer   | (GC)    | WeakRef | Weak<T>     | (GC)    |
+| Kind     | Meaning                          | C                    | Go      | Java    | Python  | Rust        | TS      |
+|----------|----------------------------------|----------------------|---------|---------|---------|-------------|---------|
+| owned    | Value owned by this binding      | arena-allocated      | (GC)    | (GC)    | (GC)    | T / Box<T>  | (GC)    |
+| borrowed | Reference to caller's value      | pointer (no free)    | (GC)    | (GC)    | (GC)    | &T          | (GC)    |
+| shared   | Runtime-managed (inference fail) | refcounted           | (GC)    | (GC)    | (GC)    | Rc<T>       | (GC)    |
+| weak     | Back-reference (no ownership)    | non-owning pointer   | (GC)    | WeakRef | weakref | Weak<T>     | (GC)    |
 
 Default ownership:
 - VarDecl: owned (unless assigned from borrowed)
@@ -83,15 +83,15 @@ class Type:
 class Primitive(Type):
     """Primitive types with direct target-language equivalents.
 
-    | Kind   | C        | Go      | Java    | Rust   | TS      |
-    |--------|----------|---------|---------|--------|---------|
-    | string | char*    | string  | String  | String | string  |
-    | int    | int64_t  | int     | long    | i64    | number  |
-    | bool   | bool     | bool    | boolean | bool   | boolean |
-    | float  | double   | float64 | double  | f64    | number  |
-    | byte   | uint8_t  | byte    | byte    | u8     | number  |
-    | rune   | int32_t  | rune    | int     | char   | string  |
-    | void   | void     | (none)  | void    | ()     | void    |
+    | Kind   | C        | Go      | Java    | Python  | Rust   | TS      |
+    |--------|----------|---------|---------|---------|--------|---------|
+    | string | char*    | string  | String  | str     | String | string  |
+    | int    | int64_t  | int     | long    | int     | i64    | number  |
+    | bool   | bool     | bool    | boolean | bool    | bool   | boolean |
+    | float  | double   | float64 | double  | float   | f64    | number  |
+    | byte   | uint8_t  | byte    | byte    | int     | u8     | number  |
+    | rune   | int32_t  | rune    | int     | str     | char   | string  |
+    | void   | void     | (none)  | void    | None    | ()     | void    |
     """
 
     kind: Literal["string", "int", "bool", "float", "byte", "rune", "void"]
@@ -122,6 +122,7 @@ class CharSequence(Type):
     | C      | int32_t*       |
     | Go     | []rune         |
     | Java   | char[]         |
+    | Python | str            |
     | Rust   | Vec<char>      |
     | TS     | string         |
 
@@ -140,6 +141,7 @@ class Slice(Type):
     | C      | T* + len           |
     | Go     | []T                |
     | Java   | ArrayList<T>       |
+    | Python | list[T]            |
     | Rust   | Vec<T>             |
     | TS     | T[]                |
 
@@ -159,6 +161,7 @@ class Array(Type):
     | C      | T[N]           |
     | Go     | [N]T           |
     | Java   | T[]            |
+    | Python | tuple[T, ...]  |
     | Rust   | [T; N]         |
     | TS     | T[] (readonly) |
 
@@ -180,6 +183,7 @@ class Map(Type):
     | C      | hashmap struct   |
     | Go     | map[K]V          |
     | Java   | HashMap<K, V>    |
+    | Python | dict[K, V]       |
     | Rust   | HashMap<K, V>    |
     | TS     | Map<K, V>        |
 
@@ -201,6 +205,7 @@ class Set(Type):
     | C      | hashset struct   |
     | Go     | map[T]struct{}   |
     | Java   | HashSet<T>       |
+    | Python | set[T]           |
     | Rust   | HashSet<T>       |
     | TS     | Set<T>           |
 
@@ -220,6 +225,7 @@ class Tuple(Type):
     | C      | struct { T1; T2; ... }  |
     | Go     | multiple return values  |
     | Java   | record or Object[]      |
+    | Python | tuple[T1, T2, ...]      |
     | Rust   | (T1, T2, ...)           |
     | TS     | [T1, T2, ...]           |
 
@@ -239,6 +245,7 @@ class Pointer(Type):
     | C      | T*         | T*          |
     | Go     | *T         | *T          |
     | Java   | T          | T           |
+    | Python | T          | T           |
     | Rust   | Box<T>     | &T          |
     | TS     | T          | T           |
 
@@ -259,6 +266,7 @@ class Optional(Type):
     | C      | T* (NULL)      |
     | Go     | *T (nil)       |
     | Java   | Optional<T>    |
+    | Python | T | None       |
     | Rust   | Option<T>      |
     | TS     | T | null       |
 
@@ -289,11 +297,12 @@ class InterfaceRef(Type):
     | C      | void* + vtable      |
     | Go     | InterfaceName       |
     | Java   | InterfaceName       |
+    | Python | Protocol            |
     | Rust   | dyn Trait           |
     | TS     | InterfaceName       |
 
     Special names:
-    - "any": Go any/interface{}, Rust dyn Any, Java Object
+    - "any": Go any/interface{}, Python Any, Rust dyn Any, Java Object
     """
 
     name: str
@@ -310,6 +319,7 @@ class Union(Type):
     | C      | tagged union            |
     | Go     | interface + type switch |
     | Java   | sealed interface        |
+    | Python | Union + @dataclass      |
     | Rust   | enum                    |
     | TS     | discriminated union     |
 
@@ -331,6 +341,7 @@ class FuncType(Type):
     | C      | R (*)(P...)               |
     | Go     | func(P...) R              |
     | Java   | @FunctionalInterface / λ  |
+    | Python | Callable[[P...], R]       |
     | Rust   | fn(P...) -> R / Fn trait  |
     | TS     | (p: P...) => R            |
 
@@ -459,6 +470,7 @@ class Enum:
     | C      | enum or #define          |
     | Go     | const iota or string     |
     | Java   | enum                     |
+    | Python | Enum or StrEnum          |
     | Rust   | enum                     |
     | TS     | enum or union            |
 
@@ -608,6 +620,7 @@ class VarDecl(Stmt):
     | C      | T x = v         | const T x = v |
     | Go     | var x T = v     | (same)        |
     | Java   | T x = v         | final T x = v |
+    | Python | x = v           | x = v         |
     | Rust   | let mut x = v   | let x = v     |
     | TS     | let x = v       | const x = v   |
 
@@ -743,6 +756,7 @@ class TypeSwitch(Stmt):
     | C      | switch on tag + cast              |
     | Go     | switch binding := expr.(type)     |
     | Java   | switch with instanceof patterns   |
+    | Python | match with type guards            |
     | Rust   | match with downcast               |
     | TS     | if/else with typeof/instanceof    |
 
@@ -825,6 +839,7 @@ class ForRange(Stmt):
     | C      | for (i=0; i<len; i++)         |
     | Go     | for i, v := range iterable    |
     | Java   | for (var v : iterable)        |
+    | Python | for i, v in enumerate(iter)   |
     | Rust   | for (i, v) in iter.enumerate()|
     | TS     | for (const [i, v] of entries) |
 
@@ -926,6 +941,7 @@ class TryCatch(Stmt):
     | C      | setjmp/longjmp or error codes |
     | Go     | defer/recover pattern         |
     | Java   | try/catch                     |
+    | Python | try/except                    |
     | Rust   | Result + ? or panic/catch     |
     | TS     | try/catch                     |
 
@@ -957,6 +973,7 @@ class Raise(Stmt):
     | C      | longjmp or return error |
     | Go     | panic(Error{...})       |
     | Java   | throw new Exception(...)|
+    | Python | raise Exception(...)    |
     | Rust   | return Err(...) or panic|
     | TS     | throw new Error(...)    |
     """
@@ -978,6 +995,7 @@ class SoftFail(Stmt):
     | C      | return NULL         |
     | Go     | return nil          |
     | Java   | return Optional.empty() |
+    | Python | return None         |
     | Rust   | return None         |
     | TS     | return null         |
     """
@@ -1290,6 +1308,7 @@ class Truthy(Expr):
     | C      | len > 0 or x != NULL or x != 0    |
     | Go     | len(s) > 0 or x != nil or x != 0  |
     | Java   | !s.isEmpty() or x != null         |
+    | Python | bool(x)                           |
     | Rust   | !s.is_empty() or x.is_some()      |
     | TS     | !!x or x.length > 0               |
 
@@ -1335,6 +1354,7 @@ class Cast(Expr):
     | C      | (T)x           |
     | Go     | T(x)           |
     | Java   | (T) x          |
+    | Python | T(x)           |
     | Rust   | x as T         |
     | TS     | x as T         |
 
@@ -1357,6 +1377,7 @@ class TypeAssert(Expr):
     | C      | tag check + cast    | (T*)x             |
     | Go     | x.(T) with ok check | x.(T) panic       |
     | Java   | instanceof + (T) x  | (T) x             |
+    | Python | assert isinstance   | cast(T, x)        |
     | Rust   | downcast checked    | downcast unchecked|
     | TS     | x as T (with guard) | x as T            |
 
@@ -1380,6 +1401,7 @@ class IsType(Expr):
     | C      | x->tag == T_TAG          |
     | Go     | _, ok := x.(T)           |
     | Java   | x instanceof T           |
+    | Python | isinstance(x, T)         |
     | Rust   | x.is::<T>() or match     |
     | TS     | x instanceof T           |
 
@@ -1402,6 +1424,7 @@ class IsNil(Expr):
     | C      | x == NULL                |
     | Go     | x == nil (or reflection) |
     | Java   | x == null                |
+    | Python | x is None                |
     | Rust   | x.is_none()              |
     | TS     | x === null               |
 
@@ -1429,6 +1452,7 @@ class Len(Expr):
     | C      | x.len          |
     | Go     | len(x)         |
     | Java   | x.size()       |
+    | Python | len(x)         |
     | Rust   | x.len()        |
     | TS     | x.length       |
 
@@ -1449,6 +1473,7 @@ class MakeSlice(Expr):
     | C      | arena_alloc(cap * sizeof(T))|
     | Go     | make([]T, len, cap)         |
     | Java   | new ArrayList<>(cap)        |
+    | Python | []                          |
     | Rust   | Vec::with_capacity(cap)     |
     | TS     | new Array(len)              |
 
@@ -1470,6 +1495,7 @@ class MakeMap(Expr):
     | C      | hashmap_new()       |
     | Go     | make(map[K]V)       |
     | Java   | new HashMap<>()     |
+    | Python | {}                  |
     | Rust   | HashMap::new()      |
     | TS     | new Map()           |
 
@@ -1490,6 +1516,7 @@ class SliceLit(Expr):
     | C      | (T[]){a, b, c}   |
     | Go     | []T{a, b, c}     |
     | Java   | List.of(a, b, c) |
+    | Python | [a, b, c]        |
     | Rust   | vec![a, b, c]    |
     | TS     | [a, b, c]        |
 
@@ -1526,6 +1553,7 @@ class SetLit(Expr):
     | C      | hashset_from(a, b, ...)    |
     | Go     | map[T]struct{}{a: {}, ...} |
     | Java   | Set.of(a, b)               |
+    | Python | {a, b}                     |
     | Rust   | HashSet::from([a, b])      |
     | TS     | new Set([a, b])            |
 
@@ -1560,6 +1588,7 @@ class StructLit(Expr):
     | C      | (StructName){.f1=v1, ...} |
     | Go     | &StructName{f1: v1, ...}  |
     | Java   | new StructName(v1, ...)   |
+    | Python | StructName(f1=v1, ...)    |
     | Rust   | StructName { f1: v1, ... }|
     | TS     | { f1: v1, ... } as T      |
 
@@ -1631,6 +1660,7 @@ class CharAt(Expr):
     | C      | utf8_char_at(s, i)        |
     | Go     | []rune(s)[i] or runes[i]  |
     | Java   | s.charAt(i)               |
+    | Python | s[i]                      |
     | Rust   | s.chars().nth(i)          |
     | TS     | s.charAt(i) or s[i]       |
 
@@ -1655,6 +1685,7 @@ class CharLen(Expr):
     | C      | utf8_char_count(s)  |
     | Go     | len([]rune(s))      |
     | Java   | s.length()          |
+    | Python | len(s)              |
     | Rust   | s.chars().count()   |
     | TS     | s.length            |
 
@@ -1677,6 +1708,7 @@ class Substring(Expr):
     | C      | utf8_substring(s, lo, hi)   |
     | Go     | string([]rune(s)[lo:hi])    |
     | Java   | s.substring(lo, hi)         |
+    | Python | s[lo:hi]                    |
     | Rust   | s.chars().skip(lo).take(hi-lo).collect() |
     | TS     | s.substring(lo, hi)         |
 
@@ -1703,6 +1735,7 @@ class StringConcat(Expr):
     | C      | str_concat(s1, s2, ...)   |
     | Go     | s1 + s2 + ... or builder  |
     | Java   | s1 + s2 or StringBuilder  |
+    | Python | s1 + s2 or f-string       |
     | Rust   | format!("{}{}", s1, s2)   |
     | TS     | s1 + s2 or template       |
 
@@ -1726,6 +1759,7 @@ class StringFormat(Expr):
     | C      | snprintf(buf, tmpl, ...)|
     | Go     | fmt.Sprintf(tmpl, args) |
     | Java   | String.format(tmpl, ...)|
+    | Python | f-string or .format()   |
     | Rust   | format!(tmpl, args)     |
     | TS     | template literal        |
 
@@ -1770,14 +1804,14 @@ class CharClassify(Expr):
 
     Semantics: Test if character belongs to class.
 
-    | Kind   | C           | Go                  | Java                      | Rust                 | TS          |
-    |--------|-------------|---------------------|---------------------------|----------------------|-------------|
-    | alnum  | isalnum(c)  | unicode.IsLetter || unicode.IsDigit | Character.isLetterOrDigit | c.is_alphanumeric() | /\w/.test   |
-    | digit  | isdigit(c)  | unicode.IsDigit     | Character.isDigit         | c.is_ascii_digit()   | /\d/.test   |
-    | alpha  | isalpha(c)  | unicode.IsLetter    | Character.isLetter        | c.is_alphabetic()    | /[a-zA-Z]/  |
-    | space  | isspace(c)  | unicode.IsSpace     | Character.isWhitespace    | c.is_whitespace()    | /\s/.test   |
-    | upper  | isupper(c)  | unicode.IsUpper     | Character.isUpperCase     | c.is_uppercase()     | /[A-Z]/     |
-    | lower  | islower(c)  | unicode.IsLower     | Character.isLowerCase     | c.is_lowercase()     | /[a-z]/     |
+    | Kind   | C           | Go                  | Java                      | Python       | Rust                 | TS          |
+    |--------|-------------|---------------------|---------------------------|--------------|----------------------|-------------|
+    | alnum  | isalnum(c)  | unicode.IsLetter || unicode.IsDigit | Character.isLetterOrDigit | c.isalnum()  | c.is_alphanumeric() | /\w/.test   |
+    | digit  | isdigit(c)  | unicode.IsDigit     | Character.isDigit         | c.isdigit()  | c.is_ascii_digit()   | /\d/.test   |
+    | alpha  | isalpha(c)  | unicode.IsLetter    | Character.isLetter        | c.isalpha()  | c.is_alphabetic()    | /[a-zA-Z]/  |
+    | space  | isspace(c)  | unicode.IsSpace     | Character.isWhitespace    | c.isspace()  | c.is_whitespace()    | /\s/.test   |
+    | upper  | isupper(c)  | unicode.IsUpper     | Character.isUpperCase     | c.isupper()  | c.is_uppercase()     | /[A-Z]/     |
+    | lower  | islower(c)  | unicode.IsLower     | Character.isLowerCase     | c.islower()  | c.is_lowercase()     | /[a-z]/     |
 
     Invariants:
     - char.typ is CHAR or RUNE or STRING (single char)
@@ -1802,6 +1836,7 @@ class ParseInt(Expr):
     | C      | strtoll(s, NULL, 10)  |
     | Go     | strconv.Atoi(s)       |
     | Java   | Integer.parseInt(s)   |
+    | Python | int(s)                |
     | Rust   | s.parse::<i64>()      |
     | TS     | parseInt(s, 10)       |
 
@@ -1824,6 +1859,7 @@ class IntToStr(Expr):
     | C      | snprintf(buf, "%lld", n)  |
     | Go     | strconv.Itoa(n)           |
     | Java   | String.valueOf(n)         |
+    | Python | str(n)                    |
     | Rust   | n.to_string()             |
     | TS     | String(n) or n.toString() |
 
@@ -1848,6 +1884,7 @@ class SentinelToOptional(Expr):
     | C      | x == sentinel ? NULL : &x                  |
     | Go     | if x == sentinel { nil } else { x }        |
     | Java   | x == sentinel ? Optional.empty() : Optional.of(x) |
+    | Python | None if x == sentinel else x               |
     | Rust   | if x == sentinel { None } else { Some(x) } |
     | TS     | x === sentinel ? null : x                  |
 
@@ -1874,6 +1911,7 @@ class AddrOf(Expr):
     | C      | &x             |
     | Go     | &x             |
     | Java   | x (reference)  |
+    | Python | x (reference)  |
     | Rust   | &x or Box::new |
     | TS     | x (reference)  |
 
@@ -1897,6 +1935,7 @@ class WeakRef(Expr):
     | C      | x (no refcount) |
     | Go     | (no change)     |
     | Java   | WeakReference<> |
+    | Python | weakref.ref(x)  |
     | Rust   | Weak::new(&x)   |
     | TS     | WeakRef<>       |
 

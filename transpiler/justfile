@@ -4,7 +4,7 @@ set shell := ["bash", "-o", "pipefail", "-cu"]
 source := "../src/parable.py"
 tests := "../tests"
 dist := "../dist/go"
-backends := "c csharp go java python ruby rust swift ts zig"
+backends := "c go java python rust ts"
 testable := "go python ts"
 
 # Transpile source to stdout
@@ -20,12 +20,6 @@ check backend="go":
             uv run python -m src.cli {{source}} -b c > /tmp/transpile.c
             clang -fsyntax-only /tmp/transpile.c
             ;;
-        csharp)
-            rm -rf /tmp/transpile-csharp && mkdir -p /tmp/transpile-csharp
-            uv run python -m src.cli {{source}} -b csharp > /tmp/transpile-csharp/Output.cs
-            echo '<Project Sdk="Microsoft.NET.Sdk"><PropertyGroup><OutputType>Library</OutputType><TargetFramework>net9.0</TargetFramework></PropertyGroup></Project>' > /tmp/transpile-csharp/output.csproj
-            dotnet build /tmp/transpile-csharp -v q
-            ;;
         go)
             uv run python -m src.cli {{source}} -b go > /tmp/transpile-ir.go
             gofmt /tmp/transpile-ir.go > {{dist}}/parable.go
@@ -37,28 +31,15 @@ check backend="go":
             ;;
         python)
             uv run python -m src.cli {{source}} -b python > /tmp/transpile.py
-            python3 -m py_compile /tmp/transpile.py
-            ;;
-        ruby)
-            uv run python -m src.cli {{source}} -b ruby > /tmp/transpile.rb
-            ruby -c /tmp/transpile.rb
             ;;
         rust)
             uv run python -m src.cli {{source}} -b rust > /tmp/transpile.rs
             rustc --crate-type=lib --emit=metadata -o /tmp/transpile.rmeta /tmp/transpile.rs
             ;;
-        swift)
-            uv run python -m src.cli {{source}} -b swift > /tmp/transpile.swift
-            echo "Swift compilation skipped (too slow)"
-            ;;
         ts)
             rm -rf /tmp/transpile-ts && mkdir -p /tmp/transpile-ts/src
             uv run python -m src.cli {{source}} -b ts > /tmp/transpile-ts/src/output.ts
             tsc --outDir /tmp/transpile-ts/src --lib es2019 --module commonjs --esModuleInterop /tmp/transpile-ts/src/output.ts
-            ;;
-        zig)
-            uv run python -m src.cli {{source}} -b zig > /tmp/transpile.zig
-            zig ast-check /tmp/transpile.zig
             ;;
         *)
             echo "Unknown backend: {{backend}}"

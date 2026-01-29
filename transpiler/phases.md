@@ -1,4 +1,6 @@
-# Tongues Phases
+# Tongues Specification
+
+Tongues is a transpiler for a well-behaved subset of Python. Programs in this subset are valid Python—they execute normally with CPython, work with standard IDEs, debuggers, test frameworks, and tooling. The subset trades dynamic flexibility for compile-time guarantees: all types are known, all calls resolve statically, all ownership is inferrable. This enables generation of idiomatic output in multiple target languages from a single source —- all without shipping a runtime dependency.
 
 Sequential pipeline with clean phase boundaries. Each phase completes before the next starts.
 
@@ -7,6 +9,19 @@ Sequential pipeline with clean phase boundaries. Each phase completes before the
 - **Sequential**: Each phase completes fully before the next starts
 - **Monotonic**: Phase N reads outputs of phases 1..N-1; invariants accumulate
 - **Fail fast**: Reject bad input at the earliest possible phase
+- **Self-hosting**: Tongues can transpile itself; the compiler is written in the subset it accepts
+
+## Supported Output Languages
+
+| Language   | Role   | Reference                          |
+| ---------- | ------ | ---------------------------------- |
+| C          | target | C11 (clang 18)                     |
+| Go         | target | Go 1.23                            |
+| Java       | target | OpenJDK 21                         |
+| Python¹    | source | CPython 3.12                       |
+| Rust       | target | rustc (2021 edition)               |
+
+¹ Output Python reintroduces idioms that the subset input banned
 
 ## Overview
 

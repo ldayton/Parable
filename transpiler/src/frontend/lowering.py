@@ -5,10 +5,12 @@ import ast
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
-from ..ir import Loc
+from ..ir import INT, Loc, Optional, Pointer, Slice
 
 if TYPE_CHECKING:
     from .. import ir
+    from ..ir import FuncInfo, SymbolTable, Type
+    from .context import TypeContext
 
 
 @dataclass
@@ -215,3 +217,310 @@ def resolve_type_name(
     if name in symbols.structs:
         return Pointer(StructRef(name))
     return Interface(name)
+
+
+# ============================================================
+# ARGUMENT HELPERS
+# ============================================================
+
+
+def convert_negative_index(
+    idx_node: ast.expr,
+    obj: "ir.Expr",
+    parent: ast.AST,
+    lower_expr: Callable[[ast.expr], "ir.Expr"],
+) -> "ir.Expr":
+    """Convert negative index -N to len(obj) - N."""
+    from .. import ir
+    # Check for -N pattern (UnaryOp with USub on positive int constant)
+    if isinstance(idx_node, ast.UnaryOp) and isinstance(idx_node.op, ast.USub):
+        if isinstance(idx_node.operand, ast.Constant) and isinstance(idx_node.operand.value, int):
+            n = idx_node.operand.value
+            if n > 0:
+                # len(obj) - N
+                return ir.BinaryOp(
+                    op="-",
+                    left=ir.Len(expr=obj, typ=INT, loc=loc_from_node(parent)),
+                    right=ir.IntLit(value=n, typ=INT, loc=loc_from_node(idx_node)),
+                    typ=INT,
+                    loc=loc_from_node(idx_node)
+                )
+    # Not a negative constant, lower normally
+    return lower_expr(idx_node)
+
+
+def merge_keyword_args(
+    obj_type: "Type",
+    method: str,
+    args: list,
+    node: ast.Call,
+    symbols: "SymbolTable",
+    lower_expr: Callable[[ast.expr], "ir.Expr"],
+    extract_struct_name: Callable[["Type"], str | None],
+) -> list:
+    """Merge keyword arguments into positional args at their proper positions."""
+    if not node.keywords:
+        return args
+    struct_name = extract_struct_name(obj_type)
+    if not struct_name or struct_name not in symbols.structs:
+        return args
+    method_info = symbols.structs[struct_name].methods.get(method)
+    if not method_info:
+        return args
+    # Build param name -> index map
+    param_indices: dict[str, int] = {}
+    for i, param in enumerate(method_info.params):
+        param_indices[param.name] = i
+    # Extend args list if needed
+    result = list(args)
+    for kw in node.keywords:
+        if kw.arg and kw.arg in param_indices:
+            idx = param_indices[kw.arg]
+            # Extend list if necessary
+            while len(result) <= idx:
+                result.append(None)
+            result[idx] = lower_expr(kw.value)
+    return result
+
+
+def fill_default_args(
+    obj_type: "Type",
+    method: str,
+    args: list,
+    symbols: "SymbolTable",
+    extract_struct_name: Callable[["Type"], str | None],
+) -> list:
+    """Fill in missing arguments with default values for methods with optional params."""
+    struct_name = extract_struct_name(obj_type)
+    method_info = None
+    if struct_name and struct_name in symbols.structs:
+        method_info = symbols.structs[struct_name].methods.get(method)
+    # If struct lookup failed, search all structs for this method (for union-typed receivers)
+    if not method_info:
+        for s_name, s_info in symbols.structs.items():
+            if method in s_info.methods:
+                method_info = s_info.methods[method]
+                break
+    if not method_info:
+        return args
+    n_expected = len(method_info.params)
+    # Extend to full length if needed
+    result = list(args)
+    while len(result) < n_expected:
+        result.append(None)
+    # Fill in None slots with defaults
+    for i, arg in enumerate(result):
+        if arg is None and i < n_expected:
+            param = method_info.params[i]
+            if param.has_default and param.default_value is not None:
+                result[i] = param.default_value
+    return result
+
+
+def merge_keyword_args_for_func(
+    func_info: "FuncInfo",
+    args: list,
+    node: ast.Call,
+    lower_expr: Callable[[ast.expr], "ir.Expr"],
+) -> list:
+    """Merge keyword arguments into positional args at their proper positions for free functions."""
+    if not node.keywords:
+        return args
+    # Build param name -> index map
+    param_indices: dict[str, int] = {}
+    for i, param in enumerate(func_info.params):
+        param_indices[param.name] = i
+    # Extend args list if needed and place keyword args
+    result = list(args)
+    for kw in node.keywords:
+        if kw.arg and kw.arg in param_indices:
+            idx = param_indices[kw.arg]
+            # Extend list if necessary
+            while len(result) <= idx:
+                result.append(None)
+            result[idx] = lower_expr(kw.value)
+    return result
+
+
+def fill_default_args_for_func(func_info: "FuncInfo", args: list) -> list:
+    """Fill in missing arguments with default values for free functions with optional params."""
+    n_expected = len(func_info.params)
+    if len(args) >= n_expected:
+        return args
+    # Extend to full length if needed
+    result = list(args)
+    while len(result) < n_expected:
+        result.append(None)
+    # Fill in None slots with defaults
+    for i, arg in enumerate(result):
+        if arg is None and i < n_expected:
+            param = func_info.params[i]
+            if param.has_default and param.default_value is not None:
+                result[i] = param.default_value
+    return result
+
+
+def add_address_of_for_ptr_params(
+    obj_type: "Type",
+    method: str,
+    args: list,
+    orig_args: list[ast.expr],
+    symbols: "SymbolTable",
+    extract_struct_name: Callable[["Type"], str | None],
+    infer_expr_type_from_ast: Callable[[ast.expr], "Type"],
+) -> list:
+    """Add & when passing slice to pointer-to-slice parameter."""
+    from .. import ir
+    struct_name = extract_struct_name(obj_type)
+    if not struct_name or struct_name not in symbols.structs:
+        return args
+    method_info = symbols.structs[struct_name].methods.get(method)
+    if not method_info:
+        return args
+    result = list(args)
+    for i, arg in enumerate(result):
+        if i >= len(method_info.params) or i >= len(orig_args):
+            break
+        param = method_info.params[i]
+        param_type = param.typ
+        # Check if param expects pointer to slice but arg is slice
+        if isinstance(param_type, Pointer) and isinstance(param_type.target, Slice):
+            # Infer arg type from AST
+            arg_type = infer_expr_type_from_ast(orig_args[i])
+            if isinstance(arg_type, Slice) and not isinstance(arg_type, Pointer):
+                # Wrap with address-of
+                result[i] = ir.UnaryOp(op="&", operand=arg, typ=param_type, loc=arg.loc if hasattr(arg, 'loc') else Loc.unknown())
+    return result
+
+
+def deref_for_slice_params(
+    obj_type: "Type",
+    method: str,
+    args: list,
+    orig_args: list[ast.expr],
+    symbols: "SymbolTable",
+    extract_struct_name: Callable[["Type"], str | None],
+    infer_expr_type_from_ast: Callable[[ast.expr], "Type"],
+) -> list:
+    """Dereference * when passing pointer-to-slice to slice parameter."""
+    from .. import ir
+    struct_name = extract_struct_name(obj_type)
+    if not struct_name or struct_name not in symbols.structs:
+        return args
+    method_info = symbols.structs[struct_name].methods.get(method)
+    if not method_info:
+        return args
+    result = list(args)
+    for i, arg in enumerate(result):
+        if i >= len(method_info.params) or i >= len(orig_args):
+            break
+        param = method_info.params[i]
+        param_type = param.typ
+        # Check if param expects slice but arg is pointer/optional to slice
+        if isinstance(param_type, Slice) and not isinstance(param_type, Pointer):
+            arg_type = infer_expr_type_from_ast(orig_args[i])
+            inner_slice = get_inner_slice(arg_type)
+            if inner_slice is not None:
+                result[i] = ir.UnaryOp(op="*", operand=arg, typ=inner_slice, loc=arg.loc if hasattr(arg, 'loc') else Loc.unknown())
+    return result
+
+
+def deref_for_func_slice_params(
+    func_name: str,
+    args: list,
+    orig_args: list[ast.expr],
+    symbols: "SymbolTable",
+    infer_expr_type_from_ast: Callable[[ast.expr], "Type"],
+) -> list:
+    """Dereference * when passing pointer-to-slice to slice parameter for free functions."""
+    from .. import ir
+    if func_name not in symbols.functions:
+        return args
+    func_info = symbols.functions[func_name]
+    result = list(args)
+    for i, arg in enumerate(result):
+        if i >= len(func_info.params) or i >= len(orig_args):
+            break
+        param = func_info.params[i]
+        param_type = param.typ
+        # Check if param expects slice but arg is pointer/optional to slice
+        if isinstance(param_type, Slice) and not isinstance(param_type, Pointer):
+            arg_type = infer_expr_type_from_ast(orig_args[i])
+            inner_slice = get_inner_slice(arg_type)
+            if inner_slice is not None:
+                result[i] = ir.UnaryOp(op="*", operand=arg, typ=inner_slice, loc=arg.loc if hasattr(arg, 'loc') else Loc.unknown())
+    return result
+
+
+def coerce_args_to_node(func_info: "FuncInfo", args: list) -> list:
+    """Add type assertions when passing interface{} to Node parameter."""
+    from .. import ir
+    from ..ir import Interface
+    result = list(args)
+    for i, arg in enumerate(result):
+        if i >= len(func_info.params):
+            break
+        param = func_info.params[i]
+        param_type = param.typ
+        # Check if param expects Node but arg is interface{}
+        if isinstance(param_type, Interface) and param_type.name == "Node":
+            arg_type = getattr(arg, 'typ', None)
+            # interface{} is represented as Interface("any")
+            if arg_type == Interface("any"):
+                result[i] = ir.TypeAssert(
+                    expr=arg, asserted=Interface("Node"), safe=True,
+                    typ=Interface("Node"), loc=arg.loc if hasattr(arg, 'loc') else Loc.unknown()
+                )
+    return result
+
+
+def is_pointer_to_slice(typ: "Type") -> bool:
+    """Check if type is pointer-to-slice (Pointer(Slice) only, NOT Optional(Slice))."""
+    if isinstance(typ, Pointer) and isinstance(typ.target, Slice):
+        return True
+    return False
+
+
+def is_len_call(node: ast.expr) -> bool:
+    """Check if node is a len() call."""
+    return (isinstance(node, ast.Call) and
+            isinstance(node.func, ast.Name) and
+            node.func.id == "len")
+
+
+def get_inner_slice(typ: "Type") -> Slice | None:
+    """Get the inner Slice from Pointer(Slice) only, NOT Optional(Slice)."""
+    if isinstance(typ, Pointer) and isinstance(typ.target, Slice):
+        return typ.target
+    return None
+
+
+def coerce_sentinel_to_ptr(
+    obj_type: "Type",
+    method: str,
+    args: list,
+    orig_args: list,
+    symbols: "SymbolTable",
+    sentinel_ints: set[str],
+    extract_struct_name: Callable[["Type"], str | None],
+) -> list:
+    """Wrap sentinel ints with _intPtr() when passing to Optional(int) params."""
+    from .. import ir
+    struct_name = extract_struct_name(obj_type)
+    if not struct_name or struct_name not in symbols.structs:
+        return args
+    method_info = symbols.structs[struct_name].methods.get(method)
+    if not method_info:
+        return args
+    result = list(args)
+    for i, (arg, param) in enumerate(zip(result, method_info.params)):
+        if arg is None:
+            continue
+        # Check if parameter expects *int and argument is a sentinel int variable
+        if isinstance(param.typ, Optional) and param.typ.inner == INT:
+            if i < len(orig_args) and isinstance(orig_args[i], ast.Name):
+                var_name = orig_args[i].id
+                if var_name in sentinel_ints:
+                    # Wrap in _intPtr() call
+                    result[i] = ir.Call(func="_intPtr", args=[arg], typ=param.typ, loc=arg.loc)
+    return result

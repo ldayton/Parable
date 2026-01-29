@@ -1379,160 +1379,39 @@ class Frontend:
 
     def _merge_keyword_args(self, obj_type: Type, method: str, args: list, node: ast.Call) -> list:
         """Merge keyword arguments into positional args at their proper positions."""
-        from .. import ir
-        if not node.keywords:
-            return args
-        struct_name = self._extract_struct_name(obj_type)
-        if not struct_name or struct_name not in self.symbols.structs:
-            return args
-        method_info = self.symbols.structs[struct_name].methods.get(method)
-        if not method_info:
-            return args
-        # Build param name -> index map
-        param_indices: dict[str, int] = {}
-        for i, param in enumerate(method_info.params):
-            param_indices[param.name] = i
-        # Extend args list if needed
-        result = list(args)
-        for kw in node.keywords:
-            if kw.arg and kw.arg in param_indices:
-                idx = param_indices[kw.arg]
-                # Extend list if necessary
-                while len(result) <= idx:
-                    result.append(None)
-                result[idx] = self._lower_expr(kw.value)
-        return result
+        return lowering.merge_keyword_args(
+            obj_type, method, args, node, self.symbols, self._lower_expr, self._extract_struct_name
+        )
 
     def _fill_default_args(self, obj_type: Type, method: str, args: list) -> list:
         """Fill in missing arguments with default values for methods with optional params."""
-        from .. import ir
-        struct_name = self._extract_struct_name(obj_type)
-        method_info = None
-        if struct_name and struct_name in self.symbols.structs:
-            method_info = self.symbols.structs[struct_name].methods.get(method)
-        # If struct lookup failed, search all structs for this method (for union-typed receivers)
-        if not method_info:
-            for s_name, s_info in self.symbols.structs.items():
-                if method in s_info.methods:
-                    method_info = s_info.methods[method]
-                    break
-        if not method_info:
-            return args
-        n_expected = len(method_info.params)
-        # Extend to full length if needed
-        result = list(args)
-        while len(result) < n_expected:
-            result.append(None)
-        # Fill in None slots with defaults
-        for i, arg in enumerate(result):
-            if arg is None and i < n_expected:
-                param = method_info.params[i]
-                if param.has_default and param.default_value is not None:
-                    result[i] = param.default_value
-        return result
+        return lowering.fill_default_args(obj_type, method, args, self.symbols, self._extract_struct_name)
 
     def _merge_keyword_args_for_func(self, func_info: FuncInfo, args: list, node: ast.Call) -> list:
         """Merge keyword arguments into positional args at their proper positions for free functions."""
-        if not node.keywords:
-            return args
-        # Build param name -> index map
-        param_indices: dict[str, int] = {}
-        for i, param in enumerate(func_info.params):
-            param_indices[param.name] = i
-        # Extend args list if needed and place keyword args
-        result = list(args)
-        for kw in node.keywords:
-            if kw.arg and kw.arg in param_indices:
-                idx = param_indices[kw.arg]
-                # Extend list if necessary
-                while len(result) <= idx:
-                    result.append(None)
-                result[idx] = self._lower_expr(kw.value)
-        return result
+        return lowering.merge_keyword_args_for_func(func_info, args, node, self._lower_expr)
 
     def _fill_default_args_for_func(self, func_info: FuncInfo, args: list) -> list:
         """Fill in missing arguments with default values for free functions with optional params."""
-        n_expected = len(func_info.params)
-        if len(args) >= n_expected:
-            return args
-        # Extend to full length if needed
-        result = list(args)
-        while len(result) < n_expected:
-            result.append(None)
-        # Fill in None slots with defaults
-        for i, arg in enumerate(result):
-            if arg is None and i < n_expected:
-                param = func_info.params[i]
-                if param.has_default and param.default_value is not None:
-                    result[i] = param.default_value
-        return result
+        return lowering.fill_default_args_for_func(func_info, args)
 
     def _add_address_of_for_ptr_params(self, obj_type: Type, method: str, args: list, orig_args: list[ast.expr]) -> list:
         """Add & when passing slice to pointer-to-slice parameter."""
-        from .. import ir
-        struct_name = self._extract_struct_name(obj_type)
-        if not struct_name or struct_name not in self.symbols.structs:
-            return args
-        method_info = self.symbols.structs[struct_name].methods.get(method)
-        if not method_info:
-            return args
-        result = list(args)
-        for i, arg in enumerate(result):
-            if i >= len(method_info.params) or i >= len(orig_args):
-                break
-            param = method_info.params[i]
-            param_type = param.typ
-            # Check if param expects pointer to slice but arg is slice
-            if isinstance(param_type, Pointer) and isinstance(param_type.target, Slice):
-                # Infer arg type from AST
-                arg_type = self._infer_expr_type_from_ast(orig_args[i])
-                if isinstance(arg_type, Slice) and not isinstance(arg_type, Pointer):
-                    # Wrap with address-of
-                    result[i] = ir.UnaryOp(op="&", operand=arg, typ=param_type, loc=arg.loc if hasattr(arg, 'loc') else Loc.unknown())
-        return result
+        return lowering.add_address_of_for_ptr_params(
+            obj_type, method, args, orig_args, self.symbols, self._extract_struct_name, self._infer_expr_type_from_ast
+        )
 
     def _deref_for_slice_params(self, obj_type: Type, method: str, args: list, orig_args: list[ast.expr]) -> list:
         """Dereference * when passing pointer-to-slice to slice parameter."""
-        from .. import ir
-        struct_name = self._extract_struct_name(obj_type)
-        if not struct_name or struct_name not in self.symbols.structs:
-            return args
-        method_info = self.symbols.structs[struct_name].methods.get(method)
-        if not method_info:
-            return args
-        result = list(args)
-        for i, arg in enumerate(result):
-            if i >= len(method_info.params) or i >= len(orig_args):
-                break
-            param = method_info.params[i]
-            param_type = param.typ
-            # Check if param expects slice but arg is pointer/optional to slice
-            if isinstance(param_type, Slice) and not isinstance(param_type, Pointer):
-                arg_type = self._infer_expr_type_from_ast(orig_args[i])
-                inner_slice = self._get_inner_slice(arg_type)
-                if inner_slice is not None:
-                    result[i] = ir.UnaryOp(op="*", operand=arg, typ=inner_slice, loc=arg.loc if hasattr(arg, 'loc') else Loc.unknown())
-        return result
+        return lowering.deref_for_slice_params(
+            obj_type, method, args, orig_args, self.symbols, self._extract_struct_name, self._infer_expr_type_from_ast
+        )
 
     def _deref_for_func_slice_params(self, func_name: str, args: list, orig_args: list[ast.expr]) -> list:
         """Dereference * when passing pointer-to-slice to slice parameter for free functions."""
-        from .. import ir
-        if func_name not in self.symbols.functions:
-            return args
-        func_info = self.symbols.functions[func_name]
-        result = list(args)
-        for i, arg in enumerate(result):
-            if i >= len(func_info.params) or i >= len(orig_args):
-                break
-            param = func_info.params[i]
-            param_type = param.typ
-            # Check if param expects slice but arg is pointer/optional to slice
-            if isinstance(param_type, Slice) and not isinstance(param_type, Pointer):
-                arg_type = self._infer_expr_type_from_ast(orig_args[i])
-                inner_slice = self._get_inner_slice(arg_type)
-                if inner_slice is not None:
-                    result[i] = ir.UnaryOp(op="*", operand=arg, typ=inner_slice, loc=arg.loc if hasattr(arg, 'loc') else Loc.unknown())
-        return result
+        return lowering.deref_for_func_slice_params(
+            func_name, args, orig_args, self.symbols, self._infer_expr_type_from_ast
+        )
 
     def _extract_struct_name(self, typ: Type) -> str | None:
         """Extract struct name from wrapped types like Pointer, Optional, etc."""
@@ -1540,71 +1419,25 @@ class Frontend:
 
     def _coerce_args_to_node(self, func_info: "FuncInfo", args: list) -> list:
         """Add type assertions when passing interface{} to Node parameter."""
-        from .. import ir
-        from ..ir import FuncInfo
-        result = list(args)
-        for i, arg in enumerate(result):
-            if i >= len(func_info.params):
-                break
-            param = func_info.params[i]
-            param_type = param.typ
-            # Check if param expects Node but arg is interface{}
-            if isinstance(param_type, Interface) and param_type.name == "Node":
-                arg_type = getattr(arg, 'typ', None)
-                # interface{} is represented as Interface("any")
-                if arg_type == Interface("any"):
-                    result[i] = ir.TypeAssert(
-                        expr=arg, asserted=Interface("Node"), safe=True,
-                        typ=Interface("Node"), loc=arg.loc if hasattr(arg, 'loc') else Loc.unknown()
-                    )
-        return result
+        return lowering.coerce_args_to_node(func_info, args)
 
     def _is_pointer_to_slice(self, typ: Type) -> bool:
-        """Check if type is pointer-to-slice (Pointer(Slice) only, NOT Optional(Slice)).
-
-        Optional(Slice) represents a nullable slice where null has semantic meaning,
-        but the slice itself doesn't need dereference - slices are already nullable.
-        """
-        if isinstance(typ, Pointer) and isinstance(typ.target, Slice):
-            return True
-        return False
+        """Check if type is pointer-to-slice (Pointer(Slice) only, NOT Optional(Slice))."""
+        return lowering.is_pointer_to_slice(typ)
 
     def _is_len_call(self, node: ast.expr) -> bool:
         """Check if node is a len() call."""
-        return (isinstance(node, ast.Call) and
-                isinstance(node.func, ast.Name) and
-                node.func.id == "len")
+        return lowering.is_len_call(node)
 
     def _get_inner_slice(self, typ: Type) -> Slice | None:
-        """Get the inner Slice from Pointer(Slice) only, NOT Optional(Slice).
-
-        Optional(Slice) doesn't need dereference - slices are already nullable.
-        """
-        if isinstance(typ, Pointer) and isinstance(typ.target, Slice):
-            return typ.target
-        return None
+        """Get the inner Slice from Pointer(Slice) only, NOT Optional(Slice)."""
+        return lowering.get_inner_slice(typ)
 
     def _coerce_sentinel_to_ptr(self, obj_type: Type, method: str, args: list, orig_args: list) -> list:
         """Wrap sentinel ints with _intPtr() when passing to Optional(int) params."""
-        from .. import ir
-        struct_name = self._extract_struct_name(obj_type)
-        if not struct_name or struct_name not in self.symbols.structs:
-            return args
-        method_info = self.symbols.structs[struct_name].methods.get(method)
-        if not method_info:
-            return args
-        result = list(args)
-        for i, (arg, param) in enumerate(zip(result, method_info.params)):
-            if arg is None:
-                continue
-            # Check if parameter expects *int and argument is a sentinel int variable
-            if isinstance(param.typ, Optional) and param.typ.inner == INT:
-                if i < len(orig_args) and isinstance(orig_args[i], ast.Name):
-                    var_name = orig_args[i].id
-                    if var_name in self._type_ctx.sentinel_ints:
-                        # Wrap in _intPtr() call
-                        result[i] = ir.Call(func="_intPtr", args=[arg], typ=param.typ, loc=arg.loc)
-        return result
+        return lowering.coerce_sentinel_to_ptr(
+            obj_type, method, args, orig_args, self.symbols, self._type_ctx.sentinel_ints, self._extract_struct_name
+        )
 
     def _infer_call_return_type(self, node: ast.Call) -> Type:
         """Infer the return type of a function or method call."""
@@ -1914,22 +1747,7 @@ class Frontend:
 
     def _convert_negative_index(self, idx_node: ast.expr, obj: "ir.Expr", parent: ast.AST) -> "ir.Expr":
         """Convert negative index -N to len(obj) - N."""
-        from .. import ir
-        # Check for -N pattern (UnaryOp with USub on positive int constant)
-        if isinstance(idx_node, ast.UnaryOp) and isinstance(idx_node.op, ast.USub):
-            if isinstance(idx_node.operand, ast.Constant) and isinstance(idx_node.operand.value, int):
-                n = idx_node.operand.value
-                if n > 0:
-                    # len(obj) - N
-                    return ir.BinaryOp(
-                        op="-",
-                        left=ir.Len(expr=obj, typ=INT, loc=self._loc_from_node(parent)),
-                        right=ir.IntLit(value=n, typ=INT, loc=self._loc_from_node(idx_node)),
-                        typ=INT,
-                        loc=self._loc_from_node(idx_node)
-                    )
-        # Not a negative constant, lower normally
-        return self._lower_expr(idx_node)
+        return lowering.convert_negative_index(idx_node, obj, parent, self._lower_expr)
 
     def _infer_expr_type_from_ast(self, node: ast.expr) -> Type:
         """Infer the type of a Python AST expression without lowering it."""

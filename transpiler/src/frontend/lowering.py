@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Callable
 
 from ..ir import BOOL, BYTE, FLOAT, INT, RUNE, STRING, VOID, InterfaceRef, Loc, Map, Optional, Pointer, Set, Slice, StringFormat, StructRef, Tuple
 from ..type_overrides import NODE_METHOD_TYPES, VAR_TYPE_OVERRIDES
+from . import type_inference
 
 if TYPE_CHECKING:
     from .. import ir
@@ -1387,7 +1388,7 @@ def lower_expr_Call(
             )
         # Check if calling a method on a Node-typed expression that needs type assertion
         # Do this early so we can use the asserted type for default arg lookup
-        if dispatch.is_node_interface_type(obj_type) and method in NODE_METHOD_TYPES:
+        if type_inference.is_node_interface_type(obj_type) and method in NODE_METHOD_TYPES:
             struct_name = NODE_METHOD_TYPES[method]
             asserted_type = Pointer(StructRef(struct_name))
             obj = ir.TypeAssert(
@@ -1420,7 +1421,7 @@ def lower_expr_Call(
             arg = args[0]
             arg_type = dispatch.infer_expr_type_from_ast(node.args[0])
             # Dereference Pointer(Slice) or Optional(Slice) for len()
-            inner_slice = dispatch.get_inner_slice(arg_type)
+            inner_slice = get_inner_slice(arg_type)
             if inner_slice is not None:
                 arg = ir.UnaryOp(op="*", operand=arg, typ=inner_slice, loc=arg.loc)
             return ir.Len(expr=arg, typ=INT, loc=loc_from_node(node))
@@ -2081,7 +2082,7 @@ def lower_stmt_For(
     # Determine loop variable types based on iterable type
     iterable_type = dispatch.infer_expr_type_from_ast(node.iter)
     # Dereference Pointer(Slice) or Optional(Slice) for range
-    inner_slice = dispatch.get_inner_slice(iterable_type)
+    inner_slice = get_inner_slice(iterable_type)
     if inner_slice is not None:
         iterable = ir.UnaryOp(op="*", operand=iterable, typ=inner_slice, loc=iterable.loc)
         iterable_type = inner_slice
@@ -2215,7 +2216,7 @@ def _lower_expr_Attribute_dispatch(node: ast.Attribute, ctx: "FrontendContext", 
     from ..type_overrides import NODE_FIELD_TYPES
     return lower_expr_Attribute(
         node, ctx.symbols, ctx.type_ctx, ctx.current_class_name,
-        NODE_FIELD_TYPES, d.lower_expr, d.is_node_interface_type
+        NODE_FIELD_TYPES, d.lower_expr, type_inference.is_node_interface_type
     )
 
 

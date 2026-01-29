@@ -515,10 +515,6 @@ class Frontend:
         """Check if node is a len() call."""
         return lowering.is_len_call(node)
 
-    def _get_inner_slice(self, typ: Type) -> Slice | None:
-        """Get the inner Slice from Pointer(Slice) only, NOT Optional(Slice)."""
-        return lowering.get_inner_slice(typ)
-
     def _coerce_sentinel_to_ptr(self, obj_type: Type, method: str, args: list, orig_args: list) -> list:
         """Wrap sentinel ints with _intPtr() when passing to Optional(int) params."""
         return lowering.coerce_sentinel_to_ptr(
@@ -570,13 +566,9 @@ class Frontend:
             annotation_to_str=self._annotation_to_str,
             py_type_to_ir=self._py_type_to_ir,
             make_default_value=self._make_default_value,
-            extract_struct_name=self._extract_struct_name,
-            is_exception_subclass=self._is_exception_subclass,
-            is_node_subclass=self._is_node_subclass,
             is_sentinel_int=self._is_sentinel_int,
             get_sentinel_value=self._get_sentinel_value,
             resolve_type_name=self._resolve_type_name,
-            get_inner_slice=self._get_inner_slice,
             merge_keyword_args=self._merge_keyword_args,
             fill_default_args=self._fill_default_args,
             merge_keyword_args_for_func=self._merge_keyword_args_for_func,
@@ -586,7 +578,6 @@ class Frontend:
             deref_for_func_slice_params=self._deref_for_func_slice_params,
             coerce_sentinel_to_ptr=self._coerce_sentinel_to_ptr,
             coerce_args_to_node=self._coerce_args_to_node,
-            is_node_interface_type=self._is_node_interface_type,
             synthesize_method_return_type=self._synthesize_method_return_type,
             set_catch_var=self._set_catch_var,
         )
@@ -603,10 +594,6 @@ class Frontend:
         """Lower a Python expression to IR."""
         ctx, dispatch = self._make_ctx_and_dispatch()
         return lowering.lower_expr(node, ctx, dispatch)
-
-    def _is_node_interface_type(self, typ: Type | None) -> bool:
-        """Check if a type is the Node interface type."""
-        return type_inference.is_node_interface_type(typ)
 
     def _infer_expr_type_from_ast(self, node: ast.expr) -> Type:
         """Infer the type of a Python AST expression without lowering it."""

@@ -60,13 +60,9 @@ class LoweringDispatch:
     annotation_to_str: Callable[[ast.expr | None], str]
     py_type_to_ir: Callable[[str, bool], "Type"]
     make_default_value: Callable[["Type", "Loc"], "ir.Expr"]
-    extract_struct_name: Callable[["Type"], str | None]
-    is_exception_subclass: Callable[[str], bool]
-    is_node_subclass: Callable[[str], bool]
     is_sentinel_int: Callable[[ast.expr], bool]
     get_sentinel_value: Callable[[ast.expr], int | None]
     resolve_type_name: Callable[[str], "Type"]
-    get_inner_slice: Callable[["Type"], "ir.Slice | None"]
     # Method/function argument handling
     merge_keyword_args: Callable[["Type", str, list, ast.Call], list]
     fill_default_args: Callable[["Type", str, list], list]
@@ -78,7 +74,6 @@ class LoweringDispatch:
     coerce_sentinel_to_ptr: Callable[["Type", str, list, list], list]
     coerce_args_to_node: Callable[["FuncInfo", list], list]
     # Type predicates
-    is_node_interface_type: Callable[["Type | None"], bool]
     synthesize_method_return_type: Callable[["Type", str], "Type"]
     # Exception handling
     set_catch_var: Callable[[str | None], str | None]

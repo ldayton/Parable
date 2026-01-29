@@ -204,67 +204,20 @@ class Frontend:
 
     def _build_module(self, tree: ast.Module) -> Module:
         """Build IR Module from collected symbols."""
-        from .. import ir
-        module = Module(name="parable")
-        # Build constants from MODULE_CONSTANTS overrides
-        for const_name, (const_type, go_value) in MODULE_CONSTANTS.items():
-            # Strip quotes from go_value to get the actual string content
-            str_value = go_value.strip('"')
-            value = ir.StringLit(value=str_value, typ=STRING, loc=Loc.unknown())
-            module.constants.append(
-                Constant(name=const_name, typ=const_type, value=value, loc=Loc.unknown())
-            )
-        # Build constants (module-level and class-level)
-        for node in tree.body:
-            if isinstance(node, ast.Assign) and len(node.targets) == 1:
-                target = node.targets[0]
-                # Skip constants already handled by MODULE_CONSTANTS
-                if isinstance(target, ast.Name) and target.id in MODULE_CONSTANTS:
-                    continue
-                if isinstance(target, ast.Name) and target.id in self.symbols.constants:
-                    value = self._lower_expr(node.value)
-                    const_type = self.symbols.constants[target.id]
-                    module.constants.append(
-                        Constant(name=target.id, typ=const_type, value=value, loc=self._loc_from_node(node))
-                    )
-            elif isinstance(node, ast.ClassDef):
-                # Build class-level constants
-                for stmt in node.body:
-                    if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
-                        target = stmt.targets[0]
-                        if isinstance(target, ast.Name) and target.id.isupper():
-                            const_name = f"{node.name}_{target.id}"
-                            if const_name in self.symbols.constants:
-                                value = self._lower_expr(stmt.value)
-                                module.constants.append(
-                                    Constant(name=const_name, typ=INT, value=value, loc=self._loc_from_node(stmt))
-                                )
-        # Build Node interface (abstract base for AST nodes)
-        node_interface = InterfaceDef(
-            name="Node",
-            methods=[
-                MethodSig(name="GetKind", params=[], ret=STRING),
-                MethodSig(name="ToSexp", params=[], ret=STRING),
-            ],
+        callbacks = builders.BuilderCallbacks(
+            annotation_to_str=self._annotation_to_str,
+            py_type_to_ir=self._py_type_to_ir,
+            py_return_type_to_ir=self._py_return_type_to_ir,
+            lower_expr=self._lower_expr,
+            lower_stmts=self._lower_stmts,
+            collect_var_types=self._collect_var_types,
+            is_exception_subclass=self._is_exception_subclass,
+            extract_union_struct_names=self._extract_union_struct_names,
+            loc_from_node=self._loc_from_node,
+            setup_context=self._setup_context,
+            setup_and_lower_stmts=self._setup_and_lower_stmts,
         )
-        module.interfaces.append(node_interface)
-        # Build structs (with method bodies) and collect constructor functions
-        constructor_funcs: list[Function] = []
-        for node in tree.body:
-            if isinstance(node, ast.ClassDef):
-                struct, ctor = self._build_struct(node, with_body=True)
-                if struct:
-                    module.structs.append(struct)
-                if ctor:
-                    constructor_funcs.append(ctor)
-        # Build functions (with bodies)
-        for node in tree.body:
-            if isinstance(node, ast.FunctionDef):
-                func = self._build_function_shell(node, with_body=True)
-                module.functions.append(func)
-        # Add constructor functions (must come after regular functions for dependency order)
-        module.functions.extend(constructor_funcs)
-        return module
+        return builders.build_module(tree, self.symbols, callbacks)
 
     def _build_struct(self, node: ast.ClassDef, with_body: bool = False) -> tuple[Struct | None, Function | None]:
         """Build IR Struct from class definition. Returns (struct, constructor_func)."""

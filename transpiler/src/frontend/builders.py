@@ -5,8 +5,8 @@ import ast
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
-from ..ir import INT, Field, Function, Interface, Loc, Param, Pointer, Receiver, Struct, StructRef, VOID
-from ..type_overrides import PARAM_TYPE_OVERRIDES
+from ..ir import INT, Constant, Field, Function, Interface, InterfaceDef, Loc, MethodSig, Module, Param, Pointer, Receiver, STRING, Struct, StructRef, VOID
+from ..type_overrides import MODULE_CONSTANTS, PARAM_TYPE_OVERRIDES
 
 if TYPE_CHECKING:
     from .. import ir
@@ -342,3 +342,72 @@ def build_struct(
         # Exception subclass with no __init__ - forward to parent constructor
         ctor_func = build_forwarding_constructor(node.name, embedded_type, symbols)
     return struct, ctor_func
+
+
+def build_module(
+    tree: ast.Module,
+    symbols: "SymbolTable",
+    callbacks: BuilderCallbacks,
+) -> Module:
+    """Build IR Module from collected symbols."""
+    from .. import ir
+    module = Module(name="parable")
+    # Build constants from MODULE_CONSTANTS overrides
+    for const_name, (const_type, go_value) in MODULE_CONSTANTS.items():
+        # Strip quotes from go_value to get the actual string content
+        str_value = go_value.strip('"')
+        value = ir.StringLit(value=str_value, typ=STRING, loc=Loc.unknown())
+        module.constants.append(
+            Constant(name=const_name, typ=const_type, value=value, loc=Loc.unknown())
+        )
+    # Build constants (module-level and class-level)
+    for node in tree.body:
+        if isinstance(node, ast.Assign) and len(node.targets) == 1:
+            target = node.targets[0]
+            # Skip constants already handled by MODULE_CONSTANTS
+            if isinstance(target, ast.Name) and target.id in MODULE_CONSTANTS:
+                continue
+            if isinstance(target, ast.Name) and target.id in symbols.constants:
+                value = callbacks.lower_expr(node.value)
+                const_type = symbols.constants[target.id]
+                module.constants.append(
+                    Constant(name=target.id, typ=const_type, value=value, loc=callbacks.loc_from_node(node))
+                )
+        elif isinstance(node, ast.ClassDef):
+            # Build class-level constants
+            for stmt in node.body:
+                if isinstance(stmt, ast.Assign) and len(stmt.targets) == 1:
+                    target = stmt.targets[0]
+                    if isinstance(target, ast.Name) and target.id.isupper():
+                        const_name = f"{node.name}_{target.id}"
+                        if const_name in symbols.constants:
+                            value = callbacks.lower_expr(stmt.value)
+                            module.constants.append(
+                                Constant(name=const_name, typ=INT, value=value, loc=callbacks.loc_from_node(stmt))
+                            )
+    # Build Node interface (abstract base for AST nodes)
+    node_interface = InterfaceDef(
+        name="Node",
+        methods=[
+            MethodSig(name="GetKind", params=[], ret=STRING),
+            MethodSig(name="ToSexp", params=[], ret=STRING),
+        ],
+    )
+    module.interfaces.append(node_interface)
+    # Build structs (with method bodies) and collect constructor functions
+    constructor_funcs: list[Function] = []
+    for node in tree.body:
+        if isinstance(node, ast.ClassDef):
+            struct, ctor = build_struct(node, symbols, callbacks, with_body=True)
+            if struct:
+                module.structs.append(struct)
+            if ctor:
+                constructor_funcs.append(ctor)
+    # Build functions (with bodies)
+    for node in tree.body:
+        if isinstance(node, ast.FunctionDef):
+            func = build_function_shell(node, symbols, callbacks, with_body=True)
+            module.functions.append(func)
+    # Add constructor functions (must come after regular functions for dependency order)
+    module.functions.extend(constructor_funcs)
+    return module

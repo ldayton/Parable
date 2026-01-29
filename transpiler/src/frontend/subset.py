@@ -119,7 +119,6 @@ BANNED_NODES: set[str] = {
     "With",
     "Lambda",
     "Global", "Nonlocal",
-    "NamedExpr",
     "TypeAlias", "TryStar",
 }
 
@@ -377,9 +376,6 @@ class Verifier:
         elif node_type in ("Global", "Nonlocal"):
             category = "control"
             message = node_type.lower() + ": pass as parameter instead"
-        elif node_type == "NamedExpr":
-            category = "expression"
-            message = "walrus operator (:=) is not allowed"
         self.error(node, category, message)
 
     def visit_Module(self, node: ASTNode) -> None:
@@ -948,52 +944,21 @@ def extract_imports(ast_dict: ASTNode) -> list[ImportInfo]:
             col = node.get("col_offset", 0)
             if not isinstance(col, int):
                 col = 0
-            result.append(ImportInfo(module, level, lineno, col))
+            if module == "" and level > 0:
+                # from . import X, Y - each name is a module
+                names = node.get("names", [])
+                j = 0
+                while j < len(names):
+                    name_node = names[j]
+                    if isinstance(name_node, dict):
+                        name = name_node.get("name", "")
+                        if name != "" and name != "*":
+                            result.append(ImportInfo(name, level, lineno, col))
+                    j += 1
+            else:
+                result.append(ImportInfo(module, level, lineno, col))
         i += 1
     return result
-
-
-def resolve_import(
-    importing_file: str, module: str, level: int, project_root: str
-) -> str | None:
-    """Resolve an import to a file path.
-
-    Args:
-        importing_file: Path to the file containing the import
-        module: Module name (e.g., "foo.bar")
-        level: Import level (0=absolute, 1=., 2=.., etc.)
-        project_root: Root directory of the project
-
-    Returns:
-        Resolved file path, or None if not resolvable to a project file
-    """
-    import os
-
-    if level > 0:
-        # Relative import
-        dir_path = os.path.dirname(importing_file)
-        up = level - 1
-        while up > 0:
-            dir_path = os.path.dirname(dir_path)
-            up -= 1
-        if module:
-            parts = module.split(".")
-            rel_path = os.path.join(dir_path, *parts)
-        else:
-            rel_path = dir_path
-    else:
-        # Absolute import
-        parts = module.split(".")
-        rel_path = os.path.join(project_root, *parts)
-
-    # Try as package (__init__.py) or module (.py)
-    init_path = os.path.join(rel_path, "__init__.py")
-    if os.path.isfile(init_path):
-        return init_path
-    module_path = rel_path + ".py"
-    if os.path.isfile(module_path):
-        return module_path
-    return None
 
 
 class ProjectVerifyResult:
@@ -1037,79 +1002,3 @@ class ProjectVerifyResult:
                 return True
             i += 1
         return False
-
-
-def verify_project(path: str) -> ProjectVerifyResult:
-    """Verify a project directory or single file.
-
-    Args:
-        path: Path to a .py file or directory
-
-    Returns:
-        ProjectVerifyResult with all violations
-    """
-    import os
-    from .parse import parse
-
-    result = ProjectVerifyResult()
-
-    if os.path.isfile(path):
-        # Single file mode
-        with open(path, "r") as f:
-            source = f.read()
-        ast_dict = parse(source)
-        result.file_results[path] = verify(ast_dict)
-        return result
-
-    # Directory mode - find all reachable files
-    project_root = path
-    pending: list[str] = []
-    visited: set[str] = set()
-
-    # Start with top-level .py files
-    entries = os.listdir(project_root)
-    i = 0
-    while i < len(entries):
-        entry = entries[i]
-        if entry.endswith(".py"):
-            full_path = os.path.join(project_root, entry)
-            if os.path.isfile(full_path):
-                pending.append(full_path)
-        i += 1
-
-    # Process files and follow imports
-    while len(pending) > 0:
-        file_path = pending.pop()
-        if file_path in visited:
-            continue
-        visited.add(file_path)
-
-        with open(file_path, "r") as f:
-            source = f.read()
-        ast_dict = parse(source)
-
-        # Verify this file
-        result.file_results[file_path] = verify(ast_dict)
-
-        # Extract and resolve imports
-        imports = extract_imports(ast_dict)
-        j = 0
-        while j < len(imports):
-            imp = imports[j]
-            # Skip allowed stdlib
-            top_module = imp.module.split(".")[0] if imp.module else ""
-            if top_module in ALLOWED_STDLIB:
-                j += 1
-                continue
-
-            resolved = resolve_import(file_path, imp.module, imp.level, project_root)
-            if resolved is not None:
-                if resolved not in visited:
-                    pending.append(resolved)
-            else:
-                # Only report unresolved if not stdlib
-                if imp.level > 0 or (imp.module and top_module not in ALLOWED_STDLIB):
-                    result.unresolved_imports.append((file_path, imp))
-            j += 1
-
-    return result

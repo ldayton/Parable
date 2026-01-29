@@ -125,7 +125,7 @@ The restricted subset eliminates major parsing pain points:
 | f-strings: `{expr}` only | No `!conversion`, no `:format_spec`              |
 | No generators          | Tokenizer returns `list[Token]`, not lazy iterator |
 | No nested functions    | No closure/scope tracking during parse             |
-| No walrus operator     | No `:=` ambiguity in expressions                   |
+| Walrus operator        | `x := expr` allowed; scopes to enclosing function  |
 | No async/await         | No context-dependent keyword handling              |
 | Single grammar version | No version switching; one static grammar           |
 

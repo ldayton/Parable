@@ -981,7 +981,7 @@ class Parser:
     def parse_if_stmt(self) -> ASTNode:
         """Parse if statement."""
         tok = self.expect("if")
-        test = self.parse_test()
+        test = self.parse_namedexpr_test()
         self.expect_op(":")
         body = self.parse_suite()
         orelse: list[ASTNode] = []
@@ -1001,7 +1001,7 @@ class Parser:
     def parse_elif(self) -> ASTNode:
         """Parse elif as nested If."""
         tok = self.expect("elif")
-        test = self.parse_test()
+        test = self.parse_namedexpr_test()
         self.expect_op(":")
         body = self.parse_suite()
         orelse: list[ASTNode] = []
@@ -1020,7 +1020,7 @@ class Parser:
     def parse_while_stmt(self) -> ASTNode:
         """Parse while statement."""
         tok = self.expect("while")
-        test = self.parse_test()
+        test = self.parse_namedexpr_test()
         self.expect_op(":")
         body = self.parse_suite()
         orelse: list[ASTNode] = []
@@ -1417,6 +1417,17 @@ class Parser:
         return stmts
 
     # --- Expression parsing ---
+
+    def parse_namedexpr_test(self) -> ASTNode:
+        """Parse test with optional walrus operator: test [':=' test]."""
+        tok = self.current()
+        expr = self.parse_test()
+        if self.match_op(":="):
+            self.advance()
+            value = self.parse_test()
+            set_context(expr, "Store")
+            return make_node("NamedExpr", tok.lineno, tok.col, {"target": expr, "value": value})
+        return expr
 
     def parse_test(self) -> ASTNode:
         """Parse test expression (may be ternary or lambda)."""

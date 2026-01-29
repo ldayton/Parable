@@ -49,20 +49,20 @@ backend-transpile backend:
     case "{{backend}}" in
         go)
             out="dist/go/parable.go"
-            uv run --directory transpiler python -m src.cli --target go < "$(pwd)/src/parable.py" > /tmp/parable-ir.go
+            uv run --directory transpiler python -m src.tongues --target go < "$(pwd)/src/parable.py" > /tmp/parable-ir.go
             gofmt /tmp/parable-ir.go > "$out"
             ;;
         python)
             mkdir -p dist/python
-            uv run --directory transpiler python -m src.cli --target py < "$(pwd)/src/parable.py" > dist/python/parable.py
+            uv run --directory transpiler python -m src.tongues --target py < "$(pwd)/src/parable.py" > dist/python/parable.py
             ;;
         ts)
             mkdir -p dist/ts
-            uv run --directory transpiler python -m src.cli --target ts < "$(pwd)/src/parable.py" > dist/ts/parable.ts
+            uv run --directory transpiler python -m src.tongues --target ts < "$(pwd)/src/parable.py" > dist/ts/parable.ts
             ;;
         java)
             mkdir -p dist/java
-            uv run --directory transpiler python -m src.cli --target java < "$(pwd)/src/parable.py" > dist/java/Parable.java
+            uv run --directory transpiler python -m src.tongues --target java < "$(pwd)/src/parable.py" > dist/java/Parable.java
             ;;
         *)
             echo "Unknown backend: {{backend}}"

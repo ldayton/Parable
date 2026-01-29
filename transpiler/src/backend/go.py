@@ -1564,6 +1564,12 @@ func _Substring(s string, start int, end int) string {
     def _emit_expr_Cast(self, expr: Cast) -> str:
         inner = self._emit_expr(expr.expr)
         to_type = self._type_to_go(expr.to_type)
+        # Skip redundant string() wrapper around _runeAt (which already returns string)
+        if to_type == "string" and isinstance(expr.expr, Index):
+            obj_type = getattr(expr.expr.obj, 'typ', None)
+            if obj_type == STRING:
+                # _runeAt already returns string, no wrapper needed
+                return inner
         return f"{to_type}({inner})"
 
     def _emit_expr_TypeAssert(self, expr: TypeAssert) -> str:

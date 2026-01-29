@@ -21,6 +21,46 @@ Middleend deficiencies (should be fixed in middleend.py):
 - _infer_tuple_element_type scans return statements to infer hoisted variable
   types - middleend should annotate hoisted_vars with complete type information
   instead of leaving typ=None for some variables.
+
+UNCOMPENSATED DEFICIENCIES (non-idiomatic output)
+=================================================
+
+The dominant issue is string vs []rune representation. Python strings are
+character sequences; Go strings are byte sequences. The backend defensively
+emits _runeAt/_runeLen/_Substring helpers for ALL string operations (~540
+call sites), but idiomatic Go would:
+  1. Analyze string usage patterns in frontend/middleend
+  2. Type variables as []rune when indexed by character (e.g., lexer source)
+  3. Convert once at scope entry: `runes := []rune(source)`
+  4. Then use direct indexing: `runes[i]` instead of `_runeAt(source, i)`
+This would eliminate most helper calls and enable standard Go range iteration.
+Downstream consequences of this missing analysis:
+  - ~100 while-style loops (`for i < n`) instead of `for i, c := range runes`
+  - ~60 helper predicates take string instead of rune: `isHexDigit(string)`
+    should be `isHexDigit(rune)` with direct comparisons like `c >= '0'`
+  - Character-at-index requires double indirection: `string(_runeAt(s, i))`
+
+Frontend deficiencies (should be fixed in frontend.py):
+- Helper function indirection: `_parseInt(x, 10)` instead of `strconv.Atoi(x)`,
+  `_intToStr(n)` instead of `strconv.Itoa(n)`, `_intPtr(fd)` instead of inline
+  pointer creation. (~20 call sites)
+- Range() helper allocates slices: `for _, i := range Range(n)` instead of
+  `for i := 0; i < n; i++`. Frontend should emit ForClassic IR. (~11 sites)
+- IIFE for ternary: `func() T { if c { return a } else { return b } }()`.
+  Frontend could emit Ternary with a flag indicating if/else expansion is
+  acceptable, or middleend could lift to variable assignment. (~30 sites)
+- Factory functions assign field-by-field (`self := &T{}; self.X = v; ...`)
+  instead of struct literals (`&T{X: v, ...}`). Frontend should emit
+  StructLit with all fields when translating __init__ methods. (~7 factories)
+
+Middleend deficiencies (should be fixed in middleend.py):
+- _isNilInterface() uses reflection for interface nil checks (~92 sites).
+  Middleend could track when expressions are definitely interface{} vs typed
+  nil pointers, allowing direct `== nil` comparison in simple cases.
+
+Backend deficiencies (Go-specific, fixable in go.py):
+- Emits `repeatStr(s, n)` helper instead of `strings.Repeat(s, n)`. (~6 sites)
+- Emits `sublist(lst, a, b)` helper instead of inline `lst[a:b]`. (~9 sites)
 """
 
 from __future__ import annotations

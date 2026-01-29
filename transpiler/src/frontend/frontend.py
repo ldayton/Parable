@@ -2450,14 +2450,4 @@ class Frontend:
 
     def _lower_lvalue(self, node: ast.expr) -> "ir.LValue":
         """Lower an expression to an LValue."""
-        from .. import ir
-        if isinstance(node, ast.Name):
-            return ir.VarLV(name=node.id, loc=self._loc_from_node(node))
-        if isinstance(node, ast.Attribute):
-            obj = self._lower_expr(node.value)
-            return ir.FieldLV(obj=obj, field=node.attr, loc=self._loc_from_node(node))
-        if isinstance(node, ast.Subscript):
-            obj = self._lower_expr(node.value)
-            idx = self._lower_expr(node.slice)
-            return ir.IndexLV(obj=obj, index=idx, loc=self._loc_from_node(node))
-        return ir.VarLV(name="_unknown_lvalue", loc=self._loc_from_node(node))
+        return lowering.lower_lvalue(node, self._lower_expr)

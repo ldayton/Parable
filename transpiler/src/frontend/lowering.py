@@ -1321,3 +1321,26 @@ def lower_stmt_Raise(
                         break
             return ir.Raise(error_type=error_type, message=msg, pos=pos, loc=loc_from_node(node))
     return ir.Raise(error_type="Error", message=ir.StringLit(value="", typ=STRING), pos=ir.IntLit(value=0, typ=INT), loc=loc_from_node(node))
+
+
+# ============================================================
+# LVALUE LOWERING
+# ============================================================
+
+
+def lower_lvalue(
+    node: ast.expr,
+    lower_expr: Callable[[ast.expr], "ir.Expr"],
+) -> "ir.LValue":
+    """Lower an expression to an LValue."""
+    from .. import ir
+    if isinstance(node, ast.Name):
+        return ir.VarLV(name=node.id, loc=loc_from_node(node))
+    if isinstance(node, ast.Attribute):
+        obj = lower_expr(node.value)
+        return ir.FieldLV(obj=obj, field=node.attr, loc=loc_from_node(node))
+    if isinstance(node, ast.Subscript):
+        obj = lower_expr(node.value)
+        idx = lower_expr(node.slice)
+        return ir.IndexLV(obj=obj, index=idx, loc=loc_from_node(node))
+    return ir.VarLV(name="_unknown_lvalue", loc=loc_from_node(node))

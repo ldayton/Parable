@@ -546,9 +546,6 @@ class Frontend:
             infer_expr_type_from_ast=self._infer_expr_type_from_ast,
             annotation_to_str=self._annotation_to_str,
             make_default_value=self._make_default_value,
-            is_sentinel_int=self._is_sentinel_int,
-            get_sentinel_value=self._get_sentinel_value,
-            resolve_type_name=self._resolve_type_name,
             merge_keyword_args=self._merge_keyword_args,
             fill_default_args=self._fill_default_args,
             merge_keyword_args_for_func=self._merge_keyword_args_for_func,
@@ -579,14 +576,6 @@ class Frontend:
         return type_inference.infer_expr_type_from_ast(
             node, self._type_ctx, self.symbols, self._current_func_info, self._current_class_name, self._node_types
         )
-
-    def _is_sentinel_int(self, node: ast.expr) -> bool:
-        """Check if an expression is a sentinel int (uses a sentinel value for None)."""
-        return lowering.is_sentinel_int(node, self._type_ctx, self._current_class_name, SENTINEL_INT_FIELDS)
-
-    def _get_sentinel_value(self, node: ast.expr) -> int | None:
-        """Get the sentinel value for a sentinel int expression, or None if not a sentinel int."""
-        return lowering.get_sentinel_value(node, self._type_ctx, self._current_class_name, SENTINEL_INT_FIELDS)
 
     def _lower_expr_List(self, node: ast.List, expected_type: Type | None = None) -> "ir.Expr":
         return lowering.lower_expr_List(

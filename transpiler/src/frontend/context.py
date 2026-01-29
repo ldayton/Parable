@@ -56,9 +56,6 @@ class LoweringDispatch:
     # Helper callbacks
     annotation_to_str: Callable[[ast.expr | None], str]
     make_default_value: Callable[["Type", "Loc"], "ir.Expr"]
-    is_sentinel_int: Callable[[ast.expr], bool]
-    get_sentinel_value: Callable[[ast.expr], int | None]
-    resolve_type_name: Callable[[str], "Type"]
     # Method/function argument handling
     merge_keyword_args: Callable[["Type", str, list, ast.Call], list]
     fill_default_args: Callable[["Type", str, list], list]

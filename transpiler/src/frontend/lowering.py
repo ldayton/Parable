@@ -5,7 +5,7 @@ import ast
 from typing import TYPE_CHECKING, Callable
 
 from ..ir import BOOL, BYTE, FLOAT, INT, RUNE, STRING, VOID, InterfaceRef, Loc, Map, Optional, Pointer, Set, Slice, StringFormat, StructRef, Tuple
-from ..type_overrides import NODE_METHOD_TYPES, VAR_TYPE_OVERRIDES
+from ..type_overrides import NODE_METHOD_TYPES, SENTINEL_INT_FIELDS, VAR_TYPE_OVERRIDES
 from . import type_inference
 
 if TYPE_CHECKING:
@@ -1519,7 +1519,7 @@ def lower_expr_Call(
             expr = dispatch.lower_expr(node.args[0])
             if isinstance(node.args[1], ast.Name):
                 type_name = node.args[1].id
-                tested_type = dispatch.resolve_type_name(type_name)
+                tested_type = resolve_type_name(type_name, type_inference.TYPE_MAP, ctx.symbols)
                 return ir.IsType(expr=expr, tested_type=tested_type, typ=BOOL, loc=loc_from_node(node))
         # Check for constructor calls (class names)
         if func_name in ctx.symbols.structs:
@@ -1804,7 +1804,7 @@ def lower_stmt_Assign(
                 block.no_scope = True  # Don't emit braces
                 return block
         # Handle sentinel ints: var = None -> var = -1
-        if isinstance(value, ir.NilLit) and dispatch.is_sentinel_int(target):
+        if isinstance(value, ir.NilLit) and is_sentinel_int(target, ctx.type_ctx, ctx.current_class_name, SENTINEL_INT_FIELDS):
             value = ir.IntLit(value=-1, typ=INT, loc=loc_from_node(node))
         # Track variable type dynamically for later use in nested scopes
         # Apply VAR_TYPE_OVERRIDES first, then coerce
@@ -1936,7 +1936,7 @@ def lower_stmt_AnnAssign(
     lval = dispatch.lower_lvalue(node.target)
     if value:
         # Handle sentinel ints for field assignments: self.field = None -> self.field = -1
-        if isinstance(value, ir.NilLit) and dispatch.is_sentinel_int(node.target):
+        if isinstance(value, ir.NilLit) and is_sentinel_int(node.target, type_ctx, ctx.current_class_name, SENTINEL_INT_FIELDS):
             value = ir.IntLit(value=-1, typ=INT, loc=loc_from_node(node))
         # For field assignments, coerce to the actual field type (from struct info)
         if (isinstance(node.target, ast.Attribute) and
@@ -1974,7 +1974,7 @@ def collect_isinstance_chain(
         # Lower body once, generate case for each type
         # For or chains, duplicate the body for each type
         for type_name in type_names:
-            typ = dispatch.resolve_type_name(type_name)
+            typ = resolve_type_name(type_name, type_inference.TYPE_MAP, ctx.symbols)
             # Temporarily narrow the variable type for this branch
             old_type = type_ctx.var_types.get(var_name)
             type_ctx.var_types[var_name] = typ
@@ -2042,7 +2042,7 @@ def lower_stmt_If(
     was_already_narrowed = False
     if isinstance_in_and:
         var_name, type_name = isinstance_in_and
-        typ = dispatch.resolve_type_name(type_name)
+        typ = resolve_type_name(type_name, type_inference.TYPE_MAP, ctx.symbols)
         narrowed_var = var_name
         old_type = type_ctx.var_types.get(var_name)
         was_already_narrowed = var_name in type_ctx.narrowed_vars

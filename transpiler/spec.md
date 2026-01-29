@@ -23,20 +23,34 @@ Sequential pipeline with clean phase boundaries. Each phase completes before the
 
 ¹ Output Python reintroduces idioms that the subset input banned
 
+## Supported Types
+
+| Type         | Syntax                   | Notes                              |
+| ------------ | ------------------------ | ---------------------------------- |
+| Primitives   | `int`, `float`, `str`, `bool`, `bytes` | `bytes` for binary I/O   |
+| Optional     | `T \| None`              | Nullable types                     |
+| Union        | `A \| B \| C`            | Discriminated by type              |
+| List         | `list[T]`                | Bare `list` banned                 |
+| Dict         | `dict[K, V]`             | Bare `dict` banned                 |
+| Set          | `set[T]`                 | Bare `set` banned                  |
+| Tuple        | `tuple[A, B, C]`         | Fixed-length, heterogeneous        |
+| Callable     | `Callable[[A, B], R]`    | Function types                     |
+
 ## Overview
 
 | Phase | Stage     | Module           | Description                                         |
 | :---: | --------- | ---------------- | --------------------------------------------------- |
-|   0   | frontend  | `__init__.py`    | Orchestrate phases 1–8                              |
-|   1   | frontend  | `parse.py`       | Tokenize and parse source; produce dict-based AST   |
-|   2   | frontend  | `subset.py`      | Reject unsupported Python features early            |
-|   3   | frontend  | `names.py`       | Scope analysis and name binding                     |
-|   4   | frontend  | `signatures.py`  | Type syntax parsing and kind checking               |
-|   5   | frontend  | `fields.py`      | Dataflow over `__init__`; infer field types         |
-|   6   | frontend  | `hierarchy.py`   | Class hierarchy; subtyping relations                |
-|   7   | frontend  | `inference.py`   | Bidirectional type inference (↑synth / ↓check)      |
-|   8   | frontend  | `lowering.py`    | Type-directed elaboration to IR                     |
-|   9   | middleend | `__init__.py`    | Orchestrate phases 10–14                            |
+|   1   | cli       | `cli.py`         | Parse arguments, read input, invoke pipeline        |
+|  1.5  | frontend  | `__init__.py`    | Orchestrate phases 2–9                              |
+|   2   | frontend  | `parse.py`       | Tokenize and parse source; produce dict-based AST   |
+|   3   | frontend  | `subset.py`      | Reject unsupported Python features early            |
+|   4   | frontend  | `names.py`       | Scope analysis and name binding                     |
+|   5   | frontend  | `signatures.py`  | Type syntax parsing and kind checking               |
+|   6   | frontend  | `fields.py`      | Dataflow over `__init__`; infer field types         |
+|   7   | frontend  | `hierarchy.py`   | Class hierarchy; subtyping relations                |
+|   8   | frontend  | `inference.py`   | Bidirectional type inference (↑synth / ↓check)      |
+|   9   | frontend  | `lowering.py`    | Type-directed elaboration to IR                     |
+|  9.5  | middleend | `__init__.py`    | Orchestrate phases 10–14                            |
 |  10   | middleend | `scope.py`       | Variable declarations, reassignments, modifications |
 |  11   | middleend | `returns.py`     | Return pattern analysis                             |
 |  12   | middleend | `liveness.py`    | Unused values, catch vars, bindings                 |
@@ -44,7 +58,37 @@ Sequential pipeline with clean phase boundaries. Each phase completes before the
 |  14   | middleend | `ownership.py`   | Ownership inference and escape analysis             |
 |  15   | backend   | `<lang>.py`      | Emit target language source from annotated IR       |
 
-## Frontend (Phases 0–8)
+## CLI (Phase 1)
+
+#### Phase 1: `cli.py`
+
+Program entry point. Parses command-line arguments, reads source input, invokes the compilation pipeline, writes output. Written in the Tongues subset—uses only allowed I/O primitives (stdin/stdout/stderr, no file I/O).
+
+| Responsibility        | Implementation                                      |
+| --------------------- | --------------------------------------------------- |
+| Argument parsing      | Manual `sys.argv` processing (no argparse)          |
+| Source input          | `sys.stdin.read()`                                  |
+| Target selection      | `--target` flag: `go`, `rust`, `c`, `java`, `py`    |
+| Output                | `print()` to stdout                                 |
+| Error reporting       | `print(..., file=sys.stderr)` with exit code        |
+| Pipeline invocation   | Call `frontend.compile()` → `middleend.analyze()` → `backend.emit()` |
+
+**Usage:**
+
+```
+tongues [OPTIONS] < input.py > output.go
+
+Options:
+  --target TARGET   Output language: go, rust, c, java, py (default: go)
+  --verify          Check subset compliance only, no codegen
+  --help            Show this help message
+```
+
+File redirection is handled by the shell; the transpiler itself only uses stdin/stdout.
+
+**Postconditions:** Source read from stdin; target language selected; pipeline invoked; output written to stdout or error reported to stderr with non-zero exit.
+
+## Frontend (Phases 2–9)
 
 | Module          | Knows types? | Knows IR? | Output                                |
 | --------------- | :----------: | :-------: | ------------------------------------- |
@@ -57,11 +101,11 @@ Sequential pipeline with clean phase boundaries. Each phase completes before the
 | `inference.py`  | yes (bidir)  |    no     | TypedAST (↑synth / ↓check)            |
 | `lowering.py`   |  no (reads)  |    yes    | IR Module                             |
 
-#### Phase 0: `frontend/__init__.py`
+#### Phase 1.5: `frontend/__init__.py`
 
-Orchestrate phases 1–8. Initialize empty context tables, invoke each phase, thread outputs forward.
+Orchestrate phases 2–9. Initialize empty context tables, invoke each phase, thread outputs forward.
 
-#### Phase 1: `frontend/parse.py`
+#### Phase 2: `frontend/parse.py`
 
 Tokenize source code and parse into dict-based AST. Enables self-hosting by removing CPython bootstrap dependency.
 
@@ -89,7 +133,7 @@ The restricted subset eliminates major parsing pain points:
 
 **Prior art:** [Dragon Book Ch. 3-4](https://en.wikipedia.org/wiki/Compilers:_Principles,_Techniques,_and_Tools), [pgen2](https://github.com/python/cpython/tree/main/Parser/pgen), [parso](https://github.com/davidhalter/parso)
 
-#### Phase 2: `frontend/subset.py`
+#### Phase 3: `frontend/subset.py`
 
 Reject unsupported Python features early. If verification passes, downstream phases can assume:
 
@@ -109,11 +153,44 @@ Reject unsupported Python features early. If verification passes, downstream pha
 | No borrowed field storage| Parameters cannot be stored in fields without copy           |
 | Immutable string params  | String parameters are borrowed; copy if storing              |
 
+**Allowed built-in functions:**
+
+| Category    | Functions                                                    |
+| ----------- | ------------------------------------------------------------ |
+| Math        | `abs`, `min`, `max`, `sum`, `round`, `divmod`, `pow`         |
+| Conversion  | `int`, `float`, `str`, `bool`, `bytes`, `chr`, `ord`         |
+| Collections | `list`, `dict`, `set`, `tuple`, `frozenset`, `len`, `sorted` |
+| Type check  | `isinstance`                                                 |
+| Iteration   | `range`                                                      |
+| Formatting  | `repr`, `ascii`, `bin`, `hex`, `oct`                         |
+| Boolean     | `all`, `any`                                                 |
+| Other       | `slice`, `super`, `object`                                   |
+
+**Allowed methods:**
+
+| Type   | Methods                                                                              |
+| ------ | ------------------------------------------------------------------------------------ |
+| `str`  | `join`, `split`, `strip`, `lstrip`, `rstrip`, `lower`, `upper`, `startswith`, `endswith`, `replace`, `find`, `rfind`, `count`, `isalnum`, `isalpha`, `isdigit`, `isspace`, `isupper`, `islower` |
+| `list` | `append`, `extend`, `pop`, `insert`, `remove`, `copy`, `clear`, `index`, `count`, `reverse`, `sort` |
+| `dict` | `get`, `keys`, `values`, `items`, `pop`, `setdefault`, `update`, `clear`, `copy`     |
+| `set`  | `add`, `remove`, `discard`, `pop`, `clear`, `copy`, `union`, `intersection`, `difference`, `issubset`, `issuperset` |
+
+**Allowed I/O:**
+
+| Category    | Constructs                                                          |
+| ----------- | ------------------------------------------------------------------- |
+| Output      | `print(x)`, `print(x, end='')`, `print(x, file=sys.stderr)`         |
+| Input text  | `sys.stdin.readline()`, `sys.stdin.read()`                          |
+| Input binary| `sys.stdin.buffer.read()`, `sys.stdin.buffer.read(n)`, `sys.stdin.buffer.readline()` |
+| Output binary| `sys.stdout.buffer.write(b)`, `sys.stderr.buffer.write(b)`         |
+| Arguments   | `sys.argv`                                                          |
+| Environment | `os.getenv(name)`, `os.getenv(name, default)`                       |
+
 **Postconditions:** AST conforms to Tongues subset; all invariants above hold; rejected programs produce clear error messages with source locations.
 
-#### Phase 3: `frontend/names.py`
+#### Phase 4: `frontend/names.py`
 
-Build a symbol table mapping names to their declarations. Since phase 2 guarantees no nested functions and no `global`/`nonlocal`, scoping collapses to:
+Build a symbol table mapping names to their declarations. Since phase 3 guarantees no nested functions and no `global`/`nonlocal`, scoping collapses to:
 
 | Scope   | Contains                                  |
 | ------- | ----------------------------------------- |
@@ -128,7 +205,7 @@ No enclosing scope. Resolution is a simple two-level lookup: local → module (�
 
 **Prior art:** [Scope Graphs](https://link.springer.com/chapter/10.1007/978-3-662-46669-8_9), [Python LEGB](https://realpython.com/python-scope-legb-rule/)
 
-#### Phase 4: `frontend/signatures.py`
+#### Phase 5: `frontend/signatures.py`
 
 Parse type annotations into internal type representations. Verify types are well-formed via kind checking—kinds classify type constructors the way types classify values. No higher-kinded types, so kind checking reduces to arity validation:
 
@@ -143,9 +220,9 @@ Parse type annotations into internal type representations. Verify types are well
 
 **Prior art:** [Kind (type theory)](https://en.wikipedia.org/wiki/Kind_(type_theory)), [PEP 484](https://peps.python.org/pep-0484/)
 
-#### Phase 5: `frontend/fields.py`
+#### Phase 6: `frontend/fields.py`
 
-Analyze `__init__` bodies to infer field types. Since phase 2 guarantees annotations or obvious types, analysis is simple pattern matching:
+Analyze `__init__` bodies to infer field types. Since phase 3 guarantees annotations or obvious types, analysis is simple pattern matching:
 
 | Pattern                  | Inference                                |
 | ------------------------ | ---------------------------------------- |
@@ -163,9 +240,9 @@ No full dataflow needed. Walk `__init__` assignments, resolve RHS types via SigT
 
 **Prior art:** [Java definite assignment](https://docs.oracle.com/javase/specs/jls/se9/html/jls-16.html), [TypeScript strictPropertyInitialization](https://www.typescriptlang.org/docs/handbook/2/classes.html)
 
-#### Phase 6: `frontend/hierarchy.py`
+#### Phase 7: `frontend/hierarchy.py`
 
-Build the inheritance tree and compute subtyping relations. Inheritance implies subtyping in Tongues. Since phase 2 guarantees single inheritance:
+Build the inheritance tree and compute subtyping relations. Inheritance implies subtyping in Tongues. Since phase 3 guarantees single inheritance:
 
 - Hierarchy is a tree, not DAG
 - No diamond problem
@@ -176,7 +253,7 @@ Build the inheritance tree and compute subtyping relations. Inheritance implies 
 
 **Prior art:** [Inheritance Is Not Subtyping](https://www.cs.utexas.edu/~wcook/papers/InheritanceSubtyping90/CookPOPL90.pdf), [Variance](https://en.wikipedia.org/wiki/Covariance_and_contravariance_(computer_science))
 
-#### Phase 7: `frontend/inference.py`
+#### Phase 8: `frontend/inference.py`
 
 Assign types to every expression and statement using bidirectional type inference. Bidirectional typing is decidable (unlike full inference), has good error locality, and requires moderate annotations. Core rule: introductions check, eliminations synthesize.
 
@@ -189,8 +266,20 @@ Assign types to every expression and statement using bidirectional type inferenc
 
 Since all signatures are annotated (SigTable) and fields typed (FieldTable), most work is synthesis. Checking happens at function arguments, return statements, and typed assignments.
 
+**Truthiness semantics:** Python's `if x:` has type-dependent meaning. Tongues restricts to unambiguous patterns:
+
+| Type        | Pattern     | Meaning      |
+| ----------- | ----------- | ------------ |
+| `bool`      | `if flag:`  | Boolean test |
+| `T \| None` | `if node:`  | Not None     |
+| `list[T]`   | `if items:` | Non-empty    |
+| `str`       | `if s:`     | Non-empty    |
+
+Ambiguous types like `list[T] | None` require explicit checks (`if x is not None`, `if len(x) > 0`).
+
 **Postconditions:**
 - TypedAST complete (every expr has a type); all checks pass; subsumption applied where needed
+- Truthiness patterns validated; ambiguous types rejected with diagnostic
 - String expressions annotated with indexing semantics: `byte` vs `char` (enables Go `[]rune`, Java `char`)
 - Variables assigned different types in branches typed as union
 - Nullability propagates through control flow; nullable exprs typed `Optional[T]`
@@ -202,9 +291,9 @@ Since all signatures are annotated (SigTable) and fields typed (FieldTable), mos
 
 **Prior art:** [Bidirectional Typing](https://arxiv.org/abs/1908.05839), [Local Type Inference](https://www.cis.upenn.edu/~bcpierce/papers/lti-toplas.pdf)
 
-#### Phase 8: `frontend/lowering.py`
+#### Phase 9: `frontend/lowering.py`
 
-Translate TypedAST to IR. Lowering only reads types, never computes them—if phase 7 did its job, every expression has a type. Pure syntactic transformation: pattern-match on AST nodes and emit IR.
+Translate TypedAST to IR. Lowering only reads types, never computes them—if phase 8 did its job, every expression has a type. Pure syntactic transformation: pattern-match on AST nodes and emit IR.
 
 | AST Node                 | IR Output                              |
 | ------------------------ | -------------------------------------- |
@@ -235,10 +324,20 @@ Translate TypedAST to IR. Lowering only reads types, never computes them—if ph
 - Interface definitions emit `InterfaceDef` with explicit field list (not inferred by backend); includes discriminant fields like `kind: string` for tagged unions
 - Type switch emits `TypeSwitch` with `binding` field containing the narrowed variable name; no hardcoded naming conventions in backend
 - Slice covariance emits `SliceConvert(source, target_element_type)` when element types differ but are compatible; backends handle covariant/invariant semantics per language
+- Comprehensions emit `ListComp`, `SetComp`, `DictComp` with `element`, `target`, `iterable`, `condition` fields; backends emit idiomatic loops or builtins
+- Slicing emits `SliceExpr(obj, low, high, step)` with optional fields; backends map to `[a:b]`/`substring()`/`subList()`
+- Bitwise operations emit `BinaryOp(op, left, right)` where op is `&`/`|`/`^`/`~`/`<<`/`>>`
+- Entry point `main() -> int` with `if __name__ == "__main__"` emits `EntryPoint` IR; backends emit `func main()` / `public static void main()` / `fn main()`
+- `print(x)` emits `Print(expr, newline=True, stderr=False)`; `print(x, end='')` sets `newline=False`; `print(x, file=sys.stderr)` sets `stderr=True`
+- `sys.stdin.readline()` emits `ReadLine()`; `sys.stdin.read()` emits `ReadAll()`
+- `sys.stdin.buffer.read()` emits `ReadBytes()`; `sys.stdin.buffer.read(n)` emits `ReadBytesN(n)`
+- `sys.stdout.buffer.write(b)` emits `WriteBytes(expr, stderr=False)`
+- `sys.argv` emits `Args` IR; backends map to `os.Args`/`args`/`argv`
+- `os.getenv(name)` emits `GetEnv(name, default)` with optional default
 
 **Prior art:** [Three-address code](https://en.wikipedia.org/wiki/Three-address_code), [Cornell CS 4120 IR notes](https://www.cs.cornell.edu/courses/cs4120/2023sp/notes/ir/)
 
-## Middleend (Phases 9–14)
+## Middleend (Phases 10–14)
 
 Read-only analysis passes that annotate IR nodes in place. No transformations—just computing properties needed for code generation.
 
@@ -250,7 +349,7 @@ Read-only analysis passes that annotate IR nodes in place. No transformations—
 | `hoisting.py`  | scope, returns | `hoisted_vars`, `rune_vars`                               |
 | `ownership.py` | scope          | `ownership`, `region`, `escapes`                          |
 
-#### Phase 9: `middleend/__init__.py`
+#### Phase 9.5: `middleend/__init__.py`
 
 Orchestrate phases 10–14. Run all analysis passes on the IR Module.
 
@@ -315,7 +414,7 @@ Variables need hoisting when:
 
 #### Phase 14: `middleend/ownership.py`
 
-Infer ownership and region annotations for memory-safe code generation. Since phase 2 guarantees
+Infer ownership and region annotations for memory-safe code generation. Since phase 3 guarantees
 no back-references, no borrowed field storage, and strict tree structures, ownership analysis
 reduces to simple patterns:
 
@@ -370,7 +469,7 @@ Emit target language source from annotated IR. Each backend is a single module t
 
 #### Phase 15: `backend/<lang>.py`
 
-Walk the annotated IR and emit target language source. The backend reads all annotations from phases 0–14 but adds none—pure output generation.
+Walk the annotated IR and emit target language source. The backend reads all annotations from phases 1–14 but adds none—pure output generation.
 
 | IR Node       | Go Output                | C Output                  | Rust Output              |
 | ------------- | ------------------------ | ------------------------- | ------------------------ |
@@ -378,6 +477,11 @@ Walk the annotated IR and emit target language source. The backend reads all ann
 | `Struct`      | `type Name struct { }`   | `typedef struct { } Name` | `struct Name { }`        |
 | `VarDecl`     | `var x T` or `x := ...`  | `T x = ...`               | `let mut x = ...`        |
 | `MethodCall`  | `obj.Method(args)`       | `Method(obj, args)`       | `obj.method(args)`       |
+| `Print`       | `fmt.Println(x)`         | `printf("%s\n", x)`       | `println!("{}", x)`      |
+| `ReadLine`    | `bufio.Scanner`          | `fgets()`                 | `stdin().read_line()`    |
+| `ReadAll`     | `io.ReadAll(os.Stdin)`   | `read()` loop             | `read_to_string(stdin)`  |
+| `Args`        | `os.Args`                | `argv[0..argc]`           | `env::args().collect()`  |
+| `GetEnv`      | `os.Getenv()`            | `getenv()`                | `env::var().ok()`        |
 
 The backend consumes middleend annotations:
 - `is_reassigned` → Go: `var` vs `:=`; Rust: `let mut` vs `let`; TS: `let` vs `const`

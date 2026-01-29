@@ -4,7 +4,7 @@ This module defines the complete IR type system and serves as the specification.
 Each node's docstring documents its semantics and invariants.
 
 Architecture:
-    Source -> Frontend (phases 1-8) -> [IR] -> Middleend (phases 10-14) -> Backend -> Target
+    Source -> Frontend (phases 2-9) -> [IR] -> Middleend (phases 10-14) -> Backend -> Target
 
 Frontend produces fully-typed IR. Middleend annotates IR in place. Backend emits code.
 """
@@ -70,7 +70,7 @@ class Loc:
 # TYPES
 #
 # All types are frozen (immutable, hashable). The frontend resolves
-# all type annotations to these representations by phase 4.
+# all type annotations to these representations by phase 5.
 # ============================================================
 
 
@@ -129,6 +129,23 @@ class CharSequence(Type):
     Invariants:
     - Indexing yields Char, not byte
     - Length is character count, not byte count
+    """
+
+
+@dataclass(frozen=True)
+class Bytes(Type):
+    """Byte sequence type for binary I/O.
+
+    | Target | Representation |
+    |--------|----------------|
+    | C      | uint8_t*       |
+    | Go     | []byte         |
+    | Java   | byte[]         |
+    | Python | bytes          |
+    | Rust   | Vec<u8>        |
+    | TS     | Uint8Array     |
+
+    Distinct from Slice(BYTE) for semantic clarity in I/O operations.
     """
 
 
@@ -364,6 +381,7 @@ RUNE = Primitive("rune")
 VOID = Primitive("void")
 CHAR = Char()
 CHAR_SEQUENCE = CharSequence()
+BYTES = Bytes()
 StringSlice = STRING  # Backward compat: was separate type, maps to string
 
 
@@ -1001,11 +1019,56 @@ class SoftFail(Stmt):
     """
 
 
+@dataclass
+class Print(Stmt):
+    """Print output.
+
+    Semantics: Write value to stdout or stderr, with optional newline.
+
+    | Target | newline=True         | newline=False       |
+    |--------|----------------------|---------------------|
+    | C      | printf("%s\\n", x)   | printf("%s", x)     |
+    | Go     | fmt.Println(x)       | fmt.Print(x)        |
+    | Java   | System.out.println(x)| System.out.print(x) |
+    | Python | print(x)             | print(x, end='')    |
+    | Rust   | println!("{}", x)    | print!("{}", x)     |
+    | TS     | console.log(x)       | process.stdout.write|
+
+    Invariants:
+    - value.typ is STRING or convertible to string
+    """
+
+    value: Expr
+    newline: bool = True
+    stderr: bool = False
+
+
+@dataclass
+class EntryPoint(Stmt):
+    """Program entry point marker.
+
+    Semantics: Marks main() function with if __name__ == "__main__" guard.
+
+    | Target | Representation                    |
+    |--------|-----------------------------------|
+    | C      | int main(int argc, char** argv)   |
+    | Go     | func main()                       |
+    | Java   | public static void main(String[]) |
+    | Python | if __name__ == "__main__":        |
+    | Rust   | fn main()                         |
+    | TS     | (immediate execution)             |
+
+    The function body is in the associated Function node.
+    """
+
+    function_name: str = "main"
+
+
 # ============================================================
 # EXPRESSIONS
 #
 # All expressions carry their resolved type (typ field).
-# This is an invariant established by frontend phase 7.
+# This is an invariant established by frontend phase 8.
 # ============================================================
 
 
@@ -1159,20 +1222,31 @@ class Index(Expr):
 
 @dataclass
 class SliceExpr(Expr):
-    """Subslice: obj[low:high]
+    """Subslice: obj[low:high:step]
 
-    Semantics: Extract subsequence from low (inclusive) to high (exclusive).
+    Semantics: Extract subsequence from low (inclusive) to high (exclusive) with step.
+
+    | Target | Representation              |
+    |--------|-----------------------------|
+    | C      | slice_range(obj, lo, hi, s) |
+    | Go     | obj[lo:hi] (no step)        |
+    | Java   | subList(lo, hi)             |
+    | Python | obj[lo:hi:step]             |
+    | Rust   | obj[lo..hi].step_by(s)      |
+    | TS     | obj.slice(lo, hi)           |
 
     Invariants:
     - obj.typ is Slice, Array, or STRING
     - low.typ is INT if present
     - high.typ is INT if present
+    - step.typ is INT if present
     - typ matches obj.typ (or Slice if obj is Array)
     """
 
     obj: Expr
     low: Expr | None = None
     high: Expr | None = None
+    step: Expr | None = None
 
 
 # --- Calls ---
@@ -1945,6 +2019,224 @@ class WeakRef(Expr):
     """
 
     operand: Expr
+
+
+# --- I/O Expressions ---
+
+
+@dataclass
+class ReadLine(Expr):
+    """Read line from stdin.
+
+    Semantics: Read until newline or EOF. Returns empty string on EOF.
+
+    | Target | Representation              |
+    |--------|------------------------------|
+    | C      | fgets(buf, size, stdin)      |
+    | Go     | bufio.Scanner.Scan()         |
+    | Java   | BufferedReader.readLine()    |
+    | Python | sys.stdin.readline()         |
+    | Rust   | stdin().read_line(&mut buf)  |
+    | TS     | readline.question() sync     |
+
+    Invariants:
+    - typ is STRING
+    """
+
+
+@dataclass
+class ReadAll(Expr):
+    """Read all remaining input from stdin.
+
+    Semantics: Read until EOF. Returns complete contents as string.
+
+    | Target | Representation              |
+    |--------|------------------------------|
+    | C      | read() loop                  |
+    | Go     | io.ReadAll(os.Stdin)         |
+    | Java   | Scanner + StringBuilder      |
+    | Python | sys.stdin.read()             |
+    | Rust   | io::read_to_string(stdin())  |
+    | TS     | fs.readFileSync(0, 'utf8')   |
+
+    Invariants:
+    - typ is STRING
+    """
+
+
+@dataclass
+class ReadBytes(Expr):
+    """Read all bytes from stdin.
+
+    Semantics: Read binary data until EOF.
+
+    | Target | Representation              |
+    |--------|------------------------------|
+    | C      | fread() loop                 |
+    | Go     | io.ReadAll(os.Stdin)         |
+    | Java   | InputStream.readAllBytes()   |
+    | Python | sys.stdin.buffer.read()      |
+    | Rust   | stdin().read_to_end(&mut v)  |
+    | TS     | fs.readFileSync(0)           |
+
+    Invariants:
+    - typ is BYTES
+    """
+
+
+@dataclass
+class ReadBytesN(Expr):
+    """Read up to n bytes from stdin.
+
+    Semantics: Read up to count bytes. May return fewer at EOF.
+
+    | Target | Representation               |
+    |--------|-------------------------------|
+    | C      | fread(buf, 1, n, stdin)       |
+    | Go     | io.ReadAtLeast(stdin, buf, n) |
+    | Java   | InputStream.readNBytes(n)     |
+    | Python | sys.stdin.buffer.read(n)      |
+    | Rust   | stdin().take(n).read(&mut v)  |
+    | TS     | manual Buffer allocation      |
+
+    Invariants:
+    - count.typ is INT
+    - typ is BYTES
+    """
+
+    count: Expr
+
+
+@dataclass
+class WriteBytes(Expr):
+    """Write bytes to stdout or stderr.
+
+    Semantics: Write binary data. Returns count of bytes written.
+
+    | Target | Representation               |
+    |--------|-------------------------------|
+    | C      | fwrite(data, 1, len, stdout)  |
+    | Go     | os.Stdout.Write(data)         |
+    | Java   | OutputStream.write(data)      |
+    | Python | sys.stdout.buffer.write(data) |
+    | Rust   | stdout().write_all(&data)     |
+    | TS     | process.stdout.write(data)    |
+
+    Invariants:
+    - data.typ is BYTES
+    - typ is INT (bytes written)
+    """
+
+    data: Expr
+    stderr: bool = False
+
+
+@dataclass
+class Args(Expr):
+    """Command-line arguments.
+
+    Semantics: Program arguments as string slice. argv[0] is program name.
+
+    | Target | Representation              |
+    |--------|------------------------------|
+    | C      | argv[0..argc]                |
+    | Go     | os.Args                      |
+    | Java   | args (empty string for [0])  |
+    | Python | sys.argv                     |
+    | Rust   | std::env::args().collect()   |
+    | TS     | process.argv.slice(1)        |
+
+    Invariants:
+    - typ is Slice(STRING)
+    """
+
+
+@dataclass
+class GetEnv(Expr):
+    """Get environment variable.
+
+    Semantics: Returns value or default (nil if no default).
+
+    | Target | Representation                |
+    |--------|-------------------------------|
+    | C      | getenv(name)                  |
+    | Go     | os.Getenv(name)               |
+    | Java   | System.getenv(name)           |
+    | Python | os.getenv(name, default)      |
+    | Rust   | std::env::var(name).ok()      |
+    | TS     | process.env[name]             |
+
+    Invariants:
+    - name.typ is STRING
+    - typ is Optional(STRING) or STRING if default provided
+    """
+
+    name: Expr
+    default: Expr | None = None
+
+
+# --- Comprehensions ---
+
+
+@dataclass
+class ListComp(Expr):
+    """List comprehension: [expr for target in iter if cond]
+
+    Semantics: Build list by iterating and filtering.
+
+    | Target | Representation                      |
+    |--------|-------------------------------------|
+    | C      | loop with array_push                |
+    | Go     | for loop with append                |
+    | Java   | stream().filter().map().collect()   |
+    | Python | [expr for target in iter if cond]   |
+    | Rust   | iter.filter().map().collect()       |
+    | TS     | iter.filter().map() or loop         |
+
+    Invariants:
+    - iterable.typ is Slice, Array, or iterable
+    - typ is Slice(element.typ)
+    """
+
+    element: Expr
+    target: str
+    iterable: Expr
+    condition: Expr | None = None
+
+
+@dataclass
+class SetComp(Expr):
+    """Set comprehension: {expr for target in iter if cond}
+
+    Semantics: Build set by iterating and filtering.
+
+    Invariants:
+    - iterable.typ is Slice, Array, or iterable
+    - typ is Set(element.typ)
+    """
+
+    element: Expr
+    target: str
+    iterable: Expr
+    condition: Expr | None = None
+
+
+@dataclass
+class DictComp(Expr):
+    """Dict comprehension: {key: value for target in iter if cond}
+
+    Semantics: Build map by iterating and filtering.
+
+    Invariants:
+    - iterable.typ is Slice, Array, or iterable
+    - typ is Map(key.typ, value.typ)
+    """
+
+    key: Expr
+    value: Expr
+    target: str
+    iterable: Expr
+    condition: Expr | None = None
 
 
 # ============================================================

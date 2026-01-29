@@ -4,6 +4,52 @@ from __future__ import annotations
 
 import re
 
+# Go reserved words that need renaming
+GO_RESERVED = frozenset({
+    "break", "case", "chan", "const", "continue", "default", "defer", "else",
+    "fallthrough", "for", "func", "go", "goto", "if", "import", "interface",
+    "map", "package", "range", "return", "select", "struct", "switch", "type", "var",
+})
+
+
+def go_to_pascal(name: str) -> str:
+    """Convert snake_case to PascalCase for Go. Private methods (underscore prefix) become unexported."""
+    is_private = name.startswith("_")
+    if is_private:
+        name = name[1:]
+    parts = name.split("_")
+    # Use upper on first char only (not capitalize which lowercases rest)
+    result = "".join((p[0].upper() + p[1:]) if p else "" for p in parts)
+    # All-caps names (constants) stay all-caps even if originally private
+    if name.isupper():
+        return result
+    if is_private:
+        # Make first letter lowercase for unexported (private) names
+        return result[0].lower() + result[1:] if result else result
+    return result
+
+
+def go_to_camel(name: str) -> str:
+    """Convert snake_case to camelCase for Go."""
+    if name == "self":
+        return name
+    if name.startswith("_"):
+        name = name[1:]
+    parts = name.split("_")
+    if not parts:
+        return name
+    # Use upper on first char only (not capitalize which lowercases rest)
+    def upper_first(s: str) -> str:
+        return (s[0].upper() + s[1:]) if s else ""
+    # All-caps names (constants) should use PascalCase in Go
+    if name.isupper():
+        return "".join(upper_first(p) for p in parts)
+    result = parts[0] + "".join(upper_first(p) for p in parts[1:])
+    # Handle Go reserved words
+    if result in GO_RESERVED:
+        return result + "_"
+    return result
+
 
 def to_snake(name: str) -> str:
     """Convert camelCase/PascalCase to snake_case."""

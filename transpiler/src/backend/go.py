@@ -64,7 +64,7 @@ from __future__ import annotations
 
 import re
 
-from src.backend.util import escape_string
+from src.backend.util import GO_RESERVED, escape_string, go_to_camel, go_to_pascal
 from src.ir import (
     BOOL,
     BYTE,
@@ -155,14 +155,6 @@ from src.ir import (
     While,
 )
 
-# Go reserved words that need renaming
-GO_RESERVED = {
-    "break", "case", "chan", "const", "continue", "default", "defer", "else",
-    "fallthrough", "for", "func", "go", "goto", "if", "import", "interface",
-    "map", "package", "range", "return", "select", "struct", "switch", "type", "var",
-}
-
-
 class GoBackend:
     """Emit Go code from IR Module."""
 
@@ -202,7 +194,7 @@ class GoBackend:
             self._line("const (")
             self.indent += 1
             for const in true_consts:
-                name = self._to_pascal(const.name)
+                name = go_to_pascal(const.name)
                 value = self._emit_expr(const.value)
                 self._line(f"{name} = {value}")
             self.indent -= 1
@@ -212,7 +204,7 @@ class GoBackend:
             self._line("var (")
             self.indent += 1
             for const in var_consts:
-                name = self._to_pascal(const.name)
+                name = go_to_pascal(const.name)
                 value = self._emit_expr(const.value)
                 self._line(f"{name} = {value}")
             self.indent -= 1
@@ -447,7 +439,7 @@ func _Substring(s string, start int, end int) string {
             self._line(struct.embedded_type)
         for field in struct.fields:
             go_type = self._type_to_go(field.typ)
-            go_name = self._to_pascal(field.name)
+            go_name = go_to_pascal(field.name)
             self._line(f"{go_name} {go_type}")
         self.indent -= 1
         self._line("}")
@@ -481,7 +473,7 @@ func _Substring(s string, start int, end int) string {
         self._named_returns = None
         self._in_catch_body = False
         params = ", ".join(
-            f"{self._to_camel(p.name)} {self._type_to_go(p.typ)}" for p in func.params
+            f"{go_to_camel(p.name)} {self._type_to_go(p.typ)}" for p in func.params
         )
         # Check if we need named return parameters (for TryCatch with catch-body returns)
         needs_named_returns = getattr(func, 'needs_named_returns', False)
@@ -491,15 +483,15 @@ func _Substring(s string, start int, end int) string {
             ret = self._return_type_to_go(func.ret) if func.ret != VOID else ""
         if func.receiver:
             # Use the receiver name from IR directly (converted to camelCase)
-            recv_name = self._to_camel(func.receiver.name)
+            recv_name = go_to_camel(func.receiver.name)
             self._receiver_name = recv_name
             recv_type = self._type_to_go(func.receiver.typ)
             if func.receiver.pointer:
                 recv_type = "*" + recv_type.lstrip("*")
-            self._line(f"func ({recv_name} {recv_type}) {self._to_pascal(func.name)}({params}) {ret} {{")
+            self._line(f"func ({recv_name} {recv_type}) {go_to_pascal(func.name)}({params}) {ret} {{")
         else:
             self._receiver_name = ""
-            name = self._to_pascal(func.name)
+            name = go_to_pascal(func.name)
             if ret:
                 self._line(f"func {name}({params}) {ret} {{")
             else:
@@ -525,7 +517,7 @@ func _Substring(s string, start int, end int) string {
 
     def _emit_stmt_VarDecl(self, stmt: VarDecl) -> None:
         go_type = self._type_to_go(stmt.typ)
-        name = self._to_camel(stmt.name)
+        name = go_to_camel(stmt.name)
         # Track tuple vars for later tuple indexing
         if isinstance(stmt.typ, Tuple):
             self._tuple_vars[name] = stmt.typ
@@ -594,7 +586,7 @@ func _Substring(s string, start int, end int) string {
                 if t.name == "_":
                     targets.append("_")
                 else:
-                    targets.append(self._to_camel(t.name))
+                    targets.append(go_to_camel(t.name))
             else:
                 targets.append(self._emit_lvalue(t))
         target_str = ", ".join(targets)
@@ -782,7 +774,7 @@ func _Substring(s string, start int, end int) string {
                         type_str = self._type_to_go(ret_type)
                 # Don't override interface{} with non-tuple return type - the var might not
                 # be related to the return value at all
-            go_name = self._to_camel(name)
+            go_name = go_to_camel(name)
             self._line(f"var {go_name} {type_str}")
             self._hoisted_in_try.add(name)
 
@@ -833,7 +825,7 @@ func _Substring(s string, start int, end int) string {
         # Emit hoisted variable declarations before the loop
         hoisted_vars = getattr(stmt, 'hoisted_vars', [])
         for name, typ in hoisted_vars:
-            go_name = self._to_camel(name)
+            go_name = go_to_camel(name)
             if typ is not None:
                 go_type = self._type_to_go(typ)
                 self._line(f"var {go_name} {go_type}")
@@ -854,14 +846,14 @@ func _Substring(s string, start int, end int) string {
         hoisted_vars = getattr(stmt, 'hoisted_vars', [])
         for name, typ in hoisted_vars:
             type_str = self._type_to_go(typ) if typ else "interface{}"
-            go_name = self._to_camel(name)
+            go_name = go_to_camel(name)
             self._line(f"var {go_name} {type_str}")
             self._hoisted_in_try.add(name)
         iterable = self._emit_expr(stmt.iterable)
         idx = stmt.index if stmt.index else "_"
         val = stmt.value if stmt.value else "_"
-        idx_go = self._to_camel(idx) if idx != "_" else "_"
-        val_go = self._to_camel(val) if val != "_" else "_"
+        idx_go = go_to_camel(idx) if idx != "_" else "_"
+        val_go = go_to_camel(val) if val != "_" else "_"
         if idx == "_" and val == "_":
             self._line(f"for range {iterable} {{")
         elif idx == "_":
@@ -888,7 +880,7 @@ func _Substring(s string, start int, end int) string {
     def _emit_stmt_inline(self, stmt: Stmt) -> str:
         """Emit statement as inline string (for for loop parts)."""
         if isinstance(stmt, VarDecl):
-            name = self._to_camel(stmt.name)
+            name = go_to_camel(stmt.name)
             if stmt.value:
                 val = self._emit_expr(stmt.value)
                 return f"{name} := {val}"
@@ -936,7 +928,7 @@ func _Substring(s string, start int, end int) string {
         hoisted_vars = getattr(stmt, 'hoisted_vars', [])
         for name, typ in hoisted_vars:
             type_str = self._type_to_go(typ) if typ else "interface{}"
-            go_name = self._to_camel(name)
+            go_name = go_to_camel(name)
             self._line(f"var {go_name} {type_str}")
             self._hoisted_in_try.add(name)
         has_returns = getattr(stmt, 'has_returns', False)
@@ -1062,7 +1054,7 @@ func _Substring(s string, start int, end int) string {
         hoisted_vars = getattr(stmt, 'hoisted_vars', [])
         for name, typ in hoisted_vars:
             type_str = self._type_to_go(typ) if typ else "interface{}"
-            go_name = self._to_camel(name)
+            go_name = go_to_camel(name)
             self._line(f"var {go_name} {type_str}")
             self._hoisted_in_try.add(name)
         # Special case: single case with default that's just a break.
@@ -1081,7 +1073,7 @@ func _Substring(s string, start int, end int) string {
         if binding_unused or binding_reassigned:
             self._line(f"switch {expr}.(type) {{")
         else:
-            binding = self._to_camel(stmt.binding)
+            binding = go_to_camel(stmt.binding)
             self._line(f"switch {binding} := {expr}.(type) {{")
         for case in stmt.cases:
             go_type = self._type_to_go(case.typ)
@@ -1092,7 +1084,7 @@ func _Substring(s string, start int, end int) string {
             # When binding_reassigned, emit explicit type assertion with a different name
             # so reads use the narrowed type but writes go to the outer variable
             if binding_reassigned and not binding_unused:
-                binding = self._to_camel(stmt.binding)
+                binding = go_to_camel(stmt.binding)
                 # Create narrowed name by capitalizing first letter after binding
                 narrowed_name = f"{binding}{self._extract_type_suffix(go_type)}"
                 self._line(f"{narrowed_name} := {expr}.({go_type})")
@@ -1116,7 +1108,7 @@ func _Substring(s string, start int, end int) string {
             # In default case, binding has type interface{} - assert back to original type
             needs_node_assertion = False
             if not binding_unused and not binding_reassigned:
-                binding = self._to_camel(stmt.binding)
+                binding = go_to_camel(stmt.binding)
                 expr_typ = getattr(stmt.expr, 'typ', None)
                 if expr_typ:
                     type_str = self._type_to_go(expr_typ)
@@ -1128,7 +1120,7 @@ func _Substring(s string, start int, end int) string {
                         needs_node_assertion = True
             if needs_node_assertion:
                 # Wrap in block to allow := shadowing
-                binding = self._to_camel(stmt.binding)
+                binding = go_to_camel(stmt.binding)
                 self._line("{")
                 self.indent += 1
                 self._line(f"{binding} := {binding}.(Node)")
@@ -1150,7 +1142,7 @@ func _Substring(s string, start int, end int) string {
         case = stmt.cases[0]
         go_type = self._type_to_go(case.typ)
         expr = self._emit_expr(stmt.expr)
-        binding = self._to_camel(stmt.binding)
+        binding = go_to_camel(stmt.binding)
         # Use a different binding name to avoid shadowing issues when the body
         # reassigns the original variable. Add a type suffix.
         narrowed_binding = binding + self._extract_type_suffix(go_type)
@@ -1184,7 +1176,7 @@ func _Substring(s string, start int, end int) string {
         hoisted_vars = getattr(stmt, 'hoisted_vars', [])
         for name, typ in hoisted_vars:
             type_str = self._type_to_go(typ) if typ else "interface{}"
-            go_name = self._to_camel(name)
+            go_name = go_to_camel(name)
             self._line(f"var {go_name} {type_str}")
             self._hoisted_in_try.add(name)
         expr = self._emit_expr(stmt.expr)
@@ -1244,11 +1236,11 @@ func _Substring(s string, start int, end int) string {
         # Check for type switch binding rename (reads use narrowed name)
         if expr.name in self._type_switch_binding_rename:
             return self._type_switch_binding_rename[expr.name]
-        return self._to_camel(expr.name)
+        return go_to_camel(expr.name)
 
     def _emit_expr_FieldAccess(self, expr: FieldAccess) -> str:
         obj = self._emit_expr(expr.obj)
-        field = self._to_pascal(expr.field)
+        field = go_to_pascal(expr.field)
         # Interface fields must be accessed via getter methods
         obj_type = getattr(expr.obj, 'typ', None)
         is_node_type = (
@@ -1266,7 +1258,7 @@ func _Substring(s string, start int, end int) string {
         if isinstance(expr.index, IntLit):
             # Check if indexing into a known tuple variable
             if isinstance(expr.obj, Var):
-                var_name = self._to_camel(expr.obj.name)
+                var_name = go_to_camel(expr.obj.name)
                 if var_name in self._tuple_vars:
                     return f"{obj}.F{expr.index.value}"
             # Check if indexing into a tuple type (struct with F0, F1, etc.)
@@ -1323,7 +1315,7 @@ func _Substring(s string, start int, end int) string {
         elif expr.func in ("parsefn",):
             func = expr.func
         else:
-            func = self._to_pascal(expr.func)
+            func = go_to_pascal(expr.func)
         args = ", ".join(self._emit_expr(a) for a in expr.args)
         return f"{func}({args})"
 
@@ -1444,13 +1436,13 @@ func _Substring(s string, start int, end int) string {
                 default = self._emit_expr(expr.args[1])
                 return f"_mapGet({obj}, {key}, {default})"
             return f"{obj}[{key}]"
-        method = self._to_pascal(method)
+        method = go_to_pascal(method)
         args = ", ".join(self._emit_expr(a) for a in expr.args)
         return f"{obj}.{method}({args})"
 
     def _emit_expr_StaticCall(self, expr: StaticCall) -> str:
         on_type = self._type_to_go(expr.on_type)
-        method = self._to_pascal(expr.method)
+        method = go_to_pascal(expr.method)
         args = ", ".join(self._emit_expr(a) for a in expr.args)
         return f"{on_type}.{method}({args})"
 
@@ -1649,7 +1641,7 @@ func _Substring(s string, start int, end int) string {
             parts.append(self._emit_expr(expr.embedded_value))
         # Add named fields
         for k, v in expr.fields.items():
-            parts.append(f"{self._to_pascal(k)}: {self._emit_expr(v)}")
+            parts.append(f"{go_to_pascal(k)}: {self._emit_expr(v)}")
         fields = ", ".join(parts)
         lit = f"{expr.struct_name}{{{fields}}}"
         if isinstance(expr.typ, Pointer):
@@ -1692,10 +1684,10 @@ func _Substring(s string, start int, end int) string {
     def _emit_lvalue(self, lv: LValue) -> str:
         """Emit an lvalue and return Go code string."""
         if isinstance(lv, VarLV):
-            return self._to_camel(lv.name)
+            return go_to_camel(lv.name)
         if isinstance(lv, FieldLV):
             obj = self._emit_expr(lv.obj)
-            field = self._to_pascal(lv.field)
+            field = go_to_pascal(lv.field)
             return f"{obj}.{field}"
         if isinstance(lv, IndexLV):
             obj = self._emit_expr(lv.obj)
@@ -1817,47 +1809,6 @@ func _Substring(s string, start int, end int) string {
         if pos is not None and pos < len(ret_type.elements):
             return ret_type.elements[pos]
         return None
-
-    # ============================================================
-    # NAME CONVERSION
-    # ============================================================
-
-    def _to_pascal(self, name: str) -> str:
-        """Convert snake_case to PascalCase. Private methods (underscore prefix) become unexported."""
-        is_private = name.startswith("_")
-        if is_private:
-            name = name[1:]
-        parts = name.split("_")
-        # Use upper on first char only (not capitalize which lowercases rest)
-        result = "".join((p[0].upper() + p[1:]) if p else "" for p in parts)
-        # All-caps names (constants) stay all-caps even if originally private
-        if name.isupper():
-            return result
-        if is_private:
-            # Make first letter lowercase for unexported (private) names
-            return result[0].lower() + result[1:] if result else result
-        return result
-
-    def _to_camel(self, name: str) -> str:
-        """Convert snake_case to camelCase."""
-        if name == "self":
-            return name
-        if name.startswith("_"):
-            name = name[1:]
-        parts = name.split("_")
-        if not parts:
-            return name
-        # Use upper on first char only (not capitalize which lowercases rest)
-        def upper_first(s: str) -> str:
-            return (s[0].upper() + s[1:]) if s else ""
-        # All-caps names (constants) should use PascalCase in Go
-        if name.isupper():
-            return "".join(upper_first(p) for p in parts)
-        result = parts[0] + "".join(upper_first(p) for p in parts[1:])
-        # Handle Go reserved words
-        if result in GO_RESERVED:
-            return result + "_"
-        return result
 
     # ============================================================
     # OUTPUT HELPERS

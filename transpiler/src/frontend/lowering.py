@@ -26,6 +26,33 @@ def loc_from_node(node: ast.AST) -> Loc:
     return Loc.unknown()
 
 
+def make_default_value(typ: "Type", loc: Loc) -> "ir.Expr":
+    """Create a default value expression for a given type."""
+    from .. import ir
+    from ..ir import BOOL, FLOAT, INT, STRING, Map, Optional, Pointer, Primitive, Set, Slice, StructRef
+    # Pointer and interface types use nil
+    if isinstance(typ, (Pointer, Optional, InterfaceRef)):
+        return ir.NilLit(typ=typ, loc=loc)
+    # Primitive types use their zero values
+    if isinstance(typ, Primitive):
+        if typ.kind == "bool":
+            return ir.BoolLit(value=False, typ=BOOL, loc=loc)
+        if typ.kind == "int":
+            return ir.IntLit(value=0, typ=INT, loc=loc)
+        if typ.kind == "string":
+            return ir.StringLit(value="", typ=STRING, loc=loc)
+        if typ.kind == "float":
+            return ir.FloatLit(value=0.0, typ=FLOAT, loc=loc)
+    # Slice/Map/Set use nil (Go zero value)
+    if isinstance(typ, (Slice, Map, Set)):
+        return ir.NilLit(typ=typ, loc=loc)
+    # StructRef uses nil (pointer to struct)
+    if isinstance(typ, StructRef):
+        return ir.NilLit(typ=Pointer(typ), loc=loc)
+    # Fallback to nil
+    return ir.NilLit(typ=typ, loc=loc)
+
+
 def binop_to_str(op: ast.operator) -> str:
     """Convert AST binary operator to string."""
     return {
@@ -1573,7 +1600,7 @@ def lower_expr_Call(
                         field_name = struct_info.param_to_field.get(param_name, param_name)
                         field_info = struct_info.fields.get(field_name)
                         field_type = field_info.typ if field_info else InterfaceRef("any")
-                        ctor_args[i] = dispatch.make_default_value(field_type, loc_from_node(node))
+                        ctor_args[i] = make_default_value(field_type, loc_from_node(node))
                 return ir.Call(
                     func=f"New{func_name}",
                     args=ctor_args,  # type: ignore

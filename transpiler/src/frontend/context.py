@@ -55,7 +55,6 @@ class LoweringDispatch:
     infer_expr_type_from_ast: Callable[[ast.expr], "Type"]
     # Helper callbacks
     annotation_to_str: Callable[[ast.expr | None], str]
-    make_default_value: Callable[["Type", "Loc"], "ir.Expr"]
     # Method/function argument handling
     merge_keyword_args: Callable[["Type", str, list, ast.Call], list]
     fill_default_args: Callable[["Type", str, list], list]

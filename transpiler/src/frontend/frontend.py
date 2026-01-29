@@ -371,31 +371,6 @@ class Frontend:
             return None
         return parts
 
-    def _make_default_value(self, typ: Type, loc: Loc) -> "ir.Expr":
-        """Create a default value expression for a given type."""
-        from .. import ir
-        # Pointer and interface types use nil
-        if isinstance(typ, (Pointer, Optional, InterfaceRef)):
-            return ir.NilLit(typ=typ, loc=loc)
-        # Primitive types use their zero values
-        if isinstance(typ, Primitive):
-            if typ.kind == "bool":
-                return ir.BoolLit(value=False, typ=BOOL, loc=loc)
-            if typ.kind == "int":
-                return ir.IntLit(value=0, typ=INT, loc=loc)
-            if typ.kind == "string":
-                return ir.StringLit(value="", typ=STRING, loc=loc)
-            if typ.kind == "float":
-                return ir.FloatLit(value=0.0, typ=FLOAT, loc=loc)
-        # Slice/Map/Set use nil (Go zero value)
-        if isinstance(typ, (Slice, Map, Set)):
-            return ir.NilLit(typ=typ, loc=loc)
-        # StructRef uses nil (pointer to struct)
-        if isinstance(typ, StructRef):
-            return ir.NilLit(typ=Pointer(typ), loc=loc)
-        # Fallback to nil
-        return ir.NilLit(typ=typ, loc=loc)
-
     def _infer_type_from_value(
         self, node: ast.expr, param_types: dict[str, str]
     ) -> Type:
@@ -537,7 +512,6 @@ class Frontend:
             lower_expr_List=self._lower_expr_List,
             infer_expr_type_from_ast=self._infer_expr_type_from_ast,
             annotation_to_str=self._annotation_to_str,
-            make_default_value=self._make_default_value,
             merge_keyword_args=self._merge_keyword_args,
             fill_default_args=self._fill_default_args,
             merge_keyword_args_for_func=self._merge_keyword_args_for_func,

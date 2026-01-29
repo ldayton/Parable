@@ -87,47 +87,29 @@ class Frontend:
         """Parse Python source and produce IR Module."""
         tree = ast.parse(source)
         # Pass 1: Collect class names and inheritance
-        self._collect_class_names(tree)
+        collection.collect_class_names(tree, self.symbols)
         # Pass 2: Mark Node subclasses
-        self._mark_node_subclasses()
+        collection.mark_node_subclasses(self.symbols, self._node_types)
         # Pass 2b: Mark Exception subclasses
-        self._mark_exception_subclasses()
+        collection.mark_exception_subclasses(self.symbols)
         # Pass 3: Collect function and method signatures
         self._collect_signatures(tree)
         # Pass 4: Collect struct fields
         self._collect_fields(tree)
         # Pass 4b: Build kind -> struct mapping from const_fields
-        self._build_kind_mapping()
+        collection.build_kind_mapping(self.symbols, self._kind_to_struct, self._kind_to_class)
         # Pass 5: Collect module-level constants
-        self._collect_constants(tree)
+        collection.collect_constants(tree, self.symbols)
         # Build IR Module
         return self._build_module(tree)
-
-    def _collect_class_names(self, tree: ast.Module) -> None:
-        """Pass 1: Collect all class names and their bases."""
-        collection.collect_class_names(tree, self.symbols)
-
-    def _mark_node_subclasses(self) -> None:
-        """Pass 2: Mark classes that inherit from Node."""
-        collection.mark_node_subclasses(self.symbols, self._node_types)
 
     def _is_node_subclass(self, name: str) -> bool:
         """Check if a class is a Node subclass (directly or transitively)."""
         return type_inference.is_node_subclass(name, self.symbols)
 
-    def _mark_exception_subclasses(self) -> None:
-        """Pass 2b: Mark classes that inherit from Exception."""
-        collection.mark_exception_subclasses(self.symbols)
-
     def _is_exception_subclass(self, name: str) -> bool:
         """Check if a class is an Exception subclass (directly or transitively)."""
         return collection.is_exception_subclass(name, self.symbols)
-
-    def _build_kind_mapping(self) -> None:
-        """Build kind -> struct/class mappings from const_fields["kind"] values."""
-        collection.build_kind_mapping(
-            self.symbols, self._kind_to_struct, self._kind_to_class
-        )
 
     def _collect_signatures(self, tree: ast.Module) -> None:
         """Pass 3: Collect function and method signatures."""
@@ -181,10 +163,6 @@ class Frontend:
             infer_type_from_value=self._infer_type_from_value,
         )
         collection.collect_init_fields(init, info, callbacks)
-
-    def _collect_constants(self, tree: ast.Module) -> None:
-        """Pass 5: Collect module-level and class-level constants."""
-        collection.collect_constants(tree, self.symbols)
 
     def _detect_mutated_params(self, node: ast.FunctionDef) -> set[str]:
         """Detect which parameters are mutated in the function body."""

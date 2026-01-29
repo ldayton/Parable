@@ -33,7 +33,25 @@ input goes here
 
 ## Directories
 
+- `bin/` — Test runners and corpus utilities
 - `parable/` — Parable hand-written tests
 - `corpus/gnu-bash/` — GNU Bash 5.3 test suite
 - `corpus/oils/` — Oils project bash corpus
 - `corpus/tree-sitter-bash/` — tree-sitter-bash test cases
+
+## Corpus Utilities
+
+Scripts in `bin/` for working with test corpora. Require [bash-oracle](https://github.com/ldayton/bash-oracle).
+
+```bash
+# Verify test expectations match bash-oracle
+./tests/bin/verify-tests.py
+
+# Run Parable against bigtable-bash corpus
+./tests/bin/run-corpus.py
+
+# Convert external corpora to .tests format
+./tests/bin/convert-gnu-bash.py
+./tests/bin/convert-oils.py
+./tests/bin/convert-tree-sitter.py
+```

@@ -168,12 +168,11 @@ src/
 └── parable.go                   # Transpiled Go parser
 
 tests/
-├── bin/                         # Test runners
+├── bin/                         # Test runners + corpus utilities
 ├── parable/                     # Parable test cases
 └── corpus/                      # Validation corpus
 
 tools/
-├── bash-oracle/                 # Patched bash + corpus utilities
 ├── fuzzer/                      # Differential fuzzers
 └── transpiler/
     ├── transpile_js.py          # Python → Javascript

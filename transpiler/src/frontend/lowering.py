@@ -1955,6 +1955,227 @@ def lower_stmt_AnnAssign(
     return ir.ExprStmt(expr=ir.Var(name="_skip_ann", typ=VOID))
 
 
+def collect_isinstance_chain(
+    node: ast.If,
+    var_name: str,
+    ctx: "FrontendContext",
+    dispatch: "LoweringDispatch",
+) -> tuple[list["ir.TypeCase"], list["ir.Stmt"]]:
+    """Collect isinstance checks on same variable into TypeSwitch cases."""
+    from .. import ir
+    type_ctx = ctx.type_ctx
+    cases: list[ir.TypeCase] = []
+    current = node
+    while True:
+        # Check for single isinstance or isinstance-or-chain
+        check = extract_isinstance_or_chain(current.test, ctx.kind_to_class)
+        if not check or check[0] != var_name:
+            break
+        _, type_names = check
+        # Lower body once, generate case for each type
+        # For or chains, duplicate the body for each type
+        for type_name in type_names:
+            typ = dispatch.resolve_type_name(type_name)
+            # Temporarily narrow the variable type for this branch
+            old_type = type_ctx.var_types.get(var_name)
+            type_ctx.var_types[var_name] = typ
+            body = dispatch.lower_stmts(current.body)
+            # Restore original type
+            if old_type is not None:
+                type_ctx.var_types[var_name] = old_type
+            else:
+                type_ctx.var_types.pop(var_name, None)
+            cases.append(ir.TypeCase(typ=typ, body=body, loc=loc_from_node(current)))
+        # Check for elif isinstance chain
+        if len(current.orelse) == 1 and isinstance(current.orelse[0], ast.If):
+            current = current.orelse[0]
+        elif current.orelse:
+            # Has else block - becomes default
+            default = dispatch.lower_stmts(current.orelse)
+            return cases, default
+        else:
+            return cases, []
+    # Reached non-isinstance condition - treat rest as default
+    if current != node:
+        # Need to lower the remaining if statement
+        default_if = ir.If(
+            cond=dispatch.lower_expr_as_bool(current.test),
+            then_body=dispatch.lower_stmts(current.body),
+            else_body=dispatch.lower_stmts(current.orelse) if current.orelse else [],
+            loc=loc_from_node(current),
+        )
+        return cases, [default_if]
+    return [], []
+
+
+def lower_stmt_If(
+    node: ast.If,
+    ctx: "FrontendContext",
+    dispatch: "LoweringDispatch",
+) -> "ir.Stmt":
+    """Lower a Python if statement to IR."""
+    from .. import ir
+    from ..ir import TypeSwitch
+    type_ctx = ctx.type_ctx
+    # Check for isinstance chain pattern (including 'or' patterns)
+    isinstance_check = extract_isinstance_or_chain(node.test, ctx.kind_to_class)
+    if isinstance_check:
+        var_name, _ = isinstance_check
+        # Try to collect full isinstance chain on same variable
+        cases, default = collect_isinstance_chain(node, var_name, ctx, dispatch)
+        if cases:
+            var_expr = dispatch.lower_expr(ast.Name(id=var_name, ctx=ast.Load()))
+            return TypeSwitch(
+                expr=var_expr,
+                binding=var_name,
+                cases=cases,
+                default=default,
+                loc=loc_from_node(node)
+            )
+    # Fall back to regular If emission
+    cond = dispatch.lower_expr_as_bool(node.test)
+    # Check for isinstance in compound AND condition for type narrowing
+    isinstance_in_and = extract_isinstance_from_and(node.test)
+    # Check for kind-based type narrowing (kind == "value" or node.kind == "value")
+    kind_check = extract_kind_check(node.test, ctx.kind_to_struct, ctx.type_ctx.kind_source_vars)
+    narrowed_var = None
+    old_type = None
+    was_already_narrowed = False
+    if isinstance_in_and:
+        var_name, type_name = isinstance_in_and
+        typ = dispatch.resolve_type_name(type_name)
+        narrowed_var = var_name
+        old_type = type_ctx.var_types.get(var_name)
+        was_already_narrowed = var_name in type_ctx.narrowed_vars
+        type_ctx.var_types[var_name] = typ
+        type_ctx.narrowed_vars.add(var_name)
+    elif kind_check:
+        var_name, struct_name = kind_check
+        typ = Pointer(StructRef(struct_name))
+        narrowed_var = var_name
+        old_type = type_ctx.var_types.get(var_name)
+        was_already_narrowed = var_name in type_ctx.narrowed_vars
+        type_ctx.var_types[var_name] = typ
+        type_ctx.narrowed_vars.add(var_name)
+    then_body = dispatch.lower_stmts(node.body)
+    # Restore narrowed type after processing body
+    if narrowed_var is not None:
+        if old_type is not None:
+            type_ctx.var_types[narrowed_var] = old_type
+        else:
+            type_ctx.var_types.pop(narrowed_var, None)
+        if not was_already_narrowed:
+            type_ctx.narrowed_vars.discard(narrowed_var)
+    else_body = dispatch.lower_stmts(node.orelse) if node.orelse else []
+    return ir.If(cond=cond, then_body=then_body, else_body=else_body, loc=loc_from_node(node))
+
+
+def lower_stmt_For(
+    node: ast.For,
+    ctx: "FrontendContext",
+    dispatch: "LoweringDispatch",
+) -> "ir.Stmt":
+    """Lower a Python for loop to IR."""
+    from .. import ir
+    type_ctx = ctx.type_ctx
+    iterable = dispatch.lower_expr(node.iter)
+    # Determine loop variable types based on iterable type
+    iterable_type = dispatch.infer_expr_type_from_ast(node.iter)
+    # Dereference Pointer(Slice) or Optional(Slice) for range
+    inner_slice = dispatch.get_inner_slice(iterable_type)
+    if inner_slice is not None:
+        iterable = ir.UnaryOp(op="*", operand=iterable, typ=inner_slice, loc=iterable.loc)
+        iterable_type = inner_slice
+    # Determine index and value names
+    index = None
+    value = None
+    # Get element type for loop variable
+    elem_type: "Type | None" = None
+    if iterable_type == STRING:
+        elem_type = RUNE
+    elif isinstance(iterable_type, Slice):
+        elem_type = iterable_type.element
+    if isinstance(node.target, ast.Name):
+        if node.target.id == "_":
+            pass  # Discard
+        else:
+            value = node.target.id
+            if elem_type:
+                type_ctx.var_types[value] = elem_type
+    elif isinstance(node.target, ast.Tuple) and len(node.target.elts) == 2:
+        # Check if iterating over Slice(Tuple) - need tuple unpacking, not (index, value)
+        if isinstance(elem_type, Tuple) and len(elem_type.elements) >= 2:
+            # Generate: for _, _item := range iterable; a := _item.F0; b := _item.F1
+            item_var = "_item"
+            # Set types for unpacked variables
+            unpack_vars: list[tuple[int, str]] = []
+            for i, elt in enumerate(node.target.elts):
+                if isinstance(elt, ast.Name) and elt.id != "_":
+                    unpack_vars.append((i, elt.id))
+                    if i < len(elem_type.elements):
+                        type_ctx.var_types[elt.id] = elem_type.elements[i]
+            # Lower body after setting up types
+            body = dispatch.lower_stmts(node.body)
+            # Prepend unpacking assignments
+            unpack_stmts: list[ir.Stmt] = []
+            for i, var_name in unpack_vars:
+                field_type = elem_type.elements[i] if i < len(elem_type.elements) else Interface("any")
+                field_access = ir.FieldAccess(
+                    obj=ir.Var(name=item_var, typ=elem_type, loc=loc_from_node(node)),
+                    field=f"F{i}",
+                    typ=field_type,
+                    loc=loc_from_node(node),
+                )
+                unpack_stmts.append(ir.Assign(
+                    target=ir.VarLV(name=var_name),
+                    value=field_access,
+                    loc=loc_from_node(node),
+                ))
+            return ir.ForRange(
+                index=None,
+                value=item_var,
+                iterable=iterable,
+                body=unpack_stmts + body,
+                loc=loc_from_node(node),
+            )
+        # Otherwise treat as (index, value) iteration
+        if isinstance(node.target.elts[0], ast.Name):
+            index = node.target.elts[0].id if node.target.elts[0].id != "_" else None
+        if isinstance(node.target.elts[1], ast.Name):
+            value = node.target.elts[1].id if node.target.elts[1].id != "_" else None
+            if elem_type and value:
+                type_ctx.var_types[value] = elem_type
+    # Lower body after setting up loop variable types
+    body = dispatch.lower_stmts(node.body)
+    return ir.ForRange(index=index, value=value, iterable=iterable, body=body, loc=loc_from_node(node))
+
+
+def lower_stmt_Try(
+    node: ast.Try,
+    ctx: "FrontendContext",
+    dispatch: "LoweringDispatch",
+    set_catch_var: Callable[[str | None], str | None],
+) -> "ir.Stmt":
+    """Lower a Python try statement to IR."""
+    from .. import ir
+    body = dispatch.lower_stmts(node.body)
+    catch_var = None
+    catch_body: list[ir.Stmt] = []
+    reraise = False
+    if node.handlers:
+        handler = node.handlers[0]
+        catch_var = handler.name
+        # Set catch var context so raise e can be detected
+        saved_catch_var = set_catch_var(catch_var)
+        catch_body = dispatch.lower_stmts(handler.body)
+        set_catch_var(saved_catch_var)
+        # Check if handler re-raises (bare raise)
+        for stmt in handler.body:
+            if isinstance(stmt, ast.Raise) and stmt.exc is None:
+                reraise = True
+    return ir.TryCatch(body=body, catch_var=catch_var, catch_body=catch_body, reraise=reraise, loc=loc_from_node(node))
+
+
 # ============================================================
 # LVALUE LOWERING
 # ============================================================

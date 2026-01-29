@@ -887,182 +887,104 @@ class Frontend:
         """Extract attribute path as tuple (e.g., node.body -> ("node", "body"))."""
         return lowering.get_attr_path(node)
 
-    def _collect_isinstance_chain(self, node: ast.If, var_name: str) -> tuple[list["ir.TypeCase"], list["ir.Stmt"]]:
-        """Collect isinstance checks on same variable into TypeSwitch cases."""
-        from .. import ir
-        cases: list[ir.TypeCase] = []
-        current = node
-        while True:
-            # Check for single isinstance or isinstance-or-chain
-            check = self._extract_isinstance_or_chain(current.test)
-            if not check or check[0] != var_name:
-                break
-            _, type_names = check
-            # Lower body once, generate case for each type
-            # For or chains, duplicate the body for each type
-            for type_name in type_names:
-                typ = self._resolve_type_name(type_name)
-                # Temporarily narrow the variable type for this branch
-                # Note: Don't add to narrowed_vars here - TypeSwitch already handles
-                # type narrowing in Go via the switch binding
-                old_type = self._type_ctx.var_types.get(var_name)
-                self._type_ctx.var_types[var_name] = typ
-                body = [self._lower_stmt(s) for s in current.body]
-                # Restore original type
-                if old_type is not None:
-                    self._type_ctx.var_types[var_name] = old_type
-                else:
-                    self._type_ctx.var_types.pop(var_name, None)
-                cases.append(ir.TypeCase(typ=typ, body=body, loc=self._loc_from_node(current)))
-            # Check for elif isinstance chain
-            if len(current.orelse) == 1 and isinstance(current.orelse[0], ast.If):
-                current = current.orelse[0]
-            elif current.orelse:
-                # Has else block - becomes default
-                default = [self._lower_stmt(s) for s in current.orelse]
-                return cases, default
-            else:
-                return cases, []
-        # Reached non-isinstance condition - treat rest as default
-        if current != node:
-            default = [self._lower_stmt(ast.If(test=current.test, body=current.body, orelse=current.orelse))]
-            return cases, default
-        return [], []
-
     def _resolve_type_name(self, name: str) -> Type:
         """Resolve a class name to an IR type (for isinstance checks)."""
         return lowering.resolve_type_name(name, TYPE_MAP, self.symbols)
 
     def _lower_stmt_If(self, node: ast.If) -> "ir.Stmt":
-        from .. import ir
-        # Check for isinstance chain pattern (including 'or' patterns)
-        isinstance_check = self._extract_isinstance_or_chain(node.test)
-        if isinstance_check:
-            var_name, _ = isinstance_check
-            # Try to collect full isinstance chain on same variable
-            cases, default = self._collect_isinstance_chain(node, var_name)
-            if cases:
-                var_expr = self._lower_expr(ast.Name(id=var_name, ctx=ast.Load()))
-                return TypeSwitch(
-                    expr=var_expr,
-                    binding=var_name,
-                    cases=cases,
-                    default=default,
-                    loc=self._loc_from_node(node)
-                )
-        # Fall back to regular If emission
-        cond = self._lower_expr_as_bool(node.test)
-        # Check for isinstance in compound AND condition for type narrowing
-        isinstance_in_and = self._extract_isinstance_from_and(node.test)
-        # Check for kind-based type narrowing (kind == "value")
-        kind_check = self._extract_kind_check(node.test)
-        narrowed_var = None
-        old_type = None
-        was_already_narrowed = False
-        if isinstance_in_and:
-            var_name, type_name = isinstance_in_and
-            typ = self._resolve_type_name(type_name)
-            narrowed_var = var_name
-            old_type = self._type_ctx.var_types.get(var_name)
-            was_already_narrowed = var_name in self._type_ctx.narrowed_vars
-            self._type_ctx.var_types[var_name] = typ
-            self._type_ctx.narrowed_vars.add(var_name)
-        elif kind_check:
-            var_name, struct_name = kind_check
-            typ = Pointer(StructRef(struct_name))
-            narrowed_var = var_name
-            old_type = self._type_ctx.var_types.get(var_name)
-            was_already_narrowed = var_name in self._type_ctx.narrowed_vars
-            self._type_ctx.var_types[var_name] = typ
-            self._type_ctx.narrowed_vars.add(var_name)
-        then_body = self._lower_stmts(node.body)
-        # Restore narrowed type after processing body
-        if narrowed_var is not None:
-            if old_type is not None:
-                self._type_ctx.var_types[narrowed_var] = old_type
-            else:
-                self._type_ctx.var_types.pop(narrowed_var, None)
-            if not was_already_narrowed:
-                self._type_ctx.narrowed_vars.discard(narrowed_var)
-        else_body = self._lower_stmts(node.orelse) if node.orelse else []
-        return ir.If(cond=cond, then_body=then_body, else_body=else_body, loc=self._loc_from_node(node))
+        """Lower a Python if statement to IR."""
+        ctx = FrontendContext(
+            symbols=self.symbols,
+            type_ctx=self._type_ctx,
+            current_func_info=self._current_func_info,
+            current_class_name=self._current_class_name,
+            node_types=self._node_types,
+            kind_to_struct=self._kind_to_struct,
+            kind_to_class=self._kind_to_class,
+            current_catch_var=self._current_catch_var,
+        )
+        dispatch = LoweringDispatch(
+            lower_expr=self._lower_expr,
+            lower_expr_as_bool=self._lower_expr_as_bool,
+            lower_stmts=self._lower_stmts,
+            lower_lvalue=self._lower_lvalue,
+            lower_expr_List=self._lower_expr_List,
+            infer_expr_type_from_ast=self._infer_expr_type_from_ast,
+            infer_call_return_type=self._infer_call_return_type,
+            synthesize_type=self._synthesize_type,
+            coerce=self._coerce,
+            annotation_to_str=self._annotation_to_str,
+            py_type_to_ir=self._py_type_to_ir,
+            make_default_value=self._make_default_value,
+            extract_struct_name=self._extract_struct_name,
+            is_exception_subclass=self._is_exception_subclass,
+            is_node_subclass=self._is_node_subclass,
+            is_sentinel_int=self._is_sentinel_int,
+            get_sentinel_value=self._get_sentinel_value,
+            resolve_type_name=self._resolve_type_name,
+            get_inner_slice=self._get_inner_slice,
+            merge_keyword_args=self._merge_keyword_args,
+            fill_default_args=self._fill_default_args,
+            merge_keyword_args_for_func=self._merge_keyword_args_for_func,
+            fill_default_args_for_func=self._fill_default_args_for_func,
+            add_address_of_for_ptr_params=self._add_address_of_for_ptr_params,
+            deref_for_slice_params=self._deref_for_slice_params,
+            deref_for_func_slice_params=self._deref_for_func_slice_params,
+            coerce_sentinel_to_ptr=self._coerce_sentinel_to_ptr,
+            coerce_args_to_node=self._coerce_args_to_node,
+            is_node_interface_type=self._is_node_interface_type,
+            synthesize_method_return_type=self._synthesize_method_return_type,
+        )
+        return lowering.lower_stmt_If(node, ctx, dispatch)
 
     def _lower_stmt_While(self, node: ast.While) -> "ir.Stmt":
         return lowering.lower_stmt_While(node, self._lower_expr_as_bool, self._lower_stmts)
 
     def _lower_stmt_For(self, node: ast.For) -> "ir.Stmt":
-        from .. import ir
-        from ..ir import RUNE
-        iterable = self._lower_expr(node.iter)
-        # Determine loop variable types based on iterable type
-        iterable_type = self._infer_expr_type_from_ast(node.iter)
-        # Dereference Pointer(Slice) or Optional(Slice) for range
-        inner_slice = self._get_inner_slice(iterable_type)
-        if inner_slice is not None:
-            iterable = ir.UnaryOp(op="*", operand=iterable, typ=inner_slice, loc=iterable.loc)
-            iterable_type = inner_slice
-        # Determine index and value names
-        index = None
-        value = None
-        # Get element type for loop variable
-        elem_type: Type | None = None
-        if iterable_type == STRING:
-            elem_type = RUNE
-        elif isinstance(iterable_type, Slice):
-            elem_type = iterable_type.element
-        if isinstance(node.target, ast.Name):
-            if node.target.id == "_":
-                pass  # Discard
-            else:
-                value = node.target.id
-                if elem_type:
-                    self._type_ctx.var_types[value] = elem_type
-        elif isinstance(node.target, ast.Tuple) and len(node.target.elts) == 2:
-            # Check if iterating over Slice(Tuple) - need tuple unpacking, not (index, value)
-            if isinstance(elem_type, Tuple) and len(elem_type.elements) >= 2:
-                # Generate: for _, _item := range iterable; a := _item.F0; b := _item.F1
-                item_var = "_item"
-                # Set types for unpacked variables
-                unpack_vars: list[tuple[int, str]] = []
-                for i, elt in enumerate(node.target.elts):
-                    if isinstance(elt, ast.Name) and elt.id != "_":
-                        unpack_vars.append((i, elt.id))
-                        if i < len(elem_type.elements):
-                            self._type_ctx.var_types[elt.id] = elem_type.elements[i]
-                # Lower body after setting up types
-                body = self._lower_stmts(node.body)
-                # Prepend unpacking assignments
-                unpack_stmts: list[ir.Stmt] = []
-                for i, var_name in unpack_vars:
-                    field_type = elem_type.elements[i] if i < len(elem_type.elements) else Interface("any")
-                    field_access = ir.FieldAccess(
-                        obj=ir.Var(name=item_var, typ=elem_type, loc=self._loc_from_node(node)),
-                        field=f"F{i}",
-                        typ=field_type,
-                        loc=self._loc_from_node(node),
-                    )
-                    unpack_stmts.append(ir.Assign(
-                        target=ir.VarLV(name=var_name),
-                        value=field_access,
-                        loc=self._loc_from_node(node),
-                    ))
-                return ir.ForRange(
-                    index=None,
-                    value=item_var,
-                    iterable=iterable,
-                    body=unpack_stmts + body,
-                    loc=self._loc_from_node(node),
-                )
-            # Otherwise treat as (index, value) iteration
-            if isinstance(node.target.elts[0], ast.Name):
-                index = node.target.elts[0].id if node.target.elts[0].id != "_" else None
-            if isinstance(node.target.elts[1], ast.Name):
-                value = node.target.elts[1].id if node.target.elts[1].id != "_" else None
-                if elem_type and value:
-                    self._type_ctx.var_types[value] = elem_type
-        # Lower body after setting up loop variable types
-        body = self._lower_stmts(node.body)
-        return ir.ForRange(index=index, value=value, iterable=iterable, body=body, loc=self._loc_from_node(node))
+        """Lower a Python for loop to IR."""
+        ctx = FrontendContext(
+            symbols=self.symbols,
+            type_ctx=self._type_ctx,
+            current_func_info=self._current_func_info,
+            current_class_name=self._current_class_name,
+            node_types=self._node_types,
+            kind_to_struct=self._kind_to_struct,
+            kind_to_class=self._kind_to_class,
+            current_catch_var=self._current_catch_var,
+        )
+        dispatch = LoweringDispatch(
+            lower_expr=self._lower_expr,
+            lower_expr_as_bool=self._lower_expr_as_bool,
+            lower_stmts=self._lower_stmts,
+            lower_lvalue=self._lower_lvalue,
+            lower_expr_List=self._lower_expr_List,
+            infer_expr_type_from_ast=self._infer_expr_type_from_ast,
+            infer_call_return_type=self._infer_call_return_type,
+            synthesize_type=self._synthesize_type,
+            coerce=self._coerce,
+            annotation_to_str=self._annotation_to_str,
+            py_type_to_ir=self._py_type_to_ir,
+            make_default_value=self._make_default_value,
+            extract_struct_name=self._extract_struct_name,
+            is_exception_subclass=self._is_exception_subclass,
+            is_node_subclass=self._is_node_subclass,
+            is_sentinel_int=self._is_sentinel_int,
+            get_sentinel_value=self._get_sentinel_value,
+            resolve_type_name=self._resolve_type_name,
+            get_inner_slice=self._get_inner_slice,
+            merge_keyword_args=self._merge_keyword_args,
+            fill_default_args=self._fill_default_args,
+            merge_keyword_args_for_func=self._merge_keyword_args_for_func,
+            fill_default_args_for_func=self._fill_default_args_for_func,
+            add_address_of_for_ptr_params=self._add_address_of_for_ptr_params,
+            deref_for_slice_params=self._deref_for_slice_params,
+            deref_for_func_slice_params=self._deref_for_func_slice_params,
+            coerce_sentinel_to_ptr=self._coerce_sentinel_to_ptr,
+            coerce_args_to_node=self._coerce_args_to_node,
+            is_node_interface_type=self._is_node_interface_type,
+            synthesize_method_return_type=self._synthesize_method_return_type,
+        )
+        return lowering.lower_stmt_For(node, ctx, dispatch)
 
     def _lower_stmt_Break(self, node: ast.Break) -> "ir.Stmt":
         return lowering.lower_stmt_Break(node)
@@ -1076,25 +998,57 @@ class Frontend:
     def _lower_stmt_Raise(self, node: ast.Raise) -> "ir.Stmt":
         return lowering.lower_stmt_Raise(node, self._lower_expr, self._current_catch_var)
 
+    def _set_catch_var(self, var: str | None) -> str | None:
+        """Set the current catch variable and return the previous value."""
+        saved = self._current_catch_var
+        self._current_catch_var = var
+        return saved
+
     def _lower_stmt_Try(self, node: ast.Try) -> "ir.Stmt":
-        from .. import ir
-        body = self._lower_stmts(node.body)
-        catch_var = None
-        catch_body: list[ir.Stmt] = []
-        reraise = False
-        if node.handlers:
-            handler = node.handlers[0]
-            catch_var = handler.name
-            # Set catch var context so raise e can be detected
-            saved_catch_var = self._current_catch_var
-            self._current_catch_var = catch_var
-            catch_body = self._lower_stmts(handler.body)
-            self._current_catch_var = saved_catch_var
-            # Check if handler re-raises (bare raise)
-            for stmt in handler.body:
-                if isinstance(stmt, ast.Raise) and stmt.exc is None:
-                    reraise = True
-        return ir.TryCatch(body=body, catch_var=catch_var, catch_body=catch_body, reraise=reraise, loc=self._loc_from_node(node))
+        """Lower a Python try statement to IR."""
+        ctx = FrontendContext(
+            symbols=self.symbols,
+            type_ctx=self._type_ctx,
+            current_func_info=self._current_func_info,
+            current_class_name=self._current_class_name,
+            node_types=self._node_types,
+            kind_to_struct=self._kind_to_struct,
+            kind_to_class=self._kind_to_class,
+            current_catch_var=self._current_catch_var,
+        )
+        dispatch = LoweringDispatch(
+            lower_expr=self._lower_expr,
+            lower_expr_as_bool=self._lower_expr_as_bool,
+            lower_stmts=self._lower_stmts,
+            lower_lvalue=self._lower_lvalue,
+            lower_expr_List=self._lower_expr_List,
+            infer_expr_type_from_ast=self._infer_expr_type_from_ast,
+            infer_call_return_type=self._infer_call_return_type,
+            synthesize_type=self._synthesize_type,
+            coerce=self._coerce,
+            annotation_to_str=self._annotation_to_str,
+            py_type_to_ir=self._py_type_to_ir,
+            make_default_value=self._make_default_value,
+            extract_struct_name=self._extract_struct_name,
+            is_exception_subclass=self._is_exception_subclass,
+            is_node_subclass=self._is_node_subclass,
+            is_sentinel_int=self._is_sentinel_int,
+            get_sentinel_value=self._get_sentinel_value,
+            resolve_type_name=self._resolve_type_name,
+            get_inner_slice=self._get_inner_slice,
+            merge_keyword_args=self._merge_keyword_args,
+            fill_default_args=self._fill_default_args,
+            merge_keyword_args_for_func=self._merge_keyword_args_for_func,
+            fill_default_args_for_func=self._fill_default_args_for_func,
+            add_address_of_for_ptr_params=self._add_address_of_for_ptr_params,
+            deref_for_slice_params=self._deref_for_slice_params,
+            deref_for_func_slice_params=self._deref_for_func_slice_params,
+            coerce_sentinel_to_ptr=self._coerce_sentinel_to_ptr,
+            coerce_args_to_node=self._coerce_args_to_node,
+            is_node_interface_type=self._is_node_interface_type,
+            synthesize_method_return_type=self._synthesize_method_return_type,
+        )
+        return lowering.lower_stmt_Try(node, ctx, dispatch, self._set_catch_var)
 
     def _lower_stmt_FunctionDef(self, node: ast.FunctionDef) -> "ir.Stmt":
         return lowering.lower_stmt_FunctionDef(node)

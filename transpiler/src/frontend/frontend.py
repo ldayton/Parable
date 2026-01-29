@@ -805,52 +805,7 @@ class Frontend:
         self, node: ast.expr, param_types: dict[str, str]
     ) -> Type:
         """Infer IR type from an expression."""
-        match node:
-            case ast.Constant(value=bool()):
-                return BOOL
-            case ast.Constant(value=int()):
-                return INT
-            case ast.Constant(value=str()):
-                return STRING
-            case ast.Constant(value=None):
-                return Interface("any")
-            case ast.List(elts=[first, *_]):
-                return Slice(self._infer_type_from_value(first, param_types))
-            case ast.List():
-                return Slice(Interface("any"))
-            case ast.Dict(values=values) if values and all(
-                isinstance(v, ast.Constant) and isinstance(v.value, str) for v in values
-            ):
-                return Map(STRING, STRING)
-            case ast.Dict():
-                return Map(STRING, Interface("any"))
-            case ast.Name(id=name) if name in param_types:
-                return self._py_type_to_ir(param_types[name])
-            case ast.Name(id="True" | "False"):
-                return BOOL
-            case ast.Name(id="None"):
-                return Interface("any")
-            case ast.Call(func=ast.Name(id="len")):
-                return INT
-            case ast.Call(func=ast.Name(id=func_name)) if func_name in self.symbols.structs:
-                info = self.symbols.structs[func_name]
-                if info.is_node:
-                    return Interface("Node")
-                return Pointer(StructRef(func_name))
-            case ast.Call(func=ast.Name(id="QuoteState")):
-                return Pointer(StructRef("QuoteState"))
-            case ast.Call(func=ast.Name(id="ContextStack")):
-                return Pointer(StructRef("ContextStack"))
-            case ast.Attribute(value=ast.Name(id=class_name)) if class_name in (
-                "ParserStateFlags",
-                "DolbraceState",
-                "TokenType",
-                "MatchedPairFlags",
-                "WordCtx",
-                "ParseContext",
-            ):
-                return INT
-        return Interface("any")
+        return type_inference.infer_type_from_value(node, param_types, self.symbols, self._node_types)
 
     def _split_union_types(self, s: str) -> list[str]:
         """Split union types on | respecting nested brackets."""
@@ -1233,19 +1188,7 @@ class Frontend:
 
     def _infer_iterable_type(self, node: ast.expr, var_types: dict[str, Type]) -> Type:
         """Infer the type of an iterable expression."""
-        # self.field
-        if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
-            if node.value.id == "self" and self._current_class_name:
-                struct_info = self.symbols.structs.get(self._current_class_name)
-                if struct_info:
-                    field_info = struct_info.fields.get(node.attr)
-                    if field_info:
-                        return field_info.typ
-        # Variable reference
-        if isinstance(node, ast.Name):
-            if node.id in var_types:
-                return var_types[node.id]
-        return Interface("any")
+        return type_inference.infer_iterable_type(node, var_types, self._current_class_name, self.symbols)
 
     def _infer_element_type_from_append_arg(self, arg: ast.expr, var_types: dict[str, Type]) -> Type:
         """Infer slice element type from what's being appended."""
@@ -1347,30 +1290,9 @@ class Frontend:
 
     def _infer_container_type_from_ast(self, node: ast.expr, var_types: dict[str, Type]) -> Type:
         """Infer the type of a container expression from AST."""
-        if isinstance(node, ast.Name):
-            if node.id in var_types:
-                return var_types[node.id]
-            # Check function parameters
-            if self._current_func_info:
-                for p in self._current_func_info.params:
-                    if p.name == node.id:
-                        return p.typ
-        elif isinstance(node, ast.Attribute):
-            if isinstance(node.value, ast.Name):
-                if node.value.id == "self" and self._current_class_name:
-                    struct_info = self.symbols.structs.get(self._current_class_name)
-                    if struct_info:
-                        field_info = struct_info.fields.get(node.attr)
-                        if field_info:
-                            return field_info.typ
-                elif node.value.id in var_types:
-                    obj_type = var_types[node.value.id]
-                    struct_name = self._extract_struct_name(obj_type)
-                    if struct_name and struct_name in self.symbols.structs:
-                        field_info = self.symbols.structs[struct_name].fields.get(node.attr)
-                        if field_info:
-                            return field_info.typ
-        return Interface("any")
+        return type_inference.infer_container_type_from_ast(
+            node, self.symbols, self._current_class_name, self._current_func_info, var_types
+        )
 
     def _unify_branch_types(self, then_vars: dict[str, Type], else_vars: dict[str, Type]) -> dict[str, Type]:
         """Unify variable types from if/else branches."""

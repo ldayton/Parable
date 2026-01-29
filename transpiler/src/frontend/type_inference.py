@@ -1,6 +1,8 @@
 """Type inference utilities extracted from frontend.py."""
 from __future__ import annotations
 
+import ast
+
 from ..ir import (
     BOOL,
     BYTE,
@@ -8,6 +10,7 @@ from ..ir import (
     INT,
     STRING,
     VOID,
+    FuncInfo,
     FuncType,
     Interface,
     Map,
@@ -274,3 +277,114 @@ def py_return_type_to_ir(
         return Tuple(elements)
     # For non-tuples, use standard conversion with concrete node types
     return py_type_to_ir(py_type, symbols, node_types, concrete_nodes=True)
+
+
+def infer_type_from_value(
+    node: ast.expr,
+    param_types: dict[str, str],
+    symbols: SymbolTable,
+    node_types: set[str],
+) -> Type:
+    """Infer IR type from an expression."""
+    match node:
+        case ast.Constant(value=bool()):
+            return BOOL
+        case ast.Constant(value=int()):
+            return INT
+        case ast.Constant(value=str()):
+            return STRING
+        case ast.Constant(value=None):
+            return Interface("any")
+        case ast.List(elts=[first, *_]):
+            return Slice(infer_type_from_value(first, param_types, symbols, node_types))
+        case ast.List():
+            return Slice(Interface("any"))
+        case ast.Dict(values=values) if values and all(
+            isinstance(v, ast.Constant) and isinstance(v.value, str) for v in values
+        ):
+            return Map(STRING, STRING)
+        case ast.Dict():
+            return Map(STRING, Interface("any"))
+        case ast.Name(id=name) if name in param_types:
+            return py_type_to_ir(param_types[name], symbols, node_types)
+        case ast.Name(id="True" | "False"):
+            return BOOL
+        case ast.Name(id="None"):
+            return Interface("any")
+        case ast.Call(func=ast.Name(id="len")):
+            return INT
+        case ast.Call(func=ast.Name(id=func_name)) if func_name in symbols.structs:
+            info = symbols.structs[func_name]
+            if info.is_node:
+                return Interface("Node")
+            return Pointer(StructRef(func_name))
+        case ast.Call(func=ast.Name(id="QuoteState")):
+            return Pointer(StructRef("QuoteState"))
+        case ast.Call(func=ast.Name(id="ContextStack")):
+            return Pointer(StructRef("ContextStack"))
+        case ast.Attribute(value=ast.Name(id=class_name)) if class_name in (
+            "ParserStateFlags",
+            "DolbraceState",
+            "TokenType",
+            "MatchedPairFlags",
+            "WordCtx",
+            "ParseContext",
+        ):
+            return INT
+    return Interface("any")
+
+
+def infer_iterable_type(
+    node: ast.expr,
+    var_types: dict[str, Type],
+    current_class_name: str,
+    symbols: SymbolTable,
+) -> Type:
+    """Infer the type of an iterable expression."""
+    # self.field
+    if isinstance(node, ast.Attribute) and isinstance(node.value, ast.Name):
+        if node.value.id == "self" and current_class_name:
+            struct_info = symbols.structs.get(current_class_name)
+            if struct_info:
+                field_info = struct_info.fields.get(node.attr)
+                if field_info:
+                    return field_info.typ
+    # Variable reference
+    if isinstance(node, ast.Name):
+        if node.id in var_types:
+            return var_types[node.id]
+    return Interface("any")
+
+
+def infer_container_type_from_ast(
+    node: ast.expr,
+    symbols: SymbolTable,
+    current_class_name: str,
+    current_func_info: FuncInfo | None,
+    var_types: dict[str, Type],
+) -> Type:
+    """Infer the type of a container expression from AST."""
+    if isinstance(node, ast.Name):
+        if node.id in var_types:
+            return var_types[node.id]
+        # Check function parameters
+        if current_func_info:
+            for p in current_func_info.params:
+                if p.name == node.id:
+                    return p.typ
+    elif isinstance(node, ast.Attribute):
+        if isinstance(node.value, ast.Name):
+            if node.value.id == "self" and current_class_name:
+                struct_info = symbols.structs.get(current_class_name)
+                if struct_info:
+                    field_info = struct_info.fields.get(node.attr)
+                    if field_info:
+                        return field_info.typ
+            elif node.value.id in var_types:
+                obj_type = var_types[node.value.id]
+                struct_name = extract_struct_name(obj_type)
+                if struct_name and struct_name in symbols.structs:
+                    field_info = symbols.structs[struct_name].fields.get(node.attr)
+                    if field_info:
+                        return field_info.typ
+    return Interface("any")

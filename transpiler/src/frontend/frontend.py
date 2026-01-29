@@ -217,48 +217,33 @@ class Frontend:
         )
 
     def _merge_keyword_args(self, obj_type: Type, method: str, args: list, node: ast.Call) -> list:
-        """Merge keyword arguments into positional args at their proper positions."""
         return lowering.merge_keyword_args(
-            obj_type, method, args, node, self.symbols, self._lower_expr, type_inference.extract_struct_name
-        )
+            obj_type, method, args, node, self.symbols, self._lower_expr, type_inference.extract_struct_name)
 
     def _fill_default_args(self, obj_type: Type, method: str, args: list) -> list:
-        """Fill in missing arguments with default values for methods with optional params."""
         return lowering.fill_default_args(obj_type, method, args, self.symbols, type_inference.extract_struct_name)
 
     def _merge_keyword_args_for_func(self, func_info: FuncInfo, args: list, node: ast.Call) -> list:
-        """Merge keyword arguments into positional args at their proper positions for free functions."""
         return lowering.merge_keyword_args_for_func(func_info, args, node, self._lower_expr)
 
     def _add_address_of_for_ptr_params(self, obj_type: Type, method: str, args: list, orig_args: list[ast.expr]) -> list:
-        """Add & when passing slice to pointer-to-slice parameter."""
         return lowering.add_address_of_for_ptr_params(
-            obj_type, method, args, orig_args, self.symbols, type_inference.extract_struct_name, self._infer_expr_type_from_ast
-        )
+            obj_type, method, args, orig_args, self.symbols, type_inference.extract_struct_name, self._infer_expr_type_from_ast)
 
     def _deref_for_slice_params(self, obj_type: Type, method: str, args: list, orig_args: list[ast.expr]) -> list:
-        """Dereference * when passing pointer-to-slice to slice parameter."""
         return lowering.deref_for_slice_params(
-            obj_type, method, args, orig_args, self.symbols, type_inference.extract_struct_name, self._infer_expr_type_from_ast
-        )
+            obj_type, method, args, orig_args, self.symbols, type_inference.extract_struct_name, self._infer_expr_type_from_ast)
 
     def _deref_for_func_slice_params(self, func_name: str, args: list, orig_args: list[ast.expr]) -> list:
-        """Dereference * when passing pointer-to-slice to slice parameter for free functions."""
-        return lowering.deref_for_func_slice_params(
-            func_name, args, orig_args, self.symbols, self._infer_expr_type_from_ast
-        )
+        return lowering.deref_for_func_slice_params(func_name, args, orig_args, self.symbols, self._infer_expr_type_from_ast)
 
     def _coerce_sentinel_to_ptr(self, obj_type: Type, method: str, args: list, orig_args: list) -> list:
-        """Wrap sentinel ints with _intPtr() when passing to Optional(int) params."""
         return lowering.coerce_sentinel_to_ptr(
-            obj_type, method, args, orig_args, self.symbols, self._type_ctx.sentinel_ints, type_inference.extract_struct_name
-        )
+            obj_type, method, args, orig_args, self.symbols, self._type_ctx.sentinel_ints, type_inference.extract_struct_name)
 
     def _infer_call_return_type(self, node: ast.Call) -> Type:
-        """Infer the return type of a function or method call."""
         return type_inference.infer_call_return_type(
-            node, self.symbols, self._type_ctx, self._current_func_info, self._current_class_name, self._node_types
-        )
+            node, self.symbols, self._type_ctx, self._current_func_info, self._current_class_name, self._node_types)
 
     # ============================================================
     # EXPRESSION LOWERING (Phase 3)

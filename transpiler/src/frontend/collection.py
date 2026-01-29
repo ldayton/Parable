@@ -2,10 +2,13 @@
 from __future__ import annotations
 
 import ast
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Callable
+
+from . import type_inference
+from ..ir import StructInfo
 
 if TYPE_CHECKING:
-    from ..ir import StructInfo, SymbolTable
+    from ..ir import SymbolTable
 
 
 def is_exception_subclass(name: str, symbols: SymbolTable) -> bool:
@@ -37,3 +40,47 @@ def detect_mutated_params(node: ast.FunctionDef) -> set[str]:
                     if isinstance(target.value, ast.Name) and target.value.id in param_names:
                         mutated.add(target.value.id)
     return mutated
+
+
+def get_base_name(base: ast.expr) -> str:
+    """Extract base class name from AST node."""
+    if isinstance(base, ast.Name):
+        return base.id
+    if isinstance(base, ast.Attribute):
+        return base.attr
+    return ""
+
+
+def collect_class_names(tree: ast.Module, symbols: SymbolTable) -> None:
+    """Pass 1: Collect all class names and their bases."""
+    for node in ast.walk(tree):
+        if isinstance(node, ast.ClassDef):
+            bases = [get_base_name(b) for b in node.bases]
+            symbols.structs[node.name] = StructInfo(name=node.name, bases=bases)
+
+
+def mark_node_subclasses(symbols: SymbolTable, node_types: set[str]) -> None:
+    """Pass 2: Mark classes that inherit from Node."""
+    for name, info in symbols.structs.items():
+        info.is_node = type_inference.is_node_subclass(name, symbols)
+        if info.is_node:
+            node_types.add(name)
+
+
+def mark_exception_subclasses(symbols: SymbolTable) -> None:
+    """Pass 2b: Mark classes that inherit from Exception."""
+    for name, info in symbols.structs.items():
+        info.is_exception = is_exception_subclass(name, symbols)
+
+
+def build_kind_mapping(
+    symbols: SymbolTable,
+    kind_to_struct: dict[str, str],
+    kind_to_class: dict[str, str],
+) -> None:
+    """Build kind -> struct/class mappings from const_fields["kind"] values."""
+    for name, info in symbols.structs.items():
+        if "kind" in info.const_fields:
+            kind_value = info.const_fields["kind"]
+            kind_to_struct[kind_value] = name
+            kind_to_class[kind_value] = name

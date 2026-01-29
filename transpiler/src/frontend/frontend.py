@@ -104,19 +104,11 @@ class Frontend:
 
     def _collect_class_names(self, tree: ast.Module) -> None:
         """Pass 1: Collect all class names and their bases."""
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ClassDef):
-                bases = [self._get_base_name(b) for b in node.bases]
-                self.symbols.structs[node.name] = StructInfo(
-                    name=node.name, bases=bases
-                )
+        collection.collect_class_names(tree, self.symbols)
 
     def _mark_node_subclasses(self) -> None:
         """Pass 2: Mark classes that inherit from Node."""
-        for name, info in self.symbols.structs.items():
-            info.is_node = self._is_node_subclass(name)
-            if info.is_node:
-                self._node_types.add(name)
+        collection.mark_node_subclasses(self.symbols, self._node_types)
 
     def _is_node_subclass(self, name: str) -> bool:
         """Check if a class is a Node subclass (directly or transitively)."""
@@ -124,8 +116,7 @@ class Frontend:
 
     def _mark_exception_subclasses(self) -> None:
         """Pass 2b: Mark classes that inherit from Exception."""
-        for name, info in self.symbols.structs.items():
-            info.is_exception = self._is_exception_subclass(name)
+        collection.mark_exception_subclasses(self.symbols)
 
     def _is_exception_subclass(self, name: str) -> bool:
         """Check if a class is an Exception subclass (directly or transitively)."""
@@ -133,11 +124,9 @@ class Frontend:
 
     def _build_kind_mapping(self) -> None:
         """Build kind -> struct/class mappings from const_fields["kind"] values."""
-        for name, info in self.symbols.structs.items():
-            if "kind" in info.const_fields:
-                kind_value = info.const_fields["kind"]
-                self._kind_to_struct[kind_value] = name
-                self._kind_to_class[kind_value] = name
+        collection.build_kind_mapping(
+            self.symbols, self._kind_to_struct, self._kind_to_class
+        )
 
     def _collect_signatures(self, tree: ast.Module) -> None:
         """Pass 3: Collect function and method signatures."""
@@ -686,11 +675,7 @@ class Frontend:
 
     def _get_base_name(self, base: ast.expr) -> str:
         """Extract base class name from AST node."""
-        if isinstance(base, ast.Name):
-            return base.id
-        if isinstance(base, ast.Attribute):
-            return base.attr
-        return ""
+        return collection.get_base_name(base)
 
     def _annotation_to_str(self, node: ast.expr | None) -> str:
         """Convert type annotation AST to string."""

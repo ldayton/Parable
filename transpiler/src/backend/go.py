@@ -38,7 +38,6 @@ Downstream consequences of this missing analysis:
   - ~100 while-style loops (`for i < n`) instead of `for i, c := range runes`
   - ~60 helper predicates take string instead of rune: `isHexDigit(string)`
     should be `isHexDigit(rune)` with direct comparisons like `c >= '0'`
-  - Character-at-index requires double indirection: `string(_runeAt(s, i))`
 
 Frontend deficiencies (should be fixed in frontend.py):
 - Helper function indirection: `_parseInt(x, 10)` instead of `strconv.Atoi(x)`,

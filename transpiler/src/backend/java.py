@@ -30,18 +30,17 @@ UNCOMPENSATED DEFICIENCIES (non-idiomatic output)
 =================================================
 
 The dominant issue is char vs String conflation. Python has only strings; Java
-distinguishes char (primitive) from String (object). The backend defensively
-treats all single characters as String, causing verbose comparisons (~950 sites):
-  `String.valueOf(s.charAt(i)).equals("(")` instead of `s.charAt(i) == '('`
+distinguishes char (primitive) from String (object). The backend now detects
+single-char string comparisons and emits `s.charAt(i) == '('` instead of
+`String.valueOf(s.charAt(i)).equals("(")`. However, multi-char comparisons and
+helper predicates still use String-based patterns.
 Idiomatic Java would:
   1. Track character vs string semantics in frontend
   2. Emit char type for single-character literals and charAt() results
   3. Use primitive `==` for char comparisons instead of .equals()
   4. Emit `isDigit(char)` instead of `_isDigit(String)`
-This would eliminate String.valueOf() wrapping and enable direct comparisons.
 Downstream consequences of this missing analysis:
-  - ~556 single-char comparisons use .equals() instead of ==
-  - ~394 String.valueOf() calls to wrap chars for comparison
+  - ~175 remaining String.valueOf() calls for non-comparison contexts
   - Helper predicates take String instead of char: `_isWhitespace(String)`
     should be `Character.isWhitespace(char)` (~356 helper call sites)
 

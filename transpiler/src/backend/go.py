@@ -189,7 +189,7 @@ class GoBackend:
         for struct in module.structs:
             self._emit_struct(struct)
         for func in module.functions:
-            if func.name == "_repeat_str":
+            if func.name in ("_repeat_str", "_sublist"):
                 continue
             self._emit_function(func)
         return "\n".join(self.output)
@@ -1313,6 +1313,12 @@ func _Substring(s string, start int, end int) string {
             s = self._emit_expr(expr.args[0])
             n = self._emit_expr(expr.args[1])
             return f"strings.Repeat({s}, {n})"
+        # _sublist(lst, a, b) → lst[a:b]
+        if expr.func == "_sublist" and len(expr.args) == 3:
+            lst = self._emit_expr(expr.args[0])
+            start = self._emit_expr(expr.args[1])
+            end = self._emit_expr(expr.args[2])
+            return f"{lst}[{start}:{end}]"
         # Go builtins and our helpers stay as-is
         if expr.func in ("append", "cap", "close", "copy", "delete", "panic", "recover", "print", "println", "_parseInt", "_intToStr", "_intPtr"):
             func = expr.func

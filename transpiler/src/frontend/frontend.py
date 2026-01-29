@@ -1624,45 +1624,9 @@ class Frontend:
 
     def _coerce(self, expr: "ir.Expr", from_type: Type, to_type: Type) -> "ir.Expr":
         """Apply type coercions when synthesized type doesn't match expected."""
-        from .. import ir
-        # byte → string: wrap with string() cast
-        if from_type == BYTE and to_type == STRING:
-            return ir.Cast(expr=expr, to_type=STRING, typ=STRING, loc=expr.loc)
-        # nil → string: convert to empty string
-        if isinstance(expr, ir.NilLit) and to_type == STRING:
-            return ir.StringLit(value="", typ=STRING, loc=expr.loc)
-        # nil → Optional(T): update NilLit type for proper Go emission
-        if isinstance(expr, ir.NilLit) and isinstance(to_type, Optional):
-            expr.typ = to_type
-            return expr
-        # nil → nilable types: update NilLit type (interfaces, pointers, and slices are nilable in Go)
-        if isinstance(expr, ir.NilLit) and isinstance(to_type, (Interface, StructRef, Pointer, Slice)):
-            expr.typ = to_type
-            return expr
-        # []interface{} → []T: use typed slice
-        if isinstance(from_type, Slice) and isinstance(to_type, Slice):
-            if from_type.element == Interface("any"):
-                # Update the expression's type to the expected slice type
-                expr.typ = to_type
-                if isinstance(expr, ir.SliceLit):
-                    expr.element_type = to_type.element
-            # []*Subtype → []Node: for Node interface covariance (Go slices aren't covariant)
-            elif self._is_node_subtype(from_type.element) and self._is_node_interface_type(to_type.element):
-                expr.typ = to_type
-                if isinstance(expr, ir.SliceLit):
-                    expr.element_type = to_type.element
-        # Tuple coercion: coerce each element individually
-        if isinstance(to_type, Tuple) and isinstance(expr, ir.TupleLit):
-            new_elements = []
-            for i, elem in enumerate(expr.elements):
-                if i < len(to_type.elements):
-                    elem_from_type = self._synthesize_type(elem)
-                    new_elements.append(self._coerce(elem, elem_from_type, to_type.elements[i]))
-                else:
-                    new_elements.append(elem)
-            expr.elements = new_elements
-            expr.typ = to_type
-        return expr
+        return type_inference.coerce(
+            expr, from_type, to_type, self._type_ctx, self._current_func_info, self.symbols, self._node_types
+        )
 
     # ============================================================
     # EXPRESSION LOWERING (Phase 3)

@@ -2191,14 +2191,7 @@ class Frontend:
 
     def _is_node_subtype(self, typ: Type | None) -> bool:
         """Check if a type is a Node subtype (pointer to struct implementing Node)."""
-        if typ is None:
-            return False
-        # Check Pointer(StructRef(X)) where X is a Node subclass
-        if isinstance(typ, Pointer) and isinstance(typ.target, StructRef):
-            struct_name = typ.target.name
-            if struct_name in self._node_types:
-                return True
-        return False
+        return type_inference.is_node_subtype(typ, self._node_types)
 
     def _lower_expr_Subscript(self, node: ast.Subscript) -> "ir.Expr":
         from .. import ir

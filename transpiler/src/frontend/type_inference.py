@@ -76,3 +76,15 @@ def is_node_interface_type(typ: Type | None) -> bool:
     if isinstance(typ, StructRef) and typ.name == "Node":
         return True
     return False
+
+
+def is_node_subtype(typ: Type | None, node_types: set[str]) -> bool:
+    """Check if a type is a Node subtype (pointer to struct implementing Node)."""
+    if typ is None:
+        return False
+    # Check Pointer(StructRef(X)) where X is a Node subclass
+    if isinstance(typ, Pointer) and isinstance(typ.target, StructRef):
+        struct_name = typ.target.name
+        if struct_name in node_types:
+            return True
+    return False

@@ -6,7 +6,7 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
 from . import type_inference
-from ..ir import BOOL, INT, VOID, FieldInfo, FuncInfo, Interface, Map, ParamInfo, Pointer, Set, Slice, STRING, StructInfo
+from ..ir import BOOL, FLOAT, INT, VOID, FieldInfo, FuncInfo, Interface, Map, ParamInfo, Pointer, Set, Slice, STRING, StructRef, StructInfo, Tuple
 from ..type_overrides import FIELD_TYPE_OVERRIDES, MODULE_CONSTANTS, PARAM_TYPE_OVERRIDES, RETURN_TYPE_OVERRIDES
 
 if TYPE_CHECKING:
@@ -22,6 +22,8 @@ class CollectionCallbacks:
     py_return_type_to_ir: Callable[[str], "Type"]
     lower_expr: Callable[[ast.expr], "ir.Expr"]
     infer_type_from_value: Callable[[ast.expr, dict[str, str]], "Type"] | None = None
+    extract_struct_name: Callable[["Type"], str | None] | None = None
+    infer_container_type_from_ast: Callable[[ast.expr, dict[str, "Type"]], "Type"] | None = None
 
 
 def is_exception_subclass(name: str, symbols: SymbolTable) -> bool:
@@ -404,3 +406,114 @@ def collect_branch_var_types(
                     if method in ("to_sexp", "format", "strip", "lower", "upper", "replace", "join"):
                         branch_vars[var_name] = STRING
     return branch_vars
+
+
+def infer_element_type_from_append_arg(
+    arg: ast.expr,
+    var_types: dict[str, "Type"],
+    symbols: SymbolTable,
+    current_class_name: str,
+    current_func_info: "FuncInfo | None",
+    callbacks: CollectionCallbacks,
+) -> "Type":
+    """Infer slice element type from what's being appended."""
+    # Constant literals
+    if isinstance(arg, ast.Constant):
+        if isinstance(arg.value, bool):
+            return BOOL
+        if isinstance(arg.value, int):
+            return INT
+        if isinstance(arg.value, str):
+            return STRING
+        if isinstance(arg.value, float):
+            return FLOAT
+    # Variable reference with known type (e.g., loop variable)
+    if isinstance(arg, ast.Name):
+        if arg.id in var_types:
+            return var_types[arg.id]
+        # Check function parameters
+        if current_func_info:
+            for p in current_func_info.params:
+                if p.name == arg.id:
+                    return p.typ
+    # Field access: self.field or obj.field
+    if isinstance(arg, ast.Attribute):
+        if isinstance(arg.value, ast.Name):
+            if arg.value.id == "self" and current_class_name:
+                struct_info = symbols.structs.get(current_class_name)
+                if struct_info:
+                    field_info = struct_info.fields.get(arg.attr)
+                    if field_info:
+                        return field_info.typ
+            elif arg.value.id in var_types:
+                obj_type = var_types[arg.value.id]
+                assert callbacks.extract_struct_name is not None
+                struct_name = callbacks.extract_struct_name(obj_type)
+                if struct_name and struct_name in symbols.structs:
+                    field_info = symbols.structs[struct_name].fields.get(arg.attr)
+                    if field_info:
+                        return field_info.typ
+    # Subscript: container[i] -> infer element type from container
+    if isinstance(arg, ast.Subscript):
+        assert callbacks.infer_container_type_from_ast is not None
+        container_type = callbacks.infer_container_type_from_ast(arg.value, var_types)
+        if container_type == STRING:
+            return STRING  # string[i] in Python returns a string
+        if isinstance(container_type, Slice):
+            return container_type.element
+    # Tuple literal: (a, b, ...) -> Tuple(type(a), type(b), ...)
+    if isinstance(arg, ast.Tuple):
+        elem_types = []
+        for elt in arg.elts:
+            elem_types.append(infer_element_type_from_append_arg(
+                elt, var_types, symbols, current_class_name, current_func_info, callbacks
+            ))
+        return Tuple(tuple(elem_types))
+    # Method calls
+    if isinstance(arg, ast.Call) and isinstance(arg.func, ast.Attribute):
+        method = arg.func.attr
+        # String methods that return string
+        if method in ("strip", "lstrip", "rstrip", "lower", "upper", "replace", "join", "format", "to_sexp"):
+            return STRING
+        # .Copy() returns same type
+        if method == "Copy":
+            # x.Copy() where x is ctx -> *ParseContext
+            if isinstance(arg.func.value, ast.Name):
+                var = arg.func.value.id
+                if var == "ctx":
+                    return Pointer(StructRef("ParseContext"))
+    # Function/constructor calls
+    if isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name):
+        func_name = arg.func.id
+        # String conversion functions
+        if func_name in ("str", "string", "substring", "chr"):
+            return STRING
+        # Constructor calls
+        if func_name in symbols.structs:
+            info = symbols.structs[func_name]
+            if info.is_node:
+                return Interface("Node")
+            return Pointer(StructRef(func_name))
+        # Function return types
+        if func_name in symbols.functions:
+            return symbols.functions[func_name].return_type
+    # Method calls: obj.method() -> look up method return type
+    if isinstance(arg, ast.Call) and isinstance(arg.func, ast.Attribute):
+        method_name = arg.func.attr
+        # Handle self.method() calls directly using current class name
+        # (can't use _infer_expr_type_from_ast here - _type_ctx not set yet)
+        if isinstance(arg.func.value, ast.Name) and arg.func.value.id == "self":
+            if current_class_name and current_class_name in symbols.structs:
+                method_info = symbols.structs[current_class_name].methods.get(method_name)
+                if method_info:
+                    return method_info.return_type
+        # Handle other obj.method() calls via var_types lookup
+        elif isinstance(arg.func.value, ast.Name) and arg.func.value.id in var_types:
+            obj_type = var_types[arg.func.value.id]
+            assert callbacks.extract_struct_name is not None
+            struct_name = callbacks.extract_struct_name(obj_type)
+            if struct_name and struct_name in symbols.structs:
+                method_info = symbols.structs[struct_name].methods.get(method_name)
+                if method_info:
+                    return method_info.return_type
+    return Interface("any")

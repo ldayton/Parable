@@ -1031,101 +1031,19 @@ class Frontend:
 
     def _infer_element_type_from_append_arg(self, arg: ast.expr, var_types: dict[str, Type]) -> Type:
         """Infer slice element type from what's being appended."""
-        # Constant literals
-        if isinstance(arg, ast.Constant):
-            if isinstance(arg.value, bool):
-                return BOOL
-            if isinstance(arg.value, int):
-                return INT
-            if isinstance(arg.value, str):
-                return STRING
-            if isinstance(arg.value, float):
-                return FLOAT
-        # Variable reference with known type (e.g., loop variable)
-        if isinstance(arg, ast.Name):
-            if arg.id in var_types:
-                return var_types[arg.id]
-            # Check function parameters
-            if self._current_func_info:
-                for p in self._current_func_info.params:
-                    if p.name == arg.id:
-                        return p.typ
-        # Field access: self.field or obj.field
-        if isinstance(arg, ast.Attribute):
-            if isinstance(arg.value, ast.Name):
-                if arg.value.id == "self" and self._current_class_name:
-                    struct_info = self.symbols.structs.get(self._current_class_name)
-                    if struct_info:
-                        field_info = struct_info.fields.get(arg.attr)
-                        if field_info:
-                            return field_info.typ
-                elif arg.value.id in var_types:
-                    obj_type = var_types[arg.value.id]
-                    struct_name = self._extract_struct_name(obj_type)
-                    if struct_name and struct_name in self.symbols.structs:
-                        field_info = self.symbols.structs[struct_name].fields.get(arg.attr)
-                        if field_info:
-                            return field_info.typ
-        # Subscript: container[i] -> infer element type from container
-        if isinstance(arg, ast.Subscript):
-            container_type = self._infer_container_type_from_ast(arg.value, var_types)
-            if container_type == STRING:
-                return STRING  # string[i] in Python returns a string
-            if isinstance(container_type, Slice):
-                return container_type.element
-        # Tuple literal: (a, b, ...) -> Tuple(type(a), type(b), ...)
-        if isinstance(arg, ast.Tuple):
-            elem_types = []
-            for elt in arg.elts:
-                elem_types.append(self._infer_element_type_from_append_arg(elt, var_types))
-            return Tuple(tuple(elem_types))
-        # Method calls
-        if isinstance(arg, ast.Call) and isinstance(arg.func, ast.Attribute):
-            method = arg.func.attr
-            # String methods that return string
-            if method in ("strip", "lstrip", "rstrip", "lower", "upper", "replace", "join", "format", "to_sexp"):
-                return STRING
-            # .Copy() returns same type
-            if method == "Copy":
-                # x.Copy() where x is ctx -> *ParseContext
-                if isinstance(arg.func.value, ast.Name):
-                    var = arg.func.value.id
-                    if var == "ctx":
-                        return Pointer(StructRef("ParseContext"))
-        # Function/constructor calls
-        if isinstance(arg, ast.Call) and isinstance(arg.func, ast.Name):
-            func_name = arg.func.id
-            # String conversion functions
-            if func_name in ("str", "string", "substring", "chr"):
-                return STRING
-            # Constructor calls
-            if func_name in self.symbols.structs:
-                info = self.symbols.structs[func_name]
-                if info.is_node:
-                    return Interface("Node")
-                return Pointer(StructRef(func_name))
-            # Function return types
-            if func_name in self.symbols.functions:
-                return self.symbols.functions[func_name].return_type
-        # Method calls: obj.method() -> look up method return type
-        if isinstance(arg, ast.Call) and isinstance(arg.func, ast.Attribute):
-            method_name = arg.func.attr
-            # Handle self.method() calls directly using current class name
-            # (can't use _infer_expr_type_from_ast here - _type_ctx not set yet)
-            if isinstance(arg.func.value, ast.Name) and arg.func.value.id == "self":
-                if self._current_class_name and self._current_class_name in self.symbols.structs:
-                    method_info = self.symbols.structs[self._current_class_name].methods.get(method_name)
-                    if method_info:
-                        return method_info.return_type
-            # Handle other obj.method() calls via var_types lookup
-            elif isinstance(arg.func.value, ast.Name) and arg.func.value.id in var_types:
-                obj_type = var_types[arg.func.value.id]
-                struct_name = self._extract_struct_name(obj_type)
-                if struct_name and struct_name in self.symbols.structs:
-                    method_info = self.symbols.structs[struct_name].methods.get(method_name)
-                    if method_info:
-                        return method_info.return_type
-        return Interface("any")
+        callbacks = collection.CollectionCallbacks(
+            annotation_to_str=self._annotation_to_str,
+            py_type_to_ir=self._py_type_to_ir,
+            py_return_type_to_ir=self._py_return_type_to_ir,
+            lower_expr=self._lower_expr,
+            infer_type_from_value=self._infer_type_from_value,
+            extract_struct_name=self._extract_struct_name,
+            infer_container_type_from_ast=self._infer_container_type_from_ast,
+        )
+        return collection.infer_element_type_from_append_arg(
+            arg, var_types, self.symbols, self._current_class_name,
+            self._current_func_info, callbacks
+        )
 
     def _infer_container_type_from_ast(self, node: ast.expr, var_types: dict[str, Type]) -> Type:
         """Infer the type of a container expression from AST."""

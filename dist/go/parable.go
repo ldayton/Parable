@@ -3559,7 +3559,7 @@ func (self *List) ToSexp() string {
 	parts := append(self.Parts[:0:0], self.Parts...)
 	opNames := map[string]string{"&&": "and", "||": "or", ";": "semi", "\n": "semi", "&": "background"}
 	for len(parts) > 1 && parts[len(parts)-1].GetKind() == "operator" && (parts[len(parts)-1].(*Operator).Op == ";" || parts[len(parts)-1].(*Operator).Op == "\n") {
-		parts = sublist(parts, 0, len(parts)-1)
+		parts = parts[0 : len(parts)-1]
 	}
 	if len(parts) == 1 {
 		return parts[0].ToSexp()
@@ -3567,8 +3567,8 @@ func (self *List) ToSexp() string {
 	if parts[len(parts)-1].GetKind() == "operator" && parts[len(parts)-1].(*Operator).Op == "&" {
 		for _, i := range Range(len(parts)-3, 0, -2) {
 			if parts[i].GetKind() == "operator" && (parts[i].(*Operator).Op == ";" || parts[i].(*Operator).Op == "\n") {
-				left := sublist(parts, 0, i)
-				right := sublist(parts, i+1, len(parts)-1)
+				left := parts[0:i]
+				right := parts[i+1 : len(parts)-1]
 				var leftSexp string
 				if len(left) > 1 {
 					leftSexp = (&List{Parts: left, Kind: "list"}).ToSexp()
@@ -3584,7 +3584,7 @@ func (self *List) ToSexp() string {
 				return "(semi " + leftSexp + " (background " + rightSexp + "))"
 			}
 		}
-		innerParts := sublist(parts, 0, len(parts)-1)
+		innerParts := parts[0 : len(parts)-1]
 		if len(innerParts) == 1 {
 			return "(background " + innerParts[0].ToSexp() + ")"
 		}
@@ -3606,13 +3606,13 @@ func (self *List) toSexpWithPrecedence(parts []Node, opNames map[string]string) 
 		start := 0
 		var seg []Node
 		for _, pos := range semiPositions {
-			seg = sublist(parts, start, pos)
+			seg = parts[start:pos]
 			if len(seg) > 0 && seg[0].GetKind() != "operator" {
 				segments = append(segments, seg)
 			}
 			start = pos + 1
 		}
-		seg = sublist(parts, start, len(parts))
+		seg = parts[start:len(parts)]
 		if len(seg) > 0 && seg[0].GetKind() != "operator" {
 			segments = append(segments, seg)
 		}
@@ -3642,10 +3642,10 @@ func (self *List) toSexpAmpAndHigher(parts []Node, opNames map[string]string) st
 		segments := [][]Node{}
 		start := 0
 		for _, pos := range ampPositions {
-			segments = append(segments, sublist(parts, start, pos))
+			segments = append(segments, parts[start:pos])
 			start = pos + 1
 		}
-		segments = append(segments, sublist(parts, start, len(parts)))
+		segments = append(segments, parts[start:len(parts)])
 		result := self.toSexpAndOr(segments[0], opNames)
 		for _, i := range Range(1, len(segments)) {
 			result = "(background " + result + " " + self.toSexpAndOr(segments[i], opNames) + ")"
@@ -8672,20 +8672,6 @@ func isExpansionStart(s string, pos int, delimiter string) bool {
 	return (countConsecutiveDollarsBefore(s, pos) % 2) == 0
 }
 
-func sublist(lst []Node, start int, end int) []Node {
-	return lst[start:end]
-}
-
-func repeatStr(s string, n int) string {
-	result := []string{}
-	i := 0
-	for i < n {
-		result = append(result, s)
-		i++
-	}
-	return strings.Join(result, "")
-}
-
 func stripLineContinuationsCommentAware(text string) string {
 	result := []string{}
 	i := 0
@@ -8899,8 +8885,8 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 	if _isNilInterface(node) {
 		return ""
 	}
-	sp := repeatStr(" ", indent)
-	innerSp := repeatStr(" ", indent+4)
+	sp := strings.Repeat(" ", indent)
+	innerSp := strings.Repeat(" ", indent+4)
 	switch node.(type) {
 	case *ArithEmpty:
 		return ""
@@ -9239,8 +9225,8 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 				body = ""
 			}
 			term := p.(*CasePattern).Terminator
-			patIndent := repeatStr(" ", indent+8)
-			termIndent := repeatStr(" ", indent+4)
+			patIndent := strings.Repeat(" ", indent+8)
+			termIndent := strings.Repeat(" ", indent+4)
 			bodyPart := func() string {
 				if body != "" {
 					return patIndent + body + "\n"
@@ -9255,7 +9241,7 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 			}
 			i++
 		}
-		patternStr := strings.Join(patterns, "\n"+repeatStr(" ", indent+4))
+		patternStr := strings.Join(patterns, "\n"+strings.Repeat(" ", indent+4))
 		redirects := ""
 		if len(node.Redirects) > 0 {
 			var redirectParts []string = []string{}

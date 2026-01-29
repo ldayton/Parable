@@ -255,43 +255,13 @@ class Frontend:
         self, node: ast.FunctionDef, is_method: bool = False
     ) -> FuncInfo:
         """Extract function signature information."""
-        mutated_params = self._detect_mutated_params(node)
-        params = []
-        non_self_args = [a for a in node.args.args if a.arg != "self"]
-        n_params = len(non_self_args)
-        n_defaults = len(node.args.defaults) if node.args.defaults else 0
-        for i, arg in enumerate(non_self_args):
-            py_type = self._annotation_to_str(arg.annotation) if arg.annotation else ""
-            typ = self._py_type_to_ir(py_type) if py_type else Interface("any")
-            # Check for overrides first (takes precedence)
-            override_key = (node.name, arg.arg)
-            if override_key in PARAM_TYPE_OVERRIDES:
-                typ = PARAM_TYPE_OVERRIDES[override_key]
-            # Auto-wrap mutated slice params with Pointer
-            elif arg.arg in mutated_params and isinstance(typ, Slice):
-                typ = Pointer(typ)
-            has_default = False
-            default_value = None
-            # Check if this param has a default
-            if i >= n_params - n_defaults:
-                has_default = True
-                default_idx = i - (n_params - n_defaults)
-                if node.args.defaults and default_idx < len(node.args.defaults):
-                    default_value = self._lower_expr(node.args.defaults[default_idx])
-            params.append(ParamInfo(name=arg.arg, typ=typ, has_default=has_default, default_value=default_value))
-        return_type = VOID
-        if node.returns:
-            py_return = self._annotation_to_str(node.returns)
-            return_type = self._py_return_type_to_ir(py_return)
-        # Apply return type overrides
-        if node.name in RETURN_TYPE_OVERRIDES:
-            return_type = RETURN_TYPE_OVERRIDES[node.name]
-        return FuncInfo(
-            name=node.name,
-            params=params,
-            return_type=return_type,
-            is_method=is_method,
+        callbacks = collection.CollectionCallbacks(
+            annotation_to_str=self._annotation_to_str,
+            py_type_to_ir=self._py_type_to_ir,
+            py_return_type_to_ir=self._py_return_type_to_ir,
+            lower_expr=self._lower_expr,
         )
+        return collection.extract_func_info(node, callbacks, is_method)
 
     def _build_module(self, tree: ast.Module) -> Module:
         """Build IR Module from collected symbols."""

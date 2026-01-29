@@ -2,14 +2,25 @@
 from __future__ import annotations
 
 import ast
+from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
 from . import type_inference
-from ..ir import INT, Map, Set, STRING, StructInfo
-from ..type_overrides import MODULE_CONSTANTS
+from ..ir import INT, VOID, FuncInfo, Interface, Map, ParamInfo, Pointer, Set, Slice, STRING, StructInfo
+from ..type_overrides import MODULE_CONSTANTS, PARAM_TYPE_OVERRIDES, RETURN_TYPE_OVERRIDES
 
 if TYPE_CHECKING:
-    from ..ir import SymbolTable
+    from .. import ir
+    from ..ir import SymbolTable, Type
+
+
+@dataclass
+class CollectionCallbacks:
+    """Callbacks for collection phase that need lowering/type conversion."""
+    annotation_to_str: Callable[[ast.expr | None], str]
+    py_type_to_ir: Callable[[str, bool], "Type"]
+    py_return_type_to_ir: Callable[[str], "Type"]
+    lower_expr: Callable[[ast.expr], "ir.Expr"]
 
 
 def is_exception_subclass(name: str, symbols: SymbolTable) -> bool:
@@ -118,3 +129,48 @@ def collect_constants(tree: ast.Module, symbols: SymbolTable) -> None:
                             # Store as ClassName_CONST_NAME
                             const_name = f"{node.name}_{target.id}"
                             symbols.constants[const_name] = INT
+
+
+def extract_func_info(
+    node: ast.FunctionDef,
+    callbacks: CollectionCallbacks,
+    is_method: bool = False,
+) -> FuncInfo:
+    """Extract function signature information."""
+    mutated_params = detect_mutated_params(node)
+    params = []
+    non_self_args = [a for a in node.args.args if a.arg != "self"]
+    n_params = len(non_self_args)
+    n_defaults = len(node.args.defaults) if node.args.defaults else 0
+    for i, arg in enumerate(non_self_args):
+        py_type = callbacks.annotation_to_str(arg.annotation) if arg.annotation else ""
+        typ = callbacks.py_type_to_ir(py_type, False) if py_type else Interface("any")
+        # Check for overrides first (takes precedence)
+        override_key = (node.name, arg.arg)
+        if override_key in PARAM_TYPE_OVERRIDES:
+            typ = PARAM_TYPE_OVERRIDES[override_key]
+        # Auto-wrap mutated slice params with Pointer
+        elif arg.arg in mutated_params and isinstance(typ, Slice):
+            typ = Pointer(typ)
+        has_default = False
+        default_value = None
+        # Check if this param has a default
+        if i >= n_params - n_defaults:
+            has_default = True
+            default_idx = i - (n_params - n_defaults)
+            if node.args.defaults and default_idx < len(node.args.defaults):
+                default_value = callbacks.lower_expr(node.args.defaults[default_idx])
+        params.append(ParamInfo(name=arg.arg, typ=typ, has_default=has_default, default_value=default_value))
+    return_type = VOID
+    if node.returns:
+        py_return = callbacks.annotation_to_str(node.returns)
+        return_type = callbacks.py_return_type_to_ir(py_return)
+    # Apply return type overrides
+    if node.name in RETURN_TYPE_OVERRIDES:
+        return_type = RETURN_TYPE_OVERRIDES[node.name]
+    return FuncInfo(
+        name=node.name,
+        params=params,
+        return_type=return_type,
+        is_method=is_method,
+    )

@@ -543,6 +543,9 @@ class Frontend:
 
     def _make_ctx_and_dispatch(self) -> tuple[FrontendContext, LoweringDispatch]:
         """Build FrontendContext and LoweringDispatch for lowering functions."""
+        exception_subclasses = {
+            name for name, info in self.symbols.structs.items() if info.is_exception
+        }
         ctx = FrontendContext(
             symbols=self.symbols,
             type_ctx=self._type_ctx,
@@ -552,6 +555,7 @@ class Frontend:
             kind_to_struct=self._kind_to_struct,
             kind_to_class=self._kind_to_class,
             current_catch_var=self._current_catch_var,
+            exception_subclasses=exception_subclasses,
         )
         dispatch = LoweringDispatch(
             lower_expr=self._lower_expr,

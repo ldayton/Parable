@@ -36,6 +36,7 @@ class FrontendContext:
     kind_to_struct: dict[str, str]
     kind_to_class: dict[str, str]
     current_catch_var: str | None
+    exception_subclasses: set[str]
 
 
 @dataclass

@@ -9144,9 +9144,6 @@ function IsWhitespaceNoNewline(c: string): boolean {
 }
 
 function Substring(s: string, start: number, end: number): string {
-  if (end > s.length) {
-    end = s.length;
-  }
   return s.slice(start, end);
 }
 

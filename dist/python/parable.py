@@ -6625,8 +6625,6 @@ def _is_whitespace_no_newline(c: str) -> bool:
 
 
 def _substring(s: str, start: int, end: int) -> str:
-    if end > len(s):
-        end = len(s)
     return s[start:end]
 
 

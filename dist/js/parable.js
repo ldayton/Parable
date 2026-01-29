@@ -9275,9 +9275,6 @@ function IsWhitespaceNoNewline(c) {
     return c === " " || c === "\t";
 }
 function Substring(s, start, end) {
-    if (end > s.length) {
-        end = s.length;
-    }
     return s.slice(start, end);
 }
 function StartsWithAt(s, pos, prefix) {

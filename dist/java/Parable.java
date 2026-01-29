@@ -9222,9 +9222,6 @@ final class ParableFunctions {
     }
 
     static String _substring(String s, int start, int end) {
-        if (end > s.length()) {
-            end = s.length();
-        }
         return s.substring(start, end);
     }
 

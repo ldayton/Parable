@@ -143,11 +143,17 @@ func _isNilInterface(i interface{}) bool {
 // _runeAt returns the character (as string) at rune index i in string s.
 // Python s[i] on a string returns the i-th character, not byte.
 func _runeAt(s string, i int) string {
-	runes := []rune(s)
-	if i < 0 || i >= len(runes) {
+	if i < 0 {
 		return ""
 	}
-	return string(runes[i])
+	for byteOffset, runeIdx := 0, 0; byteOffset < len(s); runeIdx++ {
+		r, size := utf8.DecodeRuneInString(s[byteOffset:])
+		if runeIdx == i {
+			return string(r)
+		}
+		byteOffset += size
+	}
+	return ""
 }
 
 // _runeLen returns the number of runes (characters) in string s.
@@ -159,17 +165,27 @@ func _runeLen(s string) int {
 // _Substring returns s[start:end] using rune (character) indices.
 // Python s[start:end] uses character indices, not byte indices.
 func _Substring(s string, start int, end int) string {
-	runes := []rune(s)
 	if start < 0 {
 		start = 0
 	}
-	if end > len(runes) {
-		end = len(runes)
+	byteStart, byteEnd := -1, len(s)
+	runeIdx := 0
+	for byteOffset := 0; byteOffset < len(s); {
+		if runeIdx == start {
+			byteStart = byteOffset
+		}
+		if runeIdx == end {
+			byteEnd = byteOffset
+			break
+		}
+		_, size := utf8.DecodeRuneInString(s[byteOffset:])
+		byteOffset += size
+		runeIdx++
 	}
-	if start >= end {
+	if byteStart < 0 || byteStart >= byteEnd {
 		return ""
 	}
-	return string(runes[start:end])
+	return s[byteStart:byteEnd]
 }
 
 const (
@@ -8623,9 +8639,6 @@ func isWhitespaceNoNewline(c string) bool {
 }
 
 func substring(s string, start int, end int) string {
-	if end > _runeLen(s) {
-		end = _runeLen(s)
-	}
 	return _Substring(s, start, end)
 }
 

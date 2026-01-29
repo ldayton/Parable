@@ -8,29 +8,17 @@ from pathlib import Path
 
 from .frontend import Frontend
 from .middleend import analyze
-from .backend.c import CBackend
-from .backend.csharp import CSharpBackend
 from .backend.go import GoBackend
 from .backend.java import JavaBackend
 from .backend.python import PythonBackend
-from .backend.ruby import RubyBackend
-from .backend.rust import RustBackend
-from .backend.swift import SwiftBackend
 from .backend.typescript import TsBackend
-from .backend.zig import ZigBackend
 
 
 BACKENDS = {
-    "c": CBackend,
-    "csharp": CSharpBackend,
     "go": GoBackend,
     "java": JavaBackend,
     "python": PythonBackend,
-    "ruby": RubyBackend,
-    "rust": RustBackend,
-    "swift": SwiftBackend,
     "ts": TsBackend,
-    "zig": ZigBackend,
 }
 
 

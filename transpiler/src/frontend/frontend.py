@@ -52,6 +52,7 @@ from .context import TypeContext
 from . import type_inference
 from . import lowering
 from . import collection
+from . import builders
 
 if TYPE_CHECKING:
     pass
@@ -322,58 +323,7 @@ class Frontend:
 
     def _build_forwarding_constructor(self, class_name: str, parent_class: str) -> Function:
         """Build a forwarding constructor for exception subclasses with no __init__."""
-        from .. import ir
-        # Get parent class info to copy its parameters
-        parent_info = self.symbols.structs.get(parent_class)
-        if not parent_info:
-            raise ValueError(f"Unknown parent class: {parent_class}")
-        # Build parameters from parent's __init__ params
-        params: list[Param] = []
-        args: list[ir.Var] = []
-        for param_name in parent_info.init_params:
-            # Check for parameter type overrides
-            typ = INT  # Default
-            override_key = (f"New{class_name}", param_name)
-            if override_key in PARAM_TYPE_OVERRIDES:
-                typ = PARAM_TYPE_OVERRIDES[override_key]
-            else:
-                # Try parent constructor override
-                parent_key = (f"New{parent_class}", param_name)
-                if parent_key in PARAM_TYPE_OVERRIDES:
-                    typ = PARAM_TYPE_OVERRIDES[parent_key]
-                else:
-                    # Get from parent's field type
-                    field_info = parent_info.fields.get(param_name)
-                    if field_info:
-                        typ = field_info.typ
-            params.append(Param(name=param_name, typ=typ, loc=Loc.unknown()))
-            args.append(ir.Var(name=param_name, typ=typ))
-        # Build body: return &ClassName{ParentClass{...}}
-        # Use StructLit with embedded type
-        body: list[ir.Stmt] = []
-        # Create parent struct literal
-        parent_lit = ir.StructLit(
-            struct_name=parent_class,
-            fields={param_name: ir.Var(name=param_name, typ=params[i].typ) for i, param_name in enumerate(parent_info.init_params)},
-            typ=StructRef(parent_class),
-        )
-        # Create struct with embedded parent - typ=Pointer makes backend emit &
-        struct_lit = ir.StructLit(
-            struct_name=class_name,
-            fields={},
-            typ=Pointer(StructRef(class_name)),
-            embedded_value=parent_lit,
-        )
-        # Return pointer to struct
-        ret = ir.Return(value=struct_lit)
-        body.append(ret)
-        return Function(
-            name=f"New{class_name}",
-            params=params,
-            ret=Pointer(StructRef(class_name)),
-            body=body,
-            loc=Loc.unknown(),
-        )
+        return builders.build_forwarding_constructor(class_name, parent_class, self.symbols)
 
     def _build_constructor(self, class_name: str, init_ast: ast.FunctionDef, info: StructInfo) -> Function:
         """Build a NewXxx constructor function from __init__ AST."""

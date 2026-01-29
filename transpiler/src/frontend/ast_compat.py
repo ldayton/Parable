@@ -1,22 +1,28 @@
 """Compatibility layer for dict-based AST."""
 
-from typing import Iterator
-
 ASTNode = dict[str, object]
 
 
-def dict_walk(node: ASTNode) -> Iterator[ASTNode]:
-    """Walk dict-based AST like ast.walk()."""
-    yield node
-    for key, value in node.items():
-        if key.startswith("_"):
-            continue
-        if isinstance(value, dict) and "_type" in value:
-            yield from dict_walk(value)
-        elif isinstance(value, list):
-            for item in value:
-                if isinstance(item, dict) and "_type" in item:
-                    yield from dict_walk(item)
+def dict_walk(node: ASTNode) -> list[ASTNode]:
+    """Walk dict-based AST like ast.walk(), returns list of all nodes."""
+    result: list[ASTNode] = [node]
+    keys = list(node.keys())
+    i = 0
+    while i < len(keys):
+        key = keys[i]
+        if not key.startswith("_"):
+            value = node[key]
+            if isinstance(value, dict) and "_type" in value:
+                result = result + dict_walk(value)
+            elif isinstance(value, list):
+                j = 0
+                while j < len(value):
+                    item = value[j]
+                    if isinstance(item, dict) and "_type" in item:
+                        result = result + dict_walk(item)
+                    j += 1
+        i += 1
+    return result
 
 
 def node_type(node: ASTNode) -> str:
@@ -24,7 +30,7 @@ def node_type(node: ASTNode) -> str:
     return node.get("_type", "")
 
 
-def is_type(node: object, *type_names: str) -> bool:
+def is_type(node: object, type_names: list[str]) -> bool:
     """Check if node is one of the given AST types."""
     if not isinstance(node, dict):
         return False

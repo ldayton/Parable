@@ -18,7 +18,7 @@ ALLOWED_BUILTINS: set[str] = {
     # Math
     "abs", "min", "max", "sum", "round", "divmod", "pow",
     # Conversion
-    "int", "float", "str", "bool", "bytes", "bytearray", "chr", "ord",
+    "int", "float", "str", "bool", "bytes", "bytearray", "chr", "ord", "complex",
     # Collections
     "list", "dict", "set", "tuple", "frozenset", "len", "sorted",
     # Type check
@@ -31,6 +31,7 @@ ALLOWED_BUILTINS: set[str] = {
     "all", "any",
     # Other
     "slice", "super", "object", "Exception", "BaseException", "NotImplementedError",
+    "ValueError", "TypeError", "KeyError", "IndexError", "AttributeError", "RuntimeError",
     # print is handled specially
     "print",
 }
@@ -211,6 +212,20 @@ def is_all_caps(name: str) -> bool:
     return has_letter
 
 
+def is_type_alias(name: str, value: dict[str, object]) -> bool:
+    """Check if this looks like a type alias (PascalCase = type expression)."""
+    if len(name) == 0:
+        return False
+    # Must start with uppercase
+    if not name[0].isupper():
+        return False
+    # Value should be a Subscript (like dict[str, object]) or Name (like int)
+    value_type = value.get("_type", "")
+    if value_type == "Subscript" or value_type == "Name" or value_type == "BinOp":
+        return True
+    return False
+
+
 class NameResolver:
     """Resolves names in a dict-based AST."""
 
@@ -263,15 +278,19 @@ class NameResolver:
                     self.result.table.add_module(info)
             elif node_type == "Assign":
                 targets = stmt.get("targets", [])
+                value = stmt.get("value", {})
                 j = 0
                 while j < len(targets):
                     target = targets[j]
                     if target.get("_type") == "Name":
                         name = target.get("id", "")
-                        if is_all_caps(name):
-                            existing = self.result.table.get_module(name)
-                            if existing is None:
+                        existing = self.result.table.get_module(name)
+                        if existing is None:
+                            if is_all_caps(name):
                                 info = NameInfo(name, "constant", "module", lineno, col, "", "")
+                                self.result.table.add_module(info)
+                            elif is_type_alias(name, value):
+                                info = NameInfo(name, "type_alias", "module", lineno, col, "", "")
                                 self.result.table.add_module(info)
                     j += 1
             elif node_type == "AnnAssign":

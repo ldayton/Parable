@@ -359,7 +359,7 @@ def build_struct(
     methods = []
     init_ast: ASTNode | None = None
     for stmt in node.get("body", []):
-        if is_type(stmt, "FunctionDef"):
+        if is_type(stmt, ["FunctionDef"]):
             if stmt.get("name") == "__init__":
                 init_ast = stmt
             else:
@@ -414,12 +414,12 @@ def build_module(
         )
     # Build constants (module-level and class-level)
     for node in tree.get("body", []):
-        if is_type(node, "Assign") and len(node.get("targets", [])) == 1:
+        if is_type(node, ["Assign"]) and len(node.get("targets", [])) == 1:
             target = node.get("targets", [])[0]
             # Skip constants already handled by MODULE_CONSTANTS
-            if is_type(target, "Name") and target.get("id") in MODULE_CONSTANTS:
+            if is_type(target, ["Name"]) and target.get("id") in MODULE_CONSTANTS:
                 continue
-            if is_type(target, "Name") and target.get("id") in symbols.constants:
+            if is_type(target, ["Name"]) and target.get("id") in symbols.constants:
                 value = callbacks.lower_expr(node.get("value"))
                 const_type = symbols.constants[target.get("id")]
                 module.constants.append(
@@ -430,12 +430,12 @@ def build_module(
                         loc=callbacks.loc_from_node(node),
                     )
                 )
-        elif is_type(node, "ClassDef"):
+        elif is_type(node, ["ClassDef"]):
             # Build class-level constants
             for stmt in node.get("body", []):
-                if is_type(stmt, "Assign") and len(stmt.get("targets", [])) == 1:
+                if is_type(stmt, ["Assign"]) and len(stmt.get("targets", [])) == 1:
                     target = stmt.get("targets", [])[0]
-                    if is_type(target, "Name") and target.get("id", "").isupper():
+                    if is_type(target, ["Name"]) and target.get("id", "").isupper():
                         const_name = f"{node.get('name')}_{target.get('id')}"
                         if const_name in symbols.constants:
                             value = callbacks.lower_expr(stmt.get("value"))
@@ -459,7 +459,7 @@ def build_module(
     # Build structs (with method bodies) and collect constructor functions
     constructor_funcs: list[Function] = []
     for node in tree.get("body", []):
-        if is_type(node, "ClassDef"):
+        if is_type(node, ["ClassDef"]):
             struct, ctor = build_struct(node, symbols, callbacks, with_body=True)
             if struct:
                 module.structs.append(struct)
@@ -467,7 +467,7 @@ def build_module(
                 constructor_funcs.append(ctor)
     # Build functions (with bodies)
     for node in tree.get("body", []):
-        if is_type(node, "FunctionDef"):
+        if is_type(node, ["FunctionDef"]):
             func = build_function_shell(node, symbols, callbacks, with_body=True)
             module.functions.append(func)
     # Add constructor functions (must come after regular functions for dependency order)

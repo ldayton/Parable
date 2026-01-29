@@ -142,13 +142,13 @@ Reject unsupported Python features early. If verification passes, downstream pha
 | No dynamic dispatch      | Call graph is static; all calls resolve at compile time      |
 | No runtime introspection | No `getattr`/`setattr`/`__dict__` — field access is static   |
 | No closures              | No nested functions — all functions are top-level or methods |
-| No generators            | Control flow is eager; no lazy evaluation                    |
+| Eager iteration only     | Comprehensions and generators must be statically eager       |
 | All types annotated      | Signatures have types; inference only needed for locals      |
 | No bare collections      | `list[T]` not `list` — element types always known            |
 | Single inheritance       | Class hierarchy is a tree, not a DAG                         |
-| No decorators            | Functions/classes aren't modified at runtime                 |
+| `@dataclass` only        | No arbitrary decorators; `@dataclass` (no args) allowed      |
 | No mutable defaults      | Default args are immutable; no shared-state bugs             |
-| Static imports           | Only `typing`, `__future__`, `collections.abc`               |
+| Static imports           | Only `typing`, `__future__`, `collections.abc`, `dataclasses`|
 | No back-references       | Fields cannot reference their container (no cycles)          |
 | No borrowed field storage| Parameters cannot be stored in fields without copy           |
 | Immutable string params  | String parameters are borrowed; copy if storing              |
@@ -161,7 +161,7 @@ Reject unsupported Python features early. If verification passes, downstream pha
 | Conversion  | `int`, `float`, `str`, `bool`, `bytes`, `chr`, `ord`         |
 | Collections | `list`, `dict`, `set`, `tuple`, `frozenset`, `len`, `sorted` |
 | Type check  | `isinstance`                                                 |
-| Iteration   | `range`                                                      |
+| Iteration   | `range`, `enumerate`, `zip`                                  |
 | Formatting  | `repr`, `ascii`, `bin`, `hex`, `oct`                         |
 | Boolean     | `all`, `any`                                                 |
 | Other       | `slice`, `super`, `object`                                   |
@@ -185,6 +185,50 @@ Reject unsupported Python features early. If verification passes, downstream pha
 | Output binary| `sys.stdout.buffer.write(b)`, `sys.stderr.buffer.write(b)`         |
 | Arguments   | `sys.argv`                                                          |
 | Environment | `os.getenv(name)`, `os.getenv(name, default)`                       |
+
+**Eager iteration constructs:**
+
+Iteration constructs are allowed when statically analyzable as eager (non-lazy). No generator functions, no lazy pipelines, no infinite sequences.
+
+| Construct | Allowed | Notes |
+|-----------|---------|-------|
+| List comprehension | `[expr for x in iter]` | Always eager |
+| Set comprehension | `{expr for x in iter}` | Always eager |
+| Dict comprehension | `{k: v for x in iter}` | Always eager |
+| Generator function | `yield`, `yield from` | Never allowed |
+
+**Generator expressions** — allowed only as immediate argument to eager consumers:
+
+| Consumer | Example |
+|----------|---------|
+| `tuple()` | `tuple(x for x in iter)` |
+| `list()` | `list(x for x in iter)` |
+| `set()` | `set(x for x in iter)` |
+| `any()` | `any(p(x) for x in iter)` |
+| `all()` | `all(p(x) for x in iter)` |
+| `sum()` | `sum(x for x in iter)` |
+| `min()` | `min(x for x in iter)` |
+| `max()` | `max(x for x in iter)` |
+| `sorted()` | `sorted(x for x in iter)` |
+| `str.join()` | `",".join(s for s in iter)` |
+
+Not allowed: `g = (x for x in iter)` (assigned), `foo(x for x in iter)` (unknown consumer), `return (x for x in iter)` (returned).
+
+**enumerate / zip** — allowed only in for-loop headers:
+
+| Allowed | Not allowed |
+|---------|-------------|
+| `for i, x in enumerate(iter):` | `e = enumerate(iter)` |
+| `for a, b in zip(xs, ys):` | `foo(zip(xs, ys))` |
+
+**Dataclasses:**
+
+The `@dataclass` decorator is allowed with no arguments. Dataclass arguments (`frozen`, `order`, etc.) and `field()` options are not supported.
+
+| Allowed | Not allowed |
+|---------|-------------|
+| `@dataclass` | `@dataclass(frozen=True)` |
+| `x: int = 0` | `x: list = field(default_factory=list)` |
 
 **Postconditions:** AST conforms to Tongues subset; all invariants above hold; rejected programs produce clear error messages with source locations.
 

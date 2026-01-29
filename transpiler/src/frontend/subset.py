@@ -89,8 +89,8 @@ ALLOWED_BUILTINS: set[str] = {
     "list", "dict", "set", "tuple", "frozenset", "len", "sorted",
     # Type check
     "isinstance",
-    # Iteration
-    "range",
+    # Iteration (enumerate/zip only in for-loop headers)
+    "range", "enumerate", "zip",
     # Formatting
     "repr", "ascii", "bin", "hex", "oct",
     # Boolean
@@ -107,7 +107,7 @@ BANNED_BUILTINS: set[str] = {
     "type", "vars", "dir", "globals", "locals",
     "id", "callable", "eval", "exec", "compile", "__import__",
     "issubclass", "hash", "format", "memoryview",
-    "iter", "next", "map", "filter", "zip", "enumerate", "reversed",
+    "iter", "next", "map", "filter", "reversed",
     "open", "input", "breakpoint", "help", "exit", "quit",
     "staticmethod", "classmethod", "property",
 }
@@ -115,7 +115,7 @@ BANNED_BUILTINS: set[str] = {
 # Node types that are completely banned
 BANNED_NODES: set[str] = {
     "AsyncFunctionDef", "AsyncFor", "AsyncWith", "Await",
-    "Yield", "YieldFrom", "GeneratorExp",
+    "Yield", "YieldFrom",
     "With",
     "Lambda",
     "Global", "Nonlocal",
@@ -123,9 +123,16 @@ BANNED_NODES: set[str] = {
     "TypeAlias", "TryStar",
 }
 
-# Allowed imports
-ALLOWED_IMPORTS: set[str] = {
-    "__future__", "typing", "collections.abc", "sys", "os",
+# Functions that eagerly consume generator expressions
+EAGER_CONSUMERS: set[str] = {
+    "tuple", "list", "set", "frozenset",
+    "any", "all", "sum", "min", "max", "sorted",
+}
+
+# Allowed stdlib imports (for typing and dataclasses)
+# Internal imports (relative or within the project) are always allowed
+ALLOWED_STDLIB: set[str] = {
+    "__future__", "typing", "collections.abc", "dataclasses",
 }
 
 # Bare collection types that need type parameters
@@ -256,6 +263,9 @@ class Verifier:
         self.function_name: str = ""
         self.annotated_params: set[str] = set()
         self.annotated_fields: set[str] = set()
+        # Context flags for eager iteration
+        self.in_eager_consumer: bool = False
+        self.in_for_iter: bool = False
 
     def error(self, node: ASTNode, category: str, message: str) -> None:
         lineno = node.get("lineno", 0)
@@ -314,6 +324,8 @@ class Verifier:
             self.visit_JoinedStr(node)
         elif node_type == "FormattedValue":
             self.visit_FormattedValue(node)
+        elif node_type == "GeneratorExp":
+            self.visit_GeneratorExp(node)
         elif node_type == "Match":
             pass
         else:
@@ -334,7 +346,7 @@ class Verifier:
             "AugAssign", "For", "While", "If", "Raise", "Try", "ExceptHandler",
             "Import", "ImportFrom", "Pass", "Break", "Continue", "Expr",
             "BoolOp", "BinOp", "UnaryOp", "IfExp", "Dict", "Set", "ListComp",
-            "SetComp", "DictComp", "Compare", "Call", "JoinedStr", "FormattedValue",
+            "SetComp", "DictComp", "GeneratorExp", "Compare", "Call", "JoinedStr", "FormattedValue",
             "Constant", "Attribute", "Subscript", "Starred", "Name", "List",
             "Tuple", "Slice", "And", "Or", "Add", "Sub", "Mult", "Div",
             "Mod", "Pow", "LShift", "RShift", "BitOr", "BitXor", "BitAnd",
@@ -488,12 +500,25 @@ class Verifier:
     def visit_ClassDef(self, node: ASTNode) -> None:
         """Check class definition constraints."""
         name = node.get("name", "")
-        # Check decorators
+        # Check decorators - only @dataclass (no arguments) is allowed
         decorators = node.get("decorator_list", [])
-        i = 0
-        while i < len(decorators):
-            self.error(node, "class", "class decorators are not allowed")
-            break
+        if isinstance(decorators, list):
+            i = 0
+            while i < len(decorators):
+                dec = decorators[i]
+                if isinstance(dec, dict):
+                    dec_type = dec.get("_type", "")
+                    if dec_type == "Name" and dec.get("id") == "dataclass":
+                        pass  # @dataclass with no arguments is allowed
+                    elif dec_type == "Call":
+                        func = dec.get("func")
+                        if isinstance(func, dict) and func.get("id") == "dataclass":
+                            self.error(node, "class", "@dataclass arguments not allowed")
+                        else:
+                            self.error(node, "class", "class decorator not allowed")
+                    else:
+                        self.error(node, "class", "class decorator not allowed")
+                i += 1
         # Check nested class
         if self.in_class:
             self.error(node, "class", "nested class: define at module level")
@@ -537,6 +562,15 @@ class Verifier:
         # Check banned builtins
         if func_name is not None and func_name in BANNED_BUILTINS:
             self.error(node, "builtin", func_name + "() is not allowed")
+        # Check enumerate/zip only allowed in for-loop iter
+        if func_name in ("enumerate", "zip") and not self.in_for_iter:
+            self.error(node, "builtin", func_name + "() only allowed in for-loop header")
+        # Check if this is an eager consumer (for generator expressions)
+        is_eager = func_name is not None and func_name in EAGER_CONSUMERS
+        # Also check for str.join method call
+        if not is_eager and isinstance(func, dict) and func.get("_type") == "Attribute":
+            if func.get("attr") == "join":
+                is_eager = True
         # Check *args in call
         args = node.get("args", [])
         i = 0
@@ -557,10 +591,15 @@ class Verifier:
             j += 1
         # Visit children
         self.visit(func)
+        # Set eager consumer context when visiting args
+        old_in_eager = self.in_eager_consumer
+        if is_eager:
+            self.in_eager_consumer = True
         k = 0
         while k < len(args):
             self.visit(args[k])
             k += 1
+        self.in_eager_consumer = old_in_eager
         m = 0
         while m < len(keywords):
             kw = keywords[m]
@@ -691,7 +730,11 @@ class Verifier:
             self.visit(target)
         iter_node = node.get("iter")
         if iter_node is not None:
+            # Set context flag for enumerate/zip in for-loop iter
+            old_in_for_iter = self.in_for_iter
+            self.in_for_iter = True
             self.visit(iter_node)
+            self.in_for_iter = old_in_for_iter
         body = node.get("body", [])
         i = 0
         while i < len(body):
@@ -769,10 +812,20 @@ class Verifier:
         self.error(node, "import", "import: not allowed, code must be self-contained")
 
     def visit_ImportFrom(self, node: ASTNode) -> None:
-        """Check from import constraints."""
-        module = node.get("module", "")
-        if module not in ALLOWED_IMPORTS:
-            self.error(node, "import", "import from " + module + ": not allowed")
+        """Check from import constraints.
+
+        Relative imports and imports within the project are allowed.
+        Only typing-related stdlib imports are allowed for external modules.
+        """
+        level = node.get("level", 0)
+        if level > 0:
+            return
+        module = node.get("module")
+        if module is None:
+            return
+        top_module = module.split(".")[0]
+        if top_module in ALLOWED_STDLIB:
+            return
 
     def visit_Attribute(self, node: ASTNode) -> None:
         """Check attribute access constraints."""
@@ -822,6 +875,32 @@ class Verifier:
         if value is not None:
             self.visit(value)
 
+    def visit_GeneratorExp(self, node: ASTNode) -> None:
+        """Check generator expression - only allowed in eager consumer context."""
+        if not self.in_eager_consumer:
+            self.error(node, "generator", "generator expression only allowed in eager consumer (tuple, list, any, all, etc.)")
+        # Visit children (elt, generators)
+        elt = node.get("elt")
+        if elt is not None:
+            self.visit(elt)
+        generators = node.get("generators", [])
+        i = 0
+        while i < len(generators):
+            gen = generators[i]
+            if isinstance(gen, dict):
+                target = gen.get("target")
+                if target is not None:
+                    self.visit(target)
+                iter_node = gen.get("iter")
+                if iter_node is not None:
+                    self.visit(iter_node)
+                ifs = gen.get("ifs", [])
+                j = 0
+                while j < len(ifs):
+                    self.visit(ifs[j])
+                    j += 1
+            i += 1
+
 
 def verify(ast_dict: ASTNode) -> VerifyResult:
     """Verify dict-based AST conforms to Tongues subset.
@@ -835,3 +914,202 @@ def verify(ast_dict: ASTNode) -> VerifyResult:
     verifier = Verifier()
     verifier.visit(ast_dict)
     return verifier.result
+
+
+class ImportInfo:
+    """Information about an import statement."""
+
+    def __init__(self, module: str, level: int, lineno: int, col: int):
+        self.module: str = module
+        self.level: int = level
+        self.lineno: int = lineno
+        self.col: int = col
+
+
+def extract_imports(ast_dict: ASTNode) -> list[ImportInfo]:
+    """Extract all from-imports from an AST."""
+    result: list[ImportInfo] = []
+    body = ast_dict.get("body", [])
+    if not isinstance(body, list):
+        return result
+    i = 0
+    while i < len(body):
+        node = body[i]
+        if isinstance(node, dict) and node.get("_type") == "ImportFrom":
+            module = node.get("module")
+            if module is None:
+                module = ""
+            level = node.get("level", 0)
+            if not isinstance(level, int):
+                level = 0
+            lineno = node.get("lineno", 1)
+            if not isinstance(lineno, int):
+                lineno = 1
+            col = node.get("col_offset", 0)
+            if not isinstance(col, int):
+                col = 0
+            result.append(ImportInfo(module, level, lineno, col))
+        i += 1
+    return result
+
+
+def resolve_import(
+    importing_file: str, module: str, level: int, project_root: str
+) -> str | None:
+    """Resolve an import to a file path.
+
+    Args:
+        importing_file: Path to the file containing the import
+        module: Module name (e.g., "foo.bar")
+        level: Import level (0=absolute, 1=., 2=.., etc.)
+        project_root: Root directory of the project
+
+    Returns:
+        Resolved file path, or None if not resolvable to a project file
+    """
+    import os
+
+    if level > 0:
+        # Relative import
+        dir_path = os.path.dirname(importing_file)
+        up = level - 1
+        while up > 0:
+            dir_path = os.path.dirname(dir_path)
+            up -= 1
+        if module:
+            parts = module.split(".")
+            rel_path = os.path.join(dir_path, *parts)
+        else:
+            rel_path = dir_path
+    else:
+        # Absolute import
+        parts = module.split(".")
+        rel_path = os.path.join(project_root, *parts)
+
+    # Try as package (__init__.py) or module (.py)
+    init_path = os.path.join(rel_path, "__init__.py")
+    if os.path.isfile(init_path):
+        return init_path
+    module_path = rel_path + ".py"
+    if os.path.isfile(module_path):
+        return module_path
+    return None
+
+
+class ProjectVerifyResult:
+    """Result of project-level verification."""
+
+    def __init__(self) -> None:
+        self.file_results: dict[str, VerifyResult] = {}
+        self.unresolved_imports: list[tuple[str, ImportInfo]] = []
+
+    def errors(self) -> list[str]:
+        """Get all errors as formatted strings."""
+        result: list[str] = []
+        files = sorted(self.file_results.keys())
+        i = 0
+        while i < len(files):
+            f = files[i]
+            file_result = self.file_results[f]
+            errs = file_result.errors()
+            j = 0
+            while j < len(errs):
+                result.append(f + ": " + str(errs[j]))
+                j += 1
+            i += 1
+        j = 0
+        while j < len(self.unresolved_imports):
+            file_path, imp = self.unresolved_imports[j]
+            msg = file_path + ":" + str(imp.lineno) + ":" + str(imp.col)
+            msg = msg + ": [import] unresolved import: " + imp.module
+            result.append(msg)
+            j += 1
+        return result
+
+    def has_errors(self) -> bool:
+        """Check if there are any errors."""
+        if len(self.unresolved_imports) > 0:
+            return True
+        files = list(self.file_results.keys())
+        i = 0
+        while i < len(files):
+            if self.file_results[files[i]].has_errors():
+                return True
+            i += 1
+        return False
+
+
+def verify_project(path: str) -> ProjectVerifyResult:
+    """Verify a project directory or single file.
+
+    Args:
+        path: Path to a .py file or directory
+
+    Returns:
+        ProjectVerifyResult with all violations
+    """
+    import os
+    from .parse import parse
+
+    result = ProjectVerifyResult()
+
+    if os.path.isfile(path):
+        # Single file mode
+        with open(path, "r") as f:
+            source = f.read()
+        ast_dict = parse(source)
+        result.file_results[path] = verify(ast_dict)
+        return result
+
+    # Directory mode - find all reachable files
+    project_root = path
+    pending: list[str] = []
+    visited: set[str] = set()
+
+    # Start with top-level .py files
+    entries = os.listdir(project_root)
+    i = 0
+    while i < len(entries):
+        entry = entries[i]
+        if entry.endswith(".py"):
+            full_path = os.path.join(project_root, entry)
+            if os.path.isfile(full_path):
+                pending.append(full_path)
+        i += 1
+
+    # Process files and follow imports
+    while len(pending) > 0:
+        file_path = pending.pop()
+        if file_path in visited:
+            continue
+        visited.add(file_path)
+
+        with open(file_path, "r") as f:
+            source = f.read()
+        ast_dict = parse(source)
+
+        # Verify this file
+        result.file_results[file_path] = verify(ast_dict)
+
+        # Extract and resolve imports
+        imports = extract_imports(ast_dict)
+        j = 0
+        while j < len(imports):
+            imp = imports[j]
+            # Skip allowed stdlib
+            top_module = imp.module.split(".")[0] if imp.module else ""
+            if top_module in ALLOWED_STDLIB:
+                j += 1
+                continue
+
+            resolved = resolve_import(file_path, imp.module, imp.level, project_root)
+            if resolved is not None:
+                if resolved not in visited:
+                    pending.append(resolved)
+            else:
+                # Only report unresolved if not stdlib
+                if imp.level > 0 or (imp.module and top_module not in ALLOWED_STDLIB):
+                    result.unresolved_imports.append((file_path, imp))
+            j += 1
+
+    return result

@@ -343,7 +343,7 @@ def infer_type_from_value(
             return InterfaceRef("any")
     elif node_t == "Call":
         func = node.get("func")
-        if is_type(func, "Name"):
+        if is_type(func, ["Name"]):
             func_name = func.get("id")
             if func_name == "len":
                 return INT
@@ -358,7 +358,7 @@ def infer_type_from_value(
                 return Pointer(StructRef("ContextStack"))
     elif node_t == "Attribute":
         value = node.get("value")
-        if is_type(value, "Name"):
+        if is_type(value, ["Name"]):
             class_name = value.get("id")
             if class_name in (
                 "ParserStateFlags",
@@ -382,9 +382,9 @@ def infer_iterable_type(
     from .ast_compat import is_type
 
     # self.field
-    if is_type(node, "Attribute"):
+    if is_type(node, ["Attribute"]):
         value = node.get("value")
-        if is_type(value, "Name"):
+        if is_type(value, ["Name"]):
             if value.get("id") == "self" and current_class_name:
                 struct_info = symbols.structs.get(current_class_name)
                 if struct_info:
@@ -392,7 +392,7 @@ def infer_iterable_type(
                     if field_info:
                         return field_info.typ
     # Variable reference
-    if is_type(node, "Name"):
+    if is_type(node, ["Name"]):
         name_id = node.get("id")
         if name_id in var_types:
             return var_types[name_id]
@@ -409,7 +409,7 @@ def infer_container_type_from_ast(
     """Infer the type of a container expression from AST."""
     from .ast_compat import is_type
 
-    if is_type(node, "Name"):
+    if is_type(node, ["Name"]):
         name_id = node.get("id")
         if name_id in var_types:
             return var_types[name_id]
@@ -418,9 +418,9 @@ def infer_container_type_from_ast(
             for p in current_func_info.params:
                 if p.name == name_id:
                     return p.typ
-    elif is_type(node, "Attribute"):
+    elif is_type(node, ["Attribute"]):
         value = node.get("value")
-        if is_type(value, "Name"):
+        if is_type(value, ["Name"]):
             value_id = value.get("id")
             if value_id == "self" and current_class_name:
                 struct_info = symbols.structs.get(current_class_name)
@@ -594,7 +594,7 @@ def infer_expr_type_from_ast(
     # Field access
     if node_t == "Attribute":
         value = node.get("value")
-        if is_type(value, "Name") and value.get("id") == "self":
+        if is_type(value, ["Name"]) and value.get("id") == "self":
             field = node.get("attr")
             if current_class_name in symbols.structs:
                 struct_info = symbols.structs[current_class_name]
@@ -615,13 +615,13 @@ def infer_expr_type_from_ast(
     # Method call - look up return type
     if node_t == "Call":
         func = node.get("func")
-        if is_type(func, "Attribute"):
+        if is_type(func, ["Attribute"]):
             obj_type = infer_expr_type_from_ast(
                 func.get("value"), type_ctx, symbols, current_func_info, current_class_name, node_types
             )
             return synthesize_method_return_type(obj_type, func.get("attr"), symbols, node_types)
         # Free function call - look up return type
-        if is_type(func, "Name"):
+        if is_type(func, ["Name"]):
             func_name = func.get("id")
             # Built-in functions
             if func_name == "len":
@@ -678,7 +678,7 @@ def infer_call_return_type(
     from .ast_compat import is_type
 
     func = node.get("func")
-    if is_type(func, "Attribute"):
+    if is_type(func, ["Attribute"]):
         # Method call - look up return type
         obj_type = infer_expr_type_from_ast(
             func.get("value"), type_ctx, symbols, current_func_info, current_class_name, node_types
@@ -688,7 +688,7 @@ def infer_call_return_type(
             method_info = symbols.structs[struct_name].methods.get(func.get("attr"))
             if method_info:
                 return method_info.return_type
-    elif is_type(func, "Name"):
+    elif is_type(func, ["Name"]):
         # Free function call
         func_name = func.get("id")
         if func_name in symbols.functions:

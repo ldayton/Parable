@@ -77,27 +77,27 @@ def detect_mutated_params(node: ASTNode) -> set[str]:
     param_names = {a.get("arg") for a in args_list if a.get("arg") != "self"}
     for stmt in dict_walk(node):
         # param.append(...), param.extend(...), param.clear(), param.pop()
-        if is_type(stmt, "Expr") and is_type(stmt.get("value"), "Call"):
+        if is_type(stmt, ["Expr"]) and is_type(stmt.get("value"), ["Call"]):
             call = stmt.get("value")
-            if is_type(call.get("func"), "Attribute"):
+            if is_type(call.get("func"), ["Attribute"]):
                 func = call.get("func")
                 if func.get("attr") in ("append", "extend", "clear", "pop"):
-                    if is_type(func.get("value"), "Name") and func.get("value", {}).get("id") in param_names:
+                    if is_type(func.get("value"), ["Name"]) and func.get("value", {}).get("id") in param_names:
                         mutated.add(func.get("value", {}).get("id"))
         # param[i] = ...
-        if is_type(stmt, "Assign"):
+        if is_type(stmt, ["Assign"]):
             for target in stmt.get("targets", []):
-                if is_type(target, "Subscript"):
-                    if is_type(target.get("value"), "Name") and target.get("value", {}).get("id") in param_names:
+                if is_type(target, ["Subscript"]):
+                    if is_type(target.get("value"), ["Name"]) and target.get("value", {}).get("id") in param_names:
                         mutated.add(target.get("value", {}).get("id"))
     return mutated
 
 
 def get_base_name(base: ASTNode) -> str:
     """Extract base class name from AST node."""
-    if is_type(base, "Name"):
+    if is_type(base, ["Name"]):
         return base.get("id", "")
-    if is_type(base, "Attribute"):
+    if is_type(base, ["Attribute"]):
         return base.get("attr", "")
     return ""
 
@@ -105,7 +105,7 @@ def get_base_name(base: ASTNode) -> str:
 def collect_class_names(tree: ASTNode, symbols: SymbolTable) -> None:
     """Pass 1: Collect all class names and their bases."""
     for node in dict_walk(tree):
-        if is_type(node, "ClassDef"):
+        if is_type(node, ["ClassDef"]):
             bases = [get_base_name(b) for b in node.get("bases", [])]
             symbols.structs[node.get("name")] = StructInfo(name=node.get("name"), bases=bases)
 
@@ -143,30 +143,30 @@ def collect_constants(tree: ASTNode, symbols: SymbolTable) -> None:
     for const_name, (const_type, _) in MODULE_CONSTANTS.items():
         symbols.constants[const_name] = const_type
     for node in tree.get("body", []):
-        if is_type(node, "Assign") and len(node.get("targets", [])) == 1:
+        if is_type(node, ["Assign"]) and len(node.get("targets", [])) == 1:
             target = node.get("targets", [])[0]
-            if is_type(target, "Name") and target.get("id", "").isupper():
+            if is_type(target, ["Name"]) and target.get("id", "").isupper():
                 # Skip if already registered via MODULE_CONSTANTS
                 if target.get("id") in MODULE_CONSTANTS:
                     continue
                 # All-caps name = constant
                 value = node.get("value", {})
-                if is_type(value, "Constant") and isinstance(value.get("value"), int):
+                if is_type(value, ["Constant"]) and isinstance(value.get("value"), int):
                     symbols.constants[target.get("id")] = INT
                 # Set literal constants (e.g., ASSIGNMENT_BUILTINS = {"alias", ...})
-                elif is_type(value, "Set"):
+                elif is_type(value, ["Set"]):
                     symbols.constants[target.get("id")] = Set(STRING)
                 # Dict literal constants (e.g., ANSI_C_ESCAPES = {"a": 0x07, ...})
-                elif is_type(value, "Dict"):
+                elif is_type(value, ["Dict"]):
                     symbols.constants[target.get("id")] = Map(STRING, INT)
         # Collect class-level constants (e.g., TokenType.EOF = 0)
-        elif is_type(node, "ClassDef"):
+        elif is_type(node, ["ClassDef"]):
             for stmt in node.get("body", []):
-                if is_type(stmt, "Assign") and len(stmt.get("targets", [])) == 1:
+                if is_type(stmt, ["Assign"]) and len(stmt.get("targets", [])) == 1:
                     target = stmt.get("targets", [])[0]
-                    if is_type(target, "Name") and target.get("id", "").isupper():
+                    if is_type(target, ["Name"]) and target.get("id", "").isupper():
                         value = stmt.get("value", {})
-                        if is_type(value, "Constant") and isinstance(value.get("value"), int):
+                        if is_type(value, ["Constant"]) and isinstance(value.get("value"), int):
                             # Store as ClassName_CONST_NAME
                             const_name = f"{node.get('name')}_{target.get('id')}"
                             symbols.constants[const_name] = INT
@@ -232,7 +232,7 @@ def collect_class_methods(
     """Collect method signatures for a class."""
     info = symbols.structs[node.get("name")]
     for stmt in node.get("body", []):
-        if is_type(stmt, "FunctionDef"):
+        if is_type(stmt, ["FunctionDef"]):
             func_info = extract_func_info(stmt, callbacks, is_method=True)
             func_info.is_method = True
             func_info.receiver_type = node.get("name")
@@ -246,9 +246,9 @@ def collect_signatures(
 ) -> None:
     """Pass 3: Collect function and method signatures."""
     for node in tree.get("body", []):
-        if is_type(node, "FunctionDef"):
+        if is_type(node, ["FunctionDef"]):
             symbols.functions[node.get("name")] = extract_func_info(node, callbacks)
-        elif is_type(node, "ClassDef"):
+        elif is_type(node, ["ClassDef"]):
             collect_class_methods(node, symbols, callbacks)
 
 
@@ -270,11 +270,11 @@ def collect_init_fields(
     # Track whether __init__ has computed initializations
     has_computed_init = False
     for stmt in dict_walk(init):
-        if is_type(stmt, "AnnAssign"):
+        if is_type(stmt, ["AnnAssign"]):
             target = stmt.get("target", {})
             if (
-                is_type(target, "Attribute")
-                and is_type(target.get("value"), "Name")
+                is_type(target, ["Attribute"])
+                and is_type(target.get("value"), ["Name"])
                 and target.get("value", {}).get("id") == "self"
             ):
                 field_name = target.get("attr")
@@ -291,23 +291,23 @@ def collect_init_fields(
                 # Check if value is computed (not just a param reference)
                 value = stmt.get("value")
                 if value is not None:
-                    if not (is_type(value, "Name") and value.get("id") in info.init_params):
+                    if not (is_type(value, ["Name"]) and value.get("id") in info.init_params):
                         has_computed_init = True
-        elif is_type(stmt, "Assign"):
+        elif is_type(stmt, ["Assign"]):
             for target in stmt.get("targets", []):
                 if (
-                    is_type(target, "Attribute")
-                    and is_type(target.get("value"), "Name")
+                    is_type(target, ["Attribute"])
+                    and is_type(target.get("value"), ["Name"])
                     and target.get("value", {}).get("id") == "self"
                 ):
                     field_name = target.get("attr")
                     value = stmt.get("value", {})
                     # Track param-to-field mapping: self.field = param
                     is_simple_param = (
-                        is_type(value, "Name") and value.get("id") in info.init_params
+                        is_type(value, ["Name"]) and value.get("id") in info.init_params
                     )
                     # Track constant string assignments: self.kind = "operator"
-                    is_const_str = is_type(value, "Constant") and isinstance(
+                    is_const_str = is_type(value, ["Constant"]) and isinstance(
                         value.get("value"), str
                     )
                     if is_simple_param:
@@ -343,7 +343,7 @@ def collect_class_fields(
     info = symbols.structs[node.get("name")]
     # Collect class-level annotations
     for stmt in node.get("body", []):
-        if is_type(stmt, "AnnAssign") and is_type(stmt.get("target"), "Name"):
+        if is_type(stmt, ["AnnAssign"]) and is_type(stmt.get("target"), ["Name"]):
             target = stmt.get("target", {})
             field_name = target.get("id")
             py_type = callbacks.annotation_to_str(stmt.get("annotation"))
@@ -355,7 +355,7 @@ def collect_class_fields(
             info.fields[field_name] = FieldInfo(name=field_name, typ=typ, py_name=field_name)
     # Collect fields from __init__
     for stmt in node.get("body", []):
-        if is_type(stmt, "FunctionDef") and stmt.get("name") == "__init__":
+        if is_type(stmt, ["FunctionDef"]) and stmt.get("name") == "__init__":
             collect_init_fields(stmt, info, callbacks)
     # Exception classes always need constructors for panic(NewXxx(...)) pattern
     if info.is_exception:
@@ -369,7 +369,7 @@ def collect_fields(
 ) -> None:
     """Pass 4: Collect struct fields from class definitions."""
     for node in tree.get("body", []):
-        if is_type(node, "ClassDef"):
+        if is_type(node, ["ClassDef"]):
             collect_class_fields(node, symbols, callbacks)
 
 
@@ -396,7 +396,7 @@ def infer_branch_expr_type(
     branch_vars: dict[str, "Type"],
 ) -> "Type":
     """Infer type of expression during branch analysis."""
-    if is_type(node, "Constant"):
+    if is_type(node, ["Constant"]):
         value = node.get("value")
         if isinstance(value, str):
             return STRING
@@ -404,13 +404,13 @@ def infer_branch_expr_type(
             return INT
         if isinstance(value, bool):
             return BOOL
-    if is_type(node, "Name"):
+    if is_type(node, ["Name"]):
         node_id = node.get("id")
         if node_id in branch_vars:
             return branch_vars[node_id]
         if node_id in var_types:
             return var_types[node_id]
-    if is_type(node, "BinOp"):
+    if is_type(node, ["BinOp"]):
         left = infer_branch_expr_type(node.get("left"), var_types, branch_vars)
         right = infer_branch_expr_type(node.get("right"), var_types, branch_vars)
         if left == STRING or right == STRING:
@@ -428,13 +428,13 @@ def collect_branch_var_types(
     branch_vars: dict[str, "Type"] = {}
     # Walk entire subtree to find all assignments (may be nested in for/while/etc)
     for stmt in dict_walk({"_type": "Module", "body": stmts}):
-        if is_type(stmt, "Assign") and len(stmt.get("targets", [])) == 1:
+        if is_type(stmt, ["Assign"]) and len(stmt.get("targets", [])) == 1:
             target = stmt.get("targets", [])[0]
-            if is_type(target, "Name"):
+            if is_type(target, ["Name"]):
                 var_name = target.get("id")
                 value = stmt.get("value", {})
                 # Infer type from value
-                if is_type(value, "Constant"):
+                if is_type(value, ["Constant"]):
                     v = value.get("value")
                     if isinstance(v, str):
                         branch_vars[var_name] = STRING
@@ -442,7 +442,7 @@ def collect_branch_var_types(
                         branch_vars[var_name] = INT
                     elif isinstance(v, bool):
                         branch_vars[var_name] = BOOL
-                elif is_type(value, "BinOp"):
+                elif is_type(value, ["BinOp"]):
                     # String concatenation -> STRING
                     op = value.get("op", {})
                     if op.get("_type") == "Add":
@@ -454,7 +454,7 @@ def collect_branch_var_types(
                             branch_vars[var_name] = STRING
                         elif left_type == INT or right_type == INT:
                             branch_vars[var_name] = INT
-                elif is_type(value, "Name"):
+                elif is_type(value, ["Name"]):
                     # Assign from another variable
                     value_id = value.get("id")
                     if value_id in var_types:
@@ -462,7 +462,7 @@ def collect_branch_var_types(
                     elif value_id in branch_vars:
                         branch_vars[var_name] = branch_vars[value_id]
                 # Method calls (e.g., x.to_sexp() returns STRING)
-                elif is_type(value, "Call") and is_type(value.get("func"), "Attribute"):
+                elif is_type(value, ["Call"]) and is_type(value.get("func"), ["Attribute"]):
                     method = value.get("func", {}).get("attr")
                     if method in (
                         "to_sexp",
@@ -487,7 +487,7 @@ def infer_element_type_from_append_arg(
 ) -> "Type":
     """Infer slice element type from what's being appended."""
     # Constant literals
-    if is_type(arg, "Constant"):
+    if is_type(arg, ["Constant"]):
         value = arg.get("value")
         if isinstance(value, bool):
             return BOOL
@@ -498,7 +498,7 @@ def infer_element_type_from_append_arg(
         if isinstance(value, float):
             return FLOAT
     # Variable reference with known type (e.g., loop variable)
-    if is_type(arg, "Name"):
+    if is_type(arg, ["Name"]):
         arg_id = arg.get("id")
         if arg_id in var_types:
             return var_types[arg_id]
@@ -508,9 +508,9 @@ def infer_element_type_from_append_arg(
                 if p.name == arg_id:
                     return p.typ
     # Field access: self.field or obj.field
-    if is_type(arg, "Attribute"):
+    if is_type(arg, ["Attribute"]):
         arg_value = arg.get("value", {})
-        if is_type(arg_value, "Name"):
+        if is_type(arg_value, ["Name"]):
             if arg_value.get("id") == "self" and current_class_name:
                 struct_info = symbols.structs.get(current_class_name)
                 if struct_info:
@@ -526,7 +526,7 @@ def infer_element_type_from_append_arg(
                     if field_info:
                         return field_info.typ
     # Subscript: container[i] -> infer element type from container
-    if is_type(arg, "Subscript"):
+    if is_type(arg, ["Subscript"]):
         assert callbacks.infer_container_type_from_ast is not None
         container_type = callbacks.infer_container_type_from_ast(arg.get("value"), var_types)
         if container_type == STRING:
@@ -534,7 +534,7 @@ def infer_element_type_from_append_arg(
         if isinstance(container_type, Slice):
             return container_type.element
     # Tuple literal: (a, b, ...) -> Tuple(type(a), type(b), ...)
-    if is_type(arg, "Tuple"):
+    if is_type(arg, ["Tuple"]):
         elem_types = []
         for elt in arg.get("elts", []):
             elem_types.append(
@@ -544,7 +544,7 @@ def infer_element_type_from_append_arg(
             )
         return Tuple(tuple(elem_types))
     # Method calls
-    if is_type(arg, "Call") and is_type(arg.get("func"), "Attribute"):
+    if is_type(arg, ["Call"]) and is_type(arg.get("func"), ["Attribute"]):
         func = arg.get("func", {})
         method = func.get("attr")
         # String methods that return string
@@ -564,12 +564,12 @@ def infer_element_type_from_append_arg(
         if method == "Copy":
             # x.Copy() where x is ctx -> *ParseContext
             func_value = func.get("value", {})
-            if is_type(func_value, "Name"):
+            if is_type(func_value, ["Name"]):
                 var = func_value.get("id")
                 if var == "ctx":
                     return Pointer(StructRef("ParseContext"))
     # Function/constructor calls
-    if is_type(arg, "Call") and is_type(arg.get("func"), "Name"):
+    if is_type(arg, ["Call"]) and is_type(arg.get("func"), ["Name"]):
         func_name = arg.get("func", {}).get("id")
         # String conversion functions
         if func_name in ("str", "string", "substring", "chr"):
@@ -584,19 +584,19 @@ def infer_element_type_from_append_arg(
         if func_name in symbols.functions:
             return symbols.functions[func_name].return_type
     # Method calls: obj.method() -> look up method return type
-    if is_type(arg, "Call") and is_type(arg.get("func"), "Attribute"):
+    if is_type(arg, ["Call"]) and is_type(arg.get("func"), ["Attribute"]):
         func = arg.get("func", {})
         method_name = func.get("attr")
         func_value = func.get("value", {})
         # Handle self.method() calls directly using current class name
         # (can't use _infer_expr_type_from_ast here - _type_ctx not set yet)
-        if is_type(func_value, "Name") and func_value.get("id") == "self":
+        if is_type(func_value, ["Name"]) and func_value.get("id") == "self":
             if current_class_name and current_class_name in symbols.structs:
                 method_info = symbols.structs[current_class_name].methods.get(method_name)
                 if method_info:
                     return method_info.return_type
         # Handle other obj.method() calls via var_types lookup
-        elif is_type(func_value, "Name") and func_value.get("id") in var_types:
+        elif is_type(func_value, ["Name"]) and func_value.get("id") in var_types:
             obj_type = var_types[func_value.get("id")]
             assert callbacks.extract_struct_name is not None
             struct_name = callbacks.extract_struct_name(obj_type)
@@ -624,24 +624,24 @@ def collect_var_types(
     vars_all_types: dict[str, list["Type"]] = {}  # Track all types assigned to each var
     # Preliminary pass: find variables assigned both None and typed values
     for stmt in dict_walk({"_type": "Module", "body": stmts}):
-        if is_type(stmt, "Assign") and len(stmt.get("targets", [])) == 1:
+        if is_type(stmt, ["Assign"]) and len(stmt.get("targets", [])) == 1:
             target = stmt.get("targets", [])[0]
-            if is_type(target, "Name"):
+            if is_type(target, ["Name"]):
                 var_name = target.get("id")
                 if var_name not in vars_all_types:
                     vars_all_types[var_name] = []
                 value = stmt.get("value", {})
                 # Check if assigning None
-                if is_type(value, "Constant") and value.get("value") is None:
+                if is_type(value, ["Constant"]) and value.get("value") is None:
                     vars_assigned_none.add(var_name)
                 # Check if assigning typed value
-                elif is_type(value, "Constant"):
+                elif is_type(value, ["Constant"]):
                     v = value.get("value")
                     if isinstance(v, int) and not isinstance(v, bool):
                         vars_all_types[var_name].append(INT)
                     elif isinstance(v, str):
                         vars_all_types[var_name].append(STRING)
-                elif is_type(value, "Call") and is_type(value.get("func"), "Name"):
+                elif is_type(value, ["Call"]) and is_type(value.get("func"), ["Name"]):
                     # int(...) call
                     func_id = value.get("func", {}).get("id")
                     if func_id == "int":
@@ -649,7 +649,7 @@ def collect_var_types(
                     elif func_id == "str":
                         vars_all_types[var_name].append(STRING)
                 # String method calls: x = "".join(...), etc.
-                elif is_type(value, "Call") and is_type(value.get("func"), "Attribute"):
+                elif is_type(value, ["Call"]) and is_type(value.get("func"), ["Attribute"]):
                     func = value.get("func", {})
                     method = func.get("attr")
                     if method in (
@@ -665,7 +665,7 @@ def collect_var_types(
                         vars_all_types[var_name].append(STRING)
                     # self.method() calls - check return type
                     elif (
-                        is_type(func.get("value"), "Name")
+                        is_type(func.get("value"), ["Name"])
                         and func.get("value", {}).get("id") == "self"
                     ):
                         if current_class_name and current_class_name in symbols.structs:
@@ -673,7 +673,7 @@ def collect_var_types(
                             if method_info:
                                 vars_all_types[var_name].append(method_info.return_type)
                 # Assignment from known variable: varfd = varname
-                elif is_type(value, "Name"):
+                elif is_type(value, ["Name"]):
                     value_id = value.get("id")
                     if value_id in vars_all_types and vars_all_types[value_id]:
                         vars_all_types[var_name].extend(vars_all_types[value_id])
@@ -703,15 +703,15 @@ def collect_var_types(
             # Otherwise, no unified type (will fall back to default inference)
     # First pass: collect For loop variable types (needed for append inference)
     for stmt in dict_walk({"_type": "Module", "body": stmts}):
-        if is_type(stmt, "For"):
+        if is_type(stmt, ["For"]):
             target = stmt.get("target", {})
-            if is_type(target, "Name"):
+            if is_type(target, ["Name"]):
                 loop_var = target.get("id")
                 iter_node = stmt.get("iter", {})
                 # Check for range() call - loop variable is INT
                 if (
-                    is_type(iter_node, "Call")
-                    and is_type(iter_node.get("func"), "Name")
+                    is_type(iter_node, ["Call"])
+                    and is_type(iter_node.get("func"), ["Name"])
                     and iter_node.get("func", {}).get("id") == "range"
                 ):
                     var_types[loop_var] = INT
@@ -720,9 +720,9 @@ def collect_var_types(
                     iterable_type = callbacks.infer_iterable_type(iter_node, var_types)
                     if isinstance(iterable_type, Slice):
                         var_types[loop_var] = iterable_type.element
-            elif is_type(target, "Tuple") and len(target.get("elts", [])) == 2:
+            elif is_type(target, ["Tuple"]) and len(target.get("elts", [])) == 2:
                 elts = target.get("elts", [])
-                if is_type(elts[1], "Name"):
+                if is_type(elts[1], ["Name"]):
                     loop_var = elts[1].get("id")
                     assert callbacks.infer_iterable_type is not None
                     iterable_type = callbacks.infer_iterable_type(stmt.get("iter"), var_types)
@@ -731,7 +731,7 @@ def collect_var_types(
     # Second pass: infer variable types from assignments (runs first to populate var_types)
     for stmt in dict_walk({"_type": "Module", "body": stmts}):
         # Infer from annotated assignments
-        if is_type(stmt, "AnnAssign") and is_type(stmt.get("target"), "Name"):
+        if is_type(stmt, ["AnnAssign"]) and is_type(stmt.get("target"), ["Name"]):
             target = stmt.get("target", {})
             py_type = callbacks.annotation_to_str(stmt.get("annotation"))
             typ = callbacks.py_type_to_ir(py_type, False)
@@ -741,7 +741,7 @@ def collect_var_types(
                 isinstance(typ, Optional)
                 and typ.inner == INT
                 and value
-                and is_type(value, "Constant")
+                and is_type(value, ["Constant"])
                 and value.get("value") is None
             ):
                 var_types[target.get("id")] = INT
@@ -749,18 +749,18 @@ def collect_var_types(
             else:
                 var_types[target.get("id")] = typ
         # Infer from return statements: if returning var and return type is known
-        if is_type(stmt, "Return") and stmt.get("value"):
+        if is_type(stmt, ["Return"]) and stmt.get("value"):
             value = stmt.get("value", {})
-            if is_type(value, "Name"):
+            if is_type(value, ["Name"]):
                 var_name = value.get("id")
                 if current_func_info and isinstance(current_func_info.return_type, Slice):
                     var_types[var_name] = current_func_info.return_type
         # Infer from field assignments: self.field = var -> var has field's type
-        if is_type(stmt, "Assign") and len(stmt.get("targets", [])) == 1:
+        if is_type(stmt, ["Assign"]) and len(stmt.get("targets", [])) == 1:
             target = stmt.get("targets", [])[0]
             value = stmt.get("value", {})
-            if is_type(target, "Attribute") and is_type(target.get("value"), "Name"):
-                if target.get("value", {}).get("id") == "self" and is_type(value, "Name"):
+            if is_type(target, ["Attribute"]) and is_type(target.get("value"), ["Name"]):
+                if target.get("value", {}).get("id") == "self" and is_type(value, ["Name"]):
                     var_name = value.get("id")
                     field_name = target.get("attr")
                     # Look up field type from current class
@@ -770,14 +770,14 @@ def collect_var_types(
                         if field_info:
                             var_types[var_name] = field_info.typ
             # Infer from method call assignments: var = self.method() -> var has method's return type
-            if is_type(target, "Name") and is_type(value, "Call"):
+            if is_type(target, ["Name"]) and is_type(value, ["Call"]):
                 var_name = target.get("id")
                 call = value
-                if is_type(call.get("func"), "Attribute"):
+                if is_type(call.get("func"), ["Attribute"]):
                     func = call.get("func", {})
                     method_name = func.get("attr")
                     # Get object type
-                    if is_type(func.get("value"), "Name"):
+                    if is_type(func.get("value"), ["Name"]):
                         obj_name = func.get("value", {}).get("id")
                         if obj_name == "self" and current_class_name:
                             struct_info = symbols.structs.get(current_class_name)
@@ -786,9 +786,9 @@ def collect_var_types(
                                 if method_info:
                                     var_types[var_name] = method_info.return_type
             # Infer from literal assignments
-            if is_type(target, "Name"):
+            if is_type(target, ["Name"]):
                 var_name = target.get("id")
-                if is_type(value, "Constant"):
+                if is_type(value, ["Constant"]):
                     v = value.get("value")
                     if isinstance(v, bool):
                         var_types[var_name] = BOOL
@@ -796,14 +796,14 @@ def collect_var_types(
                         var_types[var_name] = INT
                     elif isinstance(v, str):
                         var_types[var_name] = STRING
-                elif is_type(value, "Name"):
+                elif is_type(value, ["Name"]):
                     if value.get("id") in ("True", "False"):
                         var_types[var_name] = BOOL
                 # Comparisons and bool ops always produce bool
-                elif is_type(value, "Compare", "BoolOp"):
+                elif is_type(value, ["Compare", "BoolOp"]):
                     var_types[var_name] = BOOL
                 # BinOp with arithmetic operators produce int
-                elif is_type(value, "BinOp"):
+                elif is_type(value, ["BinOp"]):
                     op = value.get("op", {})
                     op_t = op.get("_type")
                     if op_t in ("Sub", "Mult", "FloorDiv", "Mod"):
@@ -816,18 +816,18 @@ def collect_var_types(
                         ):
                             var_types[var_name] = INT
                 # Infer from list/dict literals - element type inferred later from appends
-                elif is_type(value, "List"):
+                elif is_type(value, ["List"]):
                     var_types[var_name] = Slice(InterfaceRef("any"))
-                elif is_type(value, "Dict"):
+                elif is_type(value, ["Dict"]):
                     var_types[var_name] = Map(STRING, InterfaceRef("any"))
                 # Infer from field access: var = obj.field -> var has field's type
-                elif is_type(value, "Attribute"):
+                elif is_type(value, ["Attribute"]):
                     # Look up field type using local var_types (not self._type_ctx)
                     attr_node = value
                     field_name = attr_node.get("attr")
                     obj_type: "Type" = InterfaceRef("any")
                     attr_value = attr_node.get("value", {})
-                    if is_type(attr_value, "Name"):
+                    if is_type(attr_value, ["Name"]):
                         obj_name = attr_value.get("id")
                         if obj_name == "self" and current_class_name:
                             obj_type = Pointer(StructRef(current_class_name))
@@ -840,18 +840,18 @@ def collect_var_types(
                         if field_info:
                             var_types[var_name] = field_info.typ
                 # Infer from subscript/slice: var = container[...] -> element type
-                elif is_type(value, "Subscript"):
+                elif is_type(value, ["Subscript"]):
                     container_type: "Type" = InterfaceRef("any")
                     subscript_value = value.get("value", {})
-                    if is_type(subscript_value, "Name"):
+                    if is_type(subscript_value, ["Name"]):
                         container_name = subscript_value.get("id")
                         if container_name in var_types:
                             container_type = var_types[container_name]
                     # Also handle field access: self.field[i]
-                    elif is_type(subscript_value, "Attribute"):
+                    elif is_type(subscript_value, ["Attribute"]):
                         attr = subscript_value
                         attr_value = attr.get("value", {})
-                        if is_type(attr_value, "Name"):
+                        if is_type(attr_value, ["Name"]):
                             if attr_value.get("id") == "self" and current_class_name:
                                 struct_info = symbols.structs.get(current_class_name)
                                 if struct_info:
@@ -877,19 +877,19 @@ def collect_var_types(
                     elif isinstance(container_type, Tuple):
                         # Indexing a tuple with constant gives element type
                         slice_node = value.get("slice", {})
-                        if is_type(slice_node, "Constant") and isinstance(
+                        if is_type(slice_node, ["Constant"]) and isinstance(
                             slice_node.get("value"), int
                         ):
                             idx = slice_node.get("value")
                             if 0 <= idx < len(container_type.elements):
                                 var_types[var_name] = container_type.elements[idx]
                 # Infer from method calls: var = obj.method() -> method return type
-                elif is_type(value, "Call") and is_type(value.get("func"), "Attribute"):
+                elif is_type(value, ["Call"]) and is_type(value.get("func"), ["Attribute"]):
                     func = value.get("func", {})
                     method_name = func.get("attr")
                     obj_type: "Type" = InterfaceRef("any")
                     func_value = func.get("value", {})
-                    if is_type(func_value, "Name"):
+                    if is_type(func_value, ["Name"]):
                         obj_name = func_value.get("id")
                         if obj_name == "self" and current_class_name:
                             obj_type = Pointer(StructRef(current_class_name))
@@ -913,19 +913,19 @@ def collect_var_types(
                         if method_info:
                             var_types[var_name] = method_info.return_type
         # Handle tuple unpacking: a, b = func() where func returns tuple
-        if is_type(stmt, "Assign") and len(stmt.get("targets", [])) == 1:
+        if is_type(stmt, ["Assign"]) and len(stmt.get("targets", [])) == 1:
             target = stmt.get("targets", [])[0]
             value = stmt.get("value", {})
-            if is_type(target, "Tuple") and is_type(value, "Call"):
+            if is_type(target, ["Tuple"]) and is_type(value, ["Call"]):
                 # Get return type of the called function/method
                 assert callbacks.infer_call_return_type is not None
                 ret_type = callbacks.infer_call_return_type(value)
                 if isinstance(ret_type, Tuple):
                     for i, elt in enumerate(target.get("elts", [])):
-                        if is_type(elt, "Name") and i < len(ret_type.elements):
+                        if is_type(elt, ["Name"]) and i < len(ret_type.elements):
                             var_types[elt.get("id")] = ret_type.elements[i]
             # Handle single var = tuple-returning func (will be expanded to synthetic vars)
-            elif is_type(target, "Name") and is_type(value, "Call"):
+            elif is_type(target, ["Name"]) and is_type(value, ["Call"]):
                 assert callbacks.infer_call_return_type is not None
                 ret_type = callbacks.infer_call_return_type(value)
                 if isinstance(ret_type, Tuple) and len(ret_type.elements) > 1:
@@ -936,7 +936,7 @@ def collect_var_types(
                         var_types[f"{base_name}{i}"] = elem_type
                 # Handle constructor calls: var = ClassName()
                 func = value.get("func", {})
-                if is_type(func, "Name"):
+                if is_type(func, ["Name"]):
                     class_name = func.get("id")
                     if class_name in symbols.structs:
                         var_types[target.get("id")] = Pointer(StructRef(class_name))
@@ -953,13 +953,13 @@ def collect_var_types(
     # Third pass: infer types from append() calls (after all variable types are collected)
     # Note: don't overwrite already-known specific slice types (e.g., bytearray -> []byte)
     for stmt in dict_walk({"_type": "Module", "body": stmts}):
-        if is_type(stmt, "Expr") and is_type(stmt.get("value"), "Call"):
+        if is_type(stmt, ["Expr"]) and is_type(stmt.get("value"), ["Call"]):
             call = stmt.get("value", {})
             func = call.get("func", {})
-            if is_type(func, "Attribute") and func.get("attr") == "append":
+            if is_type(func, ["Attribute"]) and func.get("attr") == "append":
                 func_value = func.get("value", {})
                 call_args = call.get("args", [])
-                if is_type(func_value, "Name") and call_args:
+                if is_type(func_value, ["Name"]) and call_args:
                     var_name = func_value.get("id")
                     # Don't overwrite already-known specific slice types (e.g., bytearray)
                     # But DO infer if current type is generic Slice(any)
@@ -978,7 +978,7 @@ def collect_var_types(
     # This records that list_var contains items of struct type for "something"
     list_element_unions: dict[str, list[str]] = {}
     for stmt in dict_walk({"_type": "Module", "body": stmts}):
-        if is_type(stmt, "If"):
+        if is_type(stmt, ["If"]):
             # Check the test condition for kind checks
             assert callbacks.is_kind_check is not None
             kind_check = callbacks.is_kind_check(stmt.get("test"))
@@ -986,16 +986,16 @@ def collect_var_types(
                 checked_var, struct_name = kind_check
                 # Look for append calls in the body
                 for body_stmt in stmt.get("body", []):
-                    if is_type(body_stmt, "Expr") and is_type(body_stmt.get("value"), "Call"):
+                    if is_type(body_stmt, ["Expr"]) and is_type(body_stmt.get("value"), ["Call"]):
                         call = body_stmt.get("value", {})
                         func = call.get("func", {})
                         call_args = call.get("args", [])
                         if (
-                            is_type(func, "Attribute")
+                            is_type(func, ["Attribute"])
                             and func.get("attr") == "append"
-                            and is_type(func.get("value"), "Name")
+                            and is_type(func.get("value"), ["Name"])
                             and call_args
-                            and is_type(call_args[0], "Name")
+                            and is_type(call_args[0], ["Name"])
                             and call_args[0].get("id") == checked_var
                         ):
                             list_var = func.get("value", {}).get("id")
@@ -1008,15 +1008,15 @@ def collect_var_types(
     # where pair's type depends on cmds, and needs' type depends on pair
     for _ in range(2):  # Run a couple iterations to handle multi-step chains
         for stmt in dict_walk({"_type": "Module", "body": stmts}):
-            if is_type(stmt, "Assign") and len(stmt.get("targets", [])) == 1:
+            if is_type(stmt, ["Assign"]) and len(stmt.get("targets", [])) == 1:
                 target = stmt.get("targets", [])[0]
-                if is_type(target, "Name"):
+                if is_type(target, ["Name"]):
                     var_name = target.get("id")
                     value = stmt.get("value", {})
-                    if is_type(value, "Subscript"):
+                    if is_type(value, ["Subscript"]):
                         container_type: "Type" = InterfaceRef("any")
                         subscript_value = value.get("value", {})
-                        if is_type(subscript_value, "Name"):
+                        if is_type(subscript_value, ["Name"]):
                             container_name = subscript_value.get("id")
                             if container_name in var_types:
                                 container_type = var_types[container_name]
@@ -1024,7 +1024,7 @@ def collect_var_types(
                             var_types[var_name] = container_type.element
                         elif isinstance(container_type, Tuple):
                             slice_node = value.get("slice", {})
-                            if is_type(slice_node, "Constant") and isinstance(
+                            if is_type(slice_node, ["Constant"]) and isinstance(
                                 slice_node.get("value"), int
                             ):
                                 idx = slice_node.get("value")
@@ -1032,7 +1032,7 @@ def collect_var_types(
                                     var_types[var_name] = container_type.elements[idx]
     # Fifth pass: unify types from if/else branches
     for stmt in dict_walk({"_type": "Module", "body": stmts}):
-        if is_type(stmt, "If") and stmt.get("orelse"):
+        if is_type(stmt, ["If"]) and stmt.get("orelse"):
             then_vars = collect_branch_var_types(stmt.get("body", []), var_types)
             else_vars = collect_branch_var_types(stmt.get("orelse", []), var_types)
             unified = unify_branch_types(then_vars, else_vars)

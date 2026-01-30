@@ -98,8 +98,8 @@ File redirection is handled by the shell; the transpiler itself only uses stdin/
 | `signatures.py` | yes (parse)  |    no     | SigTable { func → (params, ret) }     |
 | `fields.py`     | yes (infer)  |    no     | FieldTable { class → [(name, type)] } |
 | `hierarchy.py`  |  yes (sub)   |    no     | SubtypeRel { class → ancestors }      |
-| `inference.py`  | yes (bidir)  |    no     | TypedAST (↑synth / ↓check)            |
-| `lowering.py`   |  no (reads)  |    yes    | IR Module                             |
+| `inference.py`  | yes (bidir)  |    no     | TypedAST (↑synth / ↓check / narrow)   |
+| `lowering.py`   | yes (narrow) |    yes    | IR Module                             |
 
 #### Phase 1.5: `frontend/__init__.py`
 
@@ -325,7 +325,7 @@ Build the inheritance tree and compute subtyping relations. Inheritance implies 
 
 #### Phase 8: `frontend/inference.py`
 
-Assign types to every expression and statement using bidirectional type inference. Bidirectional typing is decidable (unlike full inference), has good error locality, and requires moderate annotations. Core rule: introductions check, eliminations synthesize.
+Assign types to every expression and statement using bidirectional type inference and control-flow-sensitive narrowing. Bidirectional typing is decidable (unlike full inference), has good error locality, and requires moderate annotations. Core rule: introductions check, eliminations synthesize.
 
 | Form        | Mode    | Example                                    |
 | ----------- | ------- | ------------------------------------------ |
@@ -335,6 +335,21 @@ Assign types to every expression and statement using bidirectional type inferenc
 | Variable    | synth ↑ | `x` synthesizes from environment           |
 
 Since all signatures are annotated (SigTable) and fields typed (FieldTable), most work is synthesis. Checking happens at function arguments, return statements, and typed assignments.
+
+**Type narrowing:** Type narrowing (also called flow-sensitive typing or occurrence typing) refines a variable's type based on control flow. The type of a variable depends on which predicates dominate its use.
+
+| Pattern                         | Narrowing                              |
+| ------------------------------- | -------------------------------------- |
+| `isinstance(x, T)`              | `x` narrows to `T` in then-branch      |
+| `x.kind == "value"`             | `x` narrows to struct with that kind   |
+| `if x:` where `x: T \| None`    | `x` narrows to `T` in then-branch      |
+| `kind = x.kind; if kind == ...` | `x` narrows via alias tracking         |
+
+**Implementation note:** Type narrowing is control-flow sensitive—a specific instance of dataflow analysis. Two strategies are supported:
+
+1. **Pre-computation**: For simple patterns (`isinstance`, truthiness), types are pre-computed by simulating control flow during Phase 8.
+
+2. **On-demand inference**: For complex patterns (kind aliasing, attribute paths, chained assertions), Phase 9 may request type inference with full narrowing context. This follows TypeScript and Pyright's architecture, where narrowed types are evaluated lazily at reference points rather than eagerly pre-computed.
 
 **Truthiness semantics:** Python's `if x:` has type-dependent meaning. Tongues restricts to unambiguous patterns:
 
@@ -359,17 +374,26 @@ Ambiguous types like `list[T] | None` require explicit checks (`if x is not None
 - Predicate parameters receiving single-char arguments typed as `Char` (not `String`)
 - Expressions have precise narrowed type after type guards; no widening to `interface{}`
 
-**Prior art:** [Bidirectional Typing](https://arxiv.org/abs/1908.05839), [Local Type Inference](https://www.cis.upenn.edu/~bcpierce/papers/lti-toplas.pdf)
+**Prior art:** [Bidirectional Typing](https://arxiv.org/abs/1908.05839), [Local Type Inference](https://www.cis.upenn.edu/~bcpierce/papers/lti-toplas.pdf), [Flow-Sensitive Typing](https://en.wikipedia.org/wiki/Flow-sensitive_typing), [Typed Racket Occurrence Typing](https://docs.racket-lang.org/ts-guide/occurrence-typing.html)
 
 #### Phase 9: `frontend/lowering.py`
 
-Translate TypedAST to IR. Lowering only reads types, never computes them—if phase 8 did its job, every expression has a type. Pure syntactic transformation: pattern-match on AST nodes and emit IR.
+Translate TypedAST to IR. Lowering primarily reads types from Phase 8, but may invoke type inference for expressions requiring full narrowing context. Pattern-match on AST nodes and emit IR.
 
 | AST Node                 | IR Output                              |
 | ------------------------ | -------------------------------------- |
 | `BinOp(+, a, b)` : `int` | `ir.BinOp(Add, lower(a), lower(b))`    |
 | `Call(f, args)` : `T`    | `ir.Call(f, [lower(a) for a in args])` |
 | `Attribute(obj, field)`  | `ir.FieldAccess(lower(obj), field)`    |
+
+**Type resolution strategy:** Following TypeScript's architecture, Phase 9 builds narrowing context (tracking `isinstance` checks, kind comparisons, alias assignments) as it traverses control flow. When a pre-computed type is unavailable, it requests the narrowed type on-demand.
+
+| Pattern                  | Strategy                                |
+| ------------------------ | --------------------------------------- |
+| `isinstance(x, T)`       | Pre-computed in Phase 8                 |
+| `x.kind == "value"`      | On-demand with kind→struct mapping      |
+| `kind = x.kind; if ...`  | On-demand with alias tracking           |
+| `x.attr.kind == "value"` | On-demand with attribute path tracking  |
 
 **Postconditions:**
 - IR Module complete; all IR nodes typed; no AST remnants in output
@@ -405,7 +429,7 @@ Translate TypedAST to IR. Lowering only reads types, never computes them—if ph
 - `sys.argv` emits `Args` IR; backends map to `os.Args`/`args`/`argv`
 - `os.getenv(name)` emits `GetEnv(name, default)` with optional default
 
-**Prior art:** [Three-address code](https://en.wikipedia.org/wiki/Three-address_code), [Cornell CS 4120 IR notes](https://www.cs.cornell.edu/courses/cs4120/2023sp/notes/ir/)
+**Prior art:** [Three-address code](https://en.wikipedia.org/wiki/Three-address_code), [Cornell CS 4120 IR notes](https://www.cs.cornell.edu/courses/cs4120/2023sp/notes/ir/), [TypeScript Flow Nodes](https://effectivetypescript.com/2024/03/24/flownodes/), [Pyright Lazy Evaluation](https://github.com/microsoft/pyright/blob/main/docs/mypy-comparison.md)
 
 ## Middleend (Phases 10–14)
 

@@ -6932,7 +6932,7 @@ def _format_cmdsub_node(node: Node, indent: int, in_procsub: bool, compact_redir
         node = node
         has_heredoc = False
         for p in (node.parts or []):
-            if p.kind == "command" and p.redirects is not None:
+            if p.kind == "command" and p.redirects:
                 for r in (p.redirects or []):
                     if isinstance(r, HereDoc):
                         r = r
@@ -7165,7 +7165,7 @@ def _format_redirect(r: Node, compact: bool, heredoc_op_only: bool) -> str:
         else:
             op = "<<"
         if r.fd is not None and r.fd > 0:
-            op = r.fd + op
+            op = _intToStr(r.fd) + op
         if r.quoted:
             delim = "'" + r.delimiter + "'"
         else:
@@ -7512,7 +7512,7 @@ def _skip_heredoc(value: str, start: int) -> int:
     while i < len(value) and _is_whitespace_no_newline(value[i]):
         i += 1
     delim_start = i
-    quote_char = ""
+    quote_char = None
     if i < len(value) and (value[i] == "\"" or value[i] == "'"):
         quote_char = value[i]
         i += 1

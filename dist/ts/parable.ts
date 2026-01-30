@@ -9321,12 +9321,12 @@ function ConsumeBracketClass(s: string, start: number, depth: number): [number, 
 function FormatCondBody(node: Node): string {
   var kind: any = node.kind;
   if (kind === "unary-test") {
-    var operandVal: any = (node as unknown as UnaryTest).operand.getCondFormattedValue();
+    var operandVal: any = ((node as unknown as UnaryTest).operand as unknown as Word).getCondFormattedValue();
     return (node as unknown as UnaryTest).op + " " + operandVal;
   }
   if (kind === "binary-test") {
-    var leftVal: any = (node as unknown as BinaryTest).left.getCondFormattedValue();
-    var rightVal: any = (node as unknown as BinaryTest).right.getCondFormattedValue();
+    var leftVal: any = ((node as unknown as BinaryTest).left as unknown as Word).getCondFormattedValue();
+    var rightVal: any = ((node as unknown as BinaryTest).right as unknown as Word).getCondFormattedValue();
     return leftVal + " " + (node as unknown as BinaryTest).op + " " + rightVal;
   }
   if (kind === "cond-and") {
@@ -9351,7 +9351,7 @@ function StartsWithSubshell(node: Node): boolean {
   if (node instanceof List) {
     for (const p of node.parts as Node[]) {
       if (p.kind !== "operator") {
-        return StartsWithSubshell((p as unknown as Node));
+        return StartsWithSubshell(p);
       }
     }
     return false;
@@ -9389,9 +9389,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
         heredocs.push(r);
       }
     }
-    for (const r of node.redirects as Node[]) {
-      parts.push(FormatRedirect((r as unknown as Node), compactRedirects, true));
-    }
+    parts.push(...node.redirects.map(r => FormatRedirect(r, compactRedirects, true)));
     if (compactRedirects && node.words.length > 0 && node.redirects.length > 0) {
       var wordParts: any = parts.slice(0, node.words.length);
       var redirectParts: any = parts.slice(node.words.length);
@@ -9484,8 +9482,8 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
   if (node instanceof List) {
     var hasHeredoc: any = false;
     for (const p of node.parts as Node[]) {
-      if (p.kind === "command" && p.redirects !== null) {
-        for (const r of p.redirects) {
+      if (p.kind === "command" && (p as unknown as Command).redirects.length > 0) {
+        for (const r of (p as unknown as Command).redirects as Node[]) {
           if (r instanceof HereDoc) {
             hasHeredoc = true;
             break;
@@ -9515,7 +9513,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
     for (const p of node.parts as Node[]) {
       if (p instanceof Operator) {
         if (p.op === ";") {
-          if (result !== "" && result[result.length - 1].endsWith("\n")) {
+          if (result.length > 0 && result[result.length - 1].endsWith("\n")) {
             skippedSemi = true;
             continue;
           }
@@ -9523,24 +9521,24 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
             skippedSemi = true;
             continue;
           }
-          result.append(";");
+          result.push(";");
           skippedSemi = false;
         } else {
           if (p.op === "\n") {
-            if (result !== "" && result[result.length - 1] === ";") {
+            if (result.length > 0 && result[result.length - 1] === ";") {
               skippedSemi = false;
               continue;
             }
-            if (result !== "" && result[result.length - 1].endsWith("\n")) {
-              result.append((skippedSemi ? " " : "\n"));
+            if (result.length > 0 && result[result.length - 1].endsWith("\n")) {
+              result.push((skippedSemi ? " " : "\n"));
               skippedSemi = false;
               continue;
             }
-            result.append("\n");
+            result.push("\n");
             skippedSemi = false;
           } else {
             if (p.op === "&") {
-              if (result !== "" && result[result.length - 1].includes("<<") && result[result.length - 1].includes("\n")) {
+              if (result.length > 0 && result[result.length - 1].includes("<<") && result[result.length - 1].includes("\n")) {
                 var last: any = result[result.length - 1];
                 if (last.includes(" |") || last.startsWith("|")) {
                   result[result.length - 1] = last + " &";
@@ -9549,24 +9547,24 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
                   result[result.length - 1] = last.slice(0, firstNl) + " &" + last.slice(firstNl);
                 }
               } else {
-                result.append(" &");
+                result.push(" &");
               }
             } else {
-              if (result !== "" && result[result.length - 1].includes("<<") && result[result.length - 1].includes("\n")) {
+              if (result.length > 0 && result[result.length - 1].includes("<<") && result[result.length - 1].includes("\n")) {
                 var last: any = result[result.length - 1];
                 var firstNl: any = last.indexOf("\n");
                 result[result.length - 1] = last.slice(0, firstNl) + " " + p.op + " " + last.slice(firstNl);
               } else {
-                result.append(" " + p.op);
+                result.push(" " + p.op);
               }
             }
           }
         }
       } else {
-        if (result !== "" && !(result[result.length - 1].endsWith(" ") || result[result.length - 1].endsWith("\n"))) {
-          result.append(" ");
+        if (result.length > 0 && !(result[result.length - 1].endsWith(" ") || result[result.length - 1].endsWith("\n"))) {
+          result.push(" ");
         }
-        var formattedCmd: any = FormatCmdsubNode((p as unknown as Node), indent, inProcsub, compactRedirects, procsubFirst && cmdCount === 0);
+        var formattedCmd: any = FormatCmdsubNode(p, indent, inProcsub, compactRedirects, procsubFirst && cmdCount === 0);
         if (result.length > 0) {
           var last: any = result[result.length - 1];
           if (last.includes(" || \n") || last.includes(" && \n")) {
@@ -9577,7 +9575,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
           formattedCmd = " " + formattedCmd;
           skippedSemi = false;
         }
-        result.append(formattedCmd);
+        result.push(formattedCmd);
         cmdCount += 1;
       }
     }
@@ -9612,7 +9610,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
     var result: any = "while " + cond + "; do\n" + innerSp + body + ";\n" + sp + "done";
     if (node.redirects.length > 0) {
       for (const r of node.redirects as Node[]) {
-        result = result + " " + FormatRedirect((r as unknown as Node), false, false);
+        result = result + " " + FormatRedirect(r, false, false);
       }
     }
     return result;
@@ -9623,7 +9621,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
     var result: any = "until " + cond + "; do\n" + innerSp + body + ";\n" + sp + "done";
     if (node.redirects.length > 0) {
       for (const r of node.redirects as Node[]) {
-        result = result + " " + FormatRedirect((r as unknown as Node), false, false);
+        result = result + " " + FormatRedirect(r, false, false);
       }
     }
     return result;
@@ -9645,7 +9643,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
     }
     if (node.redirects.length > 0) {
       for (const r of node.redirects as Node[]) {
-        var result: any = result + " " + FormatRedirect((r as unknown as Node), false, false);
+        var result: any = result + " " + FormatRedirect(r, false, false);
       }
     }
     return result;
@@ -9655,7 +9653,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
     var result: any = "for ((" + node.init + "; " + node.cond + "; " + node.incr + "))\ndo\n" + innerSp + body + ";\n" + sp + "done";
     if (node.redirects.length > 0) {
       for (const r of node.redirects as Node[]) {
-        result = result + " " + FormatRedirect((r as unknown as Node), false, false);
+        result = result + " " + FormatRedirect(r, false, false);
       }
     }
     return result;
@@ -9687,9 +9685,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
     var redirects: any = "";
     if (node.redirects.length > 0) {
       var redirectParts: any = [];
-      for (const r of node.redirects as Node[]) {
-        redirectParts.append(FormatRedirect((r as unknown as Node), false, false));
-      }
+      redirectParts.push(...node.redirects.map(r => FormatRedirect(r, false, false)));
       redirects = " " + redirectParts.join(" ");
     }
     return "case " + word + " in" + patternStr + "\n" + sp + "esac" + redirects;
@@ -9708,9 +9704,7 @@ ${innerSp}${body}
     var redirects: any = "";
     if (node.redirects.length > 0) {
       var redirectParts: any = [];
-      for (const r of node.redirects as Node[]) {
-        redirectParts.append(FormatRedirect((r as unknown as Node), false, false));
-      }
+      redirectParts.push(...node.redirects.map(r => FormatRedirect(r, false, false)));
       redirects = redirectParts.join(" ");
     }
     if (procsubFirst) {
@@ -9731,9 +9725,7 @@ ${innerSp}${body}
     var redirects: any = "";
     if (node.redirects.length > 0) {
       var redirectParts: any = [];
-      for (const r of node.redirects as Node[]) {
-        redirectParts.append(FormatRedirect((r as unknown as Node), false, false));
-      }
+      redirectParts.push(...node.redirects.map(r => FormatRedirect(r, false, false)));
       redirects = redirectParts.join(" ");
     }
     if (redirects !== "") {
@@ -9772,7 +9764,7 @@ function FormatRedirect(r: Node, compact: boolean, heredocOpOnly: boolean): stri
       var op: any = "<<";
     }
     if (r.fd !== null && r.fd > 0) {
-      var op: any = (r.fd as unknown as string) + op;
+      var op: any = String(r.fd) + op;
     }
     if (r.quoted) {
       var delim: any = "'" + r.delimiter + "'";
@@ -10243,7 +10235,7 @@ function SkipHeredoc(value: string, start: number): number {
     i += 1;
   }
   var delimStart: any = i;
-  var quoteChar: any = "";
+  var quoteChar: any = null;
   if (i < value.length && (value[i] === "\"" || value[i] === "'")) {
     quoteChar = value[i];
     i += 1;

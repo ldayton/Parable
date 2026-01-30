@@ -4892,7 +4892,7 @@ class ConditionalExpr implements Node {
         Object body = this.body;
         String result = "";
         if (body instanceof String bodyString) {
-            Object escaped = bodyString.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n");
+            String escaped = bodyString.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n");
             result = "(cond \"" + escaped + "\")";
         } else {
             result = "(cond " + ((Node) body).toSexp() + ")";
@@ -8429,7 +8429,7 @@ class Parser {
         if (!this.atEnd()) {
             ch = this.peek();
         }
-        BraceGroup body = null;
+        Node body = null;
         if (ch.equals("{")) {
             body = this.parseBraceGroup();
             if (body != null) {
@@ -8746,7 +8746,7 @@ class Parser {
             return null;
         }
         String ch = this.peek();
-        ArithmeticCommand result = null;
+        Node result = null;
         if (ch.equals("(") && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '(') {
             result = this.parseArithmeticCommand();
             if (result != null) {
@@ -9154,7 +9154,7 @@ class Parser {
         if (lastWord != null && lastWord.value.endsWith("\\")) {
             lastWord.value = ParableFunctions._substring(lastWord.value, 0, lastWord.value.length() - 1);
             if (!(!lastWord.value.equals("")) && (lastNode instanceof Command) && !((Command) lastNode).words.isEmpty()) {
-                ((Command) lastNode).words.pop();
+                ((Command) lastNode).words.remove(((Command) lastNode).words.size() - 1);
             }
         }
     }
@@ -9435,12 +9435,12 @@ final class ParableFunctions {
     static String _formatCondBody(Node node) {
         Object kind = node.getKind();
         if (kind == "unary-test") {
-            Object operandVal = ((UnaryTest) node).operand.getCondFormattedValue();
+            String operandVal = ((Word) ((UnaryTest) node).operand).getCondFormattedValue();
             return ((UnaryTest) node).op + " " + operandVal;
         }
         if (kind == "binary-test") {
-            Object leftVal = ((BinaryTest) node).left.getCondFormattedValue();
-            Object rightVal = ((BinaryTest) node).right.getCondFormattedValue();
+            String leftVal = ((Word) ((BinaryTest) node).left).getCondFormattedValue();
+            String rightVal = ((Word) ((BinaryTest) node).right).getCondFormattedValue();
             return leftVal + " " + ((BinaryTest) node).op + " " + rightVal;
         }
         if (kind == "cond-and") {
@@ -9465,7 +9465,7 @@ final class ParableFunctions {
         if (node instanceof ListNode nodeList) {
             for (Node p : nodeList.parts) {
                 if (p.getKind() != "operator") {
-                    return ParableFunctions._startsWithSubshell(((Node) p));
+                    return ParableFunctions._startsWithSubshell(p);
                 }
             }
             return false;
@@ -9491,7 +9491,7 @@ final class ParableFunctions {
         if (node instanceof Command nodeCommand) {
             List<String> parts = new ArrayList<>();
             for (Word w : nodeCommand.words) {
-                Object val = w._expandAllAnsiCQuotes(w.value);
+                String val = w._expandAllAnsiCQuotes(w.value);
                 val = w._stripLocaleStringDollars(val);
                 val = w._normalizeArrayWhitespace(val);
                 val = w._formatCommandSubstitutions(val, false);
@@ -9504,7 +9504,7 @@ final class ParableFunctions {
                 }
             }
             for (Node r : nodeCommand.redirects) {
-                parts.add(ParableFunctions._formatRedirect(((Node) r), compactRedirects, true));
+                parts.add(ParableFunctions._formatRedirect(r, compactRedirects, true));
             }
             String result = "";
             if (compactRedirects && !nodeCommand.words.isEmpty() && !nodeCommand.redirects.isEmpty()) {
@@ -9602,8 +9602,8 @@ final class ParableFunctions {
         if (node instanceof ListNode nodeList) {
             boolean hasHeredoc = false;
             for (Node p : nodeList.parts) {
-                if (p.getKind() == "command" && p.redirects != null) {
-                    for (Object r : p.redirects) {
+                if (p.getKind() == "command" && !((Command) p).redirects.isEmpty()) {
+                    for (Node r : ((Command) p).redirects) {
                         if (r instanceof HereDoc rHereDoc) {
                             hasHeredoc = true;
                             break;
@@ -9627,17 +9627,17 @@ final class ParableFunctions {
                     }
                 }
             }
-            List<Object> result = new ArrayList<>();
+            List<String> result = new ArrayList<>();
             boolean skippedSemi = false;
             int cmdCount = 0;
             for (Node p : nodeList.parts) {
                 if (p instanceof Operator pOperator) {
                     if (pOperator.op.equals(";")) {
-                        if (!result.equals("") && String.valueOf(result.charAt(result.length() - 1)).endsWith("\n")) {
+                        if (!result.isEmpty() && result.get(result.size() - 1).endsWith("\n")) {
                             skippedSemi = true;
                             continue;
                         }
-                        if (result.length() >= 3 && result.charAt(result.length() - 2) == '\n' && String.valueOf(result.charAt(result.length() - 3)).endsWith("\n")) {
+                        if (result.size() >= 3 && result.get(result.size() - 2).equals("\n") && result.get(result.size() - 3).endsWith("\n")) {
                             skippedSemi = true;
                             continue;
                         }
@@ -9645,11 +9645,11 @@ final class ParableFunctions {
                         skippedSemi = false;
                     } else {
                         if (pOperator.op.equals("\n")) {
-                            if (!result.equals("") && result.charAt(result.length() - 1) == ';') {
+                            if (!result.isEmpty() && result.get(result.size() - 1).equals(";")) {
                                 skippedSemi = false;
                                 continue;
                             }
-                            if (!result.equals("") && String.valueOf(result.charAt(result.length() - 1)).endsWith("\n")) {
+                            if (!result.isEmpty() && result.get(result.size() - 1).endsWith("\n")) {
                                 result.add((skippedSemi ? " " : "\n"));
                                 skippedSemi = false;
                                 continue;
@@ -9660,22 +9660,22 @@ final class ParableFunctions {
                             String last = "";
                             int firstNl = 0;
                             if (pOperator.op.equals("&")) {
-                                if (!result.equals("") && String.valueOf(result.charAt(result.length() - 1)).indexOf("<<") != -1 && String.valueOf(result.charAt(result.length() - 1)).indexOf("\n") != -1) {
-                                    last = String.valueOf(result.charAt(result.length() - 1));
+                                if (!result.isEmpty() && result.get(result.size() - 1).indexOf("<<") != -1 && result.get(result.size() - 1).indexOf("\n") != -1) {
+                                    last = result.get(result.size() - 1);
                                     if (last.indexOf(" |") != -1 || last.startsWith("|")) {
-                                        result[result.length() - 1] = last + " &";
+                                        result.set(result.size() - 1, last + " &");
                                     } else {
                                         firstNl = last.indexOf("\n");
-                                        result[result.length() - 1] = last.substring(0, firstNl) + " &" + last.substring(firstNl);
+                                        result.set(result.size() - 1, last.substring(0, firstNl) + " &" + last.substring(firstNl));
                                     }
                                 } else {
                                     result.add(" &");
                                 }
                             } else {
-                                if (!result.equals("") && String.valueOf(result.charAt(result.length() - 1)).indexOf("<<") != -1 && String.valueOf(result.charAt(result.length() - 1)).indexOf("\n") != -1) {
-                                    last = String.valueOf(result.charAt(result.length() - 1));
+                                if (!result.isEmpty() && result.get(result.size() - 1).indexOf("<<") != -1 && result.get(result.size() - 1).indexOf("\n") != -1) {
+                                    last = result.get(result.size() - 1);
                                     firstNl = last.indexOf("\n");
-                                    result[result.length() - 1] = last.substring(0, firstNl) + " " + pOperator.op + " " + last.substring(firstNl);
+                                    result.set(result.size() - 1, last.substring(0, firstNl) + " " + pOperator.op + " " + last.substring(firstNl));
                                 } else {
                                     result.add(" " + pOperator.op);
                                 }
@@ -9683,12 +9683,12 @@ final class ParableFunctions {
                         }
                     }
                 } else {
-                    if (!result.equals("") && !(String.valueOf(result.charAt(result.length() - 1)).endsWith(" ") || String.valueOf(result.charAt(result.length() - 1)).endsWith("\n"))) {
+                    if (!result.isEmpty() && !(result.get(result.size() - 1).endsWith(" ") || result.get(result.size() - 1).endsWith("\n"))) {
                         result.add(" ");
                     }
-                    String formattedCmd = ParableFunctions._formatCmdsubNode(((Node) p), indent, inProcsub, compactRedirects, procsubFirst && cmdCount == 0);
+                    String formattedCmd = ParableFunctions._formatCmdsubNode(p, indent, inProcsub, compactRedirects, procsubFirst && cmdCount == 0);
                     if (!result.isEmpty()) {
-                        String last = String.valueOf(result.charAt(result.length() - 1));
+                        String last = result.get(result.size() - 1);
                         if (last.indexOf(" || \n") != -1 || last.indexOf(" && \n") != -1) {
                             formattedCmd = " " + formattedCmd;
                         }
@@ -9732,7 +9732,7 @@ final class ParableFunctions {
             String result = "while " + cond + "; do\n" + innerSp + body + ";\n" + sp + "done";
             if (!nodeWhile.redirects.isEmpty()) {
                 for (Node r : nodeWhile.redirects) {
-                    result = result + " " + ParableFunctions._formatRedirect(((Node) r), false, false);
+                    result = result + " " + ParableFunctions._formatRedirect(r, false, false);
                 }
             }
             return result;
@@ -9743,7 +9743,7 @@ final class ParableFunctions {
             String result = "until " + cond + "; do\n" + innerSp + body + ";\n" + sp + "done";
             if (!nodeUntil.redirects.isEmpty()) {
                 for (Node r : nodeUntil.redirects) {
-                    result = result + " " + ParableFunctions._formatRedirect(((Node) r), false, false);
+                    result = result + " " + ParableFunctions._formatRedirect(r, false, false);
                 }
             }
             return result;
@@ -9768,7 +9768,7 @@ final class ParableFunctions {
             }
             if (!nodeFor.redirects.isEmpty()) {
                 for (Node r : nodeFor.redirects) {
-                    result = result + " " + ParableFunctions._formatRedirect(((Node) r), false, false);
+                    result = result + " " + ParableFunctions._formatRedirect(r, false, false);
                 }
             }
             return result;
@@ -9778,7 +9778,7 @@ final class ParableFunctions {
             String result = "for ((" + nodeForArith.init + "; " + nodeForArith.cond + "; " + nodeForArith.incr + "))\ndo\n" + innerSp + body + ";\n" + sp + "done";
             if (!nodeForArith.redirects.isEmpty()) {
                 for (Node r : nodeForArith.redirects) {
-                    result = result + " " + ParableFunctions._formatRedirect(((Node) r), false, false);
+                    result = result + " " + ParableFunctions._formatRedirect(r, false, false);
                 }
             }
             return result;
@@ -9812,7 +9812,7 @@ final class ParableFunctions {
             if (!nodeCase.redirects.isEmpty()) {
                 List<String> redirectParts = new ArrayList<>();
                 for (Node r : nodeCase.redirects) {
-                    redirectParts.add(ParableFunctions._formatRedirect(((Node) r), false, false));
+                    redirectParts.add(ParableFunctions._formatRedirect(r, false, false));
                 }
                 redirects = " " + String.join(" ", redirectParts);
             }
@@ -9830,7 +9830,7 @@ final class ParableFunctions {
             if (!nodeSubshell.redirects.isEmpty()) {
                 List<String> redirectParts = new ArrayList<>();
                 for (Node r : nodeSubshell.redirects) {
-                    redirectParts.add(ParableFunctions._formatRedirect(((Node) r), false, false));
+                    redirectParts.add(ParableFunctions._formatRedirect(r, false, false));
                 }
                 redirects = String.join(" ", redirectParts);
             }
@@ -9853,7 +9853,7 @@ final class ParableFunctions {
             if (!nodeBraceGroup.redirects.isEmpty()) {
                 List<String> redirectParts = new ArrayList<>();
                 for (Node r : nodeBraceGroup.redirects) {
-                    redirectParts.add(ParableFunctions._formatRedirect(((Node) r), false, false));
+                    redirectParts.add(ParableFunctions._formatRedirect(r, false, false));
                 }
                 redirects = String.join(" ", redirectParts);
             }
@@ -10362,7 +10362,7 @@ final class ParableFunctions {
             i += 1;
         }
         int delimStart = i;
-        String quoteChar = "";
+        Object quoteChar = null;
         String delimiter = "";
         if (i < value.length() && value.charAt(i) == '"' || value.charAt(i) == '\'') {
             quoteChar = String.valueOf(value.charAt(i));

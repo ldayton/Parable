@@ -125,6 +125,7 @@ _JAVA_RESERVED = frozenset(
         "true",
         "false",
         "null",
+        "_",  # Java 9+ keyword for unused variables
     }
 )
 

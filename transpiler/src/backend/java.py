@@ -7,9 +7,6 @@ Frontend deficiencies (should be fixed in frontend.py):
 - FieldAccess for "this._arith_parse_*" is special-cased to emit lambda syntax
   "() -> this.method()" - frontend should emit FuncRef IR for bound method
   references instead of FieldAccess.
-- String character classification methods (isalnum, isdigit, etc.) are translated
-  inline to Java streams - frontend should emit generic IR that backends map to
-  stdlib, not Python method names that each backend must recognize.
 - SliceConvert IR node is not handled - either frontend shouldn't emit it for
   Java-targeted code, or this backend needs to implement covariant conversion.
 - VAR_TYPE_OVERRIDES and FIELD_TYPE_OVERRIDES imported from src/type_overrides
@@ -180,6 +177,7 @@ from src.ir import (
     Break,
     Call,
     Cast,
+    CharClassify,
     Constant,
     Continue,
     DerefLV,
@@ -1209,6 +1207,20 @@ class JavaBackend:
                 return f"(int) Long.parseLong({self._expr(s)}, {self._expr(b)})"
             case IntToStr(value=v):
                 return f"String.valueOf({self._expr(v)})"
+            case CharClassify(kind=kind, char=char):
+                method_map = {
+                    "digit": "isDigit",
+                    "alpha": "isLetter",
+                    "alnum": "isLetterOrDigit",
+                    "space": "isWhitespace",
+                    "upper": "isUpperCase",
+                    "lower": "isLowerCase",
+                }
+                java_method = method_map[kind]
+                char_str = self._expr(char)
+                # Java always uses string pattern - even when IR type is rune (from string
+                # iteration), Java represents single chars as String, not primitive char
+                return f"({char_str}.length() > 0 && {char_str}.chars().allMatch(Character::{java_method}))"
             case Call(func=func, args=args):
                 args_str = ", ".join(self._expr(a) for a in args)
                 # Handle built-in functions
@@ -1562,14 +1574,6 @@ class JavaBackend:
                 return f"{obj_str}.toLowerCase()"
             if method == "upper":
                 return f"{obj_str}.toUpperCase()"
-            if method == "isalpha":
-                return f"({obj_str}.length() > 0 && {obj_str}.chars().allMatch(Character::isLetter))"
-            if method == "isalnum":
-                return f"({obj_str}.length() > 0 && {obj_str}.chars().allMatch(Character::isLetterOrDigit))"
-            if method == "isdigit":
-                return f"({obj_str}.length() > 0 && {obj_str}.chars().allMatch(Character::isDigit))"
-            if method == "isspace":
-                return f"({obj_str}.length() > 0 && {obj_str}.chars().allMatch(Character::isWhitespace))"
         # Handle Map.get with default value -> getOrDefault
         if isinstance(receiver_type, Map):
             if method == "get" and len(args) == 2:
@@ -1590,15 +1594,6 @@ class JavaBackend:
             return f"{obj_str}.clear()"
         if method == "insert":
             return f"{obj_str}.add({args_str})"
-        # Fallback for string methods when receiver_type is unknown
-        if method == "isalnum":
-            return f"({obj_str}.length() > 0 && {obj_str}.chars().allMatch(Character::isLetterOrDigit))"
-        if method == "isalpha":
-            return f"({obj_str}.length() > 0 && {obj_str}.chars().allMatch(Character::isLetter))"
-        if method == "isdigit":
-            return f"({obj_str}.length() > 0 && {obj_str}.chars().allMatch(Character::isDigit))"
-        if method == "isspace":
-            return f"({obj_str}.length() > 0 && {obj_str}.chars().allMatch(Character::isWhitespace))"
         if method == "endswith":
             return f"{obj_str}.endsWith({args_str})"
         if method == "startswith":

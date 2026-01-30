@@ -964,7 +964,7 @@ class Lexer {
         }
         if ((chars.length > 0) && atCommandStart && !seenEquals && IsArrayAssignmentPrefix(chars)) {
           var prevChar: any = chars[chars.length - 1];
-          if (/^[a-zA-Z0-9]$/.test(prevChar) || prevChar === "_") {
+          if (/^[a-zA-Z0-9]+$/.test(prevChar) || prevChar === "_") {
             bracketStartPos = this.pos;
             bracketDepth += 1;
             chars.push(this.advance());
@@ -1625,18 +1625,18 @@ class Lexer {
       this.advance();
       return ch;
     }
-    if (/^[0-9]+$/.test(ch)) {
+    if (/^\d+$/.test(ch)) {
       var nameChars: any = [];
-      while (!this.atEnd() && /^[0-9]+$/.test(this.peek())) {
+      while (!this.atEnd() && /^\d+$/.test(this.peek())) {
         nameChars.push(this.advance());
       }
       return nameChars.join("");
     }
-    if (/^[a-zA-Z]$/.test(ch) || ch === "_") {
+    if (/^[a-zA-Z]+$/.test(ch) || ch === "_") {
       var nameChars: any = [];
       while (!this.atEnd()) {
         var c: any = this.peek();
-        if (/^[a-zA-Z0-9]$/.test(c) || c === "_") {
+        if (/^[a-zA-Z0-9]+$/.test(c) || c === "_") {
           nameChars.push(this.advance());
         } else {
           if (c === "[") {
@@ -1682,11 +1682,11 @@ class Lexer {
       var text: any = Substring(this.source, start, this.pos);
       return [new ParamExpansion(ch as any, "", "", "param" as any), text];
     }
-    if (/^[a-zA-Z]$/.test(ch) || ch === "_") {
+    if (/^[a-zA-Z]+$/.test(ch) || ch === "_") {
       var nameStart: any = this.pos;
       while (!this.atEnd()) {
         var c: any = this.peek();
-        if (/^[a-zA-Z0-9]$/.test(c) || c === "_") {
+        if (/^[a-zA-Z0-9]+$/.test(c) || c === "_") {
           this.advance();
         } else {
           break;
@@ -2282,10 +2282,10 @@ class Word implements Node {
                       if ("@*#?-$!0123456789_".includes(afterBrace[0])) {
                         varNameLen = 1;
                       } else {
-                        if (/^[a-zA-Z]$/.test(afterBrace[0]) || afterBrace[0] === "_") {
+                        if (/^[a-zA-Z]+$/.test(afterBrace[0]) || afterBrace[0] === "_") {
                           while (varNameLen < afterBrace.length) {
                             var c: any = afterBrace[varNameLen];
-                            if (!(/^[a-zA-Z0-9]$/.test(c) || c === "_")) {
+                            if (!(/^[a-zA-Z0-9]+$/.test(c) || c === "_")) {
                               break;
                             }
                             varNameLen += 1;
@@ -2447,11 +2447,11 @@ class Word implements Node {
 
   NormalizeArrayWhitespace(value: string): string {
     var i: any = 0;
-    if (!(i < value.length && (/^[a-zA-Z]$/.test(value[i]) || value[i] === "_"))) {
+    if (!(i < value.length && (/^[a-zA-Z]+$/.test(value[i]) || value[i] === "_"))) {
       return value;
     }
     i += 1;
-    while (i < value.length && (/^[a-zA-Z0-9]$/.test(value[i]) || value[i] === "_")) {
+    while (i < value.length && (/^[a-zA-Z0-9]+$/.test(value[i]) || value[i] === "_")) {
       i += 1;
     }
     while (i < value.length && value[i] === "[") {
@@ -2949,7 +2949,7 @@ class Word implements Node {
             break;
           } else {
             if ((StartsWithAt(value, idx, "<(") || StartsWithAt(value, idx, ">(")) && !scanQuote.double) {
-              if (idx === 0 || !/^[a-zA-Z0-9]$/.test(value[idx - 1]) && !"\"'".includes(value[idx - 1])) {
+              if (idx === 0 || !/^[a-zA-Z0-9]+$/.test(value[idx - 1]) && !"\"'".includes(value[idx - 1])) {
                 hasUntrackedProcsub = true;
                 break;
               }
@@ -3095,7 +3095,7 @@ class Word implements Node {
               var prefix: any = (hasPipe ? "${|" : "${ ");
               var origInner: any = Substring(value, i + 2, j - 1);
               var endsWithNewline: any = origInner.endsWith("\n");
-              if (!(formatted.length > 0) || /^\s$/.test(formatted)) {
+              if (!(formatted.length > 0) || /^\s+$/.test(formatted)) {
                 var suffix: any = "}";
               } else {
                 if (formatted.endsWith("&") || formatted.endsWith("& ")) {
@@ -3116,7 +3116,7 @@ class Word implements Node {
             i = j;
           } else {
             if ((StartsWithAt(value, i, ">(") || StartsWithAt(value, i, "<(")) && !mainQuote.double && deprecatedArithDepth === 0 && arithDepth === 0) {
-              var isProcsub: any = i === 0 || !/^[a-zA-Z0-9]$/.test(value[i - 1]) && !"\"'".includes(value[i - 1]);
+              var isProcsub: any = i === 0 || !/^[a-zA-Z0-9]+$/.test(value[i - 1]) && !"\"'".includes(value[i - 1]);
               if (extglobDepth > 0) {
                 var j: any = FindCmdsubEnd(value, i + 2);
                 result.push(Substring(value, i, j));
@@ -3757,9 +3757,9 @@ class Redirect implements Node {
     var op: any = this.op.replace(/^[0123456789]+/, '');
     if (op.startsWith("{")) {
       var j: any = 1;
-      if (j < op.length && (/^[a-zA-Z]$/.test(op[j]) || op[j] === "_")) {
+      if (j < op.length && (/^[a-zA-Z]+$/.test(op[j]) || op[j] === "_")) {
         j += 1;
-        while (j < op.length && (/^[a-zA-Z0-9]$/.test(op[j]) || op[j] === "_")) {
+        while (j < op.length && (/^[a-zA-Z0-9]+$/.test(op[j]) || op[j] === "_")) {
           j += 1;
         }
         if (j < op.length && op[j] === "[") {
@@ -3793,10 +3793,10 @@ class Redirect implements Node {
         }
       }
       var raw: any = Substring(targetVal, 1, targetVal.length);
-      if (/^[0-9]+$/.test(raw) && parseInt(raw, 10) <= 2147483647) {
+      if (/^\d+$/.test(raw) && parseInt(raw, 10) <= 2147483647) {
         return "(redirect \"" + op + "\" " + String(parseInt(raw, 10)) + ")";
       }
-      if (raw.endsWith("-") && /^[0-9]+$/.test(raw.slice(0, raw.length - 1)) && parseInt(raw.slice(0, raw.length - 1), 10) <= 2147483647) {
+      if (raw.endsWith("-") && /^\d+$/.test(raw.slice(0, raw.length - 1)) && parseInt(raw.slice(0, raw.length - 1), 10) <= 2147483647) {
         return "(redirect \"" + op + "\" " + String(parseInt(raw.slice(0, raw.length - 1), 10)) + ")";
       }
       if (targetVal === "&-") {
@@ -3806,13 +3806,13 @@ class Redirect implements Node {
       return "(redirect \"" + op + "\" \"" + fdTarget + "\")";
     }
     if (op === ">&" || op === "<&") {
-      if (/^[0-9]+$/.test(targetVal) && parseInt(targetVal, 10) <= 2147483647) {
+      if (/^\d+$/.test(targetVal) && parseInt(targetVal, 10) <= 2147483647) {
         return "(redirect \"" + op + "\" " + String(parseInt(targetVal, 10)) + ")";
       }
       if (targetVal === "-") {
         return "(redirect \">&-\" 0)";
       }
-      if (targetVal.endsWith("-") && /^[0-9]+$/.test(targetVal.slice(0, targetVal.length - 1)) && parseInt(targetVal.slice(0, targetVal.length - 1), 10) <= 2147483647) {
+      if (targetVal.endsWith("-") && /^\d+$/.test(targetVal.slice(0, targetVal.length - 1)) && parseInt(targetVal.slice(0, targetVal.length - 1), 10) <= 2147483647) {
         return "(redirect \"" + op + "\" " + String(parseInt(targetVal.slice(0, targetVal.length - 1), 10)) + ")";
       }
       var outVal: any = (targetVal.endsWith("-") ? targetVal.slice(0, targetVal.length - 1) : targetVal);
@@ -6576,7 +6576,7 @@ class Parser {
     var nameChars: any = [];
     while (!this.ArithAtEnd()) {
       var ch: any = this.ArithPeek(0);
-      if (/^[a-zA-Z0-9]$/.test(ch) || ch === "_") {
+      if (/^[a-zA-Z0-9]+$/.test(ch) || ch === "_") {
         nameChars.push(this.ArithAdvance());
       } else {
         if ((IsSpecialParamOrDigit(ch) || ch === "#") && !(nameChars.length > 0)) {
@@ -6795,10 +6795,10 @@ class Parser {
     this.ArithSkipWs();
     var chars: any = [];
     var c: any = this.ArithPeek(0);
-    if (/^[0-9]+$/.test(c)) {
+    if (/^\d+$/.test(c)) {
       while (!this.ArithAtEnd()) {
         var ch: any = this.ArithPeek(0);
-        if (/^[a-zA-Z0-9]$/.test(ch) || (ch === "#" || ch === "_")) {
+        if (/^[a-zA-Z0-9]+$/.test(ch) || (ch === "#" || ch === "_")) {
           chars.push(this.ArithAdvance());
         } else {
           break;
@@ -6811,10 +6811,10 @@ class Parser {
       }
       return new ArithNumber(prefix as any, "number" as any);
     }
-    if (/^[a-zA-Z]$/.test(c) || c === "_") {
+    if (/^[a-zA-Z]+$/.test(c) || c === "_") {
       while (!this.ArithAtEnd()) {
         var ch: any = this.ArithPeek(0);
-        if (/^[a-zA-Z0-9]$/.test(ch) || ch === "_") {
+        if (/^[a-zA-Z0-9]+$/.test(ch) || ch === "_") {
           chars.push(this.ArithAdvance());
         } else {
           break;
@@ -6875,7 +6875,7 @@ class Parser {
               inBracket = false;
               varnameChars.push(this.advance());
             } else {
-              if (/^[a-zA-Z0-9]$/.test(ch) || ch === "_") {
+              if (/^[a-zA-Z0-9]+$/.test(ch) || ch === "_") {
                 varnameChars.push(this.advance());
               } else {
                 if (inBracket && !IsMetachar(ch)) {
@@ -6891,16 +6891,16 @@ class Parser {
       var varname: any = varnameChars.join("");
       var isValidVarfd: any = false;
       if ((varname.length > 0)) {
-        if (/^[a-zA-Z]$/.test(varname[0]) || varname[0] === "_") {
+        if (/^[a-zA-Z]+$/.test(varname[0]) || varname[0] === "_") {
           if (varname.includes("[") || varname.includes("]")) {
             var left: any = varname.indexOf("[");
             var right: any = varname.lastIndexOf("]");
             if (left !== -1 && right === varname.length - 1 && right > left + 1) {
               var base: any = varname.slice(0, left);
-              if ((base.length > 0) && (/^[a-zA-Z]$/.test(base[0]) || base[0] === "_")) {
+              if ((base.length > 0) && (/^[a-zA-Z]+$/.test(base[0]) || base[0] === "_")) {
                 isValidVarfd = true;
                 for (const c of base.slice(1)) {
-                  if (!(/^[a-zA-Z0-9]$/.test(c) || c === "_")) {
+                  if (!(/^[a-zA-Z0-9]+$/.test(c) || c === "_")) {
                     isValidVarfd = false;
                     break;
                   }
@@ -6910,7 +6910,7 @@ class Parser {
           } else {
             isValidVarfd = true;
             for (const c of varname.slice(1)) {
-              if (!(/^[a-zA-Z0-9]$/.test(c) || c === "_")) {
+              if (!(/^[a-zA-Z0-9]+$/.test(c) || c === "_")) {
                 isValidVarfd = false;
                 break;
               }
@@ -6925,9 +6925,9 @@ class Parser {
         this.pos = saved;
       }
     }
-    if (varfd === "" && (this.peek().length > 0) && /^[0-9]+$/.test(this.peek())) {
+    if (varfd === "" && (this.peek().length > 0) && /^\d+$/.test(this.peek())) {
       var fdChars: any = [];
-      while (!this.atEnd() && /^[0-9]+$/.test(this.peek())) {
+      while (!this.atEnd() && /^\d+$/.test(this.peek())) {
         fdChars.push(this.advance());
       }
       fd = parseInt(fdChars.join(""), 10);
@@ -7034,10 +7034,10 @@ class Parser {
         var target: any = null;
       }
       if (target === null) {
-        if (!this.atEnd() && (/^[0-9]+$/.test(this.peek()) || this.peek() === "-")) {
+        if (!this.atEnd() && (/^\d+$/.test(this.peek()) || this.peek() === "-")) {
           var wordStart: any = this.pos;
           var fdChars: any = [];
-          while (!this.atEnd() && /^[0-9]+$/.test(this.peek())) {
+          while (!this.atEnd() && /^\d+$/.test(this.peek())) {
             fdChars.push(this.advance());
           }
           if ((fdChars.length > 0)) {
@@ -9775,7 +9775,7 @@ function FormatRedirect(r: Node, compact: boolean, heredocOpOnly: boolean): stri
       op = Substring(op, 0, op.length - 1) + ">";
     }
     var afterAmp: any = Substring(target, 1, target.length);
-    var isLiteralFd: any = afterAmp === "-" || afterAmp.length > 0 && /^[0-9]+$/.test(afterAmp[0]);
+    var isLiteralFd: any = afterAmp === "-" || afterAmp.length > 0 && /^\d+$/.test(afterAmp[0]);
     if (isLiteralFd) {
       if (op === ">" || op === ">&") {
         op = (wasInputClose ? "0>" : "1>");
@@ -10409,7 +10409,7 @@ function FindHeredocContentEnd(source: string, start: number, delimiters: [strin
 function IsWordBoundary(s: string, pos: number, wordLen: number): boolean {
   if (pos > 0) {
     var prev: any = s[pos - 1];
-    if (/^[a-zA-Z0-9]$/.test(prev) || prev === "_") {
+    if (/^[a-zA-Z0-9]+$/.test(prev) || prev === "_") {
       return false;
     }
     if ("{}!".includes(prev)) {
@@ -10417,7 +10417,7 @@ function IsWordBoundary(s: string, pos: number, wordLen: number): boolean {
     }
   }
   var end: any = pos + wordLen;
-  if (end < s.length && (/^[a-zA-Z0-9]$/.test(s[end]) || s[end] === "_")) {
+  if (end < s.length && (/^[a-zA-Z0-9]+$/.test(s[end]) || s[end] === "_")) {
     return false;
   }
   return true;
@@ -10662,7 +10662,7 @@ function Assignment(s: string, flags: number): number {
   if (!(s.length > 0)) {
     return -1;
   }
-  if (!(/^[a-zA-Z]$/.test(s[0]) || s[0] === "_")) {
+  if (!(/^[a-zA-Z]+$/.test(s[0]) || s[0] === "_")) {
     return -1;
   }
   var i: any = 1;
@@ -10692,7 +10692,7 @@ function Assignment(s: string, flags: number): number {
       }
       return -1;
     }
-    if (!(/^[a-zA-Z0-9]$/.test(c) || c === "_")) {
+    if (!(/^[a-zA-Z0-9]+$/.test(c) || c === "_")) {
       return -1;
     }
     i += 1;
@@ -10704,12 +10704,12 @@ function IsArrayAssignmentPrefix(chars: string[]): boolean {
   if (!(chars.length > 0)) {
     return false;
   }
-  if (!(/^[a-zA-Z]$/.test(chars[0]) || chars[0] === "_")) {
+  if (!(/^[a-zA-Z]+$/.test(chars[0]) || chars[0] === "_")) {
     return false;
   }
   var s: any = chars.join("");
   var i: any = 1;
-  while (i < s.length && (/^[a-zA-Z0-9]$/.test(s[i]) || s[i] === "_")) {
+  while (i < s.length && (/^[a-zA-Z0-9]+$/.test(s[i]) || s[i] === "_")) {
     i += 1;
   }
   while (i < s.length) {
@@ -10797,11 +10797,11 @@ function IsValidIdentifier(name: string): boolean {
   if (!(name.length > 0)) {
     return false;
   }
-  if (!(/^[a-zA-Z]$/.test(name[0]) || name[0] === "_")) {
+  if (!(/^[a-zA-Z]+$/.test(name[0]) || name[0] === "_")) {
     return false;
   }
   for (const c of name.slice(1)) {
-    if (!(/^[a-zA-Z0-9]$/.test(c) || c === "_")) {
+    if (!(/^[a-zA-Z0-9]+$/.test(c) || c === "_")) {
       return false;
     }
   }

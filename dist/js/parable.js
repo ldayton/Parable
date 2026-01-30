@@ -976,7 +976,7 @@ var Lexer = /** @class */ (function () {
                 }
                 if ((chars.length > 0) && atCommandStart && !seenEquals && IsArrayAssignmentPrefix(chars)) {
                     var prevChar = chars[chars.length - 1];
-                    if (/^[a-zA-Z0-9]$/.test(prevChar) || prevChar === "_") {
+                    if (/^[a-zA-Z0-9]+$/.test(prevChar) || prevChar === "_") {
                         bracketStartPos = this.pos;
                         bracketDepth += 1;
                         chars.push(this.advance());
@@ -1660,18 +1660,18 @@ var Lexer = /** @class */ (function () {
             this.advance();
             return ch;
         }
-        if (/^[0-9]+$/.test(ch)) {
+        if (/^\d+$/.test(ch)) {
             var nameChars = [];
-            while (!this.atEnd() && /^[0-9]+$/.test(this.peek())) {
+            while (!this.atEnd() && /^\d+$/.test(this.peek())) {
                 nameChars.push(this.advance());
             }
             return nameChars.join("");
         }
-        if (/^[a-zA-Z]$/.test(ch) || ch === "_") {
+        if (/^[a-zA-Z]+$/.test(ch) || ch === "_") {
             var nameChars = [];
             while (!this.atEnd()) {
                 var c = this.peek();
-                if (/^[a-zA-Z0-9]$/.test(c) || c === "_") {
+                if (/^[a-zA-Z0-9]+$/.test(c) || c === "_") {
                     nameChars.push(this.advance());
                 }
                 else {
@@ -1719,11 +1719,11 @@ var Lexer = /** @class */ (function () {
             var text = Substring(this.source, start, this.pos);
             return [new ParamExpansion(ch, "", "", "param"), text];
         }
-        if (/^[a-zA-Z]$/.test(ch) || ch === "_") {
+        if (/^[a-zA-Z]+$/.test(ch) || ch === "_") {
             var nameStart = this.pos;
             while (!this.atEnd()) {
                 var c = this.peek();
-                if (/^[a-zA-Z0-9]$/.test(c) || c === "_") {
+                if (/^[a-zA-Z0-9]+$/.test(c) || c === "_") {
                     this.advance();
                 }
                 else {
@@ -2354,10 +2354,10 @@ var Word = /** @class */ (function () {
                                                 varNameLen = 1;
                                             }
                                             else {
-                                                if (/^[a-zA-Z]$/.test(afterBrace[0]) || afterBrace[0] === "_") {
+                                                if (/^[a-zA-Z]+$/.test(afterBrace[0]) || afterBrace[0] === "_") {
                                                     while (varNameLen < afterBrace.length) {
                                                         var c = afterBrace[varNameLen];
-                                                        if (!(/^[a-zA-Z0-9]$/.test(c) || c === "_")) {
+                                                        if (!(/^[a-zA-Z0-9]+$/.test(c) || c === "_")) {
                                                             break;
                                                         }
                                                         varNameLen += 1;
@@ -2536,11 +2536,11 @@ var Word = /** @class */ (function () {
     };
     Word.prototype.NormalizeArrayWhitespace = function (value) {
         var i = 0;
-        if (!(i < value.length && (/^[a-zA-Z]$/.test(value[i]) || value[i] === "_"))) {
+        if (!(i < value.length && (/^[a-zA-Z]+$/.test(value[i]) || value[i] === "_"))) {
             return value;
         }
         i += 1;
-        while (i < value.length && (/^[a-zA-Z0-9]$/.test(value[i]) || value[i] === "_")) {
+        while (i < value.length && (/^[a-zA-Z0-9]+$/.test(value[i]) || value[i] === "_")) {
             i += 1;
         }
         while (i < value.length && value[i] === "[") {
@@ -3094,7 +3094,7 @@ var Word = /** @class */ (function () {
                     }
                     else {
                         if ((StartsWithAt(value, idx, "<(") || StartsWithAt(value, idx, ">(")) && !scanQuote.double) {
-                            if (idx === 0 || !/^[a-zA-Z0-9]$/.test(value[idx - 1]) && !"\"'".includes(value[idx - 1])) {
+                            if (idx === 0 || !/^[a-zA-Z0-9]+$/.test(value[idx - 1]) && !"\"'".includes(value[idx - 1])) {
                                 hasUntrackedProcsub = true;
                                 break;
                             }
@@ -3247,7 +3247,7 @@ var Word = /** @class */ (function () {
                             var prefix = (hasPipe ? "${|" : "${ ");
                             var origInner = Substring(value, i + 2, j - 1);
                             var endsWithNewline = origInner.endsWith("\n");
-                            if (!(formatted.length > 0) || /^\s$/.test(formatted)) {
+                            if (!(formatted.length > 0) || /^\s+$/.test(formatted)) {
                                 var suffix = "}";
                             }
                             else {
@@ -3273,7 +3273,7 @@ var Word = /** @class */ (function () {
                     }
                     else {
                         if ((StartsWithAt(value, i, ">(") || StartsWithAt(value, i, "<(")) && !mainQuote.double && deprecatedArithDepth === 0 && arithDepth === 0) {
-                            var isProcsub = i === 0 || !/^[a-zA-Z0-9]$/.test(value[i - 1]) && !"\"'".includes(value[i - 1]);
+                            var isProcsub = i === 0 || !/^[a-zA-Z0-9]+$/.test(value[i - 1]) && !"\"'".includes(value[i - 1]);
                             if (extglobDepth > 0) {
                                 var j = FindCmdsubEnd(value, i + 2);
                                 result.push(Substring(value, i, j));
@@ -3930,9 +3930,9 @@ var Redirect = /** @class */ (function () {
         var op = this.op.replace(/^[0123456789]+/, '');
         if (op.startsWith("{")) {
             var j = 1;
-            if (j < op.length && (/^[a-zA-Z]$/.test(op[j]) || op[j] === "_")) {
+            if (j < op.length && (/^[a-zA-Z]+$/.test(op[j]) || op[j] === "_")) {
                 j += 1;
-                while (j < op.length && (/^[a-zA-Z0-9]$/.test(op[j]) || op[j] === "_")) {
+                while (j < op.length && (/^[a-zA-Z0-9]+$/.test(op[j]) || op[j] === "_")) {
                     j += 1;
                 }
                 if (j < op.length && op[j] === "[") {
@@ -3967,10 +3967,10 @@ var Redirect = /** @class */ (function () {
                 }
             }
             var raw = Substring(targetVal, 1, targetVal.length);
-            if (/^[0-9]+$/.test(raw) && parseInt(raw, 10) <= 2147483647) {
+            if (/^\d+$/.test(raw) && parseInt(raw, 10) <= 2147483647) {
                 return "(redirect \"" + op + "\" " + String(parseInt(raw, 10)) + ")";
             }
-            if (raw.endsWith("-") && /^[0-9]+$/.test(raw.slice(0, raw.length - 1)) && parseInt(raw.slice(0, raw.length - 1), 10) <= 2147483647) {
+            if (raw.endsWith("-") && /^\d+$/.test(raw.slice(0, raw.length - 1)) && parseInt(raw.slice(0, raw.length - 1), 10) <= 2147483647) {
                 return "(redirect \"" + op + "\" " + String(parseInt(raw.slice(0, raw.length - 1), 10)) + ")";
             }
             if (targetVal === "&-") {
@@ -3980,13 +3980,13 @@ var Redirect = /** @class */ (function () {
             return "(redirect \"" + op + "\" \"" + fdTarget + "\")";
         }
         if (op === ">&" || op === "<&") {
-            if (/^[0-9]+$/.test(targetVal) && parseInt(targetVal, 10) <= 2147483647) {
+            if (/^\d+$/.test(targetVal) && parseInt(targetVal, 10) <= 2147483647) {
                 return "(redirect \"" + op + "\" " + String(parseInt(targetVal, 10)) + ")";
             }
             if (targetVal === "-") {
                 return "(redirect \">&-\" 0)";
             }
-            if (targetVal.endsWith("-") && /^[0-9]+$/.test(targetVal.slice(0, targetVal.length - 1)) && parseInt(targetVal.slice(0, targetVal.length - 1), 10) <= 2147483647) {
+            if (targetVal.endsWith("-") && /^\d+$/.test(targetVal.slice(0, targetVal.length - 1)) && parseInt(targetVal.slice(0, targetVal.length - 1), 10) <= 2147483647) {
                 return "(redirect \"" + op + "\" " + String(parseInt(targetVal.slice(0, targetVal.length - 1), 10)) + ")";
             }
             var outVal = (targetVal.endsWith("-") ? targetVal.slice(0, targetVal.length - 1) : targetVal);
@@ -6618,7 +6618,7 @@ var Parser = /** @class */ (function () {
         var nameChars = [];
         while (!this.ArithAtEnd()) {
             var ch = this.ArithPeek(0);
-            if (/^[a-zA-Z0-9]$/.test(ch) || ch === "_") {
+            if (/^[a-zA-Z0-9]+$/.test(ch) || ch === "_") {
                 nameChars.push(this.ArithAdvance());
             }
             else {
@@ -6841,10 +6841,10 @@ var Parser = /** @class */ (function () {
         this.ArithSkipWs();
         var chars = [];
         var c = this.ArithPeek(0);
-        if (/^[0-9]+$/.test(c)) {
+        if (/^\d+$/.test(c)) {
             while (!this.ArithAtEnd()) {
                 var ch = this.ArithPeek(0);
-                if (/^[a-zA-Z0-9]$/.test(ch) || (ch === "#" || ch === "_")) {
+                if (/^[a-zA-Z0-9]+$/.test(ch) || (ch === "#" || ch === "_")) {
                     chars.push(this.ArithAdvance());
                 }
                 else {
@@ -6858,10 +6858,10 @@ var Parser = /** @class */ (function () {
             }
             return new ArithNumber(prefix, "number");
         }
-        if (/^[a-zA-Z]$/.test(c) || c === "_") {
+        if (/^[a-zA-Z]+$/.test(c) || c === "_") {
             while (!this.ArithAtEnd()) {
                 var ch = this.ArithPeek(0);
-                if (/^[a-zA-Z0-9]$/.test(ch) || ch === "_") {
+                if (/^[a-zA-Z0-9]+$/.test(ch) || ch === "_") {
                     chars.push(this.ArithAdvance());
                 }
                 else {
@@ -6923,7 +6923,7 @@ var Parser = /** @class */ (function () {
                             varnameChars.push(this.advance());
                         }
                         else {
-                            if (/^[a-zA-Z0-9]$/.test(ch) || ch === "_") {
+                            if (/^[a-zA-Z0-9]+$/.test(ch) || ch === "_") {
                                 varnameChars.push(this.advance());
                             }
                             else {
@@ -6941,17 +6941,17 @@ var Parser = /** @class */ (function () {
             var varname = varnameChars.join("");
             var isValidVarfd = false;
             if ((varname.length > 0)) {
-                if (/^[a-zA-Z]$/.test(varname[0]) || varname[0] === "_") {
+                if (/^[a-zA-Z]+$/.test(varname[0]) || varname[0] === "_") {
                     if (varname.includes("[") || varname.includes("]")) {
                         var left = varname.indexOf("[");
                         var right = varname.lastIndexOf("]");
                         if (left !== -1 && right === varname.length - 1 && right > left + 1) {
                             var base = varname.slice(0, left);
-                            if ((base.length > 0) && (/^[a-zA-Z]$/.test(base[0]) || base[0] === "_")) {
+                            if ((base.length > 0) && (/^[a-zA-Z]+$/.test(base[0]) || base[0] === "_")) {
                                 isValidVarfd = true;
                                 for (var _i = 0, _a = base.slice(1); _i < _a.length; _i++) {
                                     var c = _a[_i];
-                                    if (!(/^[a-zA-Z0-9]$/.test(c) || c === "_")) {
+                                    if (!(/^[a-zA-Z0-9]+$/.test(c) || c === "_")) {
                                         isValidVarfd = false;
                                         break;
                                     }
@@ -6963,7 +6963,7 @@ var Parser = /** @class */ (function () {
                         isValidVarfd = true;
                         for (var _b = 0, _c = varname.slice(1); _b < _c.length; _b++) {
                             var c = _c[_b];
-                            if (!(/^[a-zA-Z0-9]$/.test(c) || c === "_")) {
+                            if (!(/^[a-zA-Z0-9]+$/.test(c) || c === "_")) {
                                 isValidVarfd = false;
                                 break;
                             }
@@ -6979,9 +6979,9 @@ var Parser = /** @class */ (function () {
                 this.pos = saved;
             }
         }
-        if (varfd === "" && (this.peek().length > 0) && /^[0-9]+$/.test(this.peek())) {
+        if (varfd === "" && (this.peek().length > 0) && /^\d+$/.test(this.peek())) {
             var fdChars = [];
-            while (!this.atEnd() && /^[0-9]+$/.test(this.peek())) {
+            while (!this.atEnd() && /^\d+$/.test(this.peek())) {
                 fdChars.push(this.advance());
             }
             fd = parseInt(fdChars.join(""), 10);
@@ -7099,10 +7099,10 @@ var Parser = /** @class */ (function () {
                 var target = null;
             }
             if (target === null) {
-                if (!this.atEnd() && (/^[0-9]+$/.test(this.peek()) || this.peek() === "-")) {
+                if (!this.atEnd() && (/^\d+$/.test(this.peek()) || this.peek() === "-")) {
                     var wordStart = this.pos;
                     var fdChars = [];
-                    while (!this.atEnd() && /^[0-9]+$/.test(this.peek())) {
+                    while (!this.atEnd() && /^\d+$/.test(this.peek())) {
                         fdChars.push(this.advance());
                     }
                     if ((fdChars.length > 0)) {
@@ -9910,7 +9910,7 @@ function FormatRedirect(r, compact, heredocOpOnly) {
             op = Substring(op, 0, op.length - 1) + ">";
         }
         var afterAmp = Substring(target, 1, target.length);
-        var isLiteralFd = afterAmp === "-" || afterAmp.length > 0 && /^[0-9]+$/.test(afterAmp[0]);
+        var isLiteralFd = afterAmp === "-" || afterAmp.length > 0 && /^\d+$/.test(afterAmp[0]);
         if (isLiteralFd) {
             if (op === ">" || op === ">&") {
                 op = (wasInputClose ? "0>" : "1>");
@@ -10566,7 +10566,7 @@ function FindHeredocContentEnd(source, start, delimiters) {
 function IsWordBoundary(s, pos, wordLen) {
     if (pos > 0) {
         var prev = s[pos - 1];
-        if (/^[a-zA-Z0-9]$/.test(prev) || prev === "_") {
+        if (/^[a-zA-Z0-9]+$/.test(prev) || prev === "_") {
             return false;
         }
         if ("{}!".includes(prev)) {
@@ -10574,7 +10574,7 @@ function IsWordBoundary(s, pos, wordLen) {
         }
     }
     var end = pos + wordLen;
-    if (end < s.length && (/^[a-zA-Z0-9]$/.test(s[end]) || s[end] === "_")) {
+    if (end < s.length && (/^[a-zA-Z0-9]+$/.test(s[end]) || s[end] === "_")) {
         return false;
     }
     return true;
@@ -10821,7 +10821,7 @@ function Assignment(s, flags) {
     if (!(s.length > 0)) {
         return -1;
     }
-    if (!(/^[a-zA-Z]$/.test(s[0]) || s[0] === "_")) {
+    if (!(/^[a-zA-Z]+$/.test(s[0]) || s[0] === "_")) {
         return -1;
     }
     var i = 1;
@@ -10851,7 +10851,7 @@ function Assignment(s, flags) {
             }
             return -1;
         }
-        if (!(/^[a-zA-Z0-9]$/.test(c) || c === "_")) {
+        if (!(/^[a-zA-Z0-9]+$/.test(c) || c === "_")) {
             return -1;
         }
         i += 1;
@@ -10862,12 +10862,12 @@ function IsArrayAssignmentPrefix(chars) {
     if (!(chars.length > 0)) {
         return false;
     }
-    if (!(/^[a-zA-Z]$/.test(chars[0]) || chars[0] === "_")) {
+    if (!(/^[a-zA-Z]+$/.test(chars[0]) || chars[0] === "_")) {
         return false;
     }
     var s = chars.join("");
     var i = 1;
-    while (i < s.length && (/^[a-zA-Z0-9]$/.test(s[i]) || s[i] === "_")) {
+    while (i < s.length && (/^[a-zA-Z0-9]+$/.test(s[i]) || s[i] === "_")) {
         i += 1;
     }
     while (i < s.length) {
@@ -10940,12 +10940,12 @@ function IsValidIdentifier(name) {
     if (!(name.length > 0)) {
         return false;
     }
-    if (!(/^[a-zA-Z]$/.test(name[0]) || name[0] === "_")) {
+    if (!(/^[a-zA-Z]+$/.test(name[0]) || name[0] === "_")) {
         return false;
     }
     for (var _i = 0, _a = name.slice(1); _i < _a.length; _i++) {
         var c = _a[_i];
-        if (!(/^[a-zA-Z0-9]$/.test(c) || c === "_")) {
+        if (!(/^[a-zA-Z0-9]+$/.test(c) || c === "_")) {
             return false;
         }
     }

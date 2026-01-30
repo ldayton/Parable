@@ -1221,6 +1221,8 @@ def lower_expr_as_bool(
                 "isalpha",
                 "isalnum",
                 "isspace",
+                "isupper",
+                "islower",
             ):
                 return lower_expr(node)
             # Check if the method returns bool by looking up its return type
@@ -1573,6 +1575,22 @@ def lower_expr_Call(
         if obj_type == InterfaceRef("any"):
             # Pre-computed type is generic - use callback which has narrowing context
             obj_type = dispatch.infer_expr_type_from_ast(func_value)
+        # Character classification methods -> CharClassify IR node
+        _CHAR_CLASSIFY_METHODS = {
+            "isdigit": "digit",
+            "isalpha": "alpha",
+            "isalnum": "alnum",
+            "isspace": "space",
+            "isupper": "upper",
+            "islower": "lower",
+        }
+        if method in _CHAR_CLASSIFY_METHODS and not args:
+            return ir.CharClassify(
+                kind=_CHAR_CLASSIFY_METHODS[method],
+                char=obj,
+                typ=BOOL,
+                loc=loc_from_node(node),
+            )
         if method == "pop" and not args and isinstance(obj_type, Slice):
             # list.pop() -> return last element and shrink slice (only for slices)
             return ir.MethodCall(

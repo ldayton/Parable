@@ -38,6 +38,7 @@ from src.ir import (
     Break,
     Call,
     Cast,
+    CharClassify,
     Constant,
     Continue,
     DerefLV,
@@ -615,6 +616,16 @@ class PythonBackend:
                 return f"int({self._expr(s)}, {self._expr(b)})"
             case IntToStr(value=v):
                 return f"str({self._expr(v)})"
+            case CharClassify(kind=kind, char=char):
+                method_map = {
+                    "digit": "isdigit",
+                    "alpha": "isalpha",
+                    "alnum": "isalnum",
+                    "space": "isspace",
+                    "upper": "isupper",
+                    "lower": "islower",
+                }
+                return f"{self._expr(char)}.{method_map[kind]}()"
             case Call(func=func, args=args):
                 args_str = ", ".join(self._expr(a) for a in args)
                 return f"{func}({args_str})"

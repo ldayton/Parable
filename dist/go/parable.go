@@ -6495,7 +6495,7 @@ func (self *Parser) ParseRedirect() Node {
 						if (len(base) > 0) && (_strIsAlpha(_runeAt(base, 0)) || _runeAt(base, 0) == "_") {
 							isValidVarfd = true
 							for _, c := range _Substring(base, 1, _runeLen(base)) {
-								if !(_strIsAlnum(string(c)) || c == '_') {
+								if !((unicode.IsLetter(c) || unicode.IsDigit(c)) || c == '_') {
 									isValidVarfd = false
 									break
 								}
@@ -6505,7 +6505,7 @@ func (self *Parser) ParseRedirect() Node {
 				} else {
 					isValidVarfd = true
 					for _, c := range _Substring(varname, 1, _runeLen(varname)) {
-						if !(_strIsAlnum(string(c)) || c == '_') {
+						if !((unicode.IsLetter(c) || unicode.IsDigit(c)) || c == '_') {
 							isValidVarfd = false
 							break
 						}
@@ -10373,7 +10373,7 @@ func isValidIdentifier(name string) bool {
 		return false
 	}
 	for _, c := range _Substring(name, 1, _runeLen(name)) {
-		if !(_strIsAlnum(string(c)) || c == '_') {
+		if !((unicode.IsLetter(c) || unicode.IsDigit(c)) || c == '_') {
 			return false
 		}
 	}

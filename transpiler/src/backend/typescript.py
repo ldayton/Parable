@@ -10,8 +10,6 @@ Frontend deficiencies (should be fixed in frontend.py):
   specific. Frontend should emit interface fields explicitly.
 - Auto-generated getKind() for Node implementations - backend has Parable-specific
   knowledge about Node interface contract.
-- String methods (isalnum, isdigit, isalpha, isspace) translated to regex patterns
-  inline - frontend should emit generic IR; backend shouldn't know Python method names.
 - lstrip/rstrip/strip with char arguments require regex - frontend emits Python
   semantics that don't map cleanly to JS trimStart/trimEnd.
 - FieldAccess for "this.method" emits ".bind(this)" - frontend should emit FuncRef
@@ -75,6 +73,7 @@ from src.ir import (
     Break,
     Call,
     Cast,
+    CharClassify,
     Constant,
     Continue,
     DerefLV,
@@ -793,6 +792,16 @@ class TsBackend:
                 return f"parseInt({self._expr(s)}, {self._expr(b)})"
             case IntToStr(value=v):
                 return f"String({self._expr(v)})"
+            case CharClassify(kind=kind, char=char):
+                regex_map = {
+                    "digit": r"/^\d+$/",
+                    "alpha": r"/^[a-zA-Z]+$/",
+                    "alnum": r"/^[a-zA-Z0-9]+$/",
+                    "space": r"/^\s+$/",
+                    "upper": r"/^[A-Z]+$/",
+                    "lower": r"/^[a-z]+$/",
+                }
+                return f"{regex_map[kind]}.test({self._expr(char)})"
             case Call(func="_intPtr", args=[arg]):
                 # _intPtr is a Python type hint, just return the argument
                 return self._expr(arg)
@@ -813,14 +822,6 @@ class TsBackend:
             ):
                 # arr.copy() → arr.slice()
                 return f"{self._expr(obj)}.slice()"
-            case MethodCall(obj=obj, method="isalnum", args=_, receiver_type=_):
-                return f"/^[a-zA-Z0-9]$/.test({self._expr(obj)})"
-            case MethodCall(obj=obj, method="isdigit", args=_, receiver_type=_):
-                return f"/^[0-9]+$/.test({self._expr(obj)})"
-            case MethodCall(obj=obj, method="isalpha", args=_, receiver_type=_):
-                return f"/^[a-zA-Z]$/.test({self._expr(obj)})"
-            case MethodCall(obj=obj, method="isspace", args=_, receiver_type=_):
-                return f"/^\\s$/.test({self._expr(obj)})"
             case MethodCall(
                 obj=obj, method="lstrip", args=[StringLit(value=chars)], receiver_type=_
             ):

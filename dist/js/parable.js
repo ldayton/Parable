@@ -9493,7 +9493,10 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
                 heredocs.push(r);
             }
         }
-        parts.push.apply(parts, node.redirects.map(function (r) { return FormatRedirect(r, compactRedirects, true); }));
+        for (var _d = 0, _f = node.redirects; _d < _f.length; _d++) {
+            var r = _f[_d];
+            parts.push(FormatRedirect(r, compactRedirects, true));
+        }
         if (compactRedirects && node.words.length > 0 && node.redirects.length > 0) {
             var wordParts = parts.slice(0, node.words.length);
             var redirectParts = parts.slice(node.words.length);
@@ -9502,8 +9505,8 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
         else {
             var result = parts.join(" ");
         }
-        for (var _d = 0, _f = heredocs; _d < _f.length; _d++) {
-            var h = _f[_d];
+        for (var _g = 0, _h = heredocs; _g < _h.length; _g++) {
+            var h = _h[_g];
             var result = result + FormatHeredocBody(h);
         }
         return result;
@@ -9533,8 +9536,8 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
             var isLast = idx === cmds.length - 1;
             var hasHeredoc = false;
             if (cmd.kind === "command" && cmd.redirects.length > 0) {
-                for (var _g = 0, _h = cmd.redirects; _g < _h.length; _g++) {
-                    var r = _h[_g];
+                for (var _j = 0, _k = cmd.redirects; _j < _k.length; _j++) {
+                    var r = _k[_j];
                     if (r instanceof HereDoc) {
                         hasHeredoc = true;
                         break;
@@ -9594,11 +9597,11 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
     }
     if (node instanceof List) {
         var hasHeredoc = false;
-        for (var _j = 0, _k = node.parts; _j < _k.length; _j++) {
-            var p_1 = _k[_j];
-            if (p_1.kind === "command" && p_1.redirects.length > 0) {
-                for (var _l = 0, _m = p_1.redirects; _l < _m.length; _l++) {
-                    var r = _m[_l];
+        for (var _l = 0, _m = node.parts; _l < _m.length; _l++) {
+            var p_1 = _m[_l];
+            if (p_1.kind === "command" && p_1.redirects !== null) {
+                for (var _o = 0, _p = p_1.redirects; _o < _p.length; _o++) {
+                    var r = _p[_o];
                     if (r instanceof HereDoc) {
                         hasHeredoc = true;
                         break;
@@ -9607,11 +9610,11 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
             }
             else {
                 if (p_1 instanceof Pipeline) {
-                    for (var _o = 0, _p = p_1.commands; _o < _p.length; _o++) {
-                        var cmd_1 = _p[_o];
+                    for (var _q = 0, _r = p_1.commands; _q < _r.length; _q++) {
+                        var cmd_1 = _r[_q];
                         if (cmd_1.kind === "command" && cmd_1.redirects.length > 0) {
-                            for (var _q = 0, _r = cmd_1.redirects; _q < _r.length; _q++) {
-                                var r = _r[_q];
+                            for (var _s = 0, _t = cmd_1.redirects; _s < _t.length; _s++) {
+                                var r = _t[_s];
                                 if (r instanceof HereDoc) {
                                     hasHeredoc = true;
                                     break;
@@ -9628,11 +9631,11 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
         var result = [];
         var skippedSemi = false;
         var cmdCount = 0;
-        for (var _s = 0, _t = node.parts; _s < _t.length; _s++) {
-            var p_2 = _t[_s];
+        for (var _u = 0, _v = node.parts; _u < _v.length; _u++) {
+            var p_2 = _v[_u];
             if (p_2 instanceof Operator) {
                 if (p_2.op === ";") {
-                    if (result.length > 0 && result[result.length - 1].endsWith("\n")) {
+                    if (result !== "" && result[result.length - 1].endsWith("\n")) {
                         skippedSemi = true;
                         continue;
                     }
@@ -9640,26 +9643,26 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
                         skippedSemi = true;
                         continue;
                     }
-                    result.push(";");
+                    result.append(";");
                     skippedSemi = false;
                 }
                 else {
                     if (p_2.op === "\n") {
-                        if (result.length > 0 && result[result.length - 1] === ";") {
+                        if (result !== "" && result[result.length - 1] === ";") {
                             skippedSemi = false;
                             continue;
                         }
-                        if (result.length > 0 && result[result.length - 1].endsWith("\n")) {
-                            result.push((skippedSemi ? " " : "\n"));
+                        if (result !== "" && result[result.length - 1].endsWith("\n")) {
+                            result.append((skippedSemi ? " " : "\n"));
                             skippedSemi = false;
                             continue;
                         }
-                        result.push("\n");
+                        result.append("\n");
                         skippedSemi = false;
                     }
                     else {
                         if (p_2.op === "&") {
-                            if (result.length > 0 && result[result.length - 1].includes("<<") && result[result.length - 1].includes("\n")) {
+                            if (result !== "" && result[result.length - 1].includes("<<") && result[result.length - 1].includes("\n")) {
                                 var last = result[result.length - 1];
                                 if (last.includes(" |") || last.startsWith("|")) {
                                     result[result.length - 1] = last + " &";
@@ -9670,25 +9673,25 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
                                 }
                             }
                             else {
-                                result.push(" &");
+                                result.append(" &");
                             }
                         }
                         else {
-                            if (result.length > 0 && result[result.length - 1].includes("<<") && result[result.length - 1].includes("\n")) {
+                            if (result !== "" && result[result.length - 1].includes("<<") && result[result.length - 1].includes("\n")) {
                                 var last = result[result.length - 1];
                                 var firstNl = last.indexOf("\n");
                                 result[result.length - 1] = last.slice(0, firstNl) + " " + p_2.op + " " + last.slice(firstNl);
                             }
                             else {
-                                result.push(" " + p_2.op);
+                                result.append(" " + p_2.op);
                             }
                         }
                     }
                 }
             }
             else {
-                if (result.length > 0 && !(result[result.length - 1].endsWith(" ") || result[result.length - 1].endsWith("\n"))) {
-                    result.push(" ");
+                if (result !== "" && !(result[result.length - 1].endsWith(" ") || result[result.length - 1].endsWith("\n"))) {
+                    result.append(" ");
                 }
                 var formattedCmd = FormatCmdsubNode(p_2, indent, inProcsub, compactRedirects, procsubFirst && cmdCount === 0);
                 if (result.length > 0) {
@@ -9701,7 +9704,7 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
                     formattedCmd = " " + formattedCmd;
                     skippedSemi = false;
                 }
-                result.push(formattedCmd);
+                result.append(formattedCmd);
                 cmdCount += 1;
             }
         }
@@ -9735,8 +9738,8 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
         var body = FormatCmdsubNode(node.body, indent + 4, false, false, false);
         var result = "while " + cond + "; do\n" + innerSp + body + ";\n" + sp + "done";
         if (node.redirects.length > 0) {
-            for (var _u = 0, _v = node.redirects; _u < _v.length; _u++) {
-                var r = _v[_u];
+            for (var _w = 0, _x = node.redirects; _w < _x.length; _w++) {
+                var r = _x[_w];
                 result = result + " " + FormatRedirect(r, false, false);
             }
         }
@@ -9747,8 +9750,8 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
         var body = FormatCmdsubNode(node.body, indent + 4, false, false, false);
         var result = "until " + cond + "; do\n" + innerSp + body + ";\n" + sp + "done";
         if (node.redirects.length > 0) {
-            for (var _w = 0, _x = node.redirects; _w < _x.length; _w++) {
-                var r = _x[_w];
+            for (var _y = 0, _z = node.redirects; _y < _z.length; _y++) {
+                var r = _z[_y];
                 result = result + " " + FormatRedirect(r, false, false);
             }
         }
@@ -9772,8 +9775,8 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
             var result = "for " + varName + " in \"$@\";\n" + sp + "do\n" + innerSp + body + ";\n" + sp + "done";
         }
         if (node.redirects.length > 0) {
-            for (var _y = 0, _z = node.redirects; _y < _z.length; _y++) {
-                var r = _z[_y];
+            for (var _0 = 0, _1 = node.redirects; _0 < _1.length; _0++) {
+                var r = _1[_0];
                 var result = result + " " + FormatRedirect(r, false, false);
             }
         }
@@ -9783,8 +9786,8 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
         var body = FormatCmdsubNode(node.body, indent + 4, false, false, false);
         var result = "for ((" + node.init + "; " + node.cond + "; " + node.incr + "))\ndo\n" + innerSp + body + ";\n" + sp + "done";
         if (node.redirects.length > 0) {
-            for (var _0 = 0, _1 = node.redirects; _0 < _1.length; _0++) {
-                var r = _1[_0];
+            for (var _2 = 0, _3 = node.redirects; _2 < _3.length; _2++) {
+                var r = _3[_2];
                 result = result + " " + FormatRedirect(r, false, false);
             }
         }
@@ -9819,7 +9822,10 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
         var redirects = "";
         if (node.redirects.length > 0) {
             var redirectParts = [];
-            redirectParts.push.apply(redirectParts, node.redirects.map(function (r) { return FormatRedirect(r, false, false); }));
+            for (var _4 = 0, _5 = node.redirects; _4 < _5.length; _4++) {
+                var r = _5[_4];
+                redirectParts.append(FormatRedirect(r, false, false));
+            }
             redirects = " " + redirectParts.join(" ");
         }
         return "case " + word + " in" + patternStr + "\n" + sp + "esac" + redirects;
@@ -9835,7 +9841,10 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
         var redirects = "";
         if (node.redirects.length > 0) {
             var redirectParts = [];
-            redirectParts.push.apply(redirectParts, node.redirects.map(function (r) { return FormatRedirect(r, false, false); }));
+            for (var _6 = 0, _7 = node.redirects; _6 < _7.length; _6++) {
+                var r = _7[_6];
+                redirectParts.append(FormatRedirect(r, false, false));
+            }
             redirects = redirectParts.join(" ");
         }
         if (procsubFirst) {
@@ -9856,7 +9865,10 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
         var redirects = "";
         if (node.redirects.length > 0) {
             var redirectParts = [];
-            redirectParts.push.apply(redirectParts, node.redirects.map(function (r) { return FormatRedirect(r, false, false); }));
+            for (var _8 = 0, _9 = node.redirects; _8 < _9.length; _8++) {
+                var r = _9[_8];
+                redirectParts.append(FormatRedirect(r, false, false));
+            }
             redirects = redirectParts.join(" ");
         }
         if (redirects !== "") {
@@ -10380,7 +10392,7 @@ function SkipHeredoc(value, start) {
         i += 1;
     }
     var delimStart = i;
-    var quoteChar = null;
+    var quoteChar = "";
     if (i < value.length && (value[i] === "\"" || value[i] === "'")) {
         quoteChar = value[i];
         i += 1;

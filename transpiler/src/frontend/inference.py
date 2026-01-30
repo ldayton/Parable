@@ -391,7 +391,9 @@ def collect_branch_var_types(
                     # String concatenation -> STRING
                     op = value.get("op", {})
                     if op.get("_type") == "Add":
-                        left_type = infer_branch_expr_type(value.get("left"), var_types, branch_vars)
+                        left_type = infer_branch_expr_type(
+                            value.get("left"), var_types, branch_vars
+                        )
                         right_type = infer_branch_expr_type(
                             value.get("right"), var_types, branch_vars
                         )
@@ -793,7 +795,9 @@ def collect_var_types(
                                 obj_type = var_types[attr_value.get("id")]
                                 struct_name = callbacks.extract_struct_name(obj_type)
                                 if struct_name and struct_name in symbols.structs:
-                                    field_info = symbols.structs[struct_name].fields.get(attr.get("attr"))
+                                    field_info = symbols.structs[struct_name].fields.get(
+                                        attr.get("attr")
+                                    )
                                     if field_info:
                                         container_type = field_info.typ
                     if container_type == STRING:
@@ -820,7 +824,9 @@ def collect_var_types(
                     obj_type: "Type" = InterfaceRef("any")
                     func_value = func.get("value", {})
                     # Handle string literal method calls: "".join(...), " ".join(...), etc.
-                    if is_type(func_value, ["Constant"]) and isinstance(func_value.get("value"), str):
+                    if is_type(func_value, ["Constant"]) and isinstance(
+                        func_value.get("value"), str
+                    ):
                         if method_name in (
                             "join",
                             "replace",
@@ -1036,22 +1042,18 @@ def collect_var_types(
     return var_types, tuple_vars, sentinel_ints, list_element_unions
 
 
-def compute_expr_types(
-    stmts: list[ASTNode],
-    var_types: dict[str, "Type"],
-    symbols: "SymbolTable",
-    current_class_name: str,
-    current_func_info: FuncInfo | None,
-    node_types: set[str],
-) -> None:
-    """Compute types for all expressions in statements.
+@dataclass
+class _ExprTypeCtx:
+    """Context for compute_expr_types traversal."""
 
-    Stores computed type directly in each AST node as '_expr_type' field.
-    """
-    from .context import TypeContext
+    symbols: "SymbolTable"
+    current_class_name: str
+    current_func_info: FuncInfo | None
+    node_types: set[str]
 
-    type_ctx = TypeContext(var_types=var_types)
-    expr_node_types = {
+
+_EXPR_NODE_TYPES = frozenset(
+    {
         "Constant",
         "Name",
         "Attribute",
@@ -1069,10 +1071,101 @@ def compute_expr_types(
         "JoinedStr",
         "FormattedValue",
     }
-    for stmt in dict_walk({"_type": "Module", "body": stmts}):
-        node_t = stmt.get("_type") if isinstance(stmt, dict) else None
-        if node_t in expr_node_types:
+)
+
+
+def _compute_expr_in_stmt(
+    stmt: ASTNode, local_var_types: dict[str, "Type"], ctx: _ExprTypeCtx
+) -> None:
+    """Compute types for all expressions in a single statement."""
+    from .context import TypeContext
+
+    type_ctx = TypeContext(var_types=local_var_types)
+    for subnode in dict_walk(stmt):
+        node_t = subnode.get("_type") if isinstance(subnode, dict) else None
+        if node_t in _EXPR_NODE_TYPES:
             typ = infer_expr_type_from_ast(
-                stmt, type_ctx, symbols, current_func_info, current_class_name, node_types
+                subnode,
+                type_ctx,
+                ctx.symbols,
+                ctx.current_func_info,
+                ctx.current_class_name,
+                ctx.node_types,
             )
-            stmt["_expr_type"] = typ
+            subnode["_expr_type"] = typ
+
+
+def _process_expr_stmts(
+    stmt_list: list[ASTNode], local_var_types: dict[str, "Type"], ctx: _ExprTypeCtx
+) -> None:
+    """Process statements in order with local var_types context."""
+    for stmt in stmt_list:
+        stmt_type = stmt.get("_type") if isinstance(stmt, dict) else None
+        if stmt_type == "If":
+            _process_expr_if(stmt, local_var_types, ctx)
+        elif stmt_type in ("For", "While", "With"):
+            _compute_expr_in_stmt(stmt, local_var_types, ctx)
+            _process_expr_stmts(stmt.get("body", []), local_var_types, ctx)
+            _process_expr_stmts(stmt.get("orelse", []), local_var_types, ctx)
+        elif stmt_type == "Try":
+            _compute_expr_in_stmt(stmt, local_var_types, ctx)
+            _process_expr_stmts(stmt.get("body", []), local_var_types, ctx)
+            for handler in stmt.get("handlers", []):
+                _process_expr_stmts(handler.get("body", []), local_var_types, ctx)
+            _process_expr_stmts(stmt.get("orelse", []), local_var_types, ctx)
+            _process_expr_stmts(stmt.get("finalbody", []), local_var_types, ctx)
+        else:
+            _compute_expr_in_stmt(stmt, local_var_types, ctx)
+
+
+def _process_expr_if(stmt: ASTNode, local_var_types: dict[str, "Type"], ctx: _ExprTypeCtx) -> None:
+    """Process if statement with type narrowing for isinstance/kind checks."""
+    test = stmt.get("test", {})
+    body = stmt.get("body", [])
+    orelse = stmt.get("orelse", [])
+    # Compute types in test expression first
+    _compute_expr_in_stmt({"_type": "Expr", "value": test}, local_var_types, ctx)
+    # Check for isinstance narrowing
+    narrowing = extract_isinstance_or_chain(test, {})
+    if narrowing:
+        narrowed_var, type_names = narrowing
+        if len(type_names) == 1 and narrowed_var in local_var_types:
+            # Create copy with narrowed type for then-branch
+            then_var_types = local_var_types.copy()
+            type_name = type_names[0]
+            if type_name in ctx.symbols.structs:
+                then_var_types[narrowed_var] = Pointer(StructRef(type_name))
+            elif type_name == "str":
+                then_var_types[narrowed_var] = STRING
+            elif type_name == "int":
+                then_var_types[narrowed_var] = INT
+            elif type_name == "bool":
+                then_var_types[narrowed_var] = BOOL
+            _process_expr_stmts(body, then_var_types, ctx)
+            _process_expr_stmts(orelse, local_var_types, ctx)
+            return
+    # No narrowing - use same var_types for both branches
+    _process_expr_stmts(body, local_var_types, ctx)
+    _process_expr_stmts(orelse, local_var_types, ctx)
+
+
+def compute_expr_types(
+    stmts: list[ASTNode],
+    var_types: dict[str, "Type"],
+    symbols: "SymbolTable",
+    current_class_name: str,
+    current_func_info: FuncInfo | None,
+    node_types: set[str],
+) -> None:
+    """Compute types for all expressions in statements.
+
+    Stores computed type directly in each AST node as '_expr_type' field.
+    Processes statements in order, handling isinstance/kind narrowing in if-blocks.
+    """
+    ctx = _ExprTypeCtx(
+        symbols=symbols,
+        current_class_name=current_class_name,
+        current_func_info=current_func_info,
+        node_types=node_types,
+    )
+    _process_expr_stmts(stmts, var_types, ctx)

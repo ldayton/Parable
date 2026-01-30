@@ -8001,7 +8001,6 @@ def NewParseError(message: str, pos: int, line: int) -> ParseError:
     self.message = message
     self.pos = pos
     self.line = line
-    _skip_super_init
     return self
 
 

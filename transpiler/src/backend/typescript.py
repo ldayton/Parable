@@ -108,6 +108,7 @@ from src.ir import (
     MethodCall,
     Module,
     NilLit,
+    NoOp,
     OpAssign,
     Optional,
     Param,
@@ -413,12 +414,14 @@ class TsBackend:
                 lv = self._lvalue(target)
                 val = self._expr(value)
                 self._line(f"{lv} {op}= {val};")
+            case NoOp():
+                pass  # No output for NoOp
             case ExprStmt(expr=Var(name=name)) if name in (
                 "_skip_docstring",
                 "_pass",
                 "_skip_super_init",
             ):
-                pass  # Skip marker statements
+                pass  # Skip marker statements (legacy)
             case ExprStmt(expr=expr):
                 self._line(f"{self._expr(expr)};")
             case Return(value=value):

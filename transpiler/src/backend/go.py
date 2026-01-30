@@ -113,6 +113,7 @@ from src.ir import (
     MethodSig,
     Module,
     NilLit,
+    NoOp,
     OpAssign,
     Optional,
     Param,
@@ -647,6 +648,8 @@ func _Substring(s string, start int, end int) string {
             self._emit_stmt_TypeSwitch(stmt)
         elif isinstance(stmt, Match):
             self._emit_stmt_Match(stmt)
+        elif isinstance(stmt, NoOp):
+            pass  # No output for NoOp
         else:
             self._line("// TODO: unknown statement")
 

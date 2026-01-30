@@ -12,7 +12,7 @@ emit backend="go":
     uv run python -m src.tongues --target {{backend}} < {{source}}
 
 # Transpile source and check syntax/compilation
-check backend="go":
+prep backend="go":
     #!/usr/bin/env bash
     set -euo pipefail
     just style
@@ -48,7 +48,7 @@ test backend="go":
     tests_abs=$(cd "$(dirname "{{tests}}")" && pwd)/$(basename "{{tests}}")
     case "{{backend}}" in
         go)
-            just check go
+            just prep go
             go run -C {{dist}} ./cmd/run-tests "$tests_abs"
             ;;
         py|python)
@@ -57,7 +57,7 @@ test backend="go":
             PYTHONPATH=/tmp/transpile-test python3 {{tests}}/bin/run-tests.py {{tests}}
             ;;
         ts|typescript)
-            just check ts
+            just prep ts
             node {{tests}}/bin/run-js-tests.js /tmp/transpile-ts
             ;;
         *)
@@ -68,12 +68,12 @@ test backend="go":
     esac
 
 # Check all backends compile
-check-all:
+prep-all:
     #!/usr/bin/env bash
     set -euo pipefail
     for backend in {{backends}}; do
         echo "=== Checking $backend ==="
-        just check "$backend" || echo "FAILED: $backend"
+        just prep "$backend" || echo "FAILED: $backend"
     done
 
 # Run test suite on all testable backends
@@ -91,7 +91,7 @@ errors backend="go":
     @echo "=== Transpiler output (first 20 lines) ==="
     @head -20 /tmp/transpile-out || true
     @echo "=== Compilation errors ==="
-    @just check {{backend}} 2>&1 | head -50 || true
+    @just prep {{backend}} 2>&1 | head -50 || true
 
 # Verify all transpiler source is subset-compliant
 style:

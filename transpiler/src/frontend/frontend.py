@@ -28,6 +28,7 @@ from .context import FrontendContext, LoweringDispatch, TypeContext
 from . import type_inference
 from . import lowering
 from . import collection
+from . import hierarchy
 from . import signatures
 from . import fields
 from . import builders
@@ -49,7 +50,7 @@ class Frontend:
 
     def __init__(self) -> None:
         self.symbols: SymbolTable = SymbolTable()
-        self._node_types: set[str] = set()  # classes that inherit from Node
+        self._hierarchy: hierarchy.SubtypeRel | None = None
         # Type inference context
         self._current_func_info: FuncInfo | None = None
         self._current_class_name: str = ""
@@ -77,10 +78,8 @@ class Frontend:
         if name_result is None:
             name_result = resolve_names(tree)
         self._populate_structs_from_names(name_result)
-        # Pass 2: Mark Node subclasses
-        collection.mark_node_subclasses(self.symbols, self._node_types)
-        # Pass 2b: Mark Exception subclasses
-        collection.mark_exception_subclasses(self.symbols)
+        # Pass 2: Build hierarchy (marks is_node, is_exception flags)
+        self._hierarchy = hierarchy.build_hierarchy(self.symbols)
         # Pass 3: Collect function and method signatures
         self._collect_signatures(tree)
         # Pass 4: Collect struct fields
@@ -94,7 +93,7 @@ class Frontend:
 
     def _is_exception_subclass(self, name: str) -> bool:
         """Check if a class is an Exception subclass (directly or transitively)."""
-        return collection.is_exception_subclass(name, self.symbols)
+        return hierarchy.is_exception_subclass(name, self.symbols)
 
     def _make_collection_callbacks_basic(self) -> collection.CollectionCallbacks:
         """Create basic CollectionCallbacks with core type/expr callbacks."""
@@ -145,7 +144,7 @@ class Frontend:
 
     def _extract_union_struct_names(self, py_type: str) -> list[str]:
         """Extract struct names from union type annotation."""
-        return type_inference.extract_union_struct_names(py_type, self._node_types)
+        return type_inference.extract_union_struct_names(py_type, self._hierarchy.node_types)
 
     def _setup_and_lower_stmts(
         self,
@@ -199,16 +198,16 @@ class Frontend:
 
     def _py_type_to_ir(self, py_type: str, concrete_nodes: bool = False) -> Type:
         """Convert Python type string to IR Type."""
-        return type_inference.py_type_to_ir(py_type, self.symbols, self._node_types, concrete_nodes)
+        return type_inference.py_type_to_ir(py_type, self.symbols, self._hierarchy.node_types, concrete_nodes)
 
     def _py_return_type_to_ir(self, py_type: str) -> Type:
         """Convert Python return type to IR, handling tuples as multiple returns."""
-        return type_inference.py_return_type_to_ir(py_type, self.symbols, self._node_types)
+        return type_inference.py_return_type_to_ir(py_type, self.symbols, self._hierarchy.node_types)
 
     def _infer_type_from_value(self, node: ASTNode, param_types: dict[str, str]) -> Type:
         """Infer IR type from an expression."""
         return type_inference.infer_type_from_value(
-            node, param_types, self.symbols, self._node_types
+            node, param_types, self.symbols, self._hierarchy.node_types
         )
 
     def _collect_var_types(
@@ -228,7 +227,7 @@ class Frontend:
             self.symbols,
             self._current_class_name,
             self._current_func_info,
-            self._node_types,
+            self._hierarchy.node_types,
             cb,
         )
 
@@ -327,7 +326,7 @@ class Frontend:
             self._type_ctx,
             self._current_func_info,
             self._current_class_name,
-            self._node_types,
+            self._hierarchy.node_types,
         )
 
     def _make_ctx_and_dispatch(self) -> tuple[FrontendContext, LoweringDispatch]:
@@ -340,7 +339,7 @@ class Frontend:
             type_ctx=self._type_ctx,
             current_func_info=self._current_func_info,
             current_class_name=self._current_class_name,
-            node_types=self._node_types,
+            node_types=self._hierarchy.node_types,
             kind_to_struct=self._kind_to_struct,
             kind_to_class=self._kind_to_class,
             current_catch_var=self._current_catch_var,
@@ -391,7 +390,7 @@ class Frontend:
             self.symbols,
             self._current_func_info,
             self._current_class_name,
-            self._node_types,
+            self._hierarchy.node_types,
         )
 
     def _lower_expr_List(self, node: ASTNode, expected_type: Type | None = None) -> "ir.Expr":

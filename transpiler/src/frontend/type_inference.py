@@ -25,6 +25,7 @@ from ..ir import (
     Type,
 )
 from .ast_compat import ASTNode
+from .hierarchy import is_node_subclass
 
 if TYPE_CHECKING:
     from .. import ir
@@ -135,16 +136,6 @@ def is_node_subtype(typ: Type | None, node_types: set[str]) -> bool:
         if struct_name in node_types:
             return True
     return False
-
-
-def is_node_subclass(name: str, symbols: SymbolTable) -> bool:
-    """Check if a class is a Node subclass (directly or transitively)."""
-    if name == "Node":
-        return True
-    info = symbols.structs.get(name)
-    if not info:
-        return False
-    return any(is_node_subclass(base, symbols) for base in info.bases)
 
 
 def parse_callable_type(

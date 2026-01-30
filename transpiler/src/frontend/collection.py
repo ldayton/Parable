@@ -6,7 +6,6 @@ from dataclasses import dataclass
 from typing import TYPE_CHECKING, Callable
 
 from .ast_compat import ASTNode, dict_walk, is_type
-from . import type_inference
 from ..ir import (
     BOOL,
     BYTE,
@@ -48,30 +47,6 @@ class CollectionCallbacks:
     infer_element_type_from_append_arg: Callable[[ASTNode, dict[str, "Type"]], "Type"] | None = (
         None
     )
-
-
-def is_exception_subclass(name: str, symbols: SymbolTable) -> bool:
-    """Check if a class is an Exception subclass (directly or transitively)."""
-    if name == "Exception":
-        return True
-    info = symbols.structs.get(name)
-    if not info:
-        return False
-    return any(is_exception_subclass(base, symbols) for base in info.bases)
-
-
-def mark_node_subclasses(symbols: SymbolTable, node_types: set[str]) -> None:
-    """Pass 2: Mark classes that inherit from Node."""
-    for name, info in symbols.structs.items():
-        info.is_node = type_inference.is_node_subclass(name, symbols)
-        if info.is_node:
-            node_types.add(name)
-
-
-def mark_exception_subclasses(symbols: SymbolTable) -> None:
-    """Pass 2b: Mark classes that inherit from Exception."""
-    for name, info in symbols.structs.items():
-        info.is_exception = is_exception_subclass(name, symbols)
 
 
 def build_kind_mapping(

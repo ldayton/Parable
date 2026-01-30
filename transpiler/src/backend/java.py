@@ -240,6 +240,7 @@ from src.ir import (
     StructRef,
     Ternary,
     TryCatch,
+    Truthy,
     Tuple,
     TupleAssign,
     TupleLit,
@@ -1291,6 +1292,19 @@ class JavaBackend:
                 args_str = ", ".join(self._expr(a) for a in args)
                 type_name = self._type_name_for_check(on_type)
                 return f"{type_name}.{to_camel(method)}({args_str})"
+            case Truthy(expr=e):
+                inner_str = self._expr(e)
+                inner_type = e.typ
+                if _is_string_type(inner_type) or isinstance(inner_type, (Slice, Map, Set)):
+                    return f"(!{inner_str}.isEmpty())"
+                if isinstance(inner_type, Optional) and isinstance(inner_type.inner, (Slice, Map, Set)):
+                    return f"(!{inner_str}.isEmpty())"
+                if inner_type == Primitive(kind="int"):
+                    # Wrap binary ops in parens for correct precedence with !=
+                    if isinstance(e, BinaryOp):
+                        return f"(({inner_str}) != 0)"
+                    return f"({inner_str} != 0)"
+                return f"({inner_str} != null)"
             case BinaryOp(op="in", left=left, right=right):
                 return self._containment_check(left, right, negated=False)
             case BinaryOp(op="not in", left=left, right=right):
@@ -1308,15 +1322,6 @@ class JavaBackend:
                     if left_str_tmp.startswith("!"):
                         # Strip the leading ! and use == null
                         return f"({left_str_tmp[1:]} == null)"
-                # Detect len(x) > 0 -> !x.isEmpty(), len(x) == 0 -> x.isEmpty()
-                if isinstance(left, Len) and isinstance(right, IntLit) and right.value == 0:
-                    inner_str = self._expr(left.expr)
-                    if java_op == ">" or java_op == "!=":
-                        return f"!{inner_str}.isEmpty()"
-                    if java_op == "==":
-                        return f"{inner_str}.isEmpty()"
-                    if java_op == "<=":
-                        return f"{inner_str}.isEmpty()"
                 # Compare ParseInt result as long to avoid int overflow before comparison
                 # e.g., int(s) <= 2147483647 -> Long.parseLong(s, 10) <= 2147483647L
                 if (

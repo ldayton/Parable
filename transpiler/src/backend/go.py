@@ -142,6 +142,7 @@ from src.ir import (
     StructRef,
     Ternary,
     TryCatch,
+    Truthy,
     TupleAssign,
     TupleLit,
     Tuple,
@@ -1401,6 +1402,8 @@ func _Substring(s string, start int, end int) string {
             return self._emit_expr_ParseInt(expr)
         if isinstance(expr, IntToStr):
             return self._emit_expr_IntToStr(expr)
+        if isinstance(expr, Truthy):
+            return self._emit_expr_Truthy(expr)
         return "/* TODO: unknown expression */"
 
     def _emit_expr_IntLit(self, expr: IntLit) -> str:
@@ -1832,6 +1835,22 @@ func _Substring(s string, start int, end int) string {
         if expr.negated:
             return f"{inner} != nil"
         return f"{inner} == nil"
+
+    def _emit_expr_Truthy(self, expr: Truthy) -> str:
+        inner = self._emit_expr(expr.expr)
+        inner_type = expr.expr.typ
+        if inner_type == STRING:
+            return f"(len({inner}) > 0)"
+        if inner_type == INT:
+            # Wrap binary ops in parens for correct precedence with !=
+            if isinstance(expr.expr, BinaryOp):
+                return f"(({inner}) != 0)"
+            return f"({inner} != 0)"
+        if isinstance(inner_type, (Slice, Map, Set)):
+            return f"(len({inner}) > 0)"
+        if isinstance(inner_type, Optional) and isinstance(inner_type.inner, (Slice, Map, Set)):
+            return f"(len({inner}) > 0)"
+        return f"({inner} != nil)"
 
     def _emit_expr_Len(self, expr: Len) -> str:
         inner = self._emit_expr(expr.expr)

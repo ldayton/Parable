@@ -179,7 +179,7 @@ var Token = /** @class */ (function () {
         if (this.word !== null) {
             return "Token(".concat(this.typeName, ", ").concat(this.value, ", ").concat(this.pos, ", word=").concat(this.word, ")");
         }
-        if (this.parts.length > 0) {
+        if ((this.parts.length > 0)) {
             return "Token(".concat(this.typeName, ", ").concat(this.value, ", ").concat(this.pos, ", parts=").concat(this.parts.length, ")");
         }
         return "Token(".concat(this.typeName, ", ").concat(this.value, ", ").concat(this.pos, ")");
@@ -232,7 +232,7 @@ var QuoteState = /** @class */ (function () {
     };
     QuoteState.prototype.pop = function () {
         var _a;
-        if (this.Stack.length > 0) {
+        if ((this.Stack.length > 0)) {
             _a = this.Stack.pop(), this.single = _a[0], this.double = _a[1];
         }
     };
@@ -583,7 +583,7 @@ var Lexer = /** @class */ (function () {
             }
             return IsWhitespace(ch);
         }
-        if ((this.ParserState & ParserStateFlags_PST_EOFTOKEN) !== 0 && this.EofToken !== "" && ch === this.EofToken && bracketDepth === 0) {
+        if (((this.ParserState & ParserStateFlags_PST_EOFTOKEN) !== 0) && this.EofToken !== "" && ch === this.EofToken && bracketDepth === 0) {
             return true;
         }
         if (IsRedirectChar(ch) && this.pos + 1 < this.length && this.source[this.pos + 1] === "(") {
@@ -721,7 +721,7 @@ var Lexer = /** @class */ (function () {
                 throw new MatchedPairError();
             }
             var ch = this.advance();
-            if ((flags & MatchedPairFlags_DOLBRACE) !== 0 && this.DolbraceState === DolbraceState_OP) {
+            if (((flags & MatchedPairFlags_DOLBRACE) !== 0) && this.DolbraceState === DolbraceState_OP) {
                 if (!"#%^,~:-=?+/".includes(ch)) {
                     this.DolbraceState = DolbraceState_WORD;
                 }
@@ -740,7 +740,7 @@ var Lexer = /** @class */ (function () {
                         break;
                     }
                 }
-                if (ch === "\\" && (flags & MatchedPairFlags_ALLOWESC) !== 0) {
+                if (ch === "\\" && ((flags & MatchedPairFlags_ALLOWESC) !== 0)) {
                     passNext = true;
                 }
                 chars.push(ch);
@@ -772,7 +772,7 @@ var Lexer = /** @class */ (function () {
                 continue;
             }
             if (ch === openChar && openChar !== closeChar) {
-                if (!((flags & MatchedPairFlags_DOLBRACE) !== 0 && openChar === "{")) {
+                if (!(((flags & MatchedPairFlags_DOLBRACE) !== 0) && openChar === "{")) {
                     count += 1;
                 }
                 chars.push(ch);
@@ -814,7 +814,7 @@ var Lexer = /** @class */ (function () {
                     }
                 }
             }
-            if (ch === "$" && !this.atEnd() && (flags & MatchedPairFlags_EXTGLOB) === 0) {
+            if (ch === "$" && !this.atEnd() && !((flags & MatchedPairFlags_EXTGLOB) !== 0)) {
                 var nextCh = this.peek();
                 if (wasDollar) {
                     chars.push(ch);
@@ -823,7 +823,7 @@ var Lexer = /** @class */ (function () {
                     continue;
                 }
                 if (nextCh === "{") {
-                    if ((flags & MatchedPairFlags_ARITH) !== 0) {
+                    if (((flags & MatchedPairFlags_ARITH) !== 0)) {
                         var afterBracePos = this.pos + 1;
                         if (afterBracePos >= this.length || !IsFunsubChar(this.source[afterBracePos])) {
                             chars.push(ch);
@@ -916,7 +916,7 @@ var Lexer = /** @class */ (function () {
                     }
                 }
             }
-            if (ch === "(" && wasGtlt && (flags & (MatchedPairFlags_DOLBRACE | MatchedPairFlags_ARRAYSUB)) !== 0) {
+            if (ch === "(" && wasGtlt && ((flags & (MatchedPairFlags_DOLBRACE | MatchedPairFlags_ARRAYSUB)) !== 0)) {
                 {
                     var direction = chars[chars.length - 1];
                     chars = chars.slice(0, chars.length - 1);
@@ -974,7 +974,7 @@ var Lexer = /** @class */ (function () {
                     chars.push(this.advance());
                     continue;
                 }
-                if (chars.length > 0 && atCommandStart && !seenEquals && IsArrayAssignmentPrefix(chars)) {
+                if ((chars.length > 0) && atCommandStart && !seenEquals && IsArrayAssignmentPrefix(chars)) {
                     var prevChar = chars[chars.length - 1];
                     if (/^[a-zA-Z0-9]$/.test(prevChar) || prevChar === "_") {
                         bracketStartPos = this.pos;
@@ -1020,7 +1020,7 @@ var Lexer = /** @class */ (function () {
                 continue;
             }
             if (ctx === WORD_CTX_COND && ch === "(") {
-                if (this.Extglob && chars.length > 0 && IsExtglobPrefix(chars[chars.length - 1])) {
+                if (this.Extglob && (chars.length > 0) && IsExtglobPrefix(chars[chars.length - 1])) {
                     chars.push(this.advance());
                     var content = this.ParseMatchedPair("(", ")", MatchedPairFlags_EXTGLOB, false);
                     chars.push(content);
@@ -1157,7 +1157,7 @@ var Lexer = /** @class */ (function () {
                 }
                 else {
                     this.SyncFromParser();
-                    if (this.Extglob && ctx === WORD_CTX_NORMAL && chars.length > 0 && chars[chars.length - 1].length === 2 && chars[chars.length - 1][0] === "$" && "?*@".includes(chars[chars.length - 1][1]) && !this.atEnd() && this.peek() === "(") {
+                    if (this.Extglob && ctx === WORD_CTX_NORMAL && (chars.length > 0) && chars[chars.length - 1].length === 2 && chars[chars.length - 1][0] === "$" && "?*@".includes(chars[chars.length - 1][1]) && !this.atEnd() && this.peek() === "(") {
                         chars.push(this.advance());
                         var content = this.ParseMatchedPair("(", ")", MatchedPairFlags_EXTGLOB, false);
                         chars.push(content);
@@ -1188,7 +1188,7 @@ var Lexer = /** @class */ (function () {
                     chars.push(procsubResult1);
                 }
                 else {
-                    if (procsubResult1 !== "") {
+                    if ((procsubResult1.length > 0)) {
                         chars.push(procsubResult1);
                     }
                     else {
@@ -1200,7 +1200,7 @@ var Lexer = /** @class */ (function () {
                 }
                 continue;
             }
-            if (ctx === WORD_CTX_NORMAL && ch === "(" && chars.length > 0 && bracketDepth === 0) {
+            if (ctx === WORD_CTX_NORMAL && ch === "(" && (chars.length > 0) && bracketDepth === 0) {
                 var isArrayAssign = false;
                 if (chars.length >= 3 && chars[chars.length - 2] === "+" && chars[chars.length - 1] === "=") {
                     isArrayAssign = IsArrayAssignmentPrefix(chars.slice(0, chars.length - 2));
@@ -1232,7 +1232,7 @@ var Lexer = /** @class */ (function () {
                 chars.push(")");
                 continue;
             }
-            if (ctx === WORD_CTX_NORMAL && (this.ParserState & ParserStateFlags_PST_EOFTOKEN) !== 0 && this.EofToken !== "" && ch === this.EofToken && bracketDepth === 0) {
+            if (ctx === WORD_CTX_NORMAL && ((this.ParserState & ParserStateFlags_PST_EOFTOKEN) !== 0) && this.EofToken !== "" && ch === this.EofToken && bracketDepth === 0) {
                 if (!(chars.length > 0)) {
                     chars.push(this.advance());
                 }
@@ -1249,7 +1249,7 @@ var Lexer = /** @class */ (function () {
         if (!(chars.length > 0)) {
             return null;
         }
-        if (parts.length > 0) {
+        if ((parts.length > 0)) {
             return new Word(chars.join(""), parts, "word");
         }
         return new Word(chars.join(""), null, "word");
@@ -1287,7 +1287,7 @@ var Lexer = /** @class */ (function () {
             this.LastReadToken = tok;
             return tok;
         }
-        if (this.EofToken !== "" && this.peek() === this.EofToken && (this.ParserState & ParserStateFlags_PST_CASEPAT) === 0 && (this.ParserState & ParserStateFlags_PST_EOFTOKEN) === 0) {
+        if (this.EofToken !== "" && this.peek() === this.EofToken && !((this.ParserState & ParserStateFlags_PST_CASEPAT) !== 0) && !((this.ParserState & ParserStateFlags_PST_EOFTOKEN) !== 0)) {
             var tok = new Token(TokenType_EOF, "", this.pos, [], null);
             this.LastReadToken = tok;
             return tok;
@@ -1299,7 +1299,7 @@ var Lexer = /** @class */ (function () {
                 this.LastReadToken = tok;
                 return tok;
             }
-            if (this.EofToken !== "" && this.peek() === this.EofToken && (this.ParserState & ParserStateFlags_PST_CASEPAT) === 0 && (this.ParserState & ParserStateFlags_PST_EOFTOKEN) === 0) {
+            if (this.EofToken !== "" && this.peek() === this.EofToken && !((this.ParserState & ParserStateFlags_PST_CASEPAT) !== 0) && !((this.ParserState & ParserStateFlags_PST_EOFTOKEN) !== 0)) {
                 var tok = new Token(TokenType_EOF, "", this.pos, [], null);
                 this.LastReadToken = tok;
                 return tok;
@@ -1690,7 +1690,7 @@ var Lexer = /** @class */ (function () {
                     }
                 }
             }
-            if (nameChars.length > 0) {
+            if ((nameChars.length > 0)) {
                 return nameChars.join("");
             }
             else {
@@ -1751,7 +1751,7 @@ var Lexer = /** @class */ (function () {
         if (ch === "#") {
             this.advance();
             var param = this.ConsumeParamName();
-            if (param !== "" && !this.atEnd() && this.peek() === "}") {
+            if ((param.length > 0) && !this.atEnd() && this.peek() === "}") {
                 this.advance();
                 var text = Substring(this.source, start, this.pos);
                 this.DolbraceState = savedDolbrace;
@@ -1765,7 +1765,7 @@ var Lexer = /** @class */ (function () {
                 this.advance();
             }
             var param = this.ConsumeParamName();
-            if (param !== "") {
+            if ((param.length > 0)) {
                 while (!this.atEnd() && IsWhitespaceNoNewline(this.peek())) {
                     this.advance();
                 }
@@ -1803,7 +1803,7 @@ var Lexer = /** @class */ (function () {
             }
         }
         var param = this.ConsumeParamName();
-        if (param === "") {
+        if (!(param.length > 0)) {
             if (!this.atEnd() && ("-=+?".includes(this.peek()) || this.peek() === ":" && this.pos + 1 < this.length && IsSimpleParamOp(this.source[this.pos + 1]))) {
                 param = "";
             }
@@ -2062,7 +2062,7 @@ var Word = /** @class */ (function () {
         return result.join("");
     };
     Word.prototype.ShSingleQuote = function (s) {
-        if (s === "") {
+        if (!(s.length > 0)) {
             return "''";
         }
         if (s === "'") {
@@ -2108,7 +2108,7 @@ var Word = /** @class */ (function () {
                                 if (j < inner.length && inner[j] === "}") {
                                     j += 1;
                                 }
-                                if (hexStr === "") {
+                                if (!(hexStr.length > 0)) {
                                     return result;
                                 }
                                 var byteVal = parseInt(hexStr, 16) & 255;
@@ -2349,7 +2349,7 @@ var Word = /** @class */ (function () {
                                     if (lastBraceIdx >= 0) {
                                         var afterBrace = resultStr.slice(lastBraceIdx + 2);
                                         var varNameLen = 0;
-                                        if (afterBrace !== "") {
+                                        if ((afterBrace.length > 0)) {
                                             if ("@*#?-$!0123456789_".includes(afterBrace[0])) {
                                                 varNameLen = 1;
                                             }
@@ -2377,7 +2377,7 @@ var Word = /** @class */ (function () {
                                                     break;
                                                 }
                                             }
-                                            if (!inPattern && opStart !== "" && !"%#/^,~:+-=?".includes(opStart[0])) {
+                                            if (!inPattern && (opStart.length > 0) && !"%#/^,~:+-=?".includes(opStart[0])) {
                                                 for (var _b = 0, _c = ["//", "%%", "##", "/", "%", "#", "^", "^^", ",", ",,"]; _b < _c.length; _b++) {
                                                     var op = _c[_b];
                                                     if (opStart.includes(op)) {
@@ -2640,7 +2640,7 @@ var Word = /** @class */ (function () {
         while (i < inner.length) {
             var ch = inner[i];
             if (IsWhitespace(ch)) {
-                if (!inWhitespace && normalized.length > 0 && braceDepth === 0 && bracketDepth === 0) {
+                if (!inWhitespace && (normalized.length > 0) && braceDepth === 0 && bracketDepth === 0) {
                     normalized.push(" ");
                     inWhitespace = true;
                 }
@@ -3247,7 +3247,7 @@ var Word = /** @class */ (function () {
                             var prefix = (hasPipe ? "${|" : "${ ");
                             var origInner = Substring(value, i + 2, j - 1);
                             var endsWithNewline = origInner.endsWith("\n");
-                            if (formatted === "" || /^\s$/.test(formatted)) {
+                            if (!(formatted.length > 0) || /^\s$/.test(formatted)) {
                                 var suffix = "}";
                             }
                             else {
@@ -3298,7 +3298,7 @@ var Word = /** @class */ (function () {
                                     var leadingWs = rawContent.slice(0, leadingWsEnd);
                                     var stripped = rawContent.slice(leadingWsEnd);
                                     if (stripped.startsWith("(")) {
-                                        if (leadingWs !== "") {
+                                        if ((leadingWs.length > 0)) {
                                             var normalizedWs = leadingWs.replace(/\n/g, " ").replace(/\t/g, " ");
                                             var spaced = FormatCmdsubNode(node.command, 0, false, false, false);
                                             result.push(direction + "(" + normalizedWs + spaced + ")");
@@ -3325,7 +3325,7 @@ var Word = /** @class */ (function () {
                                 i = j;
                             }
                             else {
-                                if (isProcsub && this.parts.length !== 0) {
+                                if (isProcsub && (this.parts.length !== 0)) {
                                     var direction = value[i];
                                     var j = FindCmdsubEnd(value, i + 2);
                                     if (j > value.length || j > 0 && j <= value.length && value[j - 1] !== ")") {
@@ -3365,7 +3365,7 @@ var Word = /** @class */ (function () {
                                             result.push(direction + "(" + inner + ")");
                                         }
                                         else {
-                                            if (inner.trim() !== "") {
+                                            if ((inner.trim().length > 0)) {
                                                 var stripped = inner.replace(/^[ \t]+/, '');
                                                 result.push(direction + "(" + stripped + ")");
                                             }
@@ -3651,7 +3651,7 @@ var Command = /** @class */ (function () {
         parts.push.apply(parts, this.words.map(function (w) { return w.toSexp(); }));
         parts.push.apply(parts, this.redirects.map(function (r) { return r.toSexp(); }));
         var inner = parts.join(" ");
-        if (inner === "") {
+        if (!(inner.length > 0)) {
             return "(command)";
         }
         return "(command " + inner + ")";
@@ -3781,19 +3781,19 @@ var List = /** @class */ (function () {
                 semiPositions.push(i);
             }
         }
-        if (semiPositions.length > 0) {
+        if ((semiPositions.length > 0)) {
             var segments = [];
             var start = 0;
             for (var _b = 0, _c = semiPositions; _b < _c.length; _b++) {
                 var pos = _c[_b];
                 var seg = Sublist(parts, start, pos);
-                if (seg.length > 0 && seg[0].kind !== "operator") {
+                if ((seg.length > 0) && seg[0].kind !== "operator") {
                     segments.push(seg);
                 }
                 start = pos + 1;
             }
             seg = Sublist(parts, start, parts.length);
-            if (seg.length > 0 && seg[0].kind !== "operator") {
+            if ((seg.length > 0) && seg[0].kind !== "operator") {
                 segments.push(seg);
             }
             if (!(segments.length > 0)) {
@@ -3819,7 +3819,7 @@ var List = /** @class */ (function () {
                 ampPositions.push(i);
             }
         }
-        if (ampPositions.length > 0) {
+        if ((ampPositions.length > 0)) {
             var segments = [];
             var start = 0;
             for (var _b = 0, _c = ampPositions; _b < _c.length; _b++) {
@@ -4152,7 +4152,7 @@ var For = /** @class */ (function () {
     };
     For.prototype.toSexp = function () {
         var suffix = "";
-        if (this.redirects.length > 0) {
+        if ((this.redirects.length > 0)) {
             var redirectParts = [];
             redirectParts.push.apply(redirectParts, this.redirects.map(function (r) { return r.toSexp(); }));
             suffix = " " + redirectParts.join(" ");
@@ -4197,14 +4197,14 @@ var ForArith = /** @class */ (function () {
     };
     ForArith.prototype.toSexp = function () {
         var suffix = "";
-        if (this.redirects.length > 0) {
+        if ((this.redirects.length > 0)) {
             var redirectParts = [];
             redirectParts.push.apply(redirectParts, this.redirects.map(function (r) { return r.toSexp(); }));
             suffix = " " + redirectParts.join(" ");
         }
-        var initVal = (this.init !== "" ? this.init : "1");
-        var condVal = (this.cond !== "" ? this.cond : "1");
-        var incrVal = (this.incr !== "" ? this.incr : "1");
+        var initVal = ((this.init.length > 0) ? this.init : "1");
+        var condVal = ((this.cond.length > 0) ? this.cond : "1");
+        var incrVal = ((this.incr.length > 0) ? this.incr : "1");
         var initStr = FormatArithVal(initVal);
         var condStr = FormatArithVal(condVal);
         var incrStr = FormatArithVal(incrVal);
@@ -4231,7 +4231,7 @@ var Select = /** @class */ (function () {
     };
     Select.prototype.toSexp = function () {
         var suffix = "";
-        if (this.redirects.length > 0) {
+        if ((this.redirects.length > 0)) {
             var redirectParts = [];
             redirectParts.push.apply(redirectParts, this.redirects.map(function (r) { return r.toSexp(); }));
             suffix = " " + redirectParts.join(" ");
@@ -4241,7 +4241,7 @@ var Select = /** @class */ (function () {
             var wordParts = [];
             wordParts.push.apply(wordParts, this.words.map(function (w) { return w.toSexp(); }));
             var wordStrs = wordParts.join(" ");
-            if (this.words.length > 0) {
+            if ((this.words.length > 0)) {
                 var inClause = "(in " + wordStrs + ")";
             }
             else {
@@ -4533,7 +4533,7 @@ var ArithmeticCommand = /** @class */ (function () {
         var formatted = new Word(this.rawContent, [], "word").FormatCommandSubstitutions(this.rawContent, true);
         var escaped = formatted.replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, "\\n").replace(/\t/g, "\\t");
         var result = "(arith (word \"" + escaped + "\"))";
-        if (this.redirects.length > 0) {
+        if ((this.redirects.length > 0)) {
             var redirectParts = [];
             redirectParts.push.apply(redirectParts, this.redirects.map(function (r) { return r.toSexp(); }));
             var redirectSexps = redirectParts.join(" ");
@@ -4918,7 +4918,7 @@ var ConditionalExpr = /** @class */ (function () {
         else {
             var result = "(cond " + body.toSexp() + ")";
         }
-        if (this.redirects.length > 0) {
+        if ((this.redirects.length > 0)) {
             var redirectParts = [];
             redirectParts.push.apply(redirectParts, this.redirects.map(function (r) { return r.toSexp(); }));
             var redirectSexps = redirectParts.join(" ");
@@ -5065,7 +5065,7 @@ var Coproc = /** @class */ (function () {
         return this.kind;
     };
     Coproc.prototype.toSexp = function () {
-        if (this.name !== "") {
+        if ((this.name.length > 0)) {
             var name = this.name;
         }
         else {
@@ -5421,7 +5421,7 @@ var Parser = /** @class */ (function () {
             }
             redirects.push(redirect);
         }
-        return (redirects.length > 0 ? redirects : null);
+        return ((redirects.length > 0) ? redirects : null);
     };
     Parser.prototype.ParseLoopBody = function (context) {
         if (this.peek() === "{") {
@@ -5467,7 +5467,7 @@ var Parser = /** @class */ (function () {
             }
             chars.push(this.advance());
         }
-        if (chars.length > 0) {
+        if ((chars.length > 0)) {
             var word = chars.join("");
         }
         else {
@@ -5906,7 +5906,7 @@ var Parser = /** @class */ (function () {
                     }
                 }
                 var delimiter = delimiterChars.join("");
-                if (delimiter !== "") {
+                if ((delimiter.length > 0)) {
                     pendingHeredocs.push([delimiter, stripTabs]);
                 }
                 continue;
@@ -6940,14 +6940,14 @@ var Parser = /** @class */ (function () {
             }
             var varname = varnameChars.join("");
             var isValidVarfd = false;
-            if (varname !== "") {
+            if ((varname.length > 0)) {
                 if (/^[a-zA-Z]$/.test(varname[0]) || varname[0] === "_") {
                     if (varname.includes("[") || varname.includes("]")) {
                         var left = varname.indexOf("[");
                         var right = varname.lastIndexOf("]");
                         if (left !== -1 && right === varname.length - 1 && right > left + 1) {
                             var base = varname.slice(0, left);
-                            if (base !== "" && (/^[a-zA-Z]$/.test(base[0]) || base[0] === "_")) {
+                            if ((base.length > 0) && (/^[a-zA-Z]$/.test(base[0]) || base[0] === "_")) {
                                 isValidVarfd = true;
                                 for (var _i = 0, _a = base.slice(1); _i < _a.length; _i++) {
                                     var c = _a[_i];
@@ -6979,7 +6979,7 @@ var Parser = /** @class */ (function () {
                 this.pos = saved;
             }
         }
-        if (varfd === "" && this.peek() !== "" && /^[0-9]+$/.test(this.peek())) {
+        if (varfd === "" && (this.peek().length > 0) && /^[0-9]+$/.test(this.peek())) {
             var fdChars = [];
             while (!this.atEnd() && /^[0-9]+$/.test(this.peek())) {
                 fdChars.push(this.advance());
@@ -7105,7 +7105,7 @@ var Parser = /** @class */ (function () {
                     while (!this.atEnd() && /^[0-9]+$/.test(this.peek())) {
                         fdChars.push(this.advance());
                     }
-                    if (fdChars.length > 0) {
+                    if ((fdChars.length > 0)) {
                         var fdTarget = fdChars.join("");
                     }
                     else {
@@ -8382,7 +8382,7 @@ var Parser = /** @class */ (function () {
                 }
             }
             var pattern = patternChars.join("");
-            if (pattern === "") {
+            if (!(pattern.length > 0)) {
                 throw new ParseError("Expected pattern in case statement at position ".concat(this.LexPeekToken().pos), this.LexPeekToken().pos);
             }
             this.skipWhitespace();
@@ -8449,7 +8449,7 @@ var Parser = /** @class */ (function () {
         }
         var wordStart = this.pos;
         var potentialName = this.peekWord();
-        if (potentialName !== "") {
+        if ((potentialName.length > 0)) {
             while (!this.atEnd() && !IsMetachar(this.peek()) && !IsQuote(this.peek())) {
                 this.advance();
             }
@@ -8541,7 +8541,7 @@ var Parser = /** @class */ (function () {
             this.advance();
         }
         name = Substring(this.source, nameStart, this.pos);
-        if (name === "") {
+        if (!(name.length > 0)) {
             this.pos = savedPos;
             return null;
         }
@@ -8565,7 +8565,7 @@ var Parser = /** @class */ (function () {
         var posAfterName = this.pos;
         this.skipWhitespace();
         var hasWhitespace = this.pos > posAfterName;
-        if (!hasWhitespace && name !== "" && "*?@+!$".includes(name[name.length - 1])) {
+        if (!hasWhitespace && (name.length > 0) && "*?@+!$".includes(name[name.length - 1])) {
             this.pos = savedPos;
             return null;
         }
@@ -9087,7 +9087,7 @@ var Parser = /** @class */ (function () {
     };
     Parser.prototype.parse = function () {
         var source = this.source.trim();
-        if (source === "") {
+        if (!(source.length > 0)) {
             return [new Empty("empty")];
         }
         var results = [];
@@ -9128,7 +9128,7 @@ var Parser = /** @class */ (function () {
         if (!(results.length > 0)) {
             return [new Empty("empty")];
         }
-        if (this.SawNewlineInSingleQuote && this.source !== "" && this.source[this.source.length - 1] === "\\" && !(this.source.length >= 3 && this.source.slice(this.source.length - 3, this.source.length - 1) === "\\\n")) {
+        if (this.SawNewlineInSingleQuote && (this.source.length > 0) && this.source[this.source.length - 1] === "\\" && !(this.source.length >= 3 && this.source.slice(this.source.length - 3, this.source.length - 1) === "\\\n")) {
             if (!this.LastWordOnOwnLine(results)) {
                 this.StripTrailingBackslashFromLastWord(results);
             }
@@ -9146,7 +9146,7 @@ var Parser = /** @class */ (function () {
         var lastWord = this.FindLastWord(lastNode);
         if (lastWord !== null && lastWord.value.endsWith("\\")) {
             lastWord.value = Substring(lastWord.value, 0, lastWord.value.length - 1);
-            if (lastWord.value === "" && lastNode instanceof Command && lastNode.words.length > 0) {
+            if (!(lastWord.value.length > 0) && lastNode instanceof Command && (lastNode.words.length > 0)) {
                 lastNode.words.pop();
             }
         }
@@ -9156,29 +9156,29 @@ var Parser = /** @class */ (function () {
             return node;
         }
         if (node instanceof Command) {
-            if (node.words.length > 0) {
+            if ((node.words.length > 0)) {
                 var lastWord = node.words[node.words.length - 1];
                 if (lastWord.value.endsWith("\\")) {
                     return lastWord;
                 }
             }
-            if (node.redirects.length > 0) {
+            if ((node.redirects.length > 0)) {
                 var lastRedirect = node.redirects[node.redirects.length - 1];
                 if (lastRedirect instanceof Redirect) {
                     return lastRedirect.target;
                 }
             }
-            if (node.words.length > 0) {
+            if ((node.words.length > 0)) {
                 return node.words[node.words.length - 1];
             }
         }
         if (node instanceof Pipeline) {
-            if (node.commands.length > 0) {
+            if ((node.commands.length > 0)) {
                 return this.FindLastWord(node.commands[node.commands.length - 1]);
             }
         }
         if (node instanceof List) {
-            if (node.parts.length > 0) {
+            if ((node.parts.length > 0)) {
                 return this.FindLastWord(node.parts[node.parts.length - 1]);
             }
         }
@@ -9295,7 +9295,7 @@ function StripLineContinuationsCommentAware(text) {
     return result.join("");
 }
 function AppendRedirects(base, redirects) {
-    if (redirects.length > 0) {
+    if ((redirects.length > 0)) {
         var parts = [];
         parts.push.apply(parts, redirects.map(function (r) { return r.toSexp(); }));
         return base + " " + parts.join(" ");
@@ -9442,7 +9442,7 @@ function StartsWithSubshell(node) {
         return false;
     }
     if (node instanceof Pipeline) {
-        if (node.commands.length > 0) {
+        if ((node.commands.length > 0)) {
             return StartsWithSubshell(node.commands[0]);
         }
         return false;
@@ -9476,7 +9476,7 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
             }
         }
         parts.push.apply(parts, node.redirects.map(function (r) { return FormatRedirect(r, compactRedirects, true); }));
-        if (compactRedirects && node.words.length > 0 && node.redirects.length > 0) {
+        if (compactRedirects && (node.words.length > 0) && (node.redirects.length > 0)) {
             var wordParts = parts.slice(0, node.words.length);
             var redirectParts = parts.slice(node.words.length);
             var result = wordParts.join(" ") + redirectParts.join("");
@@ -9514,7 +9514,7 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
             var formatted = FormatCmdsubNode(cmd, indent, inProcsub, false, procsubFirst && idx === 0);
             var isLast = idx === cmds.length - 1;
             var hasHeredoc = false;
-            if (cmd.kind === "command" && cmd.redirects.length > 0) {
+            if (cmd.kind === "command" && (cmd.redirects.length > 0)) {
                 for (var _g = 0, _h = cmd.redirects; _g < _h.length; _g++) {
                     var r = _h[_g];
                     if (r instanceof HereDoc) {
@@ -9549,7 +9549,7 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
             }
             idx += 1;
         }
-        var compactPipe = inProcsub && cmds.length > 0 && cmds[0][0].kind === "subshell";
+        var compactPipe = inProcsub && (cmds.length > 0) && cmds[0][0].kind === "subshell";
         var result = "";
         idx = 0;
         while (idx < resultParts.length) {
@@ -9578,7 +9578,7 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
         var hasHeredoc = false;
         for (var _j = 0, _k = node.parts; _j < _k.length; _j++) {
             var p_1 = _k[_j];
-            if (p_1.kind === "command" && p_1.redirects.length > 0) {
+            if (p_1.kind === "command" && (p_1.redirects.length > 0)) {
                 for (var _l = 0, _m = p_1.redirects; _l < _m.length; _l++) {
                     var r = _m[_l];
                     if (r instanceof HereDoc) {
@@ -9591,7 +9591,7 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
                 if (p_1 instanceof Pipeline) {
                     for (var _o = 0, _p = p_1.commands; _o < _p.length; _o++) {
                         var cmd_1 = _p[_o];
-                        if (cmd_1.kind === "command" && cmd_1.redirects.length > 0) {
+                        if (cmd_1.kind === "command" && (cmd_1.redirects.length > 0)) {
                             for (var _q = 0, _r = cmd_1.redirects; _q < _r.length; _q++) {
                                 var r = _r[_q];
                                 if (r instanceof HereDoc) {
@@ -9614,7 +9614,7 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
             var p_2 = _t[_s];
             if (p_2 instanceof Operator) {
                 if (p_2.op === ";") {
-                    if (result.length > 0 && result[result.length - 1].endsWith("\n")) {
+                    if ((result.length > 0) && result[result.length - 1].endsWith("\n")) {
                         skippedSemi = true;
                         continue;
                     }
@@ -9627,11 +9627,11 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
                 }
                 else {
                     if (p_2.op === "\n") {
-                        if (result.length > 0 && result[result.length - 1] === ";") {
+                        if ((result.length > 0) && result[result.length - 1] === ";") {
                             skippedSemi = false;
                             continue;
                         }
-                        if (result.length > 0 && result[result.length - 1].endsWith("\n")) {
+                        if ((result.length > 0) && result[result.length - 1].endsWith("\n")) {
                             result.push((skippedSemi ? " " : "\n"));
                             skippedSemi = false;
                             continue;
@@ -9641,7 +9641,7 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
                     }
                     else {
                         if (p_2.op === "&") {
-                            if (result.length > 0 && result[result.length - 1].includes("<<") && result[result.length - 1].includes("\n")) {
+                            if ((result.length > 0) && result[result.length - 1].includes("<<") && result[result.length - 1].includes("\n")) {
                                 var last = result[result.length - 1];
                                 if (last.includes(" |") || last.startsWith("|")) {
                                     result[result.length - 1] = last + " &";
@@ -9656,7 +9656,7 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
                             }
                         }
                         else {
-                            if (result.length > 0 && result[result.length - 1].includes("<<") && result[result.length - 1].includes("\n")) {
+                            if ((result.length > 0) && result[result.length - 1].includes("<<") && result[result.length - 1].includes("\n")) {
                                 var last = result[result.length - 1];
                                 var firstNl = last.indexOf("\n");
                                 result[result.length - 1] = last.slice(0, firstNl) + " " + p_2.op + " " + last.slice(firstNl);
@@ -9669,7 +9669,7 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
                 }
             }
             else {
-                if (result.length > 0 && !(result[result.length - 1].endsWith(" ") || result[result.length - 1].endsWith("\n"))) {
+                if ((result.length > 0) && !(result[result.length - 1].endsWith(" ") || result[result.length - 1].endsWith("\n"))) {
                     result.push(" ");
                 }
                 var formattedCmd = FormatCmdsubNode(p_2, indent, inProcsub, compactRedirects, procsubFirst && cmdCount === 0);
@@ -9716,7 +9716,7 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
         var cond = FormatCmdsubNode(node.condition, indent, false, false, false);
         var body = FormatCmdsubNode(node.body, indent + 4, false, false, false);
         var result = "while " + cond + "; do\n" + innerSp + body + ";\n" + sp + "done";
-        if (node.redirects.length > 0) {
+        if ((node.redirects.length > 0)) {
             for (var _u = 0, _v = node.redirects; _u < _v.length; _u++) {
                 var r = _v[_u];
                 result = result + " " + FormatRedirect(r, false, false);
@@ -9728,7 +9728,7 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
         var cond = FormatCmdsubNode(node.condition, indent, false, false, false);
         var body = FormatCmdsubNode(node.body, indent + 4, false, false, false);
         var result = "until " + cond + "; do\n" + innerSp + body + ";\n" + sp + "done";
-        if (node.redirects.length > 0) {
+        if ((node.redirects.length > 0)) {
             for (var _w = 0, _x = node.redirects; _w < _x.length; _w++) {
                 var r = _x[_w];
                 result = result + " " + FormatRedirect(r, false, false);
@@ -9743,7 +9743,7 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
             var wordVals = [];
             wordVals.push.apply(wordVals, node.words.map(function (w) { return w.value; }));
             var words = wordVals.join(" ");
-            if (words !== "") {
+            if ((words.length > 0)) {
                 var result = "for " + varName + " in " + words + ";\n" + sp + "do\n" + innerSp + body + ";\n" + sp + "done";
             }
             else {
@@ -9753,7 +9753,7 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
         else {
             var result = "for " + varName + " in \"$@\";\n" + sp + "do\n" + innerSp + body + ";\n" + sp + "done";
         }
-        if (node.redirects.length > 0) {
+        if ((node.redirects.length > 0)) {
             for (var _y = 0, _z = node.redirects; _y < _z.length; _y++) {
                 var r = _z[_y];
                 var result = result + " " + FormatRedirect(r, false, false);
@@ -9764,7 +9764,7 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
     if (node instanceof ForArith) {
         var body = FormatCmdsubNode(node.body, indent + 4, false, false, false);
         var result = "for ((" + node.init + "; " + node.cond + "; " + node.incr + "))\ndo\n" + innerSp + body + ";\n" + sp + "done";
-        if (node.redirects.length > 0) {
+        if ((node.redirects.length > 0)) {
             for (var _0 = 0, _1 = node.redirects; _0 < _1.length; _0++) {
                 var r = _1[_0];
                 result = result + " " + FormatRedirect(r, false, false);
@@ -9788,7 +9788,7 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
             var term = p.terminator;
             var patIndent = RepeatStr(" ", indent + 8);
             var termIndent = RepeatStr(" ", indent + 4);
-            var bodyPart = (body !== "" ? patIndent + body + "\n" : "\n");
+            var bodyPart = ((body.length > 0) ? patIndent + body + "\n" : "\n");
             if (i === 0) {
                 patterns.push(" " + pat + ")\n" + bodyPart + termIndent + term);
             }
@@ -9799,7 +9799,7 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
         }
         var patternStr = patterns.join("\n" + RepeatStr(" ", indent + 4));
         var redirects = "";
-        if (node.redirects.length > 0) {
+        if ((node.redirects.length > 0)) {
             var redirectParts = [];
             redirectParts.push.apply(redirectParts, node.redirects.map(function (r) { return FormatRedirect(r, false, false); }));
             redirects = " " + redirectParts.join(" ");
@@ -9815,18 +9815,18 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
     if (node instanceof Subshell) {
         var body = FormatCmdsubNode(node.body, indent, inProcsub, compactRedirects, false);
         var redirects = "";
-        if (node.redirects.length > 0) {
+        if ((node.redirects.length > 0)) {
             var redirectParts = [];
             redirectParts.push.apply(redirectParts, node.redirects.map(function (r) { return FormatRedirect(r, false, false); }));
             redirects = redirectParts.join(" ");
         }
         if (procsubFirst) {
-            if (redirects !== "") {
+            if ((redirects.length > 0)) {
                 return "(" + body + ") " + redirects;
             }
             return "(" + body + ")";
         }
-        if (redirects !== "") {
+        if ((redirects.length > 0)) {
             return "( " + body + " ) " + redirects;
         }
         return "( " + body + " )";
@@ -9836,12 +9836,12 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
         body = body.replace(/[;]+$/, '');
         var terminator = (body.endsWith(" &") ? " }" : "; }");
         var redirects = "";
-        if (node.redirects.length > 0) {
+        if ((node.redirects.length > 0)) {
             var redirectParts = [];
             redirectParts.push.apply(redirectParts, node.redirects.map(function (r) { return FormatRedirect(r, false, false); }));
             redirects = redirectParts.join(" ");
         }
-        if (redirects !== "") {
+        if ((redirects.length > 0)) {
             return "{ " + body + terminator + " " + redirects;
         }
         return "{ " + body + terminator;
@@ -10749,7 +10749,7 @@ function IsWordEndContext(c) {
 }
 function SkipMatchedPair(s, start, open, close, flags) {
     var n = s.length;
-    if ((flags & _SMP_PAST_OPEN) !== 0) {
+    if (((flags & _SMP_PAST_OPEN) !== 0)) {
         var i = start;
     }
     else {
@@ -10769,7 +10769,7 @@ function SkipMatchedPair(s, start, open, close, flags) {
             continue;
         }
         var literal = flags & _SMP_LITERAL;
-        if (literal === 0 && c === "\\") {
+        if (!(literal !== 0) && c === "\\") {
             passNext = true;
             i += 1;
             continue;
@@ -10781,28 +10781,28 @@ function SkipMatchedPair(s, start, open, close, flags) {
             i += 1;
             continue;
         }
-        if (literal === 0 && c === "`") {
+        if (!(literal !== 0) && c === "`") {
             backq = true;
             i += 1;
             continue;
         }
-        if (literal === 0 && c === "'") {
+        if (!(literal !== 0) && c === "'") {
             var i = SkipSingleQuoted(s, i + 1);
             continue;
         }
-        if (literal === 0 && c === "\"") {
+        if (!(literal !== 0) && c === "\"") {
             var i = SkipDoubleQuoted(s, i + 1);
             continue;
         }
-        if (literal === 0 && IsExpansionStart(s, i, "$(")) {
+        if (!(literal !== 0) && IsExpansionStart(s, i, "$(")) {
             var i = FindCmdsubEnd(s, i + 2);
             continue;
         }
-        if (literal === 0 && IsExpansionStart(s, i, "${")) {
+        if (!(literal !== 0) && IsExpansionStart(s, i, "${")) {
             var i = FindBracedParamEnd(s, i + 2);
             continue;
         }
-        if (literal === 0 && c === open) {
+        if (!(literal !== 0) && c === open) {
             depth += 1;
         }
         else {
@@ -10818,7 +10818,7 @@ function SkipSubscript(s, start, flags) {
     return SkipMatchedPair(s, start, "[", "]", flags);
 }
 function Assignment(s, flags) {
-    if (s === "") {
+    if (!(s.length > 0)) {
         return -1;
     }
     if (!(/^[a-zA-Z]$/.test(s[0]) || s[0] === "_")) {
@@ -10831,7 +10831,7 @@ function Assignment(s, flags) {
             return i;
         }
         if (c === "[") {
-            var subFlags = ((flags & 2) !== 0 ? _SMP_LITERAL : 0);
+            var subFlags = (((flags & 2) !== 0) ? _SMP_LITERAL : 0);
             var end = SkipSubscript(s, i, subFlags);
             if (end === -1) {
                 return -1;
@@ -10937,7 +10937,7 @@ function LooksLikeAssignment(s) {
     return Assignment(s, 0) !== -1;
 }
 function IsValidIdentifier(name) {
-    if (name === "") {
+    if (!(name.length > 0)) {
         return false;
     }
     if (!(/^[a-zA-Z]$/.test(name[0]) || name[0] === "_")) {

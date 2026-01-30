@@ -438,7 +438,7 @@ class PythonBackend:
             case SoftFail():
                 self._line("return None")
             case _:
-                raise NotImplementedError(f"Unknown statement: {type(stmt).__name__}")
+                raise NotImplementedError("Unknown statement")
 
     def _emit_type_switch(
         self, expr: Expr, binding: str, cases: list[TypeCase], default: list[Stmt]
@@ -741,7 +741,7 @@ class PythonBackend:
             case SliceConvert(source=source):
                 return self._expr(source)
             case _:
-                raise NotImplementedError(f"Unknown expression: {type(expr).__name__}")
+                raise NotImplementedError("Unknown expression")
 
     def _slice_expr(self, obj: Expr, low: Expr | None, high: Expr | None) -> str:
         obj_str = self._expr(obj)
@@ -768,8 +768,6 @@ class PythonBackend:
         return f"-{index.right.value}"
 
     def _format_string(self, template: str, args: list[Expr]) -> str:
-        import re
-
         # First escape literal braces that aren't placeholders
         # Replace {N} with a marker, escape all other braces, then restore
         markers = {}
@@ -814,7 +812,7 @@ class PythonBackend:
             case DerefLV(ptr=ptr):
                 return self._expr(ptr)
             case _:
-                raise NotImplementedError(f"Unknown lvalue: {type(lv).__name__}")
+                raise NotImplementedError("Unknown lvalue")
 
     def _type(self, typ: Type) -> str:
         match typ:
@@ -852,7 +850,7 @@ class PythonBackend:
             case StringSlice():
                 return "str"
             case _:
-                raise NotImplementedError(f"Unknown type: {type(typ).__name__}")
+                raise NotImplementedError("Unknown type")
 
     def _type_name_for_check(self, typ: Type) -> str:
         match typ:

@@ -700,6 +700,7 @@ class TupleAssign(Stmt):
     # Middleend annotations
     is_declaration: bool = False
     unused_indices: list[int] = field(default_factory=list)
+    new_targets: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -793,6 +794,7 @@ class TypeSwitch(Stmt):
     default: list[Stmt] = field(default_factory=list)
     # Middleend annotations
     binding_unused: bool = False
+    binding_reassigned: bool = False
     hoisted_vars: list[tuple[str, Type]] = field(default_factory=list)
 
 
@@ -944,9 +946,14 @@ class Block(Stmt):
 
     Semantics: Execute body in new scope. Variables declared
     inside are not visible outside.
+
+    Middleend annotations:
+    - no_scope: Block doesn't create a new scope (emitted without braces)
     """
 
     body: list[Stmt]
+    # Middleend annotations
+    no_scope: bool = False
 
 
 @dataclass
@@ -979,6 +986,8 @@ class TryCatch(Stmt):
     reraise: bool = False
     # Middleend annotations
     catch_var_unused: bool = False
+    has_returns: bool = False
+    has_catch_returns: bool = False
     hoisted_vars: list[tuple[str, Type]] = field(default_factory=list)
 
 

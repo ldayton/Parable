@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import re
+from re import sub as re_sub
 
 # Go reserved words that need renaming
 GO_RESERVED = frozenset(
@@ -36,6 +36,11 @@ GO_RESERVED = frozenset(
 )
 
 
+def _upper_first(s: str) -> str:
+    """Uppercase the first character of a string."""
+    return (s[0].upper() + s[1:]) if s else ""
+
+
 def go_to_pascal(name: str) -> str:
     """Convert snake_case to PascalCase for Go. Private methods (underscore prefix) become unexported."""
     is_private = name.startswith("_")
@@ -43,7 +48,7 @@ def go_to_pascal(name: str) -> str:
         name = name[1:]
     parts = name.split("_")
     # Use upper on first char only (not capitalize which lowercases rest)
-    result = "".join((p[0].upper() + p[1:]) if p else "" for p in parts)
+    result = "".join(_upper_first(p) for p in parts)
     # All-caps names (constants) stay all-caps even if originally private
     if name.isupper():
         return result
@@ -62,15 +67,10 @@ def go_to_camel(name: str) -> str:
     parts = name.split("_")
     if not parts:
         return name
-
-    # Use upper on first char only (not capitalize which lowercases rest)
-    def upper_first(s: str) -> str:
-        return (s[0].upper() + s[1:]) if s else ""
-
     # All-caps names (constants) should use PascalCase in Go
     if name.isupper():
-        return "".join(upper_first(p) for p in parts)
-    result = parts[0] + "".join(upper_first(p) for p in parts[1:])
+        return "".join(_upper_first(p) for p in parts)
+    result = parts[0] + "".join(_upper_first(p) for p in parts[1:])
     # Handle Go reserved words
     if result in GO_RESERVED:
         return result + "_"
@@ -83,8 +83,8 @@ def to_snake(name: str) -> str:
         name = name[1:]
     if "_" in name or name.islower():
         return name.lower()
-    s1 = re.sub(r"(.)([A-Z][a-z]+)", r"\1_\2", name)
-    return re.sub(r"([a-z0-9])([A-Z])", r"\1_\2", s1).lower()
+    s1 = re_sub(r"(.)([A-Z][a-z]+)", r"\1_\2", name)
+    return re_sub(r"([a-z0-9])([A-Z])", r"\1_\2", s1).lower()
 
 
 def to_camel(name: str) -> str:

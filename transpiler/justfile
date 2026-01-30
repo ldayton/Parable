@@ -17,6 +17,7 @@ check backend="go":
     set -euo pipefail
     just style src/frontend
     just style src/middleend
+    just style src/backend
     case "{{backend}}" in
         go)
             uv run python -m src.tongues --target go < {{source}} > /tmp/transpile-ir.go

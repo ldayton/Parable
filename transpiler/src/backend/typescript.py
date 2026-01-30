@@ -383,7 +383,7 @@ class TsBackend:
             case Assign(target=target, value=value):
                 lv = self._lvalue(target)
                 val = self._expr(value)
-                if getattr(stmt, "is_declaration", False):
+                if stmt.is_declaration:
                     # Use var for function-scoped semantics; use 'any' type because
                     # the same variable may be re-assigned with different types in
                     # different branches (TypeScript var requires consistent types)
@@ -393,8 +393,8 @@ class TsBackend:
             case TupleAssign(targets=targets, value=value):
                 lvalues = ", ".join(self._lvalue(t) for t in targets)
                 val = self._expr(value)
-                value_type = getattr(value, "typ", None)
-                if getattr(stmt, "is_declaration", False):
+                value_type = value.typ
+                if stmt.is_declaration:
                     # Use var for function-scoped semantics, with tuple element types
                     # This is safe because tuple destructuring assigns all at once
                     if isinstance(value_type, Tuple) and value_type.elements:
@@ -404,7 +404,7 @@ class TsBackend:
                         self._line(f"var [{lvalues}] = {val};")
                 else:
                     # Check for new_targets - variables that need pre-declaration
-                    new_targets = getattr(stmt, "new_targets", [])
+                    new_targets = stmt.new_targets
                     for name in new_targets:
                         # Use any - variable may have different types in different branches
                         self._line(f"var {_camel(name)}: any;")
@@ -501,7 +501,7 @@ class TsBackend:
             case SoftFail():
                 self._line("return null;")
             case _:
-                raise NotImplementedError(f"Unknown statement: {type(stmt).__name__}")
+                raise NotImplementedError("Unknown statement")
 
     def _emit_type_switch(
         self, expr: Expr, binding: str, cases: list[TypeCase], default: list[Stmt]
@@ -566,7 +566,7 @@ class TsBackend:
         if self._try_emit_map(index, value, iterable, body):
             return
         iter_expr = self._expr(iterable)
-        iter_type = getattr(iterable, "typ", None)
+        iter_type = iterable.typ
         elem_type = self._element_type(iter_type)
         is_string = isinstance(iter_type, Primitive) and iter_type.kind == "string"
         if index is not None and value is not None:
@@ -707,7 +707,7 @@ class TsBackend:
             case Assign(target=target, value=value):
                 lv = self._lvalue(target)
                 val = self._expr(value)
-                if getattr(stmt, "is_declaration", False):
+                if stmt.is_declaration:
                     # Use any - same variable may have different types in different branches
                     return f"var {lv}: any = {val}"
                 return f"{lv} = {val}"
@@ -716,7 +716,7 @@ class TsBackend:
             case ExprStmt(expr=expr):
                 return self._expr(expr)
             case _:
-                raise NotImplementedError(f"Cannot inline: {type(stmt).__name__}")
+                raise NotImplementedError("Cannot inline")
 
     def _emit_try_catch(
         self,
@@ -780,7 +780,7 @@ class TsBackend:
                 idx_str = self._expr(index)
                 # String indexing returns char code (number) in our IR
                 # Check for byte/rune/int result type since ord() produces BYTE
-                obj_type = getattr(obj, "typ", None)
+                obj_type = obj.typ
                 if (
                     obj_type == STRING
                     and isinstance(typ, Primitive)
@@ -908,7 +908,7 @@ class TsBackend:
                 return f"({self._expr(cond)} ? {self._expr(then_expr)} : {self._expr(else_expr)})"
             case Cast(expr=inner, to_type=to_type):
                 ts_type = self._type(to_type)
-                from_type = self._type(inner.typ) if hasattr(inner, "typ") else None
+                from_type = self._type(inner.typ)
                 if from_type == ts_type:
                     return self._expr(inner)
                 # String indexing to string is redundant in TypeScript (s[i] returns string)
@@ -916,7 +916,6 @@ class TsBackend:
                     isinstance(to_type, Primitive)
                     and to_type.kind == "string"
                     and isinstance(inner, Index)
-                    and hasattr(inner.obj, "typ")
                     and inner.obj.typ == STRING
                 ):
                     return self._expr(inner)
@@ -925,7 +924,6 @@ class TsBackend:
                     isinstance(to_type, Slice)
                     and isinstance(to_type.element, Primitive)
                     and to_type.element.kind == "byte"
-                    and hasattr(inner, "typ")
                     and isinstance(inner.typ, Primitive)
                     and inner.typ.kind == "string"
                 ):
@@ -934,7 +932,6 @@ class TsBackend:
                 if (
                     isinstance(to_type, Primitive)
                     and to_type.kind == "string"
-                    and hasattr(inner, "typ")
                     and isinstance(inner.typ, Slice)
                     and isinstance(inner.typ.element, Primitive)
                     and inner.typ.element.kind == "byte"
@@ -944,7 +941,6 @@ class TsBackend:
                 if (
                     isinstance(to_type, Primitive)
                     and to_type.kind == "string"
-                    and hasattr(inner, "typ")
                     and isinstance(inner.typ, Primitive)
                     and inner.typ.kind in ("rune", "int")
                 ):
@@ -1000,26 +996,27 @@ class TsBackend:
                 return f"[{elems}]"
             case StringConcat(parts=parts):
                 # Wrap parts that have lower precedence than + (like ??)
-                def wrap_part(p):
+                wrapped_parts: list[str] = []
+                for p in parts:
                     expr_str = self._expr(p)
                     # ?? has lower precedence than +, needs parens
                     if " ?? " in expr_str:
-                        return f"({expr_str})"
-                    return expr_str
-
-                return " + ".join(wrap_part(p) for p in parts)
+                        wrapped_parts.append(f"({expr_str})")
+                    else:
+                        wrapped_parts.append(expr_str)
+                return " + ".join(wrapped_parts)
             case StringFormat(template=template, args=args):
                 return self._format_string(template, args)
             case SliceConvert(source=source):
                 return self._expr(source)  # TypeScript arrays are covariant
             case _:
-                raise NotImplementedError(f"Unknown expression: {type(expr).__name__}")
+                raise NotImplementedError("Unknown expression")
 
     def _containment_check(self, item: Expr, container: Expr, negated: bool) -> str:
         """Generate containment check: `x in y` or `x not in y`."""
         item_str = self._expr(item)
         container_str = self._expr(container)
-        container_type = getattr(container, "typ", None)
+        container_type = container.typ
         neg = "!" if negated else ""
         if isinstance(container_type, (Set, Map)):
             return f"{neg}{container_str}.has({item_str})"
@@ -1063,17 +1060,17 @@ class TsBackend:
             else:
                 result = result.replace(f"{{{i}}}", f"${{{self._expr(arg)}}}", 1)
         # Handle %v placeholders (sequential)
-        arg_iter = iter(args)
+        arg_idx = 0
         while "%v" in result:
-            try:
-                arg = next(arg_iter)
-                if isinstance(arg, StringLit):
-                    val = arg.value.replace("\\", "\\\\").replace("`", "\\`").replace("$", "\\$")
-                    result = result.replace("%v", val, 1)
-                else:
-                    result = result.replace("%v", f"${{{self._expr(arg)}}}", 1)
-            except StopIteration:
+            if arg_idx >= len(args):
                 break
+            arg = args[arg_idx]
+            arg_idx += 1
+            if isinstance(arg, StringLit):
+                val = arg.value.replace("\\", "\\\\").replace("`", "\\`").replace("$", "\\$")
+                result = result.replace("%v", val, 1)
+            else:
+                result = result.replace("%v", f"${{{self._expr(arg)}}}", 1)
         # Escape backticks in the template
         result = result.replace("`", "\\`")
         return f"`{result}`"
@@ -1091,7 +1088,7 @@ class TsBackend:
             case DerefLV(ptr=ptr):
                 return self._expr(ptr)
             case _:
-                raise NotImplementedError(f"Unknown lvalue: {type(lv).__name__}")
+                raise NotImplementedError("Unknown lvalue")
 
     def _type(self, typ: Type) -> str:
         match typ:
@@ -1127,7 +1124,7 @@ class TsBackend:
             case StringSlice():
                 return "string"
             case _:
-                raise NotImplementedError(f"Unknown type: {type(typ).__name__}")
+                raise NotImplementedError("Unknown type")
 
     def _type_name_for_check(self, typ: Type) -> str:
         match typ:

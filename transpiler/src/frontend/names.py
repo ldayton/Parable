@@ -560,6 +560,27 @@ class NameResolver:
                         target = gen.get("target", {})
                         self.collect_assign_target(target, class_name, func_name, node)
                     k += 1
+            elif node_type == "Match":
+                # Collect pattern variables from match/case
+                cases = node.get("cases", [])
+                k = 0
+                while k < len(cases):
+                    case_node = cases[k]
+                    if isinstance(case_node, dict):
+                        pattern = case_node.get("pattern", {})
+                        self.collect_pattern_names(pattern, class_name, func_name, node)
+                    k += 1
+            elif node_type == "NamedExpr":
+                # Walrus operator: (x := expr)
+                target = node.get("target", {})
+                if target.get("_type") == "Name":
+                    name = target.get("id", "")
+                    existing = self.result.table.get_local(class_name, func_name, name)
+                    if existing is None:
+                        lineno = node.get("lineno", 0)
+                        col = node.get("col_offset", 0)
+                        info = NameInfo(name, "variable", "local", lineno, col, class_name, func_name)
+                        self.result.table.add_local(class_name, func_name, info)
             # Add children (skip nested FunctionDef - shouldn't exist per Phase 3)
             children = get_children(node)
             m = 0
@@ -588,6 +609,75 @@ class NameResolver:
                 self.collect_assign_target(elts[i], class_name, func_name, stmt)
                 i += 1
         # Attribute targets (self.x) are handled in pass2
+
+    def collect_pattern_names(self, pattern: ASTNode, class_name: str, func_name: str, stmt: ASTNode) -> None:
+        """Collect names bound by a match pattern."""
+        pattern_type = pattern.get("_type", "")
+        if pattern_type == "MatchAs":
+            # MatchAs(pattern=inner, name=bound_name)
+            name = pattern.get("name")
+            if name is not None and name != "_":
+                existing = self.result.table.get_local(class_name, func_name, name)
+                if existing is None:
+                    lineno = pattern.get("lineno", 0)
+                    col = pattern.get("col_offset", 0)
+                    info = NameInfo(name, "variable", "local", lineno, col, class_name, func_name)
+                    self.result.table.add_local(class_name, func_name, info)
+            inner = pattern.get("pattern")
+            if inner is not None:
+                self.collect_pattern_names(inner, class_name, func_name, stmt)
+        elif pattern_type == "MatchClass":
+            # MatchClass(cls=..., patterns=[], kwd_attrs=[], kwd_patterns=[])
+            # The kwd_patterns bind their values as names
+            kwd_attrs = pattern.get("kwd_attrs", [])
+            kwd_patterns = pattern.get("kwd_patterns", [])
+            i = 0
+            while i < len(kwd_patterns):
+                self.collect_pattern_names(kwd_patterns[i], class_name, func_name, stmt)
+                i += 1
+            # Positional patterns
+            patterns = pattern.get("patterns", [])
+            i = 0
+            while i < len(patterns):
+                self.collect_pattern_names(patterns[i], class_name, func_name, stmt)
+                i += 1
+        elif pattern_type == "MatchMapping":
+            # MatchMapping(keys=[], patterns=[], rest=name)
+            patterns = pattern.get("patterns", [])
+            i = 0
+            while i < len(patterns):
+                self.collect_pattern_names(patterns[i], class_name, func_name, stmt)
+                i += 1
+            rest = pattern.get("rest")
+            if rest is not None:
+                existing = self.result.table.get_local(class_name, func_name, rest)
+                if existing is None:
+                    lineno = pattern.get("lineno", 0)
+                    col = pattern.get("col_offset", 0)
+                    info = NameInfo(rest, "variable", "local", lineno, col, class_name, func_name)
+                    self.result.table.add_local(class_name, func_name, info)
+        elif pattern_type == "MatchSequence":
+            # MatchSequence(patterns=[])
+            patterns = pattern.get("patterns", [])
+            i = 0
+            while i < len(patterns):
+                self.collect_pattern_names(patterns[i], class_name, func_name, stmt)
+                i += 1
+        elif pattern_type == "MatchStar":
+            # MatchStar(name=bound_name)
+            name = pattern.get("name")
+            if name is not None and name != "_":
+                existing = self.result.table.get_local(class_name, func_name, name)
+                if existing is None:
+                    lineno = pattern.get("lineno", 0)
+                    col = pattern.get("col_offset", 0)
+                    info = NameInfo(name, "variable", "local", lineno, col, class_name, func_name)
+                    self.result.table.add_local(class_name, func_name, info)
+        elif pattern_type == "MatchOr":
+            # MatchOr(patterns=[]) - all alternatives should bind same names
+            patterns = pattern.get("patterns", [])
+            if len(patterns) > 0:
+                self.collect_pattern_names(patterns[0], class_name, func_name, stmt)
 
     def resolve_references_in_body(self, body: list[ASTNode], class_name: str, func_name: str) -> None:
         """Walk body and resolve all Name nodes with ctx=Load."""

@@ -130,7 +130,7 @@ EAGER_CONSUMERS: set[str] = {
 # Allowed stdlib imports (for typing and dataclasses)
 # Internal imports (relative or within the project) are always allowed
 ALLOWED_STDLIB: set[str] = {
-    "__future__", "typing", "collections.abc", "dataclasses",
+    "__future__", "typing", "collections.abc", "dataclasses", "re",
 }
 
 # Bare collection types that need type parameters

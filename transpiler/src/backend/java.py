@@ -459,9 +459,11 @@ class JavaBackend:
         self._emit_module(module)
         return "\n".join(self.lines)
 
-    def _emit_hoisted_vars(self, stmt: Stmt) -> None:
+    def _emit_hoisted_vars(
+        self, stmt: If | While | ForRange | ForClassic | TryCatch | Match | TypeSwitch
+    ) -> None:
         """Emit declarations for hoisted variables before a control flow construct."""
-        hoisted_vars = getattr(stmt, "hoisted_vars", [])
+        hoisted_vars = stmt.hoisted_vars
         for name, typ in hoisted_vars:
             java_type = self._type(typ) if typ else "Object"
             var_name = _java_safe_name(name)
@@ -688,7 +690,7 @@ class JavaBackend:
                     lv = self._lvalue(target)
                     target_name = target.name if isinstance(target, VarLV) else None
                     is_hoisted = target_name and target_name in self._hoisted_vars
-                    if getattr(stmt, "is_declaration", False) and not is_hoisted:
+                    if stmt.is_declaration and not is_hoisted:
                         # First assignment to variable - need type declaration
                         # Check for type override first
                         override_key = (
@@ -699,8 +701,8 @@ class JavaBackend:
                         if override_key and override_key in VAR_TYPE_OVERRIDES:
                             java_type = self._type(VAR_TYPE_OVERRIDES[override_key])
                         else:
-                            value_type = getattr(value, "typ", None)
-                            if value_type:
+                            value_type = value.typ
+                            if value_type is not None:
                                 java_type = self._type(value_type)
                             else:
                                 # Fallback to Object if type unknown
@@ -715,9 +717,9 @@ class JavaBackend:
             case TupleAssign(targets=targets, value=value):
                 # Java doesn't have destructuring - emit individual assignments
                 val_str = self._expr(value)
-                value_type = getattr(value, "typ", None)
-                is_decl = getattr(stmt, "is_declaration", False)
-                new_targets = getattr(stmt, "new_targets", [])
+                value_type = value.typ
+                is_decl = stmt.is_declaration
+                new_targets = stmt.new_targets
                 # For tuple types, access fields with .f0(), .f1(), etc.
                 if isinstance(value_type, Tuple):
                     # Store tuple in temp variable if it's a complex expression
@@ -826,7 +828,7 @@ class JavaBackend:
                     self._line("continue;")
             case Block(body=body):
                 # Check if this block should emit without braces (for statement sequences)
-                no_scope = getattr(stmt, "no_scope", False)
+                no_scope = stmt.no_scope
                 if not no_scope:
                     self._line("{")
                     self.indent += 1
@@ -843,7 +845,7 @@ class JavaBackend:
             case SoftFail():
                 self._line("return null;")
             case _:
-                self._line(f"// TODO: {type(stmt).__name__}")
+                self._line("// TODO: unknown statement")
 
     def _emit_type_switch(
         self, stmt: Stmt, expr: Expr, binding: str, cases: list[TypeCase], default: list[Stmt]
@@ -917,7 +919,7 @@ class JavaBackend:
     ) -> None:
         self._emit_hoisted_vars(stmt)
         iter_expr = self._expr(iterable)
-        iter_type = getattr(iterable, "typ", None)
+        iter_type = iterable.typ
         # Look up field type from FIELD_TYPE_OVERRIDES when iter_type is None
         if iter_type is None and isinstance(iterable, FieldAccess):
             field_key = (self.current_class, iterable.field)
@@ -1092,7 +1094,7 @@ class JavaBackend:
                 ):
                     return f"{obj_str}.{lower_field}()"
                 # For .kind on Node interface, use getKind() method
-                obj_type = getattr(obj, "typ", None)
+                obj_type = obj.typ
                 if field == "kind" and isinstance(obj_type, (InterfaceRef, StructRef)):
                     return f"{obj_str}.getKind()"
                 # Method reference on self: _arith_parse_* -> () -> this._arithParse*()
@@ -1139,7 +1141,7 @@ class JavaBackend:
                     return f"String.valueOf({args_str})"
                 if func == "len":
                     arg = self._expr(args[0])
-                    arg_type = getattr(args[0], "typ", None)
+                    arg_type = args[0].typ
                     if isinstance(arg_type, Primitive) and arg_type.kind == "string":
                         return f"{arg}.length()"
                     return f"{arg}.size()"
@@ -1227,7 +1229,7 @@ class JavaBackend:
                     # Unwrap Cast if present (frontend wraps string indexing in Cast)
                     inner_left = left.expr if isinstance(left, Cast) else left
                     if isinstance(inner_left, Index):
-                        obj_type = getattr(inner_left.obj, "typ", None)
+                        obj_type = inner_left.obj.typ
                         if isinstance(obj_type, Primitive) and obj_type.kind == "string":
                             obj_str = self._expr(inner_left.obj)
                             idx_str = self._expr(inner_left.index)
@@ -1261,7 +1263,7 @@ class JavaBackend:
                 return self._expr(operand)  # Java has no pointer dereference
             case UnaryOp(op="!", operand=operand):
                 # Java ! only works on booleans; for ints, use == 0
-                operand_type = getattr(operand, "typ", None)
+                operand_type = operand.typ
                 if isinstance(operand_type, Primitive) and operand_type.kind == "int":
                     return f"({self._expr(operand)} == 0)"
                 # For object types (not primitive bool), Python "not x" means "x is falsy/null"
@@ -1307,7 +1309,7 @@ class JavaBackend:
                 # Special case: !x != null (where x is an object) should be just x == null
                 # This handles Python's "not x" being translated to IsNil(UnaryOp("!", x), negated=True)
                 if negated and isinstance(inner, UnaryOp) and inner.op == "!":
-                    inner_type = getattr(inner.operand, "typ", None)
+                    inner_type = inner.operand.typ
                     if (
                         isinstance(inner_type, (InterfaceRef, StructRef, Pointer))
                         or inner_type is None
@@ -1395,7 +1397,7 @@ class JavaBackend:
             case StringFormat(template=template, args=args):
                 return self._format_string(template, args)
             case _:
-                return f"null /* TODO: {type(expr).__name__} */"
+                return "null /* TODO: unknown expression */"
 
     def _method_call(self, obj: Expr, method: str, args: list[Expr], receiver_type: Type) -> str:
         args_str = ", ".join(self._expr(a) for a in args)
@@ -1509,7 +1511,7 @@ class JavaBackend:
         """Generate containment check: `x in y` or `x not in y`."""
         item_str = self._expr(item)
         container_str = self._expr(container)
-        container_type = getattr(container, "typ", None)
+        container_type = container.typ
         neg = "!" if negated else ""
         # For sets and maps, use contains/containsKey
         if isinstance(container_type, Set):
@@ -1538,17 +1540,17 @@ class JavaBackend:
                 return f"String.valueOf({inner_str})"
         # Handle String -> List<Byte> (encoding)
         if isinstance(to_type, Slice):
-            inner_type = getattr(inner, "typ", None)
+            inner_type = inner.typ
             if isinstance(inner_type, Primitive) and inner_type.kind == "string":
                 if isinstance(to_type.element, Primitive) and to_type.element.kind == "byte":
                     return f"ParableFunctions._stringToBytes({inner_str})"
         return f"(({java_type}) {inner_str})"
 
     def _format_string(self, template: str, args: list[Expr]) -> str:
-        import re
+        from re import sub as re_sub
 
         # Convert {0}, {1}, etc. to %s
-        result = re.sub(r"\{\d+\}", "%s", template)
+        result = re_sub(r"\{\d+\}", "%s", template)
         result = result.replace("%v", "%s")
         escaped = (
             result.replace("\\", "\\\\")
@@ -1578,7 +1580,7 @@ class JavaBackend:
             case DerefLV(ptr=ptr):
                 return self._expr(ptr)
             case _:
-                return f"null /* lvalue: {type(lv).__name__} */"
+                return "null /* lvalue: unknown */"
 
     def _type(self, typ: Type) -> str:
         match typ:

@@ -1915,27 +1915,23 @@ class CharClassify(Expr):
 
 @dataclass
 class ParseInt(Expr):
-    """Parse string to integer.
+    """Parse string to integer with specified base.
 
-    Semantics: Convert decimal string representation to int.
-
-    | Target | Representation        |
-    |--------|-----------------------|
-    | C      | strtoll(s, NULL, 10)  |
-    | Go     | strconv.Atoi(s)       |
-    | Java   | Integer.parseInt(s)   |
-    | Python | int(s)                |
-    | Rust   | s.parse::<i64>()      |
-    | TS     | parseInt(s, 10)       |
-
-    Error handling depends on context (may panic or return error).
+    | Target | Representation                      |
+    |--------|-------------------------------------|
+    | Go     | _parseInt(s, base) (helper)         |
+    | Java   | (int) Long.parseLong(s, base)       |
+    | Python | int(s, base)                        |
+    | TS     | parseInt(s, base)                   |
 
     Invariants:
     - string.typ is STRING
+    - base.typ is INT (typically IntLit 10 or 16)
     - typ is INT
     """
 
     string: Expr
+    base: Expr
 
 
 @dataclass

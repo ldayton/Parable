@@ -1700,15 +1700,15 @@ def lower_expr_Call(
             )
         # Check for int(s, base) conversion
         if func_name == "int" and len(args) == 2:
-            return ir.Call(func="_parseInt", args=args, typ=INT, loc=loc_from_node(node))
+            return ir.ParseInt(string=args[0], base=args[1], typ=INT, loc=loc_from_node(node))
         # Check for int(s) - string to int conversion
         if func_name == "int" and len(args) == 1:
             arg_type = get_expr_type(node_args[0])
             if arg_type == STRING:
-                # String to int: use _parseInt with base 10
-                return ir.Call(
-                    func="_parseInt",
-                    args=[args[0], ir.IntLit(value=10, typ=INT, loc=loc_from_node(node))],
+                # String to int: use ParseInt with base 10
+                return ir.ParseInt(
+                    string=args[0],
+                    base=ir.IntLit(value=10, typ=INT, loc=loc_from_node(node)),
                     typ=INT,
                     loc=loc_from_node(node),
                 )
@@ -1722,7 +1722,7 @@ def lower_expr_Call(
             if arg_type == InterfaceRef("any"):
                 arg_type = dispatch.infer_expr_type_from_ast(node_args[0])
             if arg_type == INT:
-                return ir.Call(func="_intToStr", args=args, typ=STRING, loc=loc_from_node(node))
+                return ir.IntToStr(value=args[0], typ=STRING, loc=loc_from_node(node))
             # Handle *int or Optional[int] - dereference first
             if isinstance(arg_type, (Optional, Pointer)):
                 inner = arg_type.inner if isinstance(arg_type, Optional) else arg_type.target
@@ -1730,9 +1730,7 @@ def lower_expr_Call(
                     deref_arg = ir.UnaryOp(
                         op="*", operand=args[0], typ=INT, loc=loc_from_node(node)
                     )
-                    return ir.Call(
-                        func="_intToStr", args=[deref_arg], typ=STRING, loc=loc_from_node(node)
-                    )
+                    return ir.IntToStr(value=deref_arg, typ=STRING, loc=loc_from_node(node))
             # Already string or convert via fmt
             return ir.Cast(expr=args[0], to_type=STRING, typ=STRING, loc=loc_from_node(node))
         # Check for ord(c) -> int(c[0]) (get Unicode code point)

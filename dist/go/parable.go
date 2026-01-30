@@ -124,11 +124,6 @@ func _mapHas[K comparable, V any](m map[K]V, key K) bool {
 	return ok
 }
 
-// _intToStr converts an integer to its string representation
-func _intToStr(n int) string {
-	return strconv.Itoa(n)
-}
-
 // _isNilInterface checks if an interface value is nil.
 // In Go, an interface is nil only when both type and value are nil.
 // This handles the case where interface contains a typed nil pointer.
@@ -3754,10 +3749,10 @@ func (self *Redirect) ToSexp() string {
 		}
 		raw := substring(targetVal, 1, _runeLen(targetVal))
 		if _strIsDigit(raw) && _parseInt(raw, 10) <= 2147483647 {
-			return "(redirect \"" + op + "\" " + _intToStr(_parseInt(raw, 10)) + ")"
+			return "(redirect \"" + op + "\" " + strconv.Itoa(_parseInt(raw, 10)) + ")"
 		}
 		if strings.HasSuffix(raw, "-") && _strIsDigit(_Substring(raw, 0, _runeLen(raw)-1)) && _parseInt(_Substring(raw, 0, _runeLen(raw)-1), 10) <= 2147483647 {
-			return "(redirect \"" + op + "\" " + _intToStr(_parseInt(_Substring(raw, 0, _runeLen(raw)-1), 10)) + ")"
+			return "(redirect \"" + op + "\" " + strconv.Itoa(_parseInt(_Substring(raw, 0, _runeLen(raw)-1), 10)) + ")"
 		}
 		if targetVal == "&-" {
 			return "(redirect \">&-\" 0)"
@@ -3773,13 +3768,13 @@ func (self *Redirect) ToSexp() string {
 	}
 	if op == ">&" || op == "<&" {
 		if _strIsDigit(targetVal) && _parseInt(targetVal, 10) <= 2147483647 {
-			return "(redirect \"" + op + "\" " + _intToStr(_parseInt(targetVal, 10)) + ")"
+			return "(redirect \"" + op + "\" " + strconv.Itoa(_parseInt(targetVal, 10)) + ")"
 		}
 		if targetVal == "-" {
 			return "(redirect \">&-\" 0)"
 		}
 		if strings.HasSuffix(targetVal, "-") && _strIsDigit(_Substring(targetVal, 0, _runeLen(targetVal)-1)) && _parseInt(_Substring(targetVal, 0, _runeLen(targetVal)-1), 10) <= 2147483647 {
-			return "(redirect \"" + op + "\" " + _intToStr(_parseInt(_Substring(targetVal, 0, _runeLen(targetVal)-1), 10)) + ")"
+			return "(redirect \"" + op + "\" " + strconv.Itoa(_parseInt(_Substring(targetVal, 0, _runeLen(targetVal)-1), 10)) + ")"
 		}
 		outVal := func() string {
 			if strings.HasSuffix(targetVal, "-") {
@@ -6607,7 +6602,7 @@ func (self *Parser) ParseRedirect() Node {
 	if varfd != "" {
 		op = "{" + varfd + "}" + op
 	} else if fd != -1 {
-		op = _intToStr(fd) + op
+		op = strconv.Itoa(fd) + op
 	}
 	if !self.AtEnd() && self.Peek() == "&" {
 		self.Advance()
@@ -9330,7 +9325,7 @@ func formatRedirect(r Node, compact bool, heredocOpOnly bool) string {
 			op = "<<"
 		}
 		if r.Fd != nil && *r.Fd > 0 {
-			op = _intToStr(*r.Fd) + op
+			op = strconv.Itoa(*r.Fd) + op
 		}
 		var delim string
 		if r.Quoted {

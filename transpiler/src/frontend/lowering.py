@@ -28,6 +28,7 @@ from ..ir import (
 )
 from ..type_overrides import NODE_METHOD_TYPES, SENTINEL_INT_FIELDS, VAR_TYPE_OVERRIDES
 from . import type_inference
+from . import inference
 
 if TYPE_CHECKING:
     from .. import ir
@@ -126,175 +127,49 @@ def unaryop_to_str(op: ASTNode) -> str:
 
 
 # ============================================================
-# TYPE NARROWING HELPERS
+# TYPE NARROWING HELPERS (delegating to inference.py)
 # ============================================================
 
 
 def is_isinstance_call(node: ASTNode) -> tuple[str, str] | None:
     """Check if node is isinstance(var, Type). Returns (var_name, type_name) or None."""
-    if not is_type(node, ["Call"]):
-        return None
-    func = node.get("func")
-    if not is_type(func, ["Name"]) or func.get("id") != "isinstance":
-        return None
-    args = node.get("args", [])
-    if len(args) != 2:
-        return None
-    if not is_type(args[0], ["Name"]):
-        return None
-    if not is_type(args[1], ["Name"]):
-        return None
-    return (args[0].get("id"), args[1].get("id"))
+    return inference.is_isinstance_call(node)
 
 
 def is_kind_check(node: ASTNode, kind_to_class: dict[str, str]) -> tuple[str, str] | None:
     """Check if node is x.kind == "typename". Returns (var_name, class_name) or None."""
-    if not is_type(node, ["Compare"]):
-        return None
-    ops = node.get("ops", [])
-    comparators = node.get("comparators", [])
-    if len(ops) != 1 or not is_type(ops[0], ["Eq"]):
-        return None
-    if len(comparators) != 1:
-        return None
-    # Check for x.kind on left side
-    left = node.get("left")
-    if not is_type(left, ["Attribute"]) or left.get("attr") != "kind":
-        return None
-    left_value = left.get("value")
-    if not is_type(left_value, ["Name"]):
-        return None
-    var_name = left_value.get("id")
-    # Check for string constant on right side
-    comparator = comparators[0]
-    if not is_type(comparator, ["Constant"]) or not isinstance(comparator.get("value"), str):
-        return None
-    kind_value = comparator.get("value")
-    # Map kind string to class name
-    if kind_value not in kind_to_class:
-        return None
-    return (var_name, kind_to_class[kind_value])
+    return inference.is_kind_check(node, kind_to_class)
 
 
 def extract_isinstance_or_chain(
     node: ASTNode, kind_to_class: dict[str, str]
 ) -> tuple[str, list[str]] | None:
     """Extract isinstance/kind checks from expression. Returns (var_name, [type_names]) or None."""
-    # Handle simple isinstance call
-    simple = is_isinstance_call(node)
-    if simple:
-        return (simple[0], [simple[1]])
-    # Handle x.kind == "typename" pattern
-    kind_check = is_kind_check(node, kind_to_class)
-    if kind_check:
-        return (kind_check[0], [kind_check[1]])
-    # Handle isinstance(x, A) or isinstance(x, B) or ...
-    if is_type(node, ["BoolOp"]) and is_type(node.get("op"), ["Or"]):
-        var_name: str | None = None
-        type_names: list[str] = []
-        for value in node.get("values", []):
-            check = is_isinstance_call(value) or is_kind_check(value, kind_to_class)
-            if not check:
-                return None  # Not all are isinstance/kind calls
-            if var_name is None:
-                var_name = check[0]
-            elif var_name != check[0]:
-                return None  # Different variables
-            type_names.append(check[1])
-        if var_name and type_names:
-            return (var_name, type_names)
-    return None
+    return inference.extract_isinstance_or_chain(node, kind_to_class)
 
 
 def extract_isinstance_from_and(node: ASTNode) -> tuple[str, str] | None:
-    """Extract isinstance(var, Type) from compound AND expression.
-    Returns (var_name, type_name) or None if no isinstance found."""
-    if not is_type(node, ["BoolOp"]):
-        return None
-    op = node.get("op")
-    if not is_type(op, ["And"]):
-        return None
-    # Check each value in the AND chain for isinstance
-    for value in node.get("values", []):
-        result = is_isinstance_call(value)
-        if result:
-            return result
-    return None
+    """Extract isinstance(var, Type) from compound AND expression."""
+    return inference.extract_isinstance_from_and(node)
 
 
 def extract_kind_check(
     node: ASTNode, kind_to_struct: dict[str, str], kind_source_vars: dict[str, str]
 ) -> tuple[str, str] | None:
-    """Extract kind-based type narrowing from `kind == "value"` or `node.kind == "value"`.
-    Returns (node_var_name, struct_name) or None if not a kind check."""
-    # Match: kind == "value" where kind was previously assigned from node.kind
-    ops = node.get("ops", [])
-    if is_type(node, ["Compare"]) and len(ops) == 1 and is_type(ops[0], ["Eq"]):
-        left = node.get("left")
-        comparators = node.get("comparators", [])
-        right = comparators[0] if comparators else {}
-        # Check for var == "kind_value" pattern
-        if (
-            is_type(left, ["Name"])
-            and is_type(right, ["Constant"])
-            and isinstance(right.get("value"), str)
-        ):
-            kind_var = left.get("id")
-            kind_value = right.get("value")
-            if kind_value in kind_to_struct:
-                # Look up which Node-typed variable this kind var came from
-                if kind_var in kind_source_vars:
-                    node_var = kind_source_vars[kind_var]
-                    return (node_var, kind_to_struct[kind_value])
-        # Check for node.kind == "value" pattern
-        if (
-            is_type(left, ["Attribute"])
-            and left.get("attr") == "kind"
-            and is_type(left.get("value"), ["Name"])
-        ):
-            node_var = left.get("value", {}).get("id")
-            if is_type(right, ["Constant"]) and isinstance(right.get("value"), str):
-                kind_value = right.get("value")
-                if kind_value in kind_to_struct:
-                    return (node_var, kind_to_struct[kind_value])
-    return None
+    """Extract kind-based type narrowing from `kind == "value"` or `node.kind == "value"`."""
+    return inference.extract_kind_check(node, kind_to_struct, kind_source_vars)
 
 
 def extract_attr_kind_check(
     node: ASTNode, kind_to_struct: dict[str, str]
 ) -> tuple[tuple[str, ...], str] | None:
-    """Extract kind check for attribute paths like `node.body.kind == "value"`.
-    Returns (attr_path_tuple, struct_name) or None."""
-    ops = node.get("ops", [])
-    if is_type(node, ["Compare"]) and len(ops) == 1 and is_type(ops[0], ["Eq"]):
-        left = node.get("left")
-        comparators = node.get("comparators", [])
-        right = comparators[0] if comparators else {}
-        # Check for expr.kind == "value" pattern where expr is an attribute chain
-        if (
-            is_type(left, ["Attribute"])
-            and left.get("attr") == "kind"
-            and is_type(right, ["Constant"])
-            and isinstance(right.get("value"), str)
-        ):
-            kind_value = right.get("value")
-            if kind_value in kind_to_struct:
-                # Extract the attribute path (e.g., node.body -> ("node", "body"))
-                attr_path = get_attr_path(left.get("value"))
-                if attr_path and len(attr_path) > 1:  # Only for chains, not simple vars
-                    return (attr_path, kind_to_struct[kind_value])
-    return None
+    """Extract kind check for attribute paths like `node.body.kind == "value"`."""
+    return inference.extract_attr_kind_check(node, kind_to_struct)
 
 
 def get_attr_path(node: ASTNode) -> tuple[str, ...] | None:
     """Extract attribute path as tuple (e.g., node.body -> ("node", "body"))."""
-    if is_type(node, ["Name"]):
-        return (node.get("id"),)
-    elif is_type(node, ["Attribute"]) and is_type(node.get("value"), ["Name", "Attribute"]):
-        base = get_attr_path(node.get("value"))
-        if base:
-            return base + (node.get("attr"),)
-    return None
+    return inference.get_attr_path(node)
 
 
 def resolve_type_name(

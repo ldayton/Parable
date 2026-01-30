@@ -28,6 +28,7 @@ from .context import FrontendContext, LoweringDispatch, TypeContext
 from . import type_inference
 from . import lowering
 from . import collection
+from . import inference
 from . import hierarchy
 from . import signatures
 from . import fields
@@ -214,15 +215,17 @@ class Frontend:
         self, stmts: list[ASTNode]
     ) -> tuple[dict[str, Type], dict[str, list[str]], set[str], dict[str, list[str]]]:
         """Pre-scan function body to collect variable types, tuple var mappings, and sentinel ints."""
-        cb = self._make_collection_callbacks_with_inference()
-        cb.extract_struct_name = type_inference.extract_struct_name
-        cb.infer_container_type_from_ast = self._infer_container_type_from_ast
-        cb.is_len_call = lowering.is_len_call
-        cb.is_kind_check = self._is_kind_check
-        cb.infer_call_return_type = self._infer_call_return_type
-        cb.infer_iterable_type = self._infer_iterable_type
-        cb.infer_element_type_from_append_arg = self._infer_element_type_from_append_arg
-        return collection.collect_var_types(
+        cb = inference.InferenceCallbacks(
+            annotation_to_str=self._annotation_to_str,
+            py_type_to_ir=self._py_type_to_ir,
+            extract_struct_name=type_inference.extract_struct_name,
+            infer_container_type_from_ast=self._infer_container_type_from_ast,
+            is_len_call=lowering.is_len_call,
+            is_kind_check=self._is_kind_check,
+            infer_call_return_type=self._infer_call_return_type,
+            infer_iterable_type=self._infer_iterable_type,
+        )
+        return inference.collect_var_types(
             stmts,
             self.symbols,
             self._current_class_name,
@@ -241,10 +244,17 @@ class Frontend:
         self, arg: ASTNode, var_types: dict[str, Type]
     ) -> Type:
         """Infer slice element type from what's being appended."""
-        cb = self._make_collection_callbacks_with_inference()
-        cb.extract_struct_name = type_inference.extract_struct_name
-        cb.infer_container_type_from_ast = self._infer_container_type_from_ast
-        return collection.infer_element_type_from_append_arg(
+        cb = inference.InferenceCallbacks(
+            annotation_to_str=self._annotation_to_str,
+            py_type_to_ir=self._py_type_to_ir,
+            extract_struct_name=type_inference.extract_struct_name,
+            infer_container_type_from_ast=self._infer_container_type_from_ast,
+            is_len_call=lowering.is_len_call,
+            is_kind_check=self._is_kind_check,
+            infer_call_return_type=self._infer_call_return_type,
+            infer_iterable_type=self._infer_iterable_type,
+        )
+        return inference.infer_element_type_from_append_arg(
             arg, var_types, self.symbols, self._current_class_name, self._current_func_info, cb
         )
 

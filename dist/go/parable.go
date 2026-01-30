@@ -2009,7 +2009,7 @@ func (self *Word) doubleCtlescSmart(value string) string {
 		if c == '\x01' {
 			if quote.Double {
 				bsCount := 0
-				for _, j := range Range(len(result)-2, -1, -1) {
+				for j := len(result) - 2; j > -1; j += -1 {
 					if result[j] == "\\" {
 						bsCount++
 					} else {
@@ -3554,7 +3554,7 @@ func (self *List) ToSexp() string {
 		return parts[0].ToSexp()
 	}
 	if parts[len(parts)-1].GetKind() == "operator" && parts[len(parts)-1].(*Operator).Op == "&" {
-		for _, i := range Range(len(parts)-3, 0, -2) {
+		for i := len(parts) - 3; i > 0; i += -2 {
 			if parts[i].GetKind() == "operator" && (parts[i].(*Operator).Op == ";" || parts[i].(*Operator).Op == "\n") {
 				left := parts[0:i]
 				right := parts[i+1 : len(parts)-1]
@@ -3585,7 +3585,7 @@ func (self *List) ToSexp() string {
 
 func (self *List) toSexpWithPrecedence(parts []Node, opNames map[string]string) string {
 	semiPositions := []int{}
-	for _, i := range Range(len(parts)) {
+	for i := 0; i < len(parts); i++ {
 		if parts[i].GetKind() == "operator" && (parts[i].(*Operator).Op == ";" || parts[i].(*Operator).Op == "\n") {
 			semiPositions = append(semiPositions, i)
 		}
@@ -3609,7 +3609,7 @@ func (self *List) toSexpWithPrecedence(parts []Node, opNames map[string]string) 
 			return "()"
 		}
 		result := self.toSexpAmpAndHigher(segments[0], opNames)
-		for _, i := range Range(1, len(segments)) {
+		for i := 1; i < len(segments); i++ {
 			result = "(semi " + result + " " + self.toSexpAmpAndHigher(segments[i], opNames) + ")"
 		}
 		return result
@@ -3622,7 +3622,7 @@ func (self *List) toSexpAmpAndHigher(parts []Node, opNames map[string]string) st
 		return parts[0].ToSexp()
 	}
 	ampPositions := []int{}
-	for _, i := range Range(1, len(parts)-1, 2) {
+	for i := 1; i < len(parts)-1; i += 2 {
 		if parts[i].GetKind() == "operator" && parts[i].(*Operator).Op == "&" {
 			ampPositions = append(ampPositions, i)
 		}
@@ -3636,7 +3636,7 @@ func (self *List) toSexpAmpAndHigher(parts []Node, opNames map[string]string) st
 		}
 		segments = append(segments, parts[start:len(parts)])
 		result := self.toSexpAndOr(segments[0], opNames)
-		for _, i := range Range(1, len(segments)) {
+		for i := 1; i < len(segments); i++ {
 			result = "(background " + result + " " + self.toSexpAndOr(segments[i], opNames) + ")"
 		}
 		return result
@@ -3649,7 +3649,7 @@ func (self *List) toSexpAndOr(parts []Node, opNames map[string]string) string {
 		return parts[0].ToSexp()
 	}
 	result := parts[0].ToSexp()
-	for _, i := range Range(1, len(parts)-1, 2) {
+	for i := 1; i < len(parts)-1; i += 2 {
 		op := parts[i]
 		cmd := parts[i+1]
 		opName := _mapGet(opNames, op.(*Operator).Op, op.(*Operator).Op)
@@ -5290,7 +5290,7 @@ func (self *Parser) parseBacktickSubstitution() (Node, string) {
 			} else if strings.HasPrefix(checkLine, currentHeredocDelim) && _runeLen(checkLine) > _runeLen(currentHeredocDelim) {
 				tabsStripped := _runeLen(line) - _runeLen(checkLine)
 				endPos := tabsStripped + _runeLen(currentHeredocDelim)
-				for _, i := range Range(endPos) {
+				for i := 0; i < endPos; i++ {
 					contentChars = append(contentChars, _runeAt(line, i))
 					textChars = append(textChars, _runeAt(line, i))
 				}
@@ -9854,7 +9854,7 @@ func skipHeredoc(value string, start int) int {
 		line := substring(value, lineStart, lineEnd)
 		for lineEnd < _runeLen(value) {
 			trailingBs := 0
-			for _, j := range Range(_runeLen(line)-1, -1, -1) {
+			for j := _runeLen(line) - 1; j > -1; j += -1 {
 				if _runeAt(line, j) == "\\" {
 					trailingBs++
 				} else {
@@ -9926,7 +9926,7 @@ func findHeredocContentEnd(source string, start int, delimiters []struct {
 			line := substring(source, lineStart, lineEnd)
 			for lineEnd < _runeLen(source) {
 				trailingBs := 0
-				for _, j := range Range(_runeLen(line)-1, -1, -1) {
+				for j := _runeLen(line) - 1; j > -1; j += -1 {
 					if _runeAt(line, j) == "\\" {
 						trailingBs++
 					} else {
@@ -10018,7 +10018,7 @@ func collapseWhitespace(s string) string {
 
 func countTrailingBackslashes(s string) int {
 	count := 0
-	for _, i := range Range(_runeLen(s)-1, -1, -1) {
+	for i := _runeLen(s) - 1; i > -1; i += -1 {
 		if _runeAt(s, i) == "\\" {
 			count++
 		} else {

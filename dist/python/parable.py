@@ -1455,11 +1455,13 @@ class Word(Node):
             if c == "":
                 if quote.double:
                     bs_count = 0
-                    for j in range(len(result) - 2, -1, -1):
+                    j: int = len(result) - 2
+                    while j > -1:
                         if result[j] == "\\":
                             bs_count += 1
                         else:
                             break
+                        j += -1
                     if bs_count % 2 == 0:
                         result.append("")
                 else:
@@ -2694,7 +2696,8 @@ class List(Node):
         if len(parts) == 1:
             return parts[0].to_sexp()
         if parts[-1].kind == "operator" and parts[-1].op == "&":
-            for i in range(len(parts) - 3, 0, -2):
+            i: int = len(parts) - 3
+            while i > 0:
                 if parts[i].kind == "operator" and (parts[i].op == ";" or parts[i].op == "\n"):
                     left = _sublist(parts, 0, i)
                     right = _sublist(parts, i + 1, len(parts) - 1)
@@ -2707,6 +2710,7 @@ class List(Node):
                     else:
                         right_sexp = right[0].to_sexp()
                     return "(semi " + left_sexp + " (background " + right_sexp + "))"
+                i += -2
             inner_parts = _sublist(parts, 0, len(parts) - 1)
             if len(inner_parts) == 1:
                 return "(background " + inner_parts[0].to_sexp() + ")"
@@ -2733,8 +2737,10 @@ class List(Node):
             if not segments:
                 return "()"
             result = self._to_sexp_amp_and_higher(segments[0], op_names)
-            for i in range(1, len(segments)):
+            i: int = 1
+            while i < len(segments):
                 result = "(semi " + result + " " + self._to_sexp_amp_and_higher(segments[i], op_names) + ")"
+                i += 1
             return result
         return self._to_sexp_amp_and_higher(parts, op_names)
 
@@ -2742,9 +2748,11 @@ class List(Node):
         if len(parts) == 1:
             return parts[0].to_sexp()
         amp_positions = []
-        for i in range(1, len(parts) - 1, 2):
+        i: int = 1
+        while i < len(parts) - 1:
             if parts[i].kind == "operator" and parts[i].op == "&":
                 amp_positions.append(i)
+            i += 2
         if amp_positions:
             segments = []
             start = 0
@@ -2753,8 +2761,10 @@ class List(Node):
                 start = pos + 1
             segments.append(_sublist(parts, start, len(parts)))
             result = self._to_sexp_and_or(segments[0], op_names)
-            for i in range(1, len(segments)):
+            i: int = 1
+            while i < len(segments):
                 result = "(background " + result + " " + self._to_sexp_and_or(segments[i], op_names) + ")"
+                i += 1
             return result
         return self._to_sexp_and_or(parts, op_names)
 
@@ -2762,11 +2772,13 @@ class List(Node):
         if len(parts) == 1:
             return parts[0].to_sexp()
         result = parts[0].to_sexp()
-        for i in range(1, len(parts) - 1, 2):
+        i: int = 1
+        while i < len(parts) - 1:
             op = parts[i]
             cmd = parts[i + 1]
             op_name = op_names.get(op.op, op.op)
             result = "(" + op_name + " " + result + " " + cmd.to_sexp() + ")"
+            i += 2
         return result
 
 
@@ -4044,9 +4056,11 @@ class Parser:
                 elif check_line.startswith(current_heredoc_delim) and len(check_line) > len(current_heredoc_delim):
                     tabs_stripped = len(line) - len(check_line)
                     end_pos = tabs_stripped + len(current_heredoc_delim)
-                    for i in range(end_pos):
+                    i: int = 0
+                    while i < end_pos:
                         content_chars.append(line[i])
                         text_chars.append(line[i])
+                        i += 1
                     self.pos = line_start + end_pos
                     in_heredoc_body = False
                     if len(pending_heredocs) > 0:
@@ -7556,11 +7570,13 @@ def _skip_heredoc(value: str, start: int) -> int:
         line = _substring(value, line_start, line_end)
         while line_end < len(value):
             trailing_bs = 0
-            for j in range(len(line) - 1, -1, -1):
+            j: int = len(line) - 1
+            while j > -1:
                 if line[j] == "\\":
                     trailing_bs += 1
                 else:
                     break
+                j += -1
             if trailing_bs % 2 == 0:
                 break
             line = line[:-1]
@@ -7609,11 +7625,13 @@ def _find_heredoc_content_end(source: str, start: int, delimiters: list[tuple[st
             line = _substring(source, line_start, line_end)
             while line_end < len(source):
                 trailing_bs = 0
-                for j in range(len(line) - 1, -1, -1):
+                j: int = len(line) - 1
+                while j > -1:
                     if line[j] == "\\":
                         trailing_bs += 1
                     else:
                         break
+                    j += -1
                 if trailing_bs % 2 == 0:
                     break
                 line = line[:-1]
@@ -7671,11 +7689,13 @@ def _collapse_whitespace(s: str) -> str:
 
 def _count_trailing_backslashes(s: str) -> int:
     count = 0
-    for i in range(len(s) - 1, -1, -1):
+    i: int = len(s) - 1
+    while i > -1:
         if s[i] == "\\":
             count += 1
         else:
             break
+        i += -1
     return count
 
 

@@ -1208,7 +1208,7 @@ class JavaBackend:
                 if func == "ord":
                     return f"(int) ({self._expr(args[0])}.charAt(0))"
                 if func == "chr":
-                    return f"String.valueOf((char) ({self._expr(args[0])}))"
+                    return f"new String(Character.toChars({self._expr(args[0])}))"
                 if func == "abs":
                     return f"Math.abs({args_str})"
                 if func == "min":
@@ -1617,6 +1617,13 @@ class JavaBackend:
                 if isinstance(inner_type, Slice):
                     if isinstance(inner_type.element, Primitive) and inner_type.element.kind == "byte":
                         return f"ParableFunctions._bytesToString({inner_str})"
+                # Handle rune -> String (need to support supplementary codepoints)
+                if isinstance(inner_type, Primitive) and inner_type.kind == "rune":
+                    # The inner_str is (char) codepoint but we need to handle codepoints > 0xFFFF
+                    # Extract the original codepoint expression and use Character.toChars
+                    if isinstance(inner, Cast) and isinstance(inner.to_type, Primitive) and inner.to_type.kind == "rune":
+                        codepoint_str = self._expr(inner.expr)
+                        return f"new String(Character.toChars({codepoint_str}))"
                 return f"String.valueOf({inner_str})"
         # Handle String -> List<Byte> (encoding)
         if isinstance(to_type, Slice):

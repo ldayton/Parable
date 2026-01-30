@@ -2178,7 +2178,7 @@ class Word implements Node {
                                     if (codepoint == 0) {
                                         return result;
                                     }
-                                    result.addAll(ParableFunctions._stringToBytes(String.valueOf(((char) codepoint))));
+                                    result.addAll(ParableFunctions._stringToBytes(new String(Character.toChars(codepoint))));
                                     i = j;
                                 } else {
                                     result.add((byte) ((int) (String.valueOf(inner.charAt(i)).charAt(0))));
@@ -2195,7 +2195,7 @@ class Word implements Node {
                                         if (codepoint == 0) {
                                             return result;
                                         }
-                                        result.addAll(ParableFunctions._stringToBytes(String.valueOf(((char) codepoint))));
+                                        result.addAll(ParableFunctions._stringToBytes(new String(Character.toChars(codepoint))));
                                         i = j;
                                     } else {
                                         result.add((byte) ((int) (String.valueOf(inner.charAt(i)).charAt(0))));
@@ -7251,7 +7251,7 @@ class Parser {
                                         String esc = this.peek();
                                         int escVal = ParableFunctions._getAnsiEscape(esc);
                                         if (escVal >= 0) {
-                                            delimiterChars.add(String.valueOf(((char) escVal)));
+                                            delimiterChars.add(new String(Character.toChars(escVal)));
                                             this.advance();
                                         } else {
                                             if (esc.equals("'")) {

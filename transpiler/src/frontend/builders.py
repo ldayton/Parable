@@ -24,6 +24,7 @@ from ..ir import (
     Struct,
     StructRef,
     VOID,
+    loc_unknown,
 )
 from ..type_overrides import MODULE_CONSTANTS, PARAM_TYPE_OVERRIDES
 
@@ -84,7 +85,7 @@ def build_forwarding_constructor(
                 field_info = parent_info.fields.get(param_name)
                 if field_info:
                     typ = field_info.typ
-        params.append(Param(name=param_name, typ=typ, loc=Loc.unknown()))
+        params.append(Param(name=param_name, typ=typ, loc=loc_unknown()))
     # Build body: return &ClassName{ParentClass{...}}
     # Use StructLit with embedded type
     body: list[ir.Stmt] = []
@@ -112,7 +113,7 @@ def build_forwarding_constructor(
         params=params,
         ret=Pointer(StructRef(class_name)),
         body=body,
-        loc=Loc.unknown(),
+        loc=loc_unknown(),
     )
 
 
@@ -147,7 +148,7 @@ def build_constructor(
             override_key = ("__init__", arg_name)
             if override_key in PARAM_TYPE_OVERRIDES:
                 typ = PARAM_TYPE_OVERRIDES[override_key]
-        params.append(Param(name=arg_name, typ=typ, loc=Loc.unknown()))
+        params.append(Param(name=arg_name, typ=typ, loc=loc_unknown()))
         param_types[arg_name] = typ
     # Handle default arguments
     n_params = len(params)
@@ -180,14 +181,14 @@ def build_constructor(
     body: list[ir.Stmt] = []
     # Create self = &ClassName{}
     self_init = ir.Assign(
-        target=ir.VarLV(name="self", loc=Loc.unknown()),
+        target=ir.VarLV(name="self", loc=loc_unknown()),
         value=ir.StructLit(
             struct_name=class_name,
             fields={},
             typ=Pointer(StructRef(class_name)),
-            loc=Loc.unknown(),
+            loc=loc_unknown(),
         ),
-        loc=Loc.unknown(),
+        loc=loc_unknown(),
     )
     self_init.is_declaration = True
     body.append(self_init)
@@ -197,8 +198,8 @@ def build_constructor(
     # Return self
     body.append(
         ir.Return(
-            value=ir.Var(name="self", typ=Pointer(StructRef(class_name)), loc=Loc.unknown()),
-            loc=Loc.unknown(),
+            value=ir.Var(name="self", typ=Pointer(StructRef(class_name)), loc=loc_unknown()),
+            loc=loc_unknown(),
         )
     )
     return Function(
@@ -206,7 +207,7 @@ def build_constructor(
         params=params,
         ret=Pointer(StructRef(class_name)),
         body=body,
-        loc=Loc.unknown(),
+        loc=loc_unknown(),
     )
 
 
@@ -226,7 +227,7 @@ def build_method_shell(
     params = []
     if func_info:
         for p in func_info.params:
-            params.append(Param(name=p.name, typ=p.typ, default=p.default_value, loc=Loc.unknown()))
+            params.append(Param(name=p.name, typ=p.typ, default=p.default_value, loc=loc_unknown()))
     body: list["ir.Stmt"] = []
     if with_body:
         # Set up context first (needed by collect_var_types)
@@ -289,7 +290,7 @@ def build_function_shell(
     params = []
     if func_info:
         for p in func_info.params:
-            params.append(Param(name=p.name, typ=p.typ, default=p.default_value, loc=Loc.unknown()))
+            params.append(Param(name=p.name, typ=p.typ, default=p.default_value, loc=loc_unknown()))
     body: list["ir.Stmt"] = []
     if with_body:
         # Set up context first (needed by collect_var_types) - empty class name for functions
@@ -352,7 +353,7 @@ def build_struct(
             Field(
                 name=name,
                 typ=field_info.typ,
-                loc=Loc.unknown(),
+                loc=loc_unknown(),
             )
         )
     # Build methods
@@ -408,9 +409,9 @@ def build_module(
     for const_name, (const_type, go_value) in MODULE_CONSTANTS.items():
         # Strip quotes from go_value to get the actual string content
         str_value = go_value.strip('"')
-        value = ir.StringLit(value=str_value, typ=STRING, loc=Loc.unknown())
+        value = ir.StringLit(value=str_value, typ=STRING, loc=loc_unknown())
         module.constants.append(
-            Constant(name=const_name, typ=const_type, value=value, loc=Loc.unknown())
+            Constant(name=const_name, typ=const_type, value=value, loc=loc_unknown())
         )
     # Build constants (module-level and class-level)
     for node in tree.get("body", []):

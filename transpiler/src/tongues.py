@@ -32,9 +32,22 @@ Options:
 """
 
 
+def should_skip_file(source: str) -> bool:
+    """Check if file has a tongues: skip directive in first 5 lines."""
+    lines = source.split("\n", 5)
+    i = 0
+    while i < len(lines) and i < 5:
+        if "tongues: skip" in lines[i]:
+            return True
+        i += 1
+    return False
+
+
 def run_verify_stdin() -> int:
     """Verify source from stdin. Returns exit code."""
     source = sys.stdin.read()
+    if should_skip_file(source):
+        return 0
     ast_dict = parse(source)
     result = verify_subset(ast_dict)
     errors = result.errors()

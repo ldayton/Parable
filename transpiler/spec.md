@@ -242,12 +242,19 @@ Unpacking from a variable is allowed only when the variable is the condition of 
 
 **Dataclasses:**
 
-The `@dataclass` decorator is allowed with no arguments. Dataclass arguments (`frozen`, `order`, etc.) and `field()` options are not supported.
+The `@dataclass` decorator is allowed with limited arguments:
+- `@dataclass` - no arguments (default eq=True)
+- `@dataclass(eq=True)` - explicit equality generation
+- `@dataclass(unsafe_hash=True)` - hash generation for use as dict keys
+- `@dataclass(kw_only=True)` - keyword-only fields
 
-| Allowed      | Not allowed                             |
-| ------------ | --------------------------------------- |
-| `@dataclass` | `@dataclass(frozen=True)`               |
-| `x: int = 0` | `x: list = field(default_factory=list)` |
+Not allowed: `frozen=True` (immutability cannot be guaranteed in target languages), `order=True`, `field()` options.
+
+| Allowed                         | Not allowed                             |
+| ------------------------------- | --------------------------------------- |
+| `@dataclass`                    | `@dataclass(frozen=True)`               |
+| `@dataclass(unsafe_hash=True)`  | `@dataclass(order=True)`                |
+| `x: int = 0`                    | `x: list = field(default_factory=list)` |
 
 **Postconditions:** AST conforms to Tongues subset; all invariants above hold; rejected programs produce clear error messages with source locations.
 

@@ -302,6 +302,20 @@ class NameResolver:
                         kind = "constant" if is_all_caps(name) else "variable"
                         info = NameInfo(name, kind, "module", lineno, col, "", "")
                         self.result.table.add_module(info)
+            elif node_type == "Import":
+                # Register imported module names (e.g., import sys)
+                names_list = stmt.get("names", [])
+                j = 0
+                while j < len(names_list):
+                    alias = names_list[j]
+                    if isinstance(alias, dict):
+                        asname = alias.get("asname")
+                        import_name = alias.get("name", "")
+                        bound_name = asname if asname is not None else import_name
+                        if bound_name != "":
+                            info = NameInfo(bound_name, "import", "module", lineno, col, "", "")
+                            self.result.table.add_module(info)
+                    j += 1
             elif node_type == "ImportFrom":
                 # Register imported names in module scope
                 names_list = stmt.get("names", [])

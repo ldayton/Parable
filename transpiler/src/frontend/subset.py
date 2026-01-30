@@ -217,6 +217,24 @@ def get_attr_name(node: ASTNode) -> str | None:
     return None
 
 
+def is_allowed_dataclass_args(keywords: list[ASTNode]) -> bool:
+    """Check if dataclass args are only eq=True, unsafe_hash=True, or kw_only=True."""
+    allowed: set[str] = {"eq", "unsafe_hash", "kw_only"}
+    i = 0
+    while i < len(keywords):
+        kw = keywords[i]
+        if not isinstance(kw, dict):
+            return False
+        arg = kw.get("arg")
+        if arg not in allowed:
+            return False
+        value = kw.get("value", {})
+        if value.get("_type") != "Constant" or value.get("value") != True:
+            return False
+        i += 1
+    return True
+
+
 def collect_annotated_fields(class_node: ASTNode) -> set[str]:
     """Collect all field names with type annotations in a class (including in methods)."""
     fields: set[str] = set()
@@ -524,7 +542,9 @@ class Verifier:
                     elif dec_type == "Call":
                         func = dec.get("func")
                         if isinstance(func, dict) and func.get("id") == "dataclass":
-                            self.error(node, "class", "@dataclass arguments not allowed")
+                            keywords = dec.get("keywords", [])
+                            if not is_allowed_dataclass_args(keywords):
+                                self.error(node, "class", "@dataclass: only eq=True and unsafe_hash=True allowed")
                         else:
                             self.error(node, "class", "class decorator not allowed")
                     else:

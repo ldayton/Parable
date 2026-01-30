@@ -24,6 +24,7 @@ from ..ir import (
     StringFormat,
     StructRef,
     Tuple,
+    loc_unknown,
 )
 from ..type_overrides import NODE_METHOD_TYPES, SENTINEL_INT_FIELDS, VAR_TYPE_OVERRIDES
 from . import type_inference
@@ -42,7 +43,7 @@ def loc_from_node(node: ASTNode) -> Loc:
         end_lineno = node.get("end_lineno", lineno) or lineno
         end_col = node.get("end_col_offset", col) or col
         return Loc(line=lineno, col=col, end_line=end_lineno, end_col=end_col)
-    return Loc.unknown()
+    return loc_unknown()
 
 
 def make_default_value(typ: "Type", loc: Loc) -> "ir.Expr":

@@ -45,7 +45,7 @@ Default ownership:
 # ============================================================
 
 
-@dataclass(frozen=True)
+@dataclass(unsafe_hash=True)
 class Loc:
     """Source location for error messages and source maps.
 
@@ -61,9 +61,10 @@ class Loc:
     end_line: int
     end_col: int
 
-    @classmethod
-    def unknown(cls) -> Loc:
-        return cls(0, 0, 0, 0)
+
+def loc_unknown() -> Loc:
+    """Factory for unknown source location."""
+    return Loc(0, 0, 0, 0)
 
 
 # ============================================================
@@ -74,12 +75,12 @@ class Loc:
 # ============================================================
 
 
-@dataclass(frozen=True)
+@dataclass(unsafe_hash=True)
 class Type:
     """Base for all types. Abstract."""
 
 
-@dataclass(frozen=True)
+@dataclass(unsafe_hash=True)
 class Primitive(Type):
     """Primitive types with direct target-language equivalents.
 
@@ -97,7 +98,7 @@ class Primitive(Type):
     kind: Literal["string", "int", "bool", "float", "byte", "rune", "void"]
 
 
-@dataclass(frozen=True)
+@dataclass(unsafe_hash=True)
 class Char(Type):
     """Single character type, distinct from string.
 
@@ -110,7 +111,7 @@ class Char(Type):
     """
 
 
-@dataclass(frozen=True)
+@dataclass(unsafe_hash=True)
 class CharSequence(Type):
     """String converted for character-based indexing.
 
@@ -132,7 +133,7 @@ class CharSequence(Type):
     """
 
 
-@dataclass(frozen=True)
+@dataclass(unsafe_hash=True)
 class Bytes(Type):
     """Byte sequence type for binary I/O.
 
@@ -149,7 +150,7 @@ class Bytes(Type):
     """
 
 
-@dataclass(frozen=True)
+@dataclass(unsafe_hash=True)
 class Slice(Type):
     """Growable sequence with homogeneous elements.
 
@@ -169,7 +170,7 @@ class Slice(Type):
     element: Type
 
 
-@dataclass(frozen=True)
+@dataclass(unsafe_hash=True)
 class Array(Type):
     """Fixed-size array with compile-time known length.
 
@@ -191,7 +192,7 @@ class Array(Type):
     size: int
 
 
-@dataclass(frozen=True)
+@dataclass(unsafe_hash=True)
 class Map(Type):
     """Key-value mapping with homogeneous keys and values.
 
@@ -213,7 +214,7 @@ class Map(Type):
     value: Type
 
 
-@dataclass(frozen=True)
+@dataclass(unsafe_hash=True)
 class Set(Type):
     """Unordered collection of unique elements.
 
@@ -233,7 +234,7 @@ class Set(Type):
     element: Type
 
 
-@dataclass(frozen=True)
+@dataclass(unsafe_hash=True)
 class Tuple(Type):
     """Fixed-size heterogeneous sequence.
 
@@ -253,7 +254,7 @@ class Tuple(Type):
     elements: tuple[Type, ...]
 
 
-@dataclass(frozen=True)
+@dataclass(unsafe_hash=True)
 class Pointer(Type):
     """Pointer with optional ownership tracking.
 
@@ -274,7 +275,7 @@ class Pointer(Type):
     owned: bool = True
 
 
-@dataclass(frozen=True)
+@dataclass(unsafe_hash=True)
 class Optional(Type):
     """Nullable value (sum of T and nil).
 
@@ -295,7 +296,7 @@ class Optional(Type):
     inner: Type
 
 
-@dataclass(frozen=True)
+@dataclass(unsafe_hash=True)
 class StructRef(Type):
     """Reference to a struct by name.
 
@@ -305,7 +306,7 @@ class StructRef(Type):
     name: str
 
 
-@dataclass(frozen=True)
+@dataclass(unsafe_hash=True)
 class InterfaceRef(Type):
     """Reference to an interface by name.
 
@@ -325,7 +326,7 @@ class InterfaceRef(Type):
     name: str
 
 
-@dataclass(frozen=True)
+@dataclass(unsafe_hash=True)
 class Union(Type):
     """Closed discriminated union (sum type).
 
@@ -349,7 +350,7 @@ class Union(Type):
     variants: tuple[StructRef, ...]
 
 
-@dataclass(frozen=True)
+@dataclass(unsafe_hash=True)
 class FuncType(Type):
     """Function type (for function pointers, callbacks, closures).
 
@@ -426,7 +427,7 @@ class Struct:
     fields: list[Field] = field(default_factory=list)
     methods: list[Function] = field(default_factory=list)
     implements: list[str] = field(default_factory=list)
-    loc: Loc = field(default_factory=Loc.unknown)
+    loc: Loc = field(default_factory=loc_unknown)
     is_exception: bool = False
     embedded_type: str | None = None  # Exception inheritance
 
@@ -447,7 +448,7 @@ class Field:
     name: str
     typ: Type
     default: Expr | None = None
-    loc: Loc = field(default_factory=Loc.unknown)
+    loc: Loc = field(default_factory=loc_unknown)
     # Ownership annotations (phase 14)
     ownership: Ownership = "owned"
 
@@ -466,7 +467,7 @@ class InterfaceDef:
     name: str
     methods: list[MethodSig] = field(default_factory=list)
     fields: list[Field] = field(default_factory=list)  # Discriminant fields
-    loc: Loc = field(default_factory=Loc.unknown)
+    loc: Loc = field(default_factory=loc_unknown)
 
 
 @dataclass
@@ -476,7 +477,7 @@ class MethodSig:
     name: str
     params: list[Param]
     ret: Type
-    loc: Loc = field(default_factory=Loc.unknown)
+    loc: Loc = field(default_factory=loc_unknown)
 
 
 @dataclass
@@ -499,7 +500,7 @@ class Enum:
 
     name: str
     variants: list[EnumVariant]
-    loc: Loc = field(default_factory=Loc.unknown)
+    loc: Loc = field(default_factory=loc_unknown)
 
 
 @dataclass
@@ -508,7 +509,7 @@ class EnumVariant:
 
     name: str
     value: int | str | None = None  # None = auto-assign
-    loc: Loc = field(default_factory=Loc.unknown)
+    loc: Loc = field(default_factory=loc_unknown)
 
 
 @dataclass
@@ -520,7 +521,7 @@ class Export:
 
     name: str
     kind: Literal["function", "struct", "constant", "interface", "enum"]
-    loc: Loc = field(default_factory=Loc.unknown)
+    loc: Loc = field(default_factory=loc_unknown)
 
 
 @dataclass
@@ -544,7 +545,7 @@ class Function:
     doc: str | None = None
     receiver: Receiver | None = None
     fallible: bool = False  # Can raise/panic
-    loc: Loc = field(default_factory=Loc.unknown)
+    loc: Loc = field(default_factory=loc_unknown)
     # Middleend annotations
     needs_named_returns: bool = False
     rune_vars: list[str] = field(default_factory=list)
@@ -582,7 +583,7 @@ class Param:
     typ: Type
     default: Expr | None = None
     mutable: bool = False  # Rust: mut
-    loc: Loc = field(default_factory=Loc.unknown)
+    loc: Loc = field(default_factory=loc_unknown)
     # Middleend annotations
     is_modified: bool = False
     is_unused: bool = False
@@ -602,7 +603,7 @@ class Constant:
     name: str
     typ: Type
     value: Expr
-    loc: Loc = field(default_factory=Loc.unknown)
+    loc: Loc = field(default_factory=loc_unknown)
 
 
 # ============================================================
@@ -614,7 +615,7 @@ class Constant:
 class Stmt:
     """Base for all statements. Abstract."""
 
-    loc: Loc = field(default_factory=Loc.unknown)
+    loc: Loc = field(default_factory=loc_unknown)
 
 
 @dataclass
@@ -808,7 +809,7 @@ class TypeCase:
 
     typ: Type
     body: list[Stmt]
-    loc: Loc = field(default_factory=Loc.unknown)
+    loc: Loc = field(default_factory=loc_unknown)
 
 
 @dataclass
@@ -846,7 +847,7 @@ class MatchCase:
 
     patterns: list[Expr]
     body: list[Stmt]
-    loc: Loc = field(default_factory=Loc.unknown)
+    loc: Loc = field(default_factory=loc_unknown)
 
 
 @dataclass
@@ -1100,7 +1101,7 @@ class Expr:
     """
 
     typ: Type
-    loc: Loc = field(default_factory=Loc.unknown)
+    loc: Loc = field(default_factory=loc_unknown)
     # Middleend annotations
     is_interface: bool = False
     narrowed_type: Type | None = None
@@ -2261,7 +2262,7 @@ class DictComp(Expr):
 class LValue:
     """Base for assignment targets. Abstract."""
 
-    loc: Loc = field(default_factory=Loc.unknown)
+    loc: Loc = field(default_factory=loc_unknown)
 
 
 @dataclass

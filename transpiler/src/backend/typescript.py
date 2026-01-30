@@ -139,6 +139,7 @@ from src.ir import (
     TupleLit,
     Ternary,
     TryCatch,
+    Truthy,
     Tuple,
     Type,
     TypeAssert,
@@ -876,6 +877,19 @@ class TsBackend:
                 args_str = ", ".join(self._expr(a) for a in args)
                 type_name = self._type_name_for_check(on_type)
                 return f"{type_name}.{_camel(method)}({args_str})"
+            case Truthy(expr=e):
+                inner_str = self._expr(e)
+                inner_type = e.typ
+                if isinstance(inner_type, (Slice, Map, Set)) or inner_type == STRING:
+                    return f"({inner_str}.length > 0)"
+                if isinstance(inner_type, Optional) and isinstance(inner_type.inner, (Slice, Map, Set)):
+                    return f"({inner_str}.length > 0)"
+                if inner_type == INT:
+                    # Wrap binary ops in parens for correct precedence with !==
+                    if isinstance(e, BinaryOp):
+                        return f"(({inner_str}) !== 0)"
+                    return f"({inner_str} !== 0)"
+                return f"({inner_str} != null)"
             case BinaryOp(op="in", left=left, right=right):
                 return self._containment_check(left, right, negated=False)
             case BinaryOp(op="not in", left=left, right=right):

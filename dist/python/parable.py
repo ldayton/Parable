@@ -188,7 +188,7 @@ class QuoteState:
         return qs
 
     def outer_double(self) -> bool:
-        if not self._stack:
+        if len(self._stack) == 0:
             return False
         return self._stack[-1][1]
 
@@ -293,7 +293,7 @@ class Lexer:
     def _read_operator(self) -> Token:
         start = self.pos
         c = self.peek()
-        if not c:
+        if c == "":
             return None
         two = self.lookahead(2)
         three = self.lookahead(3)
@@ -437,7 +437,7 @@ class Lexer:
             if _is_redirect_char(ch) and not (self.pos + 1 < self.length and self.source[self.pos + 1] == "("):
                 return True
             return _is_whitespace(ch)
-        if (self._parser_state & ParserStateFlags_PST_EOFTOKEN) and self._eof_token and ch == self._eof_token and bracket_depth == 0:
+        if self._parser_state & ParserStateFlags_PST_EOFTOKEN and self._eof_token != "" and ch == self._eof_token and bracket_depth == 0:
             return True
         if _is_redirect_char(ch) and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
             return False
@@ -534,7 +534,7 @@ class Lexer:
             if self.at_end():
                 raise MatchedPairError(f"unexpected EOF while looking for matching `{close_char}'", start)
             ch = self.advance()
-            if (flags & MatchedPairFlags_DOLBRACE) and self._dolbrace_state == DolbraceState_OP:
+            if flags & MatchedPairFlags_DOLBRACE and self._dolbrace_state == DolbraceState_OP:
                 if ch not in "#%^,~:-=?+/":
                     self._dolbrace_state = DolbraceState_WORD
             if pass_next:
@@ -548,7 +548,7 @@ class Lexer:
                     count -= 1
                     if count == 0:
                         break
-                if ch == "\\" and (flags & MatchedPairFlags_ALLOWESC):
+                if ch == "\\" and flags & MatchedPairFlags_ALLOWESC:
                     pass_next = True
                 chars.append(ch)
                 was_dollar = False
@@ -574,7 +574,7 @@ class Lexer:
                 was_gtlt = ch in "<>"
                 continue
             if ch == open_char and open_char != close_char:
-                if not ((flags & MatchedPairFlags_DOLBRACE) and open_char == "{"):
+                if not (flags & MatchedPairFlags_DOLBRACE and open_char == "{"):
                     count += 1
                 chars.append(ch)
                 was_dollar = False
@@ -606,7 +606,7 @@ class Lexer:
                     was_dollar = False
                     was_gtlt = False
                     continue
-            if ch == "$" and not self.at_end() and not ((flags & MatchedPairFlags_EXTGLOB)):
+            if ch == "$" and not self.at_end() and not flags & MatchedPairFlags_EXTGLOB:
                 next_ch = self.peek()
                 if was_dollar:
                     chars.append(ch)
@@ -614,7 +614,7 @@ class Lexer:
                     was_gtlt = False
                     continue
                 if next_ch == "{":
-                    if (flags & MatchedPairFlags_ARITH):
+                    if flags & MatchedPairFlags_ARITH:
                         after_brace_pos = self.pos + 1
                         if after_brace_pos >= self.length or not _is_funsub_char(self.source[after_brace_pos]):
                             chars.append(ch)
@@ -623,7 +623,7 @@ class Lexer:
                             continue
                     self.pos -= 1
                     self._sync_to_parser()
-                    in_dquote = (flags & MatchedPairFlags_DQUOTE)
+                    in_dquote = (flags & MatchedPairFlags_DQUOTE) != 0
                     param_node, param_text = self._parser._parse_param_expansion(in_dquote)
                     self._sync_from_parser()
                     if param_node is not None:
@@ -685,7 +685,7 @@ class Lexer:
                         was_dollar = True
                         was_gtlt = False
                     continue
-            if ch == "(" and was_gtlt and (flags & MatchedPairFlags_DOLBRACE | MatchedPairFlags_ARRAYSUB):
+            if ch == "(" and was_gtlt and flags & MatchedPairFlags_DOLBRACE | MatchedPairFlags_ARRAYSUB:
                 direction = chars[-1]
                 chars = chars[:-1]
                 self.pos -= 1
@@ -919,7 +919,7 @@ class Lexer:
                 chars.append(content)
                 chars.append(")")
                 continue
-            if ctx == WORD_CTX_NORMAL and (self._parser_state & ParserStateFlags_PST_EOFTOKEN) and self._eof_token and ch == self._eof_token and bracket_depth == 0:
+            if ctx == WORD_CTX_NORMAL and self._parser_state & ParserStateFlags_PST_EOFTOKEN and self._eof_token != "" and ch == self._eof_token and bracket_depth == 0:
                 if not chars:
                     chars.append(self.advance())
                 break
@@ -939,7 +939,7 @@ class Lexer:
         if self.pos >= self.length:
             return None
         c = self.peek()
-        if not c:
+        if c == "":
             return None
         is_procsub = (c == "<" or c == ">") and self.pos + 1 < self.length and self.source[self.pos + 1] == "("
         is_regex_paren = self._word_context == WORD_CTX_REGEX and (c == "(" or c == ")")
@@ -961,7 +961,7 @@ class Lexer:
             tok = Token(type=TokenType_EOF, value="", pos=self.pos)
             self._last_read_token = tok
             return tok
-        if self._eof_token and self.peek() == self._eof_token and not ((self._parser_state & ParserStateFlags_PST_CASEPAT)) and not ((self._parser_state & ParserStateFlags_PST_EOFTOKEN)):
+        if self._eof_token != "" and self.peek() == self._eof_token and not self._parser_state & ParserStateFlags_PST_CASEPAT and not self._parser_state & ParserStateFlags_PST_EOFTOKEN:
             tok = Token(type=TokenType_EOF, value="", pos=self.pos)
             self._last_read_token = tok
             return tok
@@ -971,7 +971,7 @@ class Lexer:
                 tok = Token(type=TokenType_EOF, value="", pos=self.pos)
                 self._last_read_token = tok
                 return tok
-            if self._eof_token and self.peek() == self._eof_token and not ((self._parser_state & ParserStateFlags_PST_CASEPAT)) and not ((self._parser_state & ParserStateFlags_PST_EOFTOKEN)):
+            if self._eof_token != "" and self.peek() == self._eof_token and not self._parser_state & ParserStateFlags_PST_CASEPAT and not self._parser_state & ParserStateFlags_PST_EOFTOKEN:
                 tok = Token(type=TokenType_EOF, value="", pos=self.pos)
                 self._last_read_token = tok
                 return tok
@@ -1111,7 +1111,7 @@ class Lexer:
     def _update_dolbrace_for_op(self, op: str, has_param: bool) -> None:
         if self._dolbrace_state == DolbraceState_NONE:
             return
-        if not op or not op:
+        if op == "" or len(op) == 0:
             return
         first_char = op[0]
         if self._dolbrace_state == DolbraceState_PARAM and has_param:
@@ -1329,9 +1329,9 @@ class Lexer:
                     self._dolbrace_state = saved_dolbrace
                     return (ParamIndirect(param=param + suffix + trailing, kind="param-indirect"), text)
                 op = self._consume_param_operator()
-                if not op and not self.at_end() and (self.peek() not in "}\"'`"):
+                if op == "" and not self.at_end() and (self.peek() not in "}\"'`"):
                     op = self.advance()
-                if op and (op not in "\"'`"):
+                if op != "" and (op not in "\"'`"):
                     arg = self._parse_matched_pair("{", "}", MatchedPairFlags_DOLBRACE, False)
                     text = _substring(self.source, start, self.pos)
                     self._dolbrace_state = saved_dolbrace
@@ -1360,7 +1360,7 @@ class Lexer:
             self._dolbrace_state = saved_dolbrace
             return (ParamExpansion(param=param, kind="param"), text)
         op = self._consume_param_operator()
-        if not op:
+        if op == "":
             if not self.at_end() and self.peek() == "$" and self.pos + 1 < self.length and (self.source[self.pos + 1] == "\"" or self.source[self.pos + 1] == "'"):
                 dollar_count = 1 + _count_consecutive_dollars_before(self.source, self.pos)
                 if dollar_count % 2 == 1:
@@ -1392,10 +1392,10 @@ class Lexer:
                     op += self.advance()
             else:
                 op = self.advance()
-        self._update_dolbrace_for_op(op, param)
+        self._update_dolbrace_for_op(op, len(param) > 0)
         try:
             flags = MatchedPairFlags_DQUOTE if in_dquote else MatchedPairFlags_NONE
-            param_ends_with_dollar = param and param.endswith("$")
+            param_ends_with_dollar = param != "" and param.endswith("$")
             arg = self._collect_param_argument(flags, param_ends_with_dollar)
         except Exception as e:
             self._dolbrace_state = saved_dolbrace
@@ -2400,7 +2400,7 @@ class Word(Node):
                         result.append(final_output)
                     procsub_idx += 1
                     i = j
-                elif is_procsub and len(self.parts) != 0:
+                elif is_procsub and len(self.parts):
                     direction = value[i]
                     j = _find_cmdsub_end(value, i + 2)
                     if j > len(value) or j > 0 and j <= len(value) and value[j - 1] != ")":
@@ -2450,7 +2450,7 @@ class Word(Node):
                         depth -= 1
                     j += 1
                 inner = _substring(value, i + 2, j - 1)
-                if not inner.strip():
+                if inner.strip() == "":
                     result.append("${ }")
                 else:
                     try:
@@ -2964,7 +2964,7 @@ class For(Node):
         var_escaped = var_formatted.replace("\\", "\\\\").replace("\"", "\\\"")
         if self.words is None:
             return "(for (word \"" + var_escaped + "\") (in (word \"\\\"$@\\\"\")) " + self.body.to_sexp() + ")" + suffix
-        elif not self.words:
+        elif len(self.words) == 0:
             return "(for (word \"" + var_escaped + "\") (in) " + self.body.to_sexp() + ")" + suffix
         else:
             word_parts = []
@@ -3133,9 +3133,9 @@ class ParamExpansion(Node):
 
     def to_sexp(self) -> str:
         escaped_param = self.param.replace("\\", "\\\\").replace("\"", "\\\"")
-        if self.op:
+        if self.op != "":
             escaped_op = self.op.replace("\\", "\\\\").replace("\"", "\\\"")
-            if self.arg:
+            if self.arg != "":
                 arg_val = self.arg
             else:
                 arg_val = ""
@@ -3163,9 +3163,9 @@ class ParamIndirect(Node):
 
     def to_sexp(self) -> str:
         escaped = self.param.replace("\\", "\\\\").replace("\"", "\\\"")
-        if self.op:
+        if self.op != "":
             escaped_op = self.op.replace("\\", "\\\\").replace("\"", "\\\"")
-            if self.arg:
+            if self.arg != "":
                 arg_val = self.arg
             else:
                 arg_val = ""
@@ -3576,7 +3576,7 @@ class Parser:
         self._parser_state = self._parser_state & ~flag
 
     def _in_state(self, flag: int) -> bool:
-        return (self._parser_state & flag)
+        return (self._parser_state & flag) != 0
 
     def _save_parser_state(self) -> SavedParserState:
         return SavedParserState(parser_state=self._parser_state, dolbrace_state=self._dolbrace_state, pending_heredocs=self._pending_heredocs, ctx_stack=self._ctx.copy_stack(), eof_token=self._eof_token)
@@ -3593,7 +3593,7 @@ class Parser:
     def _update_dolbrace_for_op(self, op: str, has_param: bool) -> None:
         if self._dolbrace_state == DolbraceState_NONE:
             return
-        if not op or not op:
+        if op == "" or len(op) == 0:
             return
         first_char = op[0]
         if self._dolbrace_state == DolbraceState_PARAM and has_param:
@@ -3784,7 +3784,7 @@ class Parser:
         if self.at_end():
             return False
         ch = self.peek()
-        if self._eof_token and ch == self._eof_token:
+        if self._eof_token != "" and ch == self._eof_token:
             return True
         if ch == ")":
             return True
@@ -3796,7 +3796,7 @@ class Parser:
         return False
 
     def _at_eof_token(self) -> bool:
-        if not self._eof_token:
+        if self._eof_token == "":
             return False
         tok = self._lex_peek_token()
         if self._eof_token == ")":
@@ -3862,7 +3862,7 @@ class Parser:
         word = self.peek_word()
         keyword_word = word
         has_leading_brace = False
-        if word and self._in_process_sub and len(word) > 1 and word[0] == "}":
+        if word != "" and self._in_process_sub and len(word) > 1 and word[0] == "}":
             keyword_word = word[1:]
             has_leading_brace = True
         if keyword_word != expected:
@@ -4038,7 +4038,7 @@ class Parser:
                         text_chars.append("\n")
                         self.advance()
                     in_heredoc_body = False
-                    if pending_heredocs:
+                    if len(pending_heredocs) > 0:
                         current_heredoc_delim, current_heredoc_strip = pending_heredocs.pop(0)
                         in_heredoc_body = True
                 elif check_line.startswith(current_heredoc_delim) and len(check_line) > len(current_heredoc_delim):
@@ -4049,7 +4049,7 @@ class Parser:
                         text_chars.append(line[i])
                     self.pos = line_start + end_pos
                     in_heredoc_body = False
-                    if pending_heredocs:
+                    if len(pending_heredocs) > 0:
                         current_heredoc_delim, current_heredoc_strip = pending_heredocs.pop(0)
                         in_heredoc_body = True
                 else:
@@ -4202,7 +4202,7 @@ class Parser:
                 ch = self.advance()
                 content_chars.append(ch)
                 text_chars.append(ch)
-                if pending_heredocs:
+                if len(pending_heredocs) > 0:
                     current_heredoc_delim, current_heredoc_strip = pending_heredocs.pop(0)
                     in_heredoc_body = True
                 continue
@@ -4215,7 +4215,7 @@ class Parser:
         text_chars.append("`")
         text = "".join(text_chars)
         content = "".join(content_chars)
-        if pending_heredocs:
+        if len(pending_heredocs) > 0:
             heredoc_start, heredoc_end = _find_heredoc_content_end(self.source, self.pos, pending_heredocs)
             if heredoc_end > heredoc_start:
                 content = content + _substring(self.source, heredoc_start, heredoc_end)
@@ -4381,7 +4381,7 @@ class Parser:
         else:
             result = self._arith_parse_comma()
         self._parser_state = saved_parser_state
-        if saved_arith_src:
+        if saved_arith_src != "":
             self._arith_src = saved_arith_src
             self._arith_pos = saved_arith_pos
             self._arith_len = saved_arith_len
@@ -5004,14 +5004,14 @@ class Parser:
                 varfd = varname
             else:
                 self.pos = saved
-        if not varfd and self.peek() and self.peek().isdigit():
+        if varfd == "" and self.peek() and self.peek().isdigit():
             fd_chars = []
             while not self.at_end() and self.peek().isdigit():
                 fd_chars.append(self.advance())
             fd = int("".join(fd_chars), 10)
         ch = self.peek()
         if ch == "&" and self.pos + 1 < self.length and self.source[self.pos + 1] == ">":
-            if fd != -1 or varfd:
+            if fd != -1 or varfd != "":
                 self.pos = start
                 return None
             self.advance()
@@ -5026,7 +5026,7 @@ class Parser:
             if target is None:
                 raise ParseError("Expected target for redirect " + op, self.pos)
             return Redirect(op=op, target=target, kind="redirect")
-        if not ch or not _is_redirect_char(ch):
+        if ch == "" or not _is_redirect_char(ch):
             self.pos = start
             return None
         if fd == -1 and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
@@ -5056,17 +5056,17 @@ class Parser:
             elif op == ">" and next_ch == "|":
                 self.advance()
                 op = ">|"
-            elif fd == -1 and not varfd and op == ">" and next_ch == "&":
+            elif fd == -1 and varfd == "" and op == ">" and next_ch == "&":
                 if self.pos + 1 >= self.length or not _is_digit_or_dash(self.source[self.pos + 1]):
                     self.advance()
                     op = ">&"
-            elif fd == -1 and not varfd and op == "<" and next_ch == "&":
+            elif fd == -1 and varfd == "" and op == "<" and next_ch == "&":
                 if self.pos + 1 >= self.length or not _is_digit_or_dash(self.source[self.pos + 1]):
                     self.advance()
                     op = "<&"
         if op == "<<":
             return self._parse_heredoc(_intPtr(fd), strip_tabs)
-        if varfd:
+        if varfd != "":
             op = "{" + varfd + "}" + op
         elif fd != -1:
             op = str(fd) + op
@@ -5360,7 +5360,7 @@ class Parser:
             self.skip_whitespace()
             if self._lex_is_command_terminator():
                 break
-            if not words:
+            if len(words) == 0:
                 reserved = self._lex_peek_reserved_word()
                 if reserved == "}" or reserved == "]]":
                     break
@@ -5373,8 +5373,8 @@ class Parser:
                 if not self._is_assignment_word(w):
                     all_assignments = False
                     break
-            in_assign_builtin = words and (words[0].value in ASSIGNMENT_BUILTINS)
-            word = self.parse_word(not words or all_assignments and not redirects, False, in_assign_builtin)
+            in_assign_builtin = len(words) > 0 and (words[0].value in ASSIGNMENT_BUILTINS)
+            word = self.parse_word(not words or all_assignments and len(redirects) == 0, False, in_assign_builtin)
             if word is None:
                 break
             words.append(word)
@@ -5722,7 +5722,7 @@ class Parser:
             var_name = var_word.value
         else:
             var_name = self.peek_word()
-            if not var_name:
+            if var_name == "":
                 raise ParseError("Expected variable name after 'for'", self._lex_peek_token().pos)
             self.consume_word(var_name)
         self.skip_whitespace()
@@ -5817,7 +5817,7 @@ class Parser:
             return None
         self.skip_whitespace()
         var_name = self.peek_word()
-        if not var_name:
+        if var_name == "":
             raise ParseError("Expected variable name after 'select'", self._lex_peek_token().pos)
         self.consume_word(var_name)
         self.skip_whitespace()
@@ -5849,7 +5849,7 @@ class Parser:
 
     def _consume_case_terminator(self) -> str:
         term = self._lex_peek_case_terminator()
-        if term:
+        if term != "":
             self._lex_next_token()
             return term
         return ";;"
@@ -5998,11 +5998,11 @@ class Parser:
                 raise ParseError("Expected pattern in case statement", self._lex_peek_token().pos)
             self.skip_whitespace()
             body = None
-            is_empty_body = self._lex_peek_case_terminator()
+            is_empty_body = self._lex_peek_case_terminator() != ""
             if not is_empty_body:
                 self.skip_whitespace_and_newlines()
                 if not self.at_end() and not self._lex_is_at_reserved_word("esac"):
-                    is_at_terminator = self._lex_peek_case_terminator()
+                    is_at_terminator = self._lex_peek_case_terminator() != ""
                     if not is_at_terminator:
                         body = self.parse_list_until({"esac"})
                         self.skip_whitespace()
@@ -6039,7 +6039,7 @@ class Parser:
             if body is not None:
                 return Coproc(command=body, name=name, kind="coproc")
         next_word = self._lex_peek_reserved_word()
-        if next_word and (next_word in COMPOUND_KEYWORDS):
+        if next_word != "" and (next_word in COMPOUND_KEYWORDS):
             body = self.parse_compound_command()
             if body is not None:
                 return Coproc(command=body, name=name, kind="coproc")
@@ -6067,7 +6067,7 @@ class Parser:
                         body = self.parse_subshell()
                     if body is not None:
                         return Coproc(command=body, name=name, kind="coproc")
-                elif next_word and (next_word in COMPOUND_KEYWORDS):
+                elif next_word != "" and (next_word in COMPOUND_KEYWORDS):
                     name = potential_name
                     body = self.parse_compound_command()
                     if body is not None:
@@ -6087,7 +6087,7 @@ class Parser:
             self._lex_consume_word("function")
             self.skip_whitespace()
             name = self.peek_word()
-            if not name:
+            if name == "":
                 self.pos = saved_pos
                 return None
             self.consume_word(name)
@@ -6102,7 +6102,7 @@ class Parser:
                 raise ParseError("Expected function body", self.pos)
             return Function(name=name, body=body, kind="function")
         name = self.peek_word()
-        if not name or (name in RESERVED_WORDS):
+        if name == "" or (name in RESERVED_WORDS):
             return None
         if _looks_like_assignment(name):
             return None
@@ -6192,16 +6192,16 @@ class Parser:
             if next_pos >= self.length or _is_word_end_context(self.source[next_pos]):
                 return True
         reserved = self._lex_peek_reserved_word()
-        if reserved and (reserved in stop_words):
+        if reserved != "" and (reserved in stop_words):
             return True
-        if self._lex_peek_case_terminator():
+        if self._lex_peek_case_terminator() != "":
             return True
         return False
 
     def parse_list_until(self, stop_words: set[str]) -> Node:
         self.skip_whitespace_and_newlines()
         reserved = self._lex_peek_reserved_word()
-        if reserved and (reserved in stop_words):
+        if reserved != "" and (reserved in stop_words):
             return None
         pipeline = self.parse_pipeline()
         if pipeline is None:
@@ -6210,7 +6210,7 @@ class Parser:
         while True:
             self.skip_whitespace()
             op = self.parse_list_operator()
-            if not op:
+            if op == "":
                 if not self.at_end() and self.peek() == "\n":
                     self.advance()
                     self._gather_heredoc_bodies()
@@ -6226,7 +6226,7 @@ class Parser:
                     op = "\n"
                 else:
                     break
-            if not op:
+            if op == "":
                 break
             if op == ";":
                 self.skip_whitespace_and_newlines()
@@ -6273,9 +6273,9 @@ class Parser:
             if result is not None:
                 return result
         reserved = self._lex_peek_reserved_word()
-        if not reserved and self._in_process_sub:
+        if reserved == "" and self._in_process_sub:
             word = self.peek_word()
-            if word and len(word) > 1 and word[0] == "}":
+            if word != "" and len(word) > 1 and word[0] == "}":
                 keyword_word = word[1:]
                 if (keyword_word in RESERVED_WORDS) or keyword_word == "{" or keyword_word == "}" or keyword_word == "[[" or keyword_word == "]]" or keyword_word == "!" or keyword_word == "time":
                     reserved = keyword_word
@@ -6438,7 +6438,7 @@ class Parser:
         while True:
             self.skip_whitespace()
             op = self.parse_list_operator()
-            if not op:
+            if op == "":
                 if not self.at_end() and self.peek() == "\n":
                     if not newline_as_separator:
                         break
@@ -6456,7 +6456,7 @@ class Parser:
                     op = "\n"
                 else:
                     break
-            if not op:
+            if op == "":
                 break
             parts.append(Operator(op=op, kind="operator"))
             if op == "&&" or op == "||":
@@ -6975,7 +6975,7 @@ def _format_cmdsub_node(node: Node, indent: int, in_procsub: bool, compact_redir
                 if result and not result[-1].endswith((" ", "\n")):
                     result.append(" ")
                 formatted_cmd = _format_cmdsub_node(p, indent, in_procsub, compact_redirects, procsub_first and cmd_count == 0)
-                if result:
+                if len(result) > 0:
                     last = result[-1]
                     if (" || \n" in last) or (" && \n" in last):
                         formatted_cmd = " " + formatted_cmd
@@ -7168,7 +7168,7 @@ def _format_redirect(r: Node, compact: bool, heredoc_op_only: bool) -> str:
             was_input_close = True
             op = _substring(op, 0, len(op) - 1) + ">"
         after_amp = _substring(target, 1, len(target))
-        is_literal_fd = after_amp == "-" or after_amp and after_amp[0].isdigit()
+        is_literal_fd = after_amp == "-" or len(after_amp) > 0 and after_amp[0].isdigit()
         if is_literal_fd:
             if op == ">" or op == ">&":
                 op = "0>" if was_input_close else "1>"
@@ -7791,7 +7791,7 @@ def _is_word_end_context(c: str) -> bool:
 
 def _skip_matched_pair(s: str, start: int, open_: str, close: str, flags: int) -> int:
     n = len(s)
-    if (flags & _SMP_PAST_OPEN):
+    if flags & _SMP_PAST_OPEN:
         i = start
     else:
         if start >= n or s[start] != open_:
@@ -7807,7 +7807,7 @@ def _skip_matched_pair(s: str, start: int, open_: str, close: str, flags: int) -
             i += 1
             continue
         literal = flags & _SMP_LITERAL
-        if not (literal != 0) and c == "\\":
+        if not literal and c == "\\":
             pass_next = True
             i += 1
             continue
@@ -7816,23 +7816,23 @@ def _skip_matched_pair(s: str, start: int, open_: str, close: str, flags: int) -
                 backq = False
             i += 1
             continue
-        if not (literal != 0) and c == "`":
+        if not literal and c == "`":
             backq = True
             i += 1
             continue
-        if not (literal != 0) and c == "'":
+        if not literal and c == "'":
             i = _skip_single_quoted(s, i + 1)
             continue
-        if not (literal != 0) and c == "\"":
+        if not literal and c == "\"":
             i = _skip_double_quoted(s, i + 1)
             continue
-        if not (literal != 0) and _is_expansion_start(s, i, "$("):
+        if not literal and _is_expansion_start(s, i, "$("):
             i = _find_cmdsub_end(s, i + 2)
             continue
-        if not (literal != 0) and _is_expansion_start(s, i, "${"):
+        if not literal and _is_expansion_start(s, i, "${"):
             i = _find_braced_param_end(s, i + 2)
             continue
-        if not (literal != 0) and c == open_:
+        if not literal and c == open_:
             depth += 1
         elif c == close:
             depth -= 1
@@ -7855,7 +7855,7 @@ def _assignment(s: str, flags: int) -> int:
         if c == "=":
             return i
         if c == "[":
-            sub_flags = _SMP_LITERAL if (flags & 2) else 0
+            sub_flags = _SMP_LITERAL if flags & 2 else 0
             end = _skip_subscript(s, i, sub_flags)
             if end == -1:
                 return -1

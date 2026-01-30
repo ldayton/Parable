@@ -181,7 +181,7 @@ class Token {
         if (this.word != null) {
             return String.format("Token(%s, %s, %s, word=%s)", this.type, this.value, this.pos, this.word);
         }
-        if (!this.parts.isEmpty()) {
+        if ((!this.parts.isEmpty())) {
             return String.format("Token(%s, %s, %s, parts=%s)", this.type, this.value, this.pos, this.parts.size());
         }
         return String.format("Token(%s, %s, %s)", this.type, this.value, this.pos);
@@ -235,7 +235,7 @@ class QuoteState {
     }
 
     public void pop() {
-        if (!this._stack.isEmpty()) {
+        if ((!this._stack.isEmpty())) {
             Tuple1 _entry1 = this._stack.remove(this._stack.size() - 1);
             this.single = _entry1.f0();
             this.double_ = _entry1.f1();
@@ -255,7 +255,7 @@ class QuoteState {
     }
 
     public boolean outerDouble() {
-        if (this._stack.isEmpty()) {
+        if (this._stack.size() == 0) {
             return false;
         }
         return this._stack.get(this._stack.size() - 1).f1();
@@ -614,7 +614,7 @@ class Lexer {
             }
             return ParableFunctions._isWhitespace(ch);
         }
-        if ((this._parserState & Constants.PARSERSTATEFLAGS_PST_EOFTOKEN) != 0 && !this._eofToken.equals("") && ch.equals(this._eofToken) && bracketDepth == 0) {
+        if ((((this._parserState & Constants.PARSERSTATEFLAGS_PST_EOFTOKEN)) != 0) && !this._eofToken.equals("") && ch.equals(this._eofToken) && bracketDepth == 0) {
             return true;
         }
         if (ParableFunctions._isRedirectChar(ch) && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '(') {
@@ -748,7 +748,7 @@ class Lexer {
                 throw new RuntimeException(String.format("unexpected EOF while looking for matching `%s'", closeChar));
             }
             String ch = this.advance();
-            if ((flags & Constants.MATCHEDPAIRFLAGS_DOLBRACE) != 0 && this._dolbraceState == Constants.DOLBRACESTATE_OP) {
+            if ((((flags & Constants.MATCHEDPAIRFLAGS_DOLBRACE)) != 0) && this._dolbraceState == Constants.DOLBRACESTATE_OP) {
                 if ("#%^,~:-=?+/".indexOf(ch) == -1) {
                     this._dolbraceState = Constants.DOLBRACESTATE_WORD;
                 }
@@ -767,7 +767,7 @@ class Lexer {
                         break;
                     }
                 }
-                if (ch.equals("\\") && (flags & Constants.MATCHEDPAIRFLAGS_ALLOWESC) != 0) {
+                if (ch.equals("\\") && (((flags & Constants.MATCHEDPAIRFLAGS_ALLOWESC)) != 0)) {
                     passNext = true;
                 }
                 chars.add(ch);
@@ -799,7 +799,7 @@ class Lexer {
                 continue;
             }
             if (ch.equals(openChar) && !openChar.equals(closeChar)) {
-                if (!((flags & Constants.MATCHEDPAIRFLAGS_DOLBRACE) != 0 && openChar.equals("{"))) {
+                if (!((((flags & Constants.MATCHEDPAIRFLAGS_DOLBRACE)) != 0) && openChar.equals("{"))) {
                     count += 1;
                 }
                 chars.add(ch);
@@ -840,7 +840,7 @@ class Lexer {
                     }
                 }
             }
-            if (ch.equals("$") && !this.atEnd() && !((flags & Constants.MATCHEDPAIRFLAGS_EXTGLOB) != 0)) {
+            if (ch.equals("$") && !this.atEnd() && !(((flags & Constants.MATCHEDPAIRFLAGS_EXTGLOB)) != 0)) {
                 String nextCh = this.peek();
                 if (wasDollar) {
                     chars.add(ch);
@@ -849,7 +849,7 @@ class Lexer {
                     continue;
                 }
                 if (nextCh.equals("{")) {
-                    if ((flags & Constants.MATCHEDPAIRFLAGS_ARITH) != 0) {
+                    if ((((flags & Constants.MATCHEDPAIRFLAGS_ARITH)) != 0)) {
                         int afterBracePos = this.pos + 1;
                         if (afterBracePos >= this.length || !ParableFunctions._isFunsubChar(String.valueOf(this.source.charAt(afterBracePos)))) {
                             chars.add(ch);
@@ -948,7 +948,7 @@ class Lexer {
                     }
                 }
             }
-            if (ch.equals("(") && wasGtlt && (flags & (Constants.MATCHEDPAIRFLAGS_DOLBRACE | Constants.MATCHEDPAIRFLAGS_ARRAYSUB)) != 0) {
+            if (ch.equals("(") && wasGtlt && (((flags & (Constants.MATCHEDPAIRFLAGS_DOLBRACE | Constants.MATCHEDPAIRFLAGS_ARRAYSUB))) != 0)) {
                 String direction = chars.get(chars.size() - 1);
                 chars = new ArrayList<>(chars.subList(0, chars.size() - 1));
                 this.pos -= 1;
@@ -1006,7 +1006,7 @@ class Lexer {
                     chars.add(this.advance());
                     continue;
                 }
-                if (!chars.isEmpty() && atCommandStart && !seenEquals && ParableFunctions._isArrayAssignmentPrefix(chars)) {
+                if ((!chars.isEmpty()) && atCommandStart && !seenEquals && ParableFunctions._isArrayAssignmentPrefix(chars)) {
                     String prevChar = chars.get(chars.size() - 1);
                     if ((prevChar.length() > 0 && prevChar.chars().allMatch(Character::isLetterOrDigit)) || prevChar.equals("_")) {
                         bracketStartPos = this.pos;
@@ -1053,7 +1053,7 @@ class Lexer {
             }
             String content = "";
             if (ctx == Constants.WORD_CTX_COND && ch.equals("(")) {
-                if (this._extglob && !chars.isEmpty() && ParableFunctions._isExtglobPrefix(chars.get(chars.size() - 1))) {
+                if (this._extglob && (!chars.isEmpty()) && ParableFunctions._isExtglobPrefix(chars.get(chars.size() - 1))) {
                     chars.add(this.advance());
                     content = this._parseMatchedPair("(", ")", Constants.MATCHEDPAIRFLAGS_EXTGLOB, false);
                     chars.add(content);
@@ -1188,7 +1188,7 @@ class Lexer {
                     chars.add(this.advance());
                 } else {
                     this._syncFromParser();
-                    if (this._extglob && ctx == Constants.WORD_CTX_NORMAL && !chars.isEmpty() && chars.get(chars.size() - 1).length() == 2 && chars.get(chars.size() - 1).charAt(0) == '$' && "?*@".indexOf(String.valueOf(chars.get(chars.size() - 1).charAt(1))) != -1 && !this.atEnd() && this.peek().equals("(")) {
+                    if (this._extglob && ctx == Constants.WORD_CTX_NORMAL && (!chars.isEmpty()) && chars.get(chars.size() - 1).length() == 2 && chars.get(chars.size() - 1).charAt(0) == '$' && "?*@".indexOf(String.valueOf(chars.get(chars.size() - 1).charAt(1))) != -1 && !this.atEnd() && this.peek().equals("(")) {
                         chars.add(this.advance());
                         content = this._parseMatchedPair("(", ")", Constants.MATCHEDPAIRFLAGS_EXTGLOB, false);
                         chars.add(content);
@@ -1221,7 +1221,7 @@ class Lexer {
                     parts.add(procsubResult0);
                     chars.add(procsubResult1);
                 } else {
-                    if (!procsubResult1.equals("")) {
+                    if ((!procsubResult1.isEmpty())) {
                         chars.add(procsubResult1);
                     } else {
                         chars.add(this.advance());
@@ -1232,7 +1232,7 @@ class Lexer {
                 }
                 continue;
             }
-            if (ctx == Constants.WORD_CTX_NORMAL && ch.equals("(") && !chars.isEmpty() && bracketDepth == 0) {
+            if (ctx == Constants.WORD_CTX_NORMAL && ch.equals("(") && (!chars.isEmpty()) && bracketDepth == 0) {
                 boolean isArrayAssign = false;
                 if (chars.size() >= 3 && chars.get(chars.size() - 2).equals("+") && chars.get(chars.size() - 1).equals("=")) {
                     isArrayAssign = ParableFunctions._isArrayAssignmentPrefix(new ArrayList<>(chars.subList(0, chars.size() - 2)));
@@ -1264,7 +1264,7 @@ class Lexer {
                 chars.add(")");
                 continue;
             }
-            if (ctx == Constants.WORD_CTX_NORMAL && (this._parserState & Constants.PARSERSTATEFLAGS_PST_EOFTOKEN) != 0 && !this._eofToken.equals("") && ch.equals(this._eofToken) && bracketDepth == 0) {
+            if (ctx == Constants.WORD_CTX_NORMAL && (((this._parserState & Constants.PARSERSTATEFLAGS_PST_EOFTOKEN)) != 0) && !this._eofToken.equals("") && ch.equals(this._eofToken) && bracketDepth == 0) {
                 if (!(!chars.isEmpty())) {
                     chars.add(this.advance());
                 }
@@ -1281,7 +1281,7 @@ class Lexer {
         if (!(!chars.isEmpty())) {
             return null;
         }
-        if (!parts.isEmpty()) {
+        if ((!parts.isEmpty())) {
             return new Word(String.join("", chars), parts, "word");
         }
         return new Word(String.join("", chars), new ArrayList<>(), "word");
@@ -1322,7 +1322,7 @@ class Lexer {
             this._lastReadToken = tok;
             return tok;
         }
-        if (!this._eofToken.equals("") && this.peek().equals(this._eofToken) && !((this._parserState & Constants.PARSERSTATEFLAGS_PST_CASEPAT) != 0) && !((this._parserState & Constants.PARSERSTATEFLAGS_PST_EOFTOKEN) != 0)) {
+        if (!this._eofToken.equals("") && this.peek().equals(this._eofToken) && !(((this._parserState & Constants.PARSERSTATEFLAGS_PST_CASEPAT)) != 0) && !(((this._parserState & Constants.PARSERSTATEFLAGS_PST_EOFTOKEN)) != 0)) {
             tok = new Token(Constants.TOKENTYPE_EOF, "", this.pos, new ArrayList<>(), null);
             this._lastReadToken = tok;
             return tok;
@@ -1334,7 +1334,7 @@ class Lexer {
                 this._lastReadToken = tok;
                 return tok;
             }
-            if (!this._eofToken.equals("") && this.peek().equals(this._eofToken) && !((this._parserState & Constants.PARSERSTATEFLAGS_PST_CASEPAT) != 0) && !((this._parserState & Constants.PARSERSTATEFLAGS_PST_EOFTOKEN) != 0)) {
+            if (!this._eofToken.equals("") && this.peek().equals(this._eofToken) && !(((this._parserState & Constants.PARSERSTATEFLAGS_PST_CASEPAT)) != 0) && !(((this._parserState & Constants.PARSERSTATEFLAGS_PST_EOFTOKEN)) != 0)) {
                 tok = new Token(Constants.TOKENTYPE_EOF, "", this.pos, new ArrayList<>(), null);
                 this._lastReadToken = tok;
                 return tok;
@@ -1529,7 +1529,7 @@ class Lexer {
         if (this._dolbraceState == Constants.DOLBRACESTATE_NONE) {
             return;
         }
-        if (op.equals("") || op.isEmpty()) {
+        if (op.equals("") || op.length() == 0) {
             return;
         }
         String firstChar = String.valueOf(op.charAt(0));
@@ -1728,7 +1728,7 @@ class Lexer {
                     }
                 }
             }
-            if (!nameChars.isEmpty()) {
+            if ((!nameChars.isEmpty())) {
                 return String.join("", nameChars);
             } else {
                 return "";
@@ -1792,7 +1792,7 @@ class Lexer {
         if (ch.equals("#")) {
             this.advance();
             param = this._consumeParamName();
-            if (!param.equals("") && !this.atEnd() && this.peek().equals("}")) {
+            if ((!param.isEmpty()) && !this.atEnd() && this.peek().equals("}")) {
                 this.advance();
                 text = ParableFunctions._substring(this.source, start, this.pos);
                 this._dolbraceState = savedDolbrace;
@@ -1808,7 +1808,7 @@ class Lexer {
                 this.advance();
             }
             param = this._consumeParamName();
-            if (!param.equals("")) {
+            if ((!param.isEmpty())) {
                 while (!this.atEnd() && ParableFunctions._isWhitespaceNoNewline(this.peek())) {
                     this.advance();
                 }
@@ -1845,7 +1845,7 @@ class Lexer {
             }
         }
         param = this._consumeParamName();
-        if (!(!param.equals(""))) {
+        if (!(!param.isEmpty())) {
             if (!this.atEnd() && ("-=+?".indexOf(this.peek()) != -1 || this.peek().equals(":") && this.pos + 1 < this.length && ParableFunctions._isSimpleParamOp(String.valueOf(this.source.charAt(this.pos + 1))))) {
                 param = "";
             } else {
@@ -1914,7 +1914,7 @@ class Lexer {
                 }
             }
         }
-        this._updateDolbraceForOp(op, !param.isEmpty());
+        this._updateDolbraceForOp(op, param.length() > 0);
         try {
             int flags = (inDquote ? Constants.MATCHEDPAIRFLAGS_DQUOTE : Constants.MATCHEDPAIRFLAGS_NONE);
             boolean paramEndsWithDollar = !param.equals("") && param.endsWith("$");
@@ -2091,7 +2091,7 @@ class Word implements Node {
     }
 
     public String _shSingleQuote(String s) {
-        if (!(!s.equals(""))) {
+        if (!(!s.isEmpty())) {
             return "''";
         }
         if (s.equals("'")) {
@@ -2137,7 +2137,7 @@ class Word implements Node {
                                 if (j < inner.length() && inner.charAt(j) == '}') {
                                     j += 1;
                                 }
-                                if (!(!hexStr.equals(""))) {
+                                if (!(!hexStr.isEmpty())) {
                                     return result;
                                 }
                                 byteVal = ((int) Long.parseLong(hexStr, 16) & 255);
@@ -2361,7 +2361,7 @@ class Word implements Node {
                                     if (lastBraceIdx >= 0) {
                                         String afterBrace = resultStr.substring(lastBraceIdx + 2);
                                         int varNameLen = 0;
-                                        if (!afterBrace.equals("")) {
+                                        if ((!afterBrace.isEmpty())) {
                                             if ("@*#?-$!0123456789_".indexOf(String.valueOf(afterBrace.charAt(0))) != -1) {
                                                 varNameLen = 1;
                                             } else {
@@ -2387,7 +2387,7 @@ class Word implements Node {
                                                     break;
                                                 }
                                             }
-                                            if (!inPattern && !opStart.equals("") && "%#/^,~:+-=?".indexOf(String.valueOf(opStart.charAt(0))) == -1) {
+                                            if (!inPattern && (!opStart.isEmpty()) && "%#/^,~:+-=?".indexOf(String.valueOf(opStart.charAt(0))) == -1) {
                                                 for (String op : new ArrayList<>(Arrays.asList("//", "%%", "##", "/", "%", "#", "^", "^^", ",", ",,"))) {
                                                     if (opStart.indexOf(op) != -1) {
                                                         inPattern = true;
@@ -2634,7 +2634,7 @@ class Word implements Node {
         while (i < inner.length()) {
             String ch = String.valueOf(inner.charAt(i));
             if (ParableFunctions._isWhitespace(ch)) {
-                if (!inWhitespace && !normalized.isEmpty() && braceDepth == 0 && bracketDepth == 0) {
+                if (!inWhitespace && (!normalized.isEmpty()) && braceDepth == 0 && bracketDepth == 0) {
                     normalized.add(" ");
                     inWhitespace = true;
                 }
@@ -3189,7 +3189,7 @@ class Word implements Node {
                             String origInner = ParableFunctions._substring(value, i + 2, j - 1);
                             boolean endsWithNewline = origInner.endsWith("\n");
                             String suffix = "";
-                            if (!(!formatted.equals("")) || (formatted.length() > 0 && formatted.chars().allMatch(Character::isWhitespace))) {
+                            if (!(!formatted.isEmpty()) || (formatted.length() > 0 && formatted.chars().allMatch(Character::isWhitespace))) {
                                 suffix = "}";
                             } else {
                                 if (formatted.endsWith("&") || formatted.endsWith("& ")) {
@@ -3238,7 +3238,7 @@ class Word implements Node {
                                     String leadingWs = rawContent.substring(0, leadingWsEnd);
                                     stripped = rawContent.substring(leadingWsEnd);
                                     if (stripped.startsWith("(")) {
-                                        if (!leadingWs.equals("")) {
+                                        if ((!leadingWs.isEmpty())) {
                                             String normalizedWs = leadingWs.replace("\n", " ").replace("\t", " ");
                                             String spaced = ParableFunctions._formatCmdsubNode(((ProcessSubstitution) node).command, 0, false, false, false);
                                             result.add(direction + "(" + normalizedWs + spaced + ")");
@@ -3262,7 +3262,7 @@ class Word implements Node {
                                 procsubIdx += 1;
                                 i = j;
                             } else {
-                                if (isProcsub && !this.parts.isEmpty()) {
+                                if (isProcsub && (this.parts.size() != 0)) {
                                     direction = String.valueOf(value.charAt(i));
                                     j = ParableFunctions._findCmdsubEnd(value, i + 2);
                                     if (j > value.length() || j > 0 && j <= value.length() && value.charAt(j - 1) != ')') {
@@ -3298,7 +3298,7 @@ class Word implements Node {
                                         if (inArith) {
                                             result.add(direction + "(" + inner + ")");
                                         } else {
-                                            if (!inner.trim().equals("")) {
+                                            if ((!inner.trim().isEmpty())) {
                                                 stripped = inner.replaceFirst("^[" + " \t" + "]+", "");
                                                 result.add(direction + "(" + stripped + ")");
                                             } else {
@@ -3568,7 +3568,7 @@ class Command implements Node {
             parts.add(((Node) r).toSexp());
         }
         String inner = String.join(" ", parts);
-        if (!(!inner.equals(""))) {
+        if (!(!inner.isEmpty())) {
             return "(command)";
         }
         return "(command " + inner + ")";
@@ -3706,19 +3706,19 @@ class ListNode implements Node {
                 semiPositions.add(i);
             }
         }
-        if (!semiPositions.isEmpty()) {
+        if ((!semiPositions.isEmpty())) {
             List<List<Node>> segments = new ArrayList<>();
             int start = 0;
             List<Node> seg = new ArrayList<>();
             for (int pos : semiPositions) {
                 seg = ParableFunctions._sublist(parts, start, pos);
-                if (!seg.isEmpty() && seg.get(0).getKind() != "operator") {
+                if ((!seg.isEmpty()) && seg.get(0).getKind() != "operator") {
                     segments.add(seg);
                 }
                 start = pos + 1;
             }
             seg = ParableFunctions._sublist(parts, start, parts.size());
-            if (!seg.isEmpty() && seg.get(0).getKind() != "operator") {
+            if ((!seg.isEmpty()) && seg.get(0).getKind() != "operator") {
                 segments.add(seg);
             }
             if (!(!segments.isEmpty())) {
@@ -3743,7 +3743,7 @@ class ListNode implements Node {
                 ampPositions.add(i);
             }
         }
-        if (!ampPositions.isEmpty()) {
+        if ((!ampPositions.isEmpty())) {
             List<List<Node>> segments = new ArrayList<>();
             int start = 0;
             for (int pos : ampPositions) {
@@ -4082,7 +4082,7 @@ class For implements Node {
 
     public String toSexp() {
         String suffix = "";
-        if (!this.redirects.isEmpty()) {
+        if ((!this.redirects.isEmpty())) {
             List<String> redirectParts = new ArrayList<>();
             for (Node r : this.redirects) {
                 redirectParts.add(((Node) r).toSexp());
@@ -4095,7 +4095,7 @@ class For implements Node {
         if (this.words == null) {
             return "(for (word \"" + varEscaped + "\") (in (word \"\\\"$@\\\"\")) " + ((Node) this.body).toSexp() + ")" + suffix;
         } else {
-            if (this.words.isEmpty()) {
+            if (this.words.size() == 0) {
                 return "(for (word \"" + varEscaped + "\") (in) " + ((Node) this.body).toSexp() + ")" + suffix;
             } else {
                 List<String> wordParts = new ArrayList<>();
@@ -4130,16 +4130,16 @@ class ForArith implements Node {
 
     public String toSexp() {
         String suffix = "";
-        if (!this.redirects.isEmpty()) {
+        if ((!this.redirects.isEmpty())) {
             List<String> redirectParts = new ArrayList<>();
             for (Node r : this.redirects) {
                 redirectParts.add(((Node) r).toSexp());
             }
             suffix = " " + String.join(" ", redirectParts);
         }
-        String initVal = (!this.init.equals("") ? this.init : "1");
-        String condVal = (!this.cond.equals("") ? this.cond : "1");
-        String incrVal = (!this.incr.equals("") ? this.incr : "1");
+        String initVal = ((!this.init.isEmpty()) ? this.init : "1");
+        String condVal = ((!this.cond.isEmpty()) ? this.cond : "1");
+        String incrVal = ((!this.incr.isEmpty()) ? this.incr : "1");
         String initStr = ParableFunctions._formatArithVal(initVal);
         String condStr = ParableFunctions._formatArithVal(condVal);
         String incrStr = ParableFunctions._formatArithVal(incrVal);
@@ -4167,7 +4167,7 @@ class Select implements Node {
 
     public String toSexp() {
         String suffix = "";
-        if (!this.redirects.isEmpty()) {
+        if ((!this.redirects.isEmpty())) {
             List<String> redirectParts = new ArrayList<>();
             for (Node r : this.redirects) {
                 redirectParts.add(((Node) r).toSexp());
@@ -4182,7 +4182,7 @@ class Select implements Node {
                 wordParts.add(((Node) w).toSexp());
             }
             String wordStrs = String.join(" ", wordParts);
-            if (!this.words.isEmpty()) {
+            if ((!this.words.isEmpty())) {
                 inClause = "(in " + wordStrs + ")";
             } else {
                 inClause = "(in)";
@@ -4484,7 +4484,7 @@ class ArithmeticCommand implements Node {
         String formatted = new Word(this.rawContent, new ArrayList<>(), "word")._formatCommandSubstitutions(this.rawContent, true);
         String escaped = formatted.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\t", "\\t");
         String result = "(arith (word \"" + escaped + "\"))";
-        if (!this.redirects.isEmpty()) {
+        if ((!this.redirects.isEmpty())) {
             List<String> redirectParts = new ArrayList<>();
             for (Node r : this.redirects) {
                 redirectParts.add(((Node) r).toSexp());
@@ -4894,7 +4894,7 @@ class ConditionalExpr implements Node {
         } else {
             result = "(cond " + ((Node) body).toSexp() + ")";
         }
-        if (!this.redirects.isEmpty()) {
+        if ((!this.redirects.isEmpty())) {
             List<String> redirectParts = new ArrayList<>();
             for (Node r : this.redirects) {
                 redirectParts.add(((Node) r).toSexp());
@@ -5054,7 +5054,7 @@ class Coproc implements Node {
 
     public String toSexp() {
         String name = "";
-        if (!this.name.equals("")) {
+        if ((!this.name.isEmpty())) {
             name = this.name;
         } else {
             name = "COPROC";
@@ -5141,7 +5141,7 @@ class Parser {
         if (this._dolbraceState == Constants.DOLBRACESTATE_NONE) {
             return;
         }
-        if (op.equals("") || op.isEmpty()) {
+        if (op.equals("") || op.length() == 0) {
             return;
         }
         String firstChar = String.valueOf(op.charAt(0));
@@ -5435,7 +5435,7 @@ class Parser {
             }
             redirects.add(redirect);
         }
-        return (!redirects.isEmpty() ? redirects : new ArrayList<>());
+        return ((!redirects.isEmpty()) ? redirects : new ArrayList<>());
     }
 
     public Node _parseLoopBody(String context) {
@@ -5484,7 +5484,7 @@ class Parser {
             chars.add(this.advance());
         }
         String word = "";
-        if (!chars.isEmpty()) {
+        if ((!chars.isEmpty())) {
             word = String.join("", chars);
         } else {
             word = "";
@@ -5730,7 +5730,7 @@ class Parser {
                         this.advance();
                     }
                     inHeredocBody = false;
-                    if (!pendingHeredocs.isEmpty()) {
+                    if (pendingHeredocs.size() > 0) {
                         Tuple2 _entry28 = pendingHeredocs.remove(0);
                         currentHeredocDelim = _entry28.f0();
                         currentHeredocStrip = _entry28.f1();
@@ -5746,7 +5746,7 @@ class Parser {
                         }
                         this.pos = lineStart + endPos;
                         inHeredocBody = false;
-                        if (!pendingHeredocs.isEmpty()) {
+                        if (pendingHeredocs.size() > 0) {
                             Tuple2 _entry29 = pendingHeredocs.remove(0);
                             currentHeredocDelim = _entry29.f0();
                             currentHeredocStrip = _entry29.f1();
@@ -5936,7 +5936,7 @@ class Parser {
                     }
                 }
                 String delimiter = String.join("", delimiterChars);
-                if (!delimiter.equals("")) {
+                if ((!delimiter.isEmpty())) {
                     pendingHeredocs.add(new Tuple2(delimiter, stripTabs));
                 }
                 continue;
@@ -5945,7 +5945,7 @@ class Parser {
                 ch = this.advance();
                 contentChars.add(ch);
                 textChars.add(ch);
-                if (!pendingHeredocs.isEmpty()) {
+                if (pendingHeredocs.size() > 0) {
                     Tuple2 _entry30 = pendingHeredocs.remove(0);
                     currentHeredocDelim = _entry30.f0();
                     currentHeredocStrip = _entry30.f1();
@@ -5964,7 +5964,7 @@ class Parser {
         textChars.add("`");
         String text = String.join("", textChars);
         String content = String.join("", contentChars);
-        if (!pendingHeredocs.isEmpty()) {
+        if (pendingHeredocs.size() > 0) {
             Tuple9 _tuple31 = ParableFunctions._findHeredocContentEnd(this.source, this.pos, pendingHeredocs);
             int heredocStart = _tuple31.f0();
             int heredocEnd = _tuple31.f1();
@@ -6977,14 +6977,14 @@ class Parser {
             }
             String varname = String.join("", varnameChars);
             boolean isValidVarfd = false;
-            if (!varname.equals("")) {
+            if ((!varname.isEmpty())) {
                 if ((String.valueOf(varname.charAt(0)).length() > 0 && String.valueOf(varname.charAt(0)).chars().allMatch(Character::isLetter)) || varname.charAt(0) == '_') {
                     if (varname.indexOf("[") != -1 || varname.indexOf("]") != -1) {
                         int left = varname.indexOf("[");
                         int right = varname.lastIndexOf("]");
                         if (left != -1 && right == varname.length() - 1 && right > left + 1) {
                             String base = varname.substring(0, left);
-                            if (!base.equals("") && ((String.valueOf(base.charAt(0)).length() > 0 && String.valueOf(base.charAt(0)).chars().allMatch(Character::isLetter)) || base.charAt(0) == '_')) {
+                            if ((!base.isEmpty()) && ((String.valueOf(base.charAt(0)).length() > 0 && String.valueOf(base.charAt(0)).chars().allMatch(Character::isLetter)) || base.charAt(0) == '_')) {
                                 isValidVarfd = true;
                                 for (int _i = 0; _i < base.substring(1).length(); _i++) {
                                     String c = String.valueOf(base.substring(1).charAt(_i));
@@ -7015,7 +7015,7 @@ class Parser {
             }
         }
         List<String> fdChars = new ArrayList<>();
-        if (varfd.equals("") && !this.peek().equals("") && (this.peek().length() > 0 && this.peek().chars().allMatch(Character::isDigit))) {
+        if (varfd.equals("") && (!this.peek().isEmpty()) && (this.peek().length() > 0 && this.peek().chars().allMatch(Character::isDigit))) {
             fdChars = new ArrayList<>();
             while (!this.atEnd() && (this.peek().length() > 0 && this.peek().chars().allMatch(Character::isDigit))) {
                 fdChars.add(this.advance());
@@ -7134,7 +7134,7 @@ class Parser {
                         fdChars.add(this.advance());
                     }
                     String fdTarget = "";
-                    if (!fdChars.isEmpty()) {
+                    if ((!fdChars.isEmpty())) {
                         fdTarget = String.join("", fdChars);
                     } else {
                         fdTarget = "";
@@ -7518,7 +7518,7 @@ class Parser {
             if (this._lexIsCommandTerminator()) {
                 break;
             }
-            if (words.isEmpty()) {
+            if (words.size() == 0) {
                 String reserved = this._lexPeekReservedWord();
                 if (reserved.equals("}") || reserved.equals("]]")) {
                     break;
@@ -7536,8 +7536,8 @@ class Parser {
                     break;
                 }
             }
-            boolean inAssignBuiltin = !words.isEmpty() && Constants.ASSIGNMENT_BUILTINS.contains(words.get(0).value);
-            Word word = this.parseWord(!(!words.isEmpty()) || allAssignments && redirects.isEmpty(), false, inAssignBuiltin);
+            boolean inAssignBuiltin = words.size() > 0 && Constants.ASSIGNMENT_BUILTINS.contains(words.get(0).value);
+            Word word = this.parseWord(!(!words.isEmpty()) || allAssignments && redirects.size() == 0, false, inAssignBuiltin);
             if (word == null) {
                 break;
             }
@@ -8376,7 +8376,7 @@ class Parser {
                 }
             }
             String pattern = String.join("", patternChars);
-            if (!(!pattern.equals(""))) {
+            if (!(!pattern.isEmpty())) {
                 throw new RuntimeException("Expected pattern in case statement");
             }
             this.skipWhitespace();
@@ -8445,7 +8445,7 @@ class Parser {
         }
         int wordStart = this.pos;
         String potentialName = this.peekWord();
-        if (!potentialName.equals("")) {
+        if ((!potentialName.isEmpty())) {
             while (!this.atEnd() && !ParableFunctions._isMetachar(this.peek()) && !ParableFunctions._isQuote(this.peek())) {
                 this.advance();
             }
@@ -8537,7 +8537,7 @@ class Parser {
             this.advance();
         }
         name = ParableFunctions._substring(this.source, nameStart, this.pos);
-        if (!(!name.equals(""))) {
+        if (!(!name.isEmpty())) {
             this.pos = savedPos;
             return null;
         }
@@ -8561,7 +8561,7 @@ class Parser {
         int posAfterName = this.pos;
         this.skipWhitespace();
         boolean hasWhitespace = this.pos > posAfterName;
-        if (!hasWhitespace && !name.equals("") && "*?@+!$".indexOf(String.valueOf(name.charAt(name.length() - 1))) != -1) {
+        if (!hasWhitespace && (!name.isEmpty()) && "*?@+!$".indexOf(String.valueOf(name.charAt(name.length() - 1))) != -1) {
             this.pos = savedPos;
             return null;
         }
@@ -9080,7 +9080,7 @@ class Parser {
 
     public List<Node> parse() {
         String source = this.source.trim();
-        if (!(!source.equals(""))) {
+        if (!(!source.isEmpty())) {
             return new ArrayList<>(Arrays.asList(new Empty("empty")));
         }
         List<Node> results = new ArrayList<>();
@@ -9121,7 +9121,7 @@ class Parser {
         if (!(!results.isEmpty())) {
             return new ArrayList<>(Arrays.asList(new Empty("empty")));
         }
-        if (this._sawNewlineInSingleQuote && !this.source.equals("") && this.source.charAt(this.source.length() - 1) == '\\' && !(this.source.length() >= 3 && this.source.substring(this.source.length() - 3, this.source.length() - 1).equals("\\\n"))) {
+        if (this._sawNewlineInSingleQuote && (!this.source.isEmpty()) && this.source.charAt(this.source.length() - 1) == '\\' && !(this.source.length() >= 3 && this.source.substring(this.source.length() - 3, this.source.length() - 1).equals("\\\n"))) {
             if (!this._lastWordOnOwnLine(results)) {
                 this._stripTrailingBackslashFromLastWord(results);
             }
@@ -9141,7 +9141,7 @@ class Parser {
         Word lastWord = this._findLastWord(lastNode);
         if (lastWord != null && lastWord.value.endsWith("\\")) {
             lastWord.value = ParableFunctions._substring(lastWord.value, 0, lastWord.value.length() - 1);
-            if (!(!lastWord.value.equals("")) && (lastNode instanceof Command) && !((Command) lastNode).words.isEmpty()) {
+            if (!(!lastWord.value.isEmpty()) && (lastNode instanceof Command) && (!((Command) lastNode).words.isEmpty())) {
                 ((Command) lastNode).words.remove(((Command) lastNode).words.size() - 1);
             }
         }
@@ -9152,29 +9152,29 @@ class Parser {
             return nodeWord;
         }
         if (node instanceof Command nodeCommand) {
-            if (!nodeCommand.words.isEmpty()) {
+            if ((!nodeCommand.words.isEmpty())) {
                 Word lastWord = nodeCommand.words.get(nodeCommand.words.size() - 1);
                 if (lastWord.value.endsWith("\\")) {
                     return lastWord;
                 }
             }
-            if (!nodeCommand.redirects.isEmpty()) {
+            if ((!nodeCommand.redirects.isEmpty())) {
                 Node lastRedirect = nodeCommand.redirects.get(nodeCommand.redirects.size() - 1);
                 if (lastRedirect instanceof Redirect lastRedirectRedirect) {
                     return lastRedirectRedirect.target;
                 }
             }
-            if (!nodeCommand.words.isEmpty()) {
+            if ((!nodeCommand.words.isEmpty())) {
                 return nodeCommand.words.get(nodeCommand.words.size() - 1);
             }
         }
         if (node instanceof Pipeline nodePipeline) {
-            if (!nodePipeline.commands.isEmpty()) {
+            if ((!nodePipeline.commands.isEmpty())) {
                 return this._findLastWord(nodePipeline.commands.get(nodePipeline.commands.size() - 1));
             }
         }
         if (node instanceof ListNode nodeList) {
-            if (!nodeList.parts.isEmpty()) {
+            if ((!nodeList.parts.isEmpty())) {
                 return this._findLastWord(nodeList.parts.get(nodeList.parts.size() - 1));
             }
         }
@@ -9310,7 +9310,7 @@ final class ParableFunctions {
     }
 
     static String _appendRedirects(String base, List<Node> redirects) {
-        if (!redirects.isEmpty()) {
+        if ((!redirects.isEmpty())) {
             List<String> parts = new ArrayList<>();
             for (Node r : redirects) {
                 parts.add(((Node) r).toSexp());
@@ -9465,7 +9465,7 @@ final class ParableFunctions {
             return false;
         }
         if (node instanceof Pipeline nodePipeline) {
-            if (!nodePipeline.commands.isEmpty()) {
+            if ((!nodePipeline.commands.isEmpty())) {
                 return ParableFunctions._startsWithSubshell(nodePipeline.commands.get(0));
             }
             return false;
@@ -9501,7 +9501,7 @@ final class ParableFunctions {
                 parts.add(ParableFunctions._formatRedirect(r, compactRedirects, true));
             }
             String result = "";
-            if (compactRedirects && !nodeCommand.words.isEmpty() && !nodeCommand.redirects.isEmpty()) {
+            if (compactRedirects && (!nodeCommand.words.isEmpty()) && (!nodeCommand.redirects.isEmpty())) {
                 List<String> wordParts = new ArrayList<>(parts.subList(0, nodeCommand.words.size()));
                 List<String> redirectParts = new ArrayList<>(parts.subList(nodeCommand.words.size(), parts.size()));
                 result = String.join(" ", wordParts) + String.join("", redirectParts);
@@ -9539,7 +9539,7 @@ final class ParableFunctions {
                 String formatted = ParableFunctions._formatCmdsubNode(cmd, indent, inProcsub, false, procsubFirst && idx == 0);
                 boolean isLast = idx == cmds.size() - 1;
                 boolean hasHeredoc = false;
-                if (cmd.getKind() == "command" && !((Command) cmd).redirects.isEmpty()) {
+                if (cmd.getKind() == "command" && (!((Command) cmd).redirects.isEmpty())) {
                     for (Node r : ((Command) cmd).redirects) {
                         if (r instanceof HereDoc rHereDoc) {
                             hasHeredoc = true;
@@ -9571,7 +9571,7 @@ final class ParableFunctions {
                 }
                 idx += 1;
             }
-            boolean compactPipe = inProcsub && !cmds.isEmpty() && cmds.get(0).f0().getKind() == "subshell";
+            boolean compactPipe = inProcsub && (!cmds.isEmpty()) && cmds.get(0).f0().getKind() == "subshell";
             String result = "";
             idx = 0;
             while (idx < resultParts.size()) {
@@ -9596,7 +9596,7 @@ final class ParableFunctions {
         if (node instanceof ListNode nodeList) {
             boolean hasHeredoc = false;
             for (Node p : nodeList.parts) {
-                if (p.getKind() == "command" && !((Command) p).redirects.isEmpty()) {
+                if (p.getKind() == "command" && (!((Command) p).redirects.isEmpty())) {
                     for (Node r : ((Command) p).redirects) {
                         if (r instanceof HereDoc rHereDoc) {
                             hasHeredoc = true;
@@ -9606,7 +9606,7 @@ final class ParableFunctions {
                 } else {
                     if (p instanceof Pipeline pPipeline) {
                         for (Node cmd : pPipeline.commands) {
-                            if (cmd.getKind() == "command" && !((Command) cmd).redirects.isEmpty()) {
+                            if (cmd.getKind() == "command" && (!((Command) cmd).redirects.isEmpty())) {
                                 for (Node r : ((Command) cmd).redirects) {
                                     if (r instanceof HereDoc rHereDoc) {
                                         hasHeredoc = true;
@@ -9627,7 +9627,7 @@ final class ParableFunctions {
             for (Node p : nodeList.parts) {
                 if (p instanceof Operator pOperator) {
                     if (pOperator.op.equals(";")) {
-                        if (!result.isEmpty() && result.get(result.size() - 1).endsWith("\n")) {
+                        if ((!result.isEmpty()) && result.get(result.size() - 1).endsWith("\n")) {
                             skippedSemi = true;
                             continue;
                         }
@@ -9639,11 +9639,11 @@ final class ParableFunctions {
                         skippedSemi = false;
                     } else {
                         if (pOperator.op.equals("\n")) {
-                            if (!result.isEmpty() && result.get(result.size() - 1).equals(";")) {
+                            if ((!result.isEmpty()) && result.get(result.size() - 1).equals(";")) {
                                 skippedSemi = false;
                                 continue;
                             }
-                            if (!result.isEmpty() && result.get(result.size() - 1).endsWith("\n")) {
+                            if ((!result.isEmpty()) && result.get(result.size() - 1).endsWith("\n")) {
                                 result.add((skippedSemi ? " " : "\n"));
                                 skippedSemi = false;
                                 continue;
@@ -9654,7 +9654,7 @@ final class ParableFunctions {
                             String last = "";
                             int firstNl = 0;
                             if (pOperator.op.equals("&")) {
-                                if (!result.isEmpty() && result.get(result.size() - 1).indexOf("<<") != -1 && result.get(result.size() - 1).indexOf("\n") != -1) {
+                                if ((!result.isEmpty()) && result.get(result.size() - 1).indexOf("<<") != -1 && result.get(result.size() - 1).indexOf("\n") != -1) {
                                     last = result.get(result.size() - 1);
                                     if (last.indexOf(" |") != -1 || last.startsWith("|")) {
                                         result.set(result.size() - 1, last + " &");
@@ -9666,7 +9666,7 @@ final class ParableFunctions {
                                     result.add(" &");
                                 }
                             } else {
-                                if (!result.isEmpty() && result.get(result.size() - 1).indexOf("<<") != -1 && result.get(result.size() - 1).indexOf("\n") != -1) {
+                                if ((!result.isEmpty()) && result.get(result.size() - 1).indexOf("<<") != -1 && result.get(result.size() - 1).indexOf("\n") != -1) {
                                     last = result.get(result.size() - 1);
                                     firstNl = last.indexOf("\n");
                                     result.set(result.size() - 1, last.substring(0, firstNl) + " " + pOperator.op + " " + last.substring(firstNl));
@@ -9677,11 +9677,11 @@ final class ParableFunctions {
                         }
                     }
                 } else {
-                    if (!result.isEmpty() && !(result.get(result.size() - 1).endsWith(" ") || result.get(result.size() - 1).endsWith("\n"))) {
+                    if ((!result.isEmpty()) && !(result.get(result.size() - 1).endsWith(" ") || result.get(result.size() - 1).endsWith("\n"))) {
                         result.add(" ");
                     }
                     String formattedCmd = ParableFunctions._formatCmdsubNode(p, indent, inProcsub, compactRedirects, procsubFirst && cmdCount == 0);
-                    if (!result.isEmpty()) {
+                    if (result.size() > 0) {
                         String last = result.get(result.size() - 1);
                         if (last.indexOf(" || \n") != -1 || last.indexOf(" && \n") != -1) {
                             formattedCmd = " " + formattedCmd;
@@ -9724,7 +9724,7 @@ final class ParableFunctions {
             String cond = ParableFunctions._formatCmdsubNode(nodeWhile.condition, indent, false, false, false);
             String body = ParableFunctions._formatCmdsubNode(nodeWhile.body, indent + 4, false, false, false);
             String result = "while " + cond + "; do\n" + innerSp + body + ";\n" + sp + "done";
-            if (!nodeWhile.redirects.isEmpty()) {
+            if ((!nodeWhile.redirects.isEmpty())) {
                 for (Node r : nodeWhile.redirects) {
                     result = result + " " + ParableFunctions._formatRedirect(r, false, false);
                 }
@@ -9735,7 +9735,7 @@ final class ParableFunctions {
             String cond = ParableFunctions._formatCmdsubNode(nodeUntil.condition, indent, false, false, false);
             String body = ParableFunctions._formatCmdsubNode(nodeUntil.body, indent + 4, false, false, false);
             String result = "until " + cond + "; do\n" + innerSp + body + ";\n" + sp + "done";
-            if (!nodeUntil.redirects.isEmpty()) {
+            if ((!nodeUntil.redirects.isEmpty())) {
                 for (Node r : nodeUntil.redirects) {
                     result = result + " " + ParableFunctions._formatRedirect(r, false, false);
                 }
@@ -9752,7 +9752,7 @@ final class ParableFunctions {
                     wordVals.add(w.value);
                 }
                 String words = String.join(" ", wordVals);
-                if (!words.equals("")) {
+                if ((!words.isEmpty())) {
                     result = "for " + var + " in " + words + ";\n" + sp + "do\n" + innerSp + body + ";\n" + sp + "done";
                 } else {
                     result = "for " + var + " in ;\n" + sp + "do\n" + innerSp + body + ";\n" + sp + "done";
@@ -9760,7 +9760,7 @@ final class ParableFunctions {
             } else {
                 result = "for " + var + " in \"$@\";\n" + sp + "do\n" + innerSp + body + ";\n" + sp + "done";
             }
-            if (!nodeFor.redirects.isEmpty()) {
+            if ((!nodeFor.redirects.isEmpty())) {
                 for (Node r : nodeFor.redirects) {
                     result = result + " " + ParableFunctions._formatRedirect(r, false, false);
                 }
@@ -9770,7 +9770,7 @@ final class ParableFunctions {
         if (node instanceof ForArith nodeForArith) {
             String body = ParableFunctions._formatCmdsubNode(nodeForArith.body, indent + 4, false, false, false);
             String result = "for ((" + nodeForArith.init + "; " + nodeForArith.cond + "; " + nodeForArith.incr + "))\ndo\n" + innerSp + body + ";\n" + sp + "done";
-            if (!nodeForArith.redirects.isEmpty()) {
+            if ((!nodeForArith.redirects.isEmpty())) {
                 for (Node r : nodeForArith.redirects) {
                     result = result + " " + ParableFunctions._formatRedirect(r, false, false);
                 }
@@ -9793,7 +9793,7 @@ final class ParableFunctions {
                 String term = ((CasePattern) p).terminator;
                 String patIndent = ParableFunctions._repeatStr(" ", indent + 8);
                 String termIndent = ParableFunctions._repeatStr(" ", indent + 4);
-                String bodyPart = (!body.equals("") ? patIndent + body + "\n" : "\n");
+                String bodyPart = ((!body.isEmpty()) ? patIndent + body + "\n" : "\n");
                 if (i == 0) {
                     patterns.add(" " + pat + ")\n" + bodyPart + termIndent + term);
                 } else {
@@ -9803,7 +9803,7 @@ final class ParableFunctions {
             }
             Object patternStr = String.join("\n" + ParableFunctions._repeatStr(" ", indent + 4), patterns);
             String redirects = "";
-            if (!nodeCase.redirects.isEmpty()) {
+            if ((!nodeCase.redirects.isEmpty())) {
                 List<String> redirectParts = new ArrayList<>();
                 for (Node r : nodeCase.redirects) {
                     redirectParts.add(ParableFunctions._formatRedirect(r, false, false));
@@ -9821,7 +9821,7 @@ final class ParableFunctions {
         if (node instanceof Subshell nodeSubshell) {
             String body = ParableFunctions._formatCmdsubNode(nodeSubshell.body, indent, inProcsub, compactRedirects, false);
             String redirects = "";
-            if (!nodeSubshell.redirects.isEmpty()) {
+            if ((!nodeSubshell.redirects.isEmpty())) {
                 List<String> redirectParts = new ArrayList<>();
                 for (Node r : nodeSubshell.redirects) {
                     redirectParts.add(ParableFunctions._formatRedirect(r, false, false));
@@ -9829,12 +9829,12 @@ final class ParableFunctions {
                 redirects = String.join(" ", redirectParts);
             }
             if (procsubFirst) {
-                if (!redirects.equals("")) {
+                if ((!redirects.isEmpty())) {
                     return "(" + body + ") " + redirects;
                 }
                 return "(" + body + ")";
             }
-            if (!redirects.equals("")) {
+            if ((!redirects.isEmpty())) {
                 return "( " + body + " ) " + redirects;
             }
             return "( " + body + " )";
@@ -9844,14 +9844,14 @@ final class ParableFunctions {
             body = body.replaceFirst("[" + ";" + "]+$", "");
             String terminator = (body.endsWith(" &") ? " }" : "; }");
             String redirects = "";
-            if (!nodeBraceGroup.redirects.isEmpty()) {
+            if ((!nodeBraceGroup.redirects.isEmpty())) {
                 List<String> redirectParts = new ArrayList<>();
                 for (Node r : nodeBraceGroup.redirects) {
                     redirectParts.add(ParableFunctions._formatRedirect(r, false, false));
                 }
                 redirects = String.join(" ", redirectParts);
             }
-            if (!redirects.equals("")) {
+            if ((!redirects.isEmpty())) {
                 return "{ " + body + terminator + " " + redirects;
             }
             return "{ " + body + terminator;
@@ -9920,7 +9920,7 @@ final class ParableFunctions {
                 op = ParableFunctions._substring(op, 0, op.length() - 1) + ">";
             }
             String afterAmp = ParableFunctions._substring(target, 1, target.length());
-            boolean isLiteralFd = afterAmp.equals("-") || !afterAmp.isEmpty() && (String.valueOf(afterAmp.charAt(0)).length() > 0 && String.valueOf(afterAmp.charAt(0)).chars().allMatch(Character::isDigit));
+            boolean isLiteralFd = afterAmp.equals("-") || afterAmp.length() > 0 && (String.valueOf(afterAmp.charAt(0)).length() > 0 && String.valueOf(afterAmp.charAt(0)).chars().allMatch(Character::isDigit));
             if (isLiteralFd) {
                 if (op.equals(">") || op.equals(">&")) {
                     op = (wasInputClose ? "0>" : "1>");
@@ -10739,7 +10739,7 @@ final class ParableFunctions {
     static int _skipMatchedPair(String s, int start, String open, String close, int flags) {
         int n = s.length();
         int i = 0;
-        if ((flags & Constants.SMP_PAST_OPEN) != 0) {
+        if ((((flags & Constants.SMP_PAST_OPEN)) != 0)) {
             i = start;
         } else {
             if (start >= n || !String.valueOf(s.charAt(start)).equals(open)) {
@@ -10808,7 +10808,7 @@ final class ParableFunctions {
     }
 
     static int _assignment(String s, int flags) {
-        if (!(!s.equals(""))) {
+        if (!(!s.isEmpty())) {
             return -1;
         }
         if (!((String.valueOf(s.charAt(0)).length() > 0 && String.valueOf(s.charAt(0)).chars().allMatch(Character::isLetter)) || s.charAt(0) == '_')) {
@@ -10821,7 +10821,7 @@ final class ParableFunctions {
                 return i;
             }
             if (c.equals("[")) {
-                int subFlags = ((flags & 2) != 0 ? Constants.SMP_LITERAL : 0);
+                int subFlags = ((((flags & 2)) != 0) ? Constants.SMP_LITERAL : 0);
                 int end = ParableFunctions._skipSubscript(s, i, subFlags);
                 if (end == -1) {
                     return -1;
@@ -10943,7 +10943,7 @@ final class ParableFunctions {
     }
 
     static boolean _isValidIdentifier(String name) {
-        if (!(!name.equals(""))) {
+        if (!(!name.isEmpty())) {
             return false;
         }
         if (!((String.valueOf(name.charAt(0)).length() > 0 && String.valueOf(name.charAt(0)).chars().allMatch(Character::isLetter)) || name.charAt(0) == '_')) {

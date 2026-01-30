@@ -162,7 +162,7 @@ class Token {
     if (this.word !== null) {
       return `Token(${this.typeName}, ${this.value}, ${this.pos}, word=${this.word})`;
     }
-    if (this.parts.length > 0) {
+    if ((this.parts.length > 0)) {
       return `Token(${this.typeName}, ${this.value}, ${this.pos}, parts=${this.parts.length})`;
     }
     return `Token(${this.typeName}, ${this.value}, ${this.pos})`;
@@ -212,7 +212,7 @@ class QuoteState {
   }
 
   pop(): void {
-    if (this.Stack.length > 0) {
+    if ((this.Stack.length > 0)) {
       [this.single, this.double] = this.Stack.pop();
     }
   }
@@ -585,7 +585,7 @@ class Lexer {
       }
       return IsWhitespace(ch);
     }
-    if ((this.ParserState & ParserStateFlags_PST_EOFTOKEN) !== 0 && this.EofToken !== "" && ch === this.EofToken && bracketDepth === 0) {
+    if (((this.ParserState & ParserStateFlags_PST_EOFTOKEN) !== 0) && this.EofToken !== "" && ch === this.EofToken && bracketDepth === 0) {
       return true;
     }
     if (IsRedirectChar(ch) && this.pos + 1 < this.length && this.source[this.pos + 1] === "(") {
@@ -719,7 +719,7 @@ class Lexer {
         throw new MatchedPairError()
       }
       var ch: any = this.advance();
-      if ((flags & MatchedPairFlags_DOLBRACE) !== 0 && this.DolbraceState === DolbraceState_OP) {
+      if (((flags & MatchedPairFlags_DOLBRACE) !== 0) && this.DolbraceState === DolbraceState_OP) {
         if (!"#%^,~:-=?+/".includes(ch)) {
           this.DolbraceState = DolbraceState_WORD;
         }
@@ -738,7 +738,7 @@ class Lexer {
             break;
           }
         }
-        if (ch === "\\" && (flags & MatchedPairFlags_ALLOWESC) !== 0) {
+        if (ch === "\\" && ((flags & MatchedPairFlags_ALLOWESC) !== 0)) {
           passNext = true;
         }
         chars.push(ch);
@@ -770,7 +770,7 @@ class Lexer {
         continue;
       }
       if (ch === openChar && openChar !== closeChar) {
-        if (!((flags & MatchedPairFlags_DOLBRACE) !== 0 && openChar === "{")) {
+        if (!(((flags & MatchedPairFlags_DOLBRACE) !== 0) && openChar === "{")) {
           count += 1;
         }
         chars.push(ch);
@@ -810,7 +810,7 @@ class Lexer {
           }
         }
       }
-      if (ch === "$" && !this.atEnd() && (flags & MatchedPairFlags_EXTGLOB) === 0) {
+      if (ch === "$" && !this.atEnd() && !((flags & MatchedPairFlags_EXTGLOB) !== 0)) {
         var nextCh: any = this.peek();
         if (wasDollar) {
           chars.push(ch);
@@ -819,7 +819,7 @@ class Lexer {
           continue;
         }
         if (nextCh === "{") {
-          if ((flags & MatchedPairFlags_ARITH) !== 0) {
+          if (((flags & MatchedPairFlags_ARITH) !== 0)) {
             var afterBracePos: any = this.pos + 1;
             if (afterBracePos >= this.length || !IsFunsubChar(this.source[afterBracePos])) {
               chars.push(ch);
@@ -904,7 +904,7 @@ class Lexer {
           }
         }
       }
-      if (ch === "(" && wasGtlt && (flags & (MatchedPairFlags_DOLBRACE | MatchedPairFlags_ARRAYSUB)) !== 0) {
+      if (ch === "(" && wasGtlt && ((flags & (MatchedPairFlags_DOLBRACE | MatchedPairFlags_ARRAYSUB)) !== 0)) {
         {
           var direction: any = chars[chars.length - 1];
           chars = chars.slice(0, chars.length - 1);
@@ -962,7 +962,7 @@ class Lexer {
           chars.push(this.advance());
           continue;
         }
-        if (chars.length > 0 && atCommandStart && !seenEquals && IsArrayAssignmentPrefix(chars)) {
+        if ((chars.length > 0) && atCommandStart && !seenEquals && IsArrayAssignmentPrefix(chars)) {
           var prevChar: any = chars[chars.length - 1];
           if (/^[a-zA-Z0-9]$/.test(prevChar) || prevChar === "_") {
             bracketStartPos = this.pos;
@@ -1008,7 +1008,7 @@ class Lexer {
         continue;
       }
       if (ctx === WORD_CTX_COND && ch === "(") {
-        if (this.Extglob && chars.length > 0 && IsExtglobPrefix(chars[chars.length - 1])) {
+        if (this.Extglob && (chars.length > 0) && IsExtglobPrefix(chars[chars.length - 1])) {
           chars.push(this.advance());
           var content: any = this.ParseMatchedPair("(", ")", MatchedPairFlags_EXTGLOB, false);
           chars.push(content);
@@ -1133,7 +1133,7 @@ class Lexer {
           chars.push(this.advance());
         } else {
           this.SyncFromParser();
-          if (this.Extglob && ctx === WORD_CTX_NORMAL && chars.length > 0 && chars[chars.length - 1].length === 2 && chars[chars.length - 1][0] === "$" && "?*@".includes(chars[chars.length - 1][1]) && !this.atEnd() && this.peek() === "(") {
+          if (this.Extglob && ctx === WORD_CTX_NORMAL && (chars.length > 0) && chars[chars.length - 1].length === 2 && chars[chars.length - 1][0] === "$" && "?*@".includes(chars[chars.length - 1][1]) && !this.atEnd() && this.peek() === "(") {
             chars.push(this.advance());
             var content: any = this.ParseMatchedPair("(", ")", MatchedPairFlags_EXTGLOB, false);
             chars.push(content);
@@ -1162,7 +1162,7 @@ class Lexer {
           parts.push(procsubResult0);
           chars.push(procsubResult1);
         } else {
-          if (procsubResult1 !== "") {
+          if ((procsubResult1.length > 0)) {
             chars.push(procsubResult1);
           } else {
             chars.push(this.advance());
@@ -1173,7 +1173,7 @@ class Lexer {
         }
         continue;
       }
-      if (ctx === WORD_CTX_NORMAL && ch === "(" && chars.length > 0 && bracketDepth === 0) {
+      if (ctx === WORD_CTX_NORMAL && ch === "(" && (chars.length > 0) && bracketDepth === 0) {
         var isArrayAssign: any = false;
         if (chars.length >= 3 && chars[chars.length - 2] === "+" && chars[chars.length - 1] === "=") {
           isArrayAssign = IsArrayAssignmentPrefix(chars.slice(0, chars.length - 2));
@@ -1203,7 +1203,7 @@ class Lexer {
         chars.push(")");
         continue;
       }
-      if (ctx === WORD_CTX_NORMAL && (this.ParserState & ParserStateFlags_PST_EOFTOKEN) !== 0 && this.EofToken !== "" && ch === this.EofToken && bracketDepth === 0) {
+      if (ctx === WORD_CTX_NORMAL && ((this.ParserState & ParserStateFlags_PST_EOFTOKEN) !== 0) && this.EofToken !== "" && ch === this.EofToken && bracketDepth === 0) {
         if (!(chars.length > 0)) {
           chars.push(this.advance());
         }
@@ -1220,7 +1220,7 @@ class Lexer {
     if (!(chars.length > 0)) {
       return null;
     }
-    if (parts.length > 0) {
+    if ((parts.length > 0)) {
       return new Word(chars.join("") as any, parts as any, "word" as any);
     }
     return new Word(chars.join("") as any, null as any, "word" as any);
@@ -1260,7 +1260,7 @@ class Lexer {
       this.LastReadToken = tok;
       return tok;
     }
-    if (this.EofToken !== "" && this.peek() === this.EofToken && (this.ParserState & ParserStateFlags_PST_CASEPAT) === 0 && (this.ParserState & ParserStateFlags_PST_EOFTOKEN) === 0) {
+    if (this.EofToken !== "" && this.peek() === this.EofToken && !((this.ParserState & ParserStateFlags_PST_CASEPAT) !== 0) && !((this.ParserState & ParserStateFlags_PST_EOFTOKEN) !== 0)) {
       var tok: any = new Token(TokenType_EOF as any, "" as any, this.pos as any, [], null);
       this.LastReadToken = tok;
       return tok;
@@ -1272,7 +1272,7 @@ class Lexer {
         this.LastReadToken = tok;
         return tok;
       }
-      if (this.EofToken !== "" && this.peek() === this.EofToken && (this.ParserState & ParserStateFlags_PST_CASEPAT) === 0 && (this.ParserState & ParserStateFlags_PST_EOFTOKEN) === 0) {
+      if (this.EofToken !== "" && this.peek() === this.EofToken && !((this.ParserState & ParserStateFlags_PST_CASEPAT) !== 0) && !((this.ParserState & ParserStateFlags_PST_EOFTOKEN) !== 0)) {
         var tok: any = new Token(TokenType_EOF as any, "" as any, this.pos as any, [], null);
         this.LastReadToken = tok;
         return tok;
@@ -1653,7 +1653,7 @@ class Lexer {
           }
         }
       }
-      if (nameChars.length > 0) {
+      if ((nameChars.length > 0)) {
         return nameChars.join("");
       } else {
         return "";
@@ -1714,7 +1714,7 @@ class Lexer {
     if (ch === "#") {
       this.advance();
       var param: any = this.ConsumeParamName();
-      if (param !== "" && !this.atEnd() && this.peek() === "}") {
+      if ((param.length > 0) && !this.atEnd() && this.peek() === "}") {
         this.advance();
         var text: any = Substring(this.source, start, this.pos);
         this.DolbraceState = savedDolbrace;
@@ -1728,7 +1728,7 @@ class Lexer {
         this.advance();
       }
       var param: any = this.ConsumeParamName();
-      if (param !== "") {
+      if ((param.length > 0)) {
         while (!this.atEnd() && IsWhitespaceNoNewline(this.peek())) {
           this.advance();
         }
@@ -1765,7 +1765,7 @@ class Lexer {
       }
     }
     var param: any = this.ConsumeParamName();
-    if (param === "") {
+    if (!(param.length > 0)) {
       if (!this.atEnd() && ("-=+?".includes(this.peek()) || this.peek() === ":" && this.pos + 1 < this.length && IsSimpleParamOp(this.source[this.pos + 1]))) {
         param = "";
       } else {
@@ -2012,7 +2012,7 @@ class Word implements Node {
   }
 
   ShSingleQuote(s: string): string {
-    if (s === "") {
+    if (!(s.length > 0)) {
       return "''";
     }
     if (s === "'") {
@@ -2055,7 +2055,7 @@ class Word implements Node {
                 if (j < inner.length && inner[j] === "}") {
                   j += 1;
                 }
-                if (hexStr === "") {
+                if (!(hexStr.length > 0)) {
                   return result;
                 }
                 var byteVal: any = parseInt(hexStr, 16) & 255;
@@ -2278,7 +2278,7 @@ class Word implements Node {
                   if (lastBraceIdx >= 0) {
                     var afterBrace: any = resultStr.slice(lastBraceIdx + 2);
                     var varNameLen: any = 0;
-                    if (afterBrace !== "") {
+                    if ((afterBrace.length > 0)) {
                       if ("@*#?-$!0123456789_".includes(afterBrace[0])) {
                         varNameLen = 1;
                       } else {
@@ -2304,7 +2304,7 @@ class Word implements Node {
                           break;
                         }
                       }
-                      if (!inPattern && opStart !== "" && !"%#/^,~:+-=?".includes(opStart[0])) {
+                      if (!inPattern && (opStart.length > 0) && !"%#/^,~:+-=?".includes(opStart[0])) {
                         for (const op of ["//", "%%", "##", "/", "%", "#", "^", "^^", ",", ",,"] as string[]) {
                           if (opStart.includes(op)) {
                             inPattern = true;
@@ -2550,7 +2550,7 @@ class Word implements Node {
     while (i < inner.length) {
       var ch: any = inner[i];
       if (IsWhitespace(ch)) {
-        if (!inWhitespace && normalized.length > 0 && braceDepth === 0 && bracketDepth === 0) {
+        if (!inWhitespace && (normalized.length > 0) && braceDepth === 0 && bracketDepth === 0) {
           normalized.push(" ");
           inWhitespace = true;
         }
@@ -3095,7 +3095,7 @@ class Word implements Node {
               var prefix: any = (hasPipe ? "${|" : "${ ");
               var origInner: any = Substring(value, i + 2, j - 1);
               var endsWithNewline: any = origInner.endsWith("\n");
-              if (formatted === "" || /^\s$/.test(formatted)) {
+              if (!(formatted.length > 0) || /^\s$/.test(formatted)) {
                 var suffix: any = "}";
               } else {
                 if (formatted.endsWith("&") || formatted.endsWith("& ")) {
@@ -3141,7 +3141,7 @@ class Word implements Node {
                   var leadingWs: any = rawContent.slice(0, leadingWsEnd);
                   var stripped: any = rawContent.slice(leadingWsEnd);
                   if (stripped.startsWith("(")) {
-                    if (leadingWs !== "") {
+                    if ((leadingWs.length > 0)) {
                       var normalizedWs: any = leadingWs.replace(/\n/g, " ").replace(/\t/g, " ");
                       var spaced: any = FormatCmdsubNode((node as unknown as ProcessSubstitution).command, 0, false, false, false);
                       result.push(direction + "(" + normalizedWs + spaced + ")");
@@ -3165,7 +3165,7 @@ class Word implements Node {
                 procsubIdx += 1;
                 i = j;
               } else {
-                if (isProcsub && this.parts.length !== 0) {
+                if (isProcsub && (this.parts.length !== 0)) {
                   var direction: any = value[i];
                   var j: any = FindCmdsubEnd(value, i + 2);
                   if (j > value.length || j > 0 && j <= value.length && value[j - 1] !== ")") {
@@ -3201,7 +3201,7 @@ class Word implements Node {
                     if (inArith) {
                       result.push(direction + "(" + inner + ")");
                     } else {
-                      if (inner.trim() !== "") {
+                      if ((inner.trim().length > 0)) {
                         var stripped: any = inner.replace(/^[ \t]+/, '');
                         result.push(direction + "(" + stripped + ")");
                       } else {
@@ -3466,7 +3466,7 @@ class Command implements Node {
     parts.push(...this.words.map(w => w.toSexp()));
     parts.push(...this.redirects.map(r => r.toSexp()));
     var inner: any = parts.join(" ");
-    if (inner === "") {
+    if (!(inner.length > 0)) {
       return "(command)";
     }
     return "(command " + inner + ")";
@@ -3599,18 +3599,18 @@ class List implements Node {
         semiPositions.push(i);
       }
     }
-    if (semiPositions.length > 0) {
+    if ((semiPositions.length > 0)) {
       var segments: any = [];
       var start: any = 0;
       for (const pos of semiPositions as number[]) {
         var seg: any = Sublist(parts, start, pos);
-        if (seg.length > 0 && seg[0].kind !== "operator") {
+        if ((seg.length > 0) && seg[0].kind !== "operator") {
           segments.push(seg);
         }
         start = pos + 1;
       }
       seg = Sublist(parts, start, parts.length);
-      if (seg.length > 0 && seg[0].kind !== "operator") {
+      if ((seg.length > 0) && seg[0].kind !== "operator") {
         segments.push(seg);
       }
       if (!(segments.length > 0)) {
@@ -3635,7 +3635,7 @@ class List implements Node {
         ampPositions.push(i);
       }
     }
-    if (ampPositions.length > 0) {
+    if ((ampPositions.length > 0)) {
       var segments: any = [];
       var start: any = 0;
       for (const pos of ampPositions as number[]) {
@@ -3998,7 +3998,7 @@ class For implements Node {
 
   toSexp(): string {
     var suffix: any = "";
-    if (this.redirects.length > 0) {
+    if ((this.redirects.length > 0)) {
       var redirectParts: any = [];
       redirectParts.push(...this.redirects.map(r => r.toSexp()));
       suffix = " " + redirectParts.join(" ");
@@ -4044,14 +4044,14 @@ class ForArith implements Node {
 
   toSexp(): string {
     var suffix: any = "";
-    if (this.redirects.length > 0) {
+    if ((this.redirects.length > 0)) {
       var redirectParts: any = [];
       redirectParts.push(...this.redirects.map(r => r.toSexp()));
       suffix = " " + redirectParts.join(" ");
     }
-    var initVal: any = (this.init !== "" ? this.init : "1");
-    var condVal: any = (this.cond !== "" ? this.cond : "1");
-    var incrVal: any = (this.incr !== "" ? this.incr : "1");
+    var initVal: any = ((this.init.length > 0) ? this.init : "1");
+    var condVal: any = ((this.cond.length > 0) ? this.cond : "1");
+    var incrVal: any = ((this.incr.length > 0) ? this.incr : "1");
     var initStr: any = FormatArithVal(initVal);
     var condStr: any = FormatArithVal(condVal);
     var incrStr: any = FormatArithVal(incrVal);
@@ -4081,7 +4081,7 @@ class Select implements Node {
 
   toSexp(): string {
     var suffix: any = "";
-    if (this.redirects.length > 0) {
+    if ((this.redirects.length > 0)) {
       var redirectParts: any = [];
       redirectParts.push(...this.redirects.map(r => r.toSexp()));
       suffix = " " + redirectParts.join(" ");
@@ -4091,7 +4091,7 @@ class Select implements Node {
       var wordParts: any = [];
       wordParts.push(...this.words.map(w => w.toSexp()));
       var wordStrs: any = wordParts.join(" ");
-      if (this.words.length > 0) {
+      if ((this.words.length > 0)) {
         var inClause: any = "(in " + wordStrs + ")";
       } else {
         var inClause: any = "(in)";
@@ -4396,7 +4396,7 @@ class ArithmeticCommand implements Node {
     var formatted: any = new Word(this.rawContent as any, [], "word" as any).FormatCommandSubstitutions(this.rawContent, true);
     var escaped: any = formatted.replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, "\\n").replace(/\t/g, "\\t");
     var result: any = "(arith (word \"" + escaped + "\"))";
-    if (this.redirects.length > 0) {
+    if ((this.redirects.length > 0)) {
       var redirectParts: any = [];
       redirectParts.push(...this.redirects.map(r => r.toSexp()));
       var redirectSexps: any = redirectParts.join(" ");
@@ -4845,7 +4845,7 @@ class ConditionalExpr implements Node {
     } else {
       var result: any = "(cond " + body.toSexp() + ")";
     }
-    if (this.redirects.length > 0) {
+    if ((this.redirects.length > 0)) {
       var redirectParts: any = [];
       redirectParts.push(...this.redirects.map(r => r.toSexp()));
       var redirectSexps: any = redirectParts.join(" ");
@@ -5016,7 +5016,7 @@ class Coproc implements Node {
   }
 
   toSexp(): string {
-    if (this.name !== "") {
+    if ((this.name.length > 0)) {
       var name: any = this.name;
     } else {
       var name: any = "COPROC";
@@ -5396,7 +5396,7 @@ class Parser {
       }
       redirects.push(redirect);
     }
-    return (redirects.length > 0 ? redirects : null);
+    return ((redirects.length > 0) ? redirects : null);
   }
 
   ParseLoopBody(context: string): Node {
@@ -5444,7 +5444,7 @@ class Parser {
       }
       chars.push(this.advance());
     }
-    if (chars.length > 0) {
+    if ((chars.length > 0)) {
       var word: any = chars.join("");
     } else {
       var word: any = "";
@@ -5873,7 +5873,7 @@ class Parser {
           }
         }
         var delimiter: any = delimiterChars.join("");
-        if (delimiter !== "") {
+        if ((delimiter.length > 0)) {
           pendingHeredocs.push([delimiter, stripTabs]);
         }
         continue;
@@ -6890,14 +6890,14 @@ class Parser {
       }
       var varname: any = varnameChars.join("");
       var isValidVarfd: any = false;
-      if (varname !== "") {
+      if ((varname.length > 0)) {
         if (/^[a-zA-Z]$/.test(varname[0]) || varname[0] === "_") {
           if (varname.includes("[") || varname.includes("]")) {
             var left: any = varname.indexOf("[");
             var right: any = varname.lastIndexOf("]");
             if (left !== -1 && right === varname.length - 1 && right > left + 1) {
               var base: any = varname.slice(0, left);
-              if (base !== "" && (/^[a-zA-Z]$/.test(base[0]) || base[0] === "_")) {
+              if ((base.length > 0) && (/^[a-zA-Z]$/.test(base[0]) || base[0] === "_")) {
                 isValidVarfd = true;
                 for (const c of base.slice(1)) {
                   if (!(/^[a-zA-Z0-9]$/.test(c) || c === "_")) {
@@ -6925,7 +6925,7 @@ class Parser {
         this.pos = saved;
       }
     }
-    if (varfd === "" && this.peek() !== "" && /^[0-9]+$/.test(this.peek())) {
+    if (varfd === "" && (this.peek().length > 0) && /^[0-9]+$/.test(this.peek())) {
       var fdChars: any = [];
       while (!this.atEnd() && /^[0-9]+$/.test(this.peek())) {
         fdChars.push(this.advance());
@@ -7040,7 +7040,7 @@ class Parser {
           while (!this.atEnd() && /^[0-9]+$/.test(this.peek())) {
             fdChars.push(this.advance());
           }
-          if (fdChars.length > 0) {
+          if ((fdChars.length > 0)) {
             var fdTarget: any = fdChars.join("");
           } else {
             var fdTarget: any = "";
@@ -8268,7 +8268,7 @@ class Parser {
         }
       }
       var pattern: any = patternChars.join("");
-      if (pattern === "") {
+      if (!(pattern.length > 0)) {
         throw new ParseError(`Expected pattern in case statement at position ${this.LexPeekToken().pos}`, this.LexPeekToken().pos)
       }
       this.skipWhitespace();
@@ -8336,7 +8336,7 @@ class Parser {
     }
     var wordStart: any = this.pos;
     var potentialName: any = this.peekWord();
-    if (potentialName !== "") {
+    if ((potentialName.length > 0)) {
       while (!this.atEnd() && !IsMetachar(this.peek()) && !IsQuote(this.peek())) {
         this.advance();
       }
@@ -8426,7 +8426,7 @@ class Parser {
       this.advance();
     }
     name = Substring(this.source, nameStart, this.pos);
-    if (name === "") {
+    if (!(name.length > 0)) {
       this.pos = savedPos;
       return null;
     }
@@ -8450,7 +8450,7 @@ class Parser {
     var posAfterName: any = this.pos;
     this.skipWhitespace();
     var hasWhitespace: any = this.pos > posAfterName;
-    if (!hasWhitespace && name !== "" && "*?@+!$".includes(name[name.length - 1])) {
+    if (!hasWhitespace && (name.length > 0) && "*?@+!$".includes(name[name.length - 1])) {
       this.pos = savedPos;
       return null;
     }
@@ -8963,7 +8963,7 @@ class Parser {
 
   parse(): Node[] {
     var source: any = this.source.trim();
-    if (source === "") {
+    if (!(source.length > 0)) {
       return [new Empty("empty" as any)];
     }
     var results: any = [];
@@ -9004,7 +9004,7 @@ class Parser {
     if (!(results.length > 0)) {
       return [new Empty("empty" as any)];
     }
-    if (this.SawNewlineInSingleQuote && this.source !== "" && this.source[this.source.length - 1] === "\\" && !(this.source.length >= 3 && this.source.slice(this.source.length - 3, this.source.length - 1) === "\\\n")) {
+    if (this.SawNewlineInSingleQuote && (this.source.length > 0) && this.source[this.source.length - 1] === "\\" && !(this.source.length >= 3 && this.source.slice(this.source.length - 3, this.source.length - 1) === "\\\n")) {
       if (!this.LastWordOnOwnLine(results)) {
         this.StripTrailingBackslashFromLastWord(results);
       }
@@ -9024,7 +9024,7 @@ class Parser {
     var lastWord: any = this.FindLastWord(lastNode);
     if (lastWord !== null && lastWord.value.endsWith("\\")) {
       lastWord.value = Substring(lastWord.value, 0, lastWord.value.length - 1);
-      if (lastWord.value === "" && lastNode instanceof Command && (lastNode as unknown as Command).words.length > 0) {
+      if (!(lastWord.value.length > 0) && lastNode instanceof Command && ((lastNode as unknown as Command).words.length > 0)) {
         (lastNode as unknown as Command).words.pop();
       }
     }
@@ -9035,29 +9035,29 @@ class Parser {
       return node;
     }
     if (node instanceof Command) {
-      if (node.words.length > 0) {
+      if ((node.words.length > 0)) {
         var lastWord: any = node.words[node.words.length - 1];
         if (lastWord.value.endsWith("\\")) {
           return lastWord;
         }
       }
-      if (node.redirects.length > 0) {
+      if ((node.redirects.length > 0)) {
         var lastRedirect: any = node.redirects[node.redirects.length - 1];
         if (lastRedirect instanceof Redirect) {
           return lastRedirect.target;
         }
       }
-      if (node.words.length > 0) {
+      if ((node.words.length > 0)) {
         return node.words[node.words.length - 1];
       }
     }
     if (node instanceof Pipeline) {
-      if (node.commands.length > 0) {
+      if ((node.commands.length > 0)) {
         return this.FindLastWord(node.commands[node.commands.length - 1]);
       }
     }
     if (node instanceof List) {
-      if (node.parts.length > 0) {
+      if ((node.parts.length > 0)) {
         return this.FindLastWord(node.parts[node.parts.length - 1]);
       }
     }
@@ -9184,7 +9184,7 @@ function StripLineContinuationsCommentAware(text: string): string {
 }
 
 function AppendRedirects(base: string, redirects: Node[]): string {
-  if (redirects.length > 0) {
+  if ((redirects.length > 0)) {
     var parts: any = [];
     parts.push(...redirects.map(r => r.toSexp()));
     return base + " " + parts.join(" ");
@@ -9337,7 +9337,7 @@ function StartsWithSubshell(node: Node): boolean {
     return false;
   }
   if (node instanceof Pipeline) {
-    if (node.commands.length > 0) {
+    if ((node.commands.length > 0)) {
       return StartsWithSubshell(node.commands[0]);
     }
     return false;
@@ -9370,7 +9370,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
       }
     }
     parts.push(...node.redirects.map(r => FormatRedirect(r, compactRedirects, true)));
-    if (compactRedirects && node.words.length > 0 && node.redirects.length > 0) {
+    if (compactRedirects && (node.words.length > 0) && (node.redirects.length > 0)) {
       var wordParts: any = parts.slice(0, node.words.length);
       var redirectParts: any = parts.slice(node.words.length);
       var result: any = wordParts.join(" ") + redirectParts.join("");
@@ -9406,7 +9406,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
       var formatted: any = FormatCmdsubNode(cmd, indent, inProcsub, false, procsubFirst && idx === 0);
       var isLast: any = idx === cmds.length - 1;
       var hasHeredoc: any = false;
-      if (cmd.kind === "command" && (cmd as unknown as Command).redirects.length > 0) {
+      if (cmd.kind === "command" && ((cmd as unknown as Command).redirects.length > 0)) {
         for (const r of (cmd as unknown as Command).redirects as Node[]) {
           if (r instanceof HereDoc) {
             hasHeredoc = true;
@@ -9437,7 +9437,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
       }
       idx += 1;
     }
-    var compactPipe: any = inProcsub && cmds.length > 0 && cmds[0][0].kind === "subshell";
+    var compactPipe: any = inProcsub && (cmds.length > 0) && cmds[0][0].kind === "subshell";
     var result: any = "";
     idx = 0;
     while (idx < resultParts.length) {
@@ -9462,7 +9462,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
   if (node instanceof List) {
     var hasHeredoc: any = false;
     for (const p of node.parts as Node[]) {
-      if (p.kind === "command" && (p as unknown as Command).redirects.length > 0) {
+      if (p.kind === "command" && ((p as unknown as Command).redirects.length > 0)) {
         for (const r of (p as unknown as Command).redirects as Node[]) {
           if (r instanceof HereDoc) {
             hasHeredoc = true;
@@ -9472,7 +9472,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
       } else {
         if (p instanceof Pipeline) {
           for (const cmd of p.commands as Node[]) {
-            if (cmd.kind === "command" && (cmd as unknown as Command).redirects.length > 0) {
+            if (cmd.kind === "command" && ((cmd as unknown as Command).redirects.length > 0)) {
               for (const r of (cmd as unknown as Command).redirects as Node[]) {
                 if (r instanceof HereDoc) {
                   hasHeredoc = true;
@@ -9493,7 +9493,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
     for (const p of node.parts as Node[]) {
       if (p instanceof Operator) {
         if (p.op === ";") {
-          if (result.length > 0 && result[result.length - 1].endsWith("\n")) {
+          if ((result.length > 0) && result[result.length - 1].endsWith("\n")) {
             skippedSemi = true;
             continue;
           }
@@ -9505,11 +9505,11 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
           skippedSemi = false;
         } else {
           if (p.op === "\n") {
-            if (result.length > 0 && result[result.length - 1] === ";") {
+            if ((result.length > 0) && result[result.length - 1] === ";") {
               skippedSemi = false;
               continue;
             }
-            if (result.length > 0 && result[result.length - 1].endsWith("\n")) {
+            if ((result.length > 0) && result[result.length - 1].endsWith("\n")) {
               result.push((skippedSemi ? " " : "\n"));
               skippedSemi = false;
               continue;
@@ -9518,7 +9518,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
             skippedSemi = false;
           } else {
             if (p.op === "&") {
-              if (result.length > 0 && result[result.length - 1].includes("<<") && result[result.length - 1].includes("\n")) {
+              if ((result.length > 0) && result[result.length - 1].includes("<<") && result[result.length - 1].includes("\n")) {
                 var last: any = result[result.length - 1];
                 if (last.includes(" |") || last.startsWith("|")) {
                   result[result.length - 1] = last + " &";
@@ -9530,7 +9530,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
                 result.push(" &");
               }
             } else {
-              if (result.length > 0 && result[result.length - 1].includes("<<") && result[result.length - 1].includes("\n")) {
+              if ((result.length > 0) && result[result.length - 1].includes("<<") && result[result.length - 1].includes("\n")) {
                 var last: any = result[result.length - 1];
                 var firstNl: any = last.indexOf("\n");
                 result[result.length - 1] = last.slice(0, firstNl) + " " + p.op + " " + last.slice(firstNl);
@@ -9541,7 +9541,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
           }
         }
       } else {
-        if (result.length > 0 && !(result[result.length - 1].endsWith(" ") || result[result.length - 1].endsWith("\n"))) {
+        if ((result.length > 0) && !(result[result.length - 1].endsWith(" ") || result[result.length - 1].endsWith("\n"))) {
           result.push(" ");
         }
         var formattedCmd: any = FormatCmdsubNode(p, indent, inProcsub, compactRedirects, procsubFirst && cmdCount === 0);
@@ -9588,7 +9588,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
     var cond: any = FormatCmdsubNode(node.condition, indent, false, false, false);
     var body: any = FormatCmdsubNode(node.body, indent + 4, false, false, false);
     var result: any = "while " + cond + "; do\n" + innerSp + body + ";\n" + sp + "done";
-    if (node.redirects.length > 0) {
+    if ((node.redirects.length > 0)) {
       for (const r of node.redirects as Node[]) {
         result = result + " " + FormatRedirect(r, false, false);
       }
@@ -9599,7 +9599,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
     var cond: any = FormatCmdsubNode(node.condition, indent, false, false, false);
     var body: any = FormatCmdsubNode(node.body, indent + 4, false, false, false);
     var result: any = "until " + cond + "; do\n" + innerSp + body + ";\n" + sp + "done";
-    if (node.redirects.length > 0) {
+    if ((node.redirects.length > 0)) {
       for (const r of node.redirects as Node[]) {
         result = result + " " + FormatRedirect(r, false, false);
       }
@@ -9613,7 +9613,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
       var wordVals: any = [];
       wordVals.push(...node.words.map(w => w.value));
       var words: any = wordVals.join(" ");
-      if (words !== "") {
+      if ((words.length > 0)) {
         var result: any = "for " + varName + " in " + words + ";\n" + sp + "do\n" + innerSp + body + ";\n" + sp + "done";
       } else {
         var result: any = "for " + varName + " in ;\n" + sp + "do\n" + innerSp + body + ";\n" + sp + "done";
@@ -9621,7 +9621,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
     } else {
       var result: any = "for " + varName + " in \"$@\";\n" + sp + "do\n" + innerSp + body + ";\n" + sp + "done";
     }
-    if (node.redirects.length > 0) {
+    if ((node.redirects.length > 0)) {
       for (const r of node.redirects as Node[]) {
         var result: any = result + " " + FormatRedirect(r, false, false);
       }
@@ -9631,7 +9631,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
   if (node instanceof ForArith) {
     var body: any = FormatCmdsubNode(node.body, indent + 4, false, false, false);
     var result: any = "for ((" + node.init + "; " + node.cond + "; " + node.incr + "))\ndo\n" + innerSp + body + ";\n" + sp + "done";
-    if (node.redirects.length > 0) {
+    if ((node.redirects.length > 0)) {
       for (const r of node.redirects as Node[]) {
         result = result + " " + FormatRedirect(r, false, false);
       }
@@ -9653,7 +9653,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
       var term: any = (p as unknown as CasePattern).terminator;
       var patIndent: any = RepeatStr(" ", indent + 8);
       var termIndent: any = RepeatStr(" ", indent + 4);
-      var bodyPart: any = (body !== "" ? patIndent + body + "\n" : "\n");
+      var bodyPart: any = ((body.length > 0) ? patIndent + body + "\n" : "\n");
       if (i === 0) {
         patterns.push(" " + pat + ")\n" + bodyPart + termIndent + term);
       } else {
@@ -9663,7 +9663,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
     }
     var patternStr: any = patterns.join("\n" + RepeatStr(" ", indent + 4));
     var redirects: any = "";
-    if (node.redirects.length > 0) {
+    if ((node.redirects.length > 0)) {
       var redirectParts: any = [];
       redirectParts.push(...node.redirects.map(r => FormatRedirect(r, false, false)));
       redirects = " " + redirectParts.join(" ");
@@ -9682,18 +9682,18 @@ ${innerSp}${body}
   if (node instanceof Subshell) {
     var body: any = FormatCmdsubNode(node.body, indent, inProcsub, compactRedirects, false);
     var redirects: any = "";
-    if (node.redirects.length > 0) {
+    if ((node.redirects.length > 0)) {
       var redirectParts: any = [];
       redirectParts.push(...node.redirects.map(r => FormatRedirect(r, false, false)));
       redirects = redirectParts.join(" ");
     }
     if (procsubFirst) {
-      if (redirects !== "") {
+      if ((redirects.length > 0)) {
         return "(" + body + ") " + redirects;
       }
       return "(" + body + ")";
     }
-    if (redirects !== "") {
+    if ((redirects.length > 0)) {
       return "( " + body + " ) " + redirects;
     }
     return "( " + body + " )";
@@ -9703,12 +9703,12 @@ ${innerSp}${body}
     body = body.replace(/[;]+$/, '');
     var terminator: any = (body.endsWith(" &") ? " }" : "; }");
     var redirects: any = "";
-    if (node.redirects.length > 0) {
+    if ((node.redirects.length > 0)) {
       var redirectParts: any = [];
       redirectParts.push(...node.redirects.map(r => FormatRedirect(r, false, false)));
       redirects = redirectParts.join(" ");
     }
-    if (redirects !== "") {
+    if ((redirects.length > 0)) {
       return "{ " + body + terminator + " " + redirects;
     }
     return "{ " + body + terminator;
@@ -10590,7 +10590,7 @@ function IsWordEndContext(c: string): boolean {
 
 function SkipMatchedPair(s: string, start: number, open: string, close: string, flags: number): number {
   var n: any = s.length;
-  if ((flags & _SMP_PAST_OPEN) !== 0) {
+  if (((flags & _SMP_PAST_OPEN) !== 0)) {
     var i: any = start;
   } else {
     if (start >= n || s[start] !== open) {
@@ -10609,7 +10609,7 @@ function SkipMatchedPair(s: string, start: number, open: string, close: string, 
       continue;
     }
     var literal: any = flags & _SMP_LITERAL;
-    if (literal === 0 && c === "\\") {
+    if (!(literal !== 0) && c === "\\") {
       passNext = true;
       i += 1;
       continue;
@@ -10621,28 +10621,28 @@ function SkipMatchedPair(s: string, start: number, open: string, close: string, 
       i += 1;
       continue;
     }
-    if (literal === 0 && c === "`") {
+    if (!(literal !== 0) && c === "`") {
       backq = true;
       i += 1;
       continue;
     }
-    if (literal === 0 && c === "'") {
+    if (!(literal !== 0) && c === "'") {
       var i: any = SkipSingleQuoted(s, i + 1);
       continue;
     }
-    if (literal === 0 && c === "\"") {
+    if (!(literal !== 0) && c === "\"") {
       var i: any = SkipDoubleQuoted(s, i + 1);
       continue;
     }
-    if (literal === 0 && IsExpansionStart(s, i, "$(")) {
+    if (!(literal !== 0) && IsExpansionStart(s, i, "$(")) {
       var i: any = FindCmdsubEnd(s, i + 2);
       continue;
     }
-    if (literal === 0 && IsExpansionStart(s, i, "${")) {
+    if (!(literal !== 0) && IsExpansionStart(s, i, "${")) {
       var i: any = FindBracedParamEnd(s, i + 2);
       continue;
     }
-    if (literal === 0 && c === open) {
+    if (!(literal !== 0) && c === open) {
       depth += 1;
     } else {
       if (c === close) {
@@ -10659,7 +10659,7 @@ function SkipSubscript(s: string, start: number, flags: number): number {
 }
 
 function Assignment(s: string, flags: number): number {
-  if (s === "") {
+  if (!(s.length > 0)) {
     return -1;
   }
   if (!(/^[a-zA-Z]$/.test(s[0]) || s[0] === "_")) {
@@ -10672,7 +10672,7 @@ function Assignment(s: string, flags: number): number {
       return i;
     }
     if (c === "[") {
-      var subFlags: any = ((flags & 2) !== 0 ? _SMP_LITERAL : 0);
+      var subFlags: any = (((flags & 2) !== 0) ? _SMP_LITERAL : 0);
       var end: any = SkipSubscript(s, i, subFlags);
       if (end === -1) {
         return -1;
@@ -10794,7 +10794,7 @@ function LooksLikeAssignment(s: string): boolean {
 }
 
 function IsValidIdentifier(name: string): boolean {
-  if (name === "") {
+  if (!(name.length > 0)) {
     return false;
   }
   if (!(/^[a-zA-Z]$/.test(name[0]) || name[0] === "_")) {

@@ -4,14 +4,8 @@ COMPENSATIONS FOR EARLIER STAGE DEFICIENCIES
 ============================================
 
 Frontend deficiencies (should be fixed in frontend.py):
-- BinaryOp patterns like "len(x) > 0" and "x != ''" are converted back to Python
-  truthy checks. Frontend creates these explicit comparisons for other backends,
-  but Python backend must undo them. Frontend could emit a "Truthy" IR node that
-  each backend renders appropriately.
-- UnaryOp "!(len(x) > 0)" similarly converted back to "not x" - same issue.
 - Marker variables "_skip_docstring" and "_pass" require special-case filtering.
   Frontend should either not emit these or use a dedicated NoOp IR node.
-- Call(_parseInt, ...) and Call(_intToStr, ...) converted back to int()/str().
 
 Middleend deficiencies (should be fixed in middleend.py):
 - None identified. Python backend is cleanest because source language matches.
@@ -108,6 +102,7 @@ from src.ir import (
     TryCatch,
     Tuple,
     TupleAssign,
+    Truthy,
     TupleLit,
     Type,
     TypeAssert,
@@ -621,12 +616,6 @@ class PythonBackend:
             case IntToStr(value=v):
                 return f"str({self._expr(v)})"
             case Call(func=func, args=args):
-                # Map helper functions to Python builtins
-                if func == "_parseInt":
-                    args_str = ", ".join(self._expr(a) for a in args)
-                    return f"int({args_str})"
-                if func == "_intToStr":
-                    return f"str({self._expr(args[0])})"
                 args_str = ", ".join(self._expr(a) for a in args)
                 return f"{func}({args_str})"
             case MethodCall(obj=obj, method=method, args=args, receiver_type=receiver_type):
@@ -641,37 +630,13 @@ class PythonBackend:
                 args_str = ", ".join(self._expr(a) for a in args)
                 type_name = self._type_name_for_check(on_type)
                 return f"{type_name}.{method}({args_str})"
-            case BinaryOp(op=">", left=Len(expr=inner), right=IntLit(value=0)):
-                # Convert len(x) > 0 back to truthy check for Python
-                return self._expr(inner)
-            case BinaryOp(op="==", left=Len(expr=inner), right=IntLit(value=0)):
-                # Convert len(x) == 0 back to "not x" for Python
-                return f"not {self._expr(inner)}"
-            case BinaryOp(op="!=", left=left, right=StringLit(value="")):
-                # Convert x != "" back to truthy check for Python
-                return self._expr(left)
-            case BinaryOp(op="==", left=left, right=StringLit(value="")):
-                # Convert x == "" back to "not x" for Python
-                return f"not {self._expr(left)}"
-            case BinaryOp(op="!=", left=BinaryOp(op="&") as inner, right=IntLit(value=0)):
-                # Convert (x & Y) != 0 back to truthy check for Python
-                return f"({self._expr(inner)})"
-            case BinaryOp(op="==", left=BinaryOp(op="&") as inner, right=IntLit(value=0)):
-                # Convert (x & Y) == 0 back to "not (x & Y)" for Python
-                return f"not ({self._expr(inner)})"
+            case Truthy(expr=e):
+                return self._expr(e)
             case BinaryOp(op=op, left=left, right=right):
                 py_op = _binary_op(op)
                 left_str = self._maybe_paren(left, op, is_left=True)
                 right_str = self._maybe_paren(right, op, is_left=False)
                 return f"{left_str} {py_op} {right_str}"
-            case UnaryOp(
-                op="!", operand=BinaryOp(op=">", left=Len(expr=inner), right=IntLit(value=0))
-            ):
-                # Convert !(len(x) > 0) back to "not x" for Python
-                return f"not {self._expr(inner)}"
-            case UnaryOp(op="!", operand=BinaryOp(op="!=", left=left, right=StringLit(value=""))):
-                # Convert !(x != "") back to "not x" for Python
-                return f"not {self._expr(left)}"
             case UnaryOp(op=op, operand=operand):
                 py_op = _unary_op(op)
                 # For 'not', wrap compound expressions in parens for correct precedence

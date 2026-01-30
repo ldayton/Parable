@@ -1243,38 +1243,18 @@ def lower_expr_as_bool(
     # Bool expressions don't need nil check
     if expr_type == BOOL:
         return expr
-    # String truthy check: s != ""
+    # String truthy check
     if expr_type == STRING:
-        return ir.BinaryOp(
-            op="!=",
-            left=expr,
-            right=ir.StringLit(value="", typ=STRING),
-            typ=BOOL,
-            loc=loc_from_node(node),
-        )
-    # Int truthy check: n != 0
+        return ir.Truthy(expr=expr, typ=BOOL, loc=loc_from_node(node))
+    # Int truthy check
     if expr_type == INT:
-        return ir.BinaryOp(
-            op="!=", left=expr, right=ir.IntLit(value=0, typ=INT), typ=BOOL, loc=loc_from_node(node)
-        )
-    # Slice/Map/Set truthy check: len(x) > 0
+        return ir.Truthy(expr=expr, typ=BOOL, loc=loc_from_node(node))
+    # Slice/Map/Set truthy check
     if isinstance(expr_type, (Slice, Map, Set)):
-        return ir.BinaryOp(
-            op=">",
-            left=ir.Len(expr=expr, typ=INT, loc=loc_from_node(node)),
-            right=ir.IntLit(value=0, typ=INT),
-            typ=BOOL,
-            loc=loc_from_node(node),
-        )
-    # Optional(Slice) truthy check: len(x) > 0 (nil slice has len 0)
+        return ir.Truthy(expr=expr, typ=BOOL, loc=loc_from_node(node))
+    # Optional(Slice/Map/Set) truthy check (nil slice has len 0)
     if isinstance(expr_type, Optional) and isinstance(expr_type.inner, (Slice, Map, Set)):
-        return ir.BinaryOp(
-            op=">",
-            left=ir.Len(expr=expr, typ=INT, loc=loc_from_node(node)),
-            right=ir.IntLit(value=0, typ=INT),
-            typ=BOOL,
-            loc=loc_from_node(node),
-        )
+        return ir.Truthy(expr=expr, typ=BOOL, loc=loc_from_node(node))
     # Interface truthy check: x != nil
     if isinstance(expr_type, InterfaceRef):
         return ir.IsNil(expr=expr, negated=True, typ=BOOL, loc=loc_from_node(node))

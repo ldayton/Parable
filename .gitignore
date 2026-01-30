@@ -4,6 +4,7 @@ node_modules/
 .venv-*/
 .pytest_cache/
 .ruff_cache/
+.coverage
 .pyperf/
 .DS_Store
 .claude/*
@@ -15,3 +16,5 @@ tools/bash-oracle/bin/negation-cmdsub.txt
 /bugs.tests
 scalene-profile.html
 src/cmd/debug-test/
+dist/java/classes/
+dist/go/parable-profile

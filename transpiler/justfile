@@ -1,0 +1,112 @@
+set shell := ["bash", "-o", "pipefail", "-cu"]
+
+# Configuration
+source := "../src/parable.py"
+tests := "../tests"
+dist := "../dist/go"
+backends := "go java py ts"
+testable := "go py ts"
+
+# Transpile source to stdout
+emit backend="go":
+    uv run python -m src.tongues --target {{backend}} < {{source}}
+
+# Transpile source and check syntax/compilation
+check backend="go":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    just style
+    case "{{backend}}" in
+        go)
+            uv run python -m src.tongues --target go < {{source}} > /tmp/transpile-ir.go
+            gofmt /tmp/transpile-ir.go > {{dist}}/parable.go
+            go build -C {{dist}} -o /dev/null .
+            ;;
+        java)
+            uv run python -m src.tongues --target java < {{source}} > /tmp/Output.java
+            javac /tmp/Output.java -d /tmp
+            ;;
+        py|python)
+            uv run python -m src.tongues --target py < {{source}} > /tmp/transpile.py
+            ;;
+        ts|typescript)
+            rm -rf /tmp/transpile-ts && mkdir -p /tmp/transpile-ts/src
+            uv run python -m src.tongues --target ts < {{source}} > /tmp/transpile-ts/src/output.ts
+            tsc --outDir /tmp/transpile-ts/src --lib es2019 --module commonjs --esModuleInterop /tmp/transpile-ts/src/output.ts
+            ;;
+        *)
+            echo "Unknown backend: {{backend}}"
+            exit 1
+            ;;
+    esac
+
+# Run full parser test suite (4574 tests)
+test backend="go":
+    #!/usr/bin/env bash
+    set -euo pipefail
+    # Convert relative paths to absolute for subprocesses
+    tests_abs=$(cd "$(dirname "{{tests}}")" && pwd)/$(basename "{{tests}}")
+    case "{{backend}}" in
+        go)
+            just check go
+            go run -C {{dist}} ./cmd/run-tests "$tests_abs"
+            ;;
+        py|python)
+            rm -rf /tmp/transpile-test && mkdir /tmp/transpile-test
+            uv run python -m src.tongues --target py < {{source}} > /tmp/transpile-test/parable.py
+            PYTHONPATH=/tmp/transpile-test python3 {{tests}}/bin/run-tests.py {{tests}}
+            ;;
+        ts|typescript)
+            just check ts
+            node {{tests}}/bin/run-js-tests.js /tmp/transpile-ts
+            ;;
+        *)
+            echo "No test runner for backend: {{backend}}"
+            echo "Testable backends: {{testable}}"
+            exit 1
+            ;;
+    esac
+
+# Check all backends compile
+check-all:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for backend in {{backends}}; do
+        echo "=== Checking $backend ==="
+        just check "$backend" || echo "FAILED: $backend"
+    done
+
+# Run test suite on all testable backends
+test-all:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    for backend in {{testable}}; do
+        echo "=== Testing $backend ==="
+        just test "$backend"
+    done
+
+# Show compilation errors for debugging
+errors backend="go":
+    @uv run python -m src.tongues --target {{backend}} < {{source}} > /tmp/transpile-out 2>&1 || true
+    @echo "=== Transpiler output (first 20 lines) ==="
+    @head -20 /tmp/transpile-out || true
+    @echo "=== Compilation errors ==="
+    @just check {{backend}} 2>&1 | head -50 || true
+
+# Verify all transpiler source is subset-compliant
+style:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    failed=0
+    for f in $(fd -e py . src) tests/run_tests.py; do
+        if ! uv run python -m src.tongues --verify < "$f" 2>/dev/null; then
+            echo "FAIL: $f"
+            uv run python -m src.tongues --verify < "$f" 2>&1 | head -5
+            failed=1
+        fi
+    done
+    exit $failed
+
+# Run transpiler tests using subset-compliant runner
+test-transpiler:
+    python3 tests/run_testsw.py tests/

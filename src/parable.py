@@ -74,14 +74,17 @@ def _is_whitespace(c: str) -> bool:
     return c == " " or c == "\t" or c == "\n"
 
 
+def _string_to_bytes(s: str) -> list[int]:
+    """Convert a string to a list of UTF-8 bytes."""
+    return list(s.encode("utf-8"))
+
+
 def _is_whitespace_no_newline(c: str) -> bool:
     return c == " " or c == "\t"
 
 
 def _substring(s: str, start: int, end: int) -> str:
-    """Extract substring from start to end (exclusive), clamped to string length."""
-    if end > len(s):
-        end = len(s)
+    """Extract substring from start to end (exclusive)."""
     return s[start:end]
 
 
@@ -213,7 +216,12 @@ class Token:
     """
 
     def __init__(
-        self, type_: int, value: str, pos: int, parts: list | None = None, word: Word | None = None
+        self,
+        type_: int,
+        value: str,
+        pos: int,
+        parts: list[Node] | None = None,
+        word: Word | None = None,
     ):
         self.type = type_
         self.value = value
@@ -223,10 +231,10 @@ class Token:
 
     def __repr__(self) -> str:
         if self.word:
-            return f"Token({self.type}, {self.value!r}, {self.pos}, word={self.word!r})"
+            return f"Token({self.type}, {self.value}, {self.pos}, word={self.word})"
         if self.parts:
-            return f"Token({self.type}, {self.value!r}, {self.pos}, parts={len(self.parts)})"
-        return f"Token({self.type}, {self.value!r}, {self.pos})"
+            return f"Token({self.type}, {self.value}, {self.pos}, parts={len(self.parts)})"
+        return f"Token({self.type}, {self.value}, {self.pos})"
 
 
 class ParserStateFlags:
@@ -2070,7 +2078,7 @@ def _strip_line_continuations_comment_aware(text: str) -> str:
     return "".join(result)
 
 
-def _append_redirects(base: str, redirects: list | None) -> str:
+def _append_redirects(base: str, redirects: list[Node]) -> str:
     """Append redirect sexp strings to a base sexp string."""
     if redirects:
         parts = []
@@ -4170,6 +4178,17 @@ class For(Node):
             )
 
 
+def _format_arith_val(s: str) -> str:
+    """Format arithmetic value for sexp output."""
+    w = Word(s, [])
+    val = w._expand_all_ansi_c_quotes(s)
+    val = w._strip_locale_string_dollars(val)
+    val = w._format_command_substitutions(val)
+    val = val.replace("\\", "\\\\").replace('"', '\\"')
+    val = val.replace("\n", "\\n").replace("\t", "\\t")
+    return val
+
+
 class ForArith(Node):
     """A C-style for loop: for ((init; cond; incr)); do ... done."""
 
@@ -4193,16 +4212,6 @@ class ForArith(Node):
 
     def to_sexp(self) -> str:
         # bash-oracle format: (arith-for (init (word "x")) (test (word "y")) (step (word "z")) body)
-        def format_arith_val(s: str) -> str:
-            # Use Word's methods to expand ANSI-C quotes and strip locale $
-            w = Word(s, [])
-            val = w._expand_all_ansi_c_quotes(s)
-            val = w._strip_locale_string_dollars(val)
-            val = w._format_command_substitutions(val)
-            val = val.replace("\\", "\\\\").replace('"', '\\"')
-            val = val.replace("\n", "\\n").replace("\t", "\\t")
-            return val
-
         suffix = ""
         if self.redirects:
             redirect_parts = []
@@ -4212,9 +4221,9 @@ class ForArith(Node):
         init_val = self.init if self.init else "1"
         cond_val = self.cond if self.cond else "1"
         incr_val = self.incr if self.incr else "1"
-        init_str = format_arith_val(init_val)
-        cond_str = format_arith_val(cond_val)
-        incr_str = format_arith_val(incr_val)
+        init_str = _format_arith_val(init_val)
+        cond_str = _format_arith_val(cond_val)
+        incr_str = _format_arith_val(incr_val)
         body_str = self.body.to_sexp()
         return f'(arith-for (init (word "{init_str}")) (test (word "{cond_str}")) (step (word "{incr_str}")) {body_str}){suffix}'
 
@@ -5581,7 +5590,9 @@ def _format_redirect(
             op = "<<-"
         else:
             op = "<<"
-        if r.fd is not None and r.fd != 0:
+        # fd > 0: explicitly specified and non-default (0 is default for heredoc input)
+        # Note: also handles sentinel value -1 used in transpiled code
+        if r.fd is not None and r.fd > 0:
             op = str(r.fd) + op
         if r.quoted:
             delim = "'" + r.delimiter + "'"
@@ -7110,7 +7121,7 @@ class Parser:
             return tok.type == TokenType.WORD and tok.value == "}"
         return False
 
-    def _collect_redirects(self) -> list | None:
+    def _collect_redirects(self) -> list[Node] | None:
         """Collect trailing redirects after a compound command."""
         redirects = []
         while True:

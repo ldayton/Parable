@@ -1,0 +1,17 @@
+[project]
+name = "tongues"
+version = "0.1.0"
+requires-python = ">=3.14"
+dependencies = []
+
+[dependency-groups]
+dev = ["pytest", "ruff"]
+
+[tool.ruff]
+line-length = 100
+
+[tool.ruff.lint]
+select = []
+
+[project.scripts]
+transpile = "src.cli:main"

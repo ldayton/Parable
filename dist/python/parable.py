@@ -1397,7 +1397,7 @@ class Lexer:
             flags = MatchedPairFlags_DQUOTE if in_dquote else MatchedPairFlags_NONE
             param_ends_with_dollar = param != "" and param.endswith("$")
             arg = self._collect_param_argument(flags, param_ends_with_dollar)
-        except Exception as e:
+        except MatchedPairError as e:
             self._dolbrace_state = saved_dolbrace
             raise e
         if (op == "<" or op == ">") and arg.startswith("(") and arg.endswith(")"):
@@ -4257,7 +4257,7 @@ class Parser:
             self._restore_parser_state(saved)
             self._in_process_sub = old_in_process_sub
             return (ProcessSubstitution(direction=direction, command=cmd, kind="procsub"), text)
-        except Exception as e:
+        except ParseError as e:
             self._restore_parser_state(saved)
             self._in_process_sub = old_in_process_sub
             content_start_char = self.source[start + 2] if start + 2 < self.length else ""
@@ -4361,7 +4361,7 @@ class Parser:
         text = _substring(self.source, start, self.pos)
         try:
             expr = self._parse_arith_expr(content)
-        except Exception as _e:
+        except ParseError as _e:
             self.pos = start
             return (None, "")
         return (ArithmeticExpansion(expression=expr, kind="arith"), text)

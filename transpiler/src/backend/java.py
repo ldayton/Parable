@@ -6,7 +6,7 @@ COMPENSATIONS FOR EARLIER STAGE DEFICIENCIES
 Frontend deficiencies (should be fixed in frontend.py):
 - FieldAccess for "this._arith_parse_*" is special-cased to emit lambda syntax
   "() -> this.method()" - frontend should emit FuncRef IR for bound method
-  references instead of FieldAccess.
+  references instead of FieldAccess. Parable-specific: hardcoded method prefix.
 - SliceConvert IR node is not handled - either frontend shouldn't emit it for
   Java-targeted code, or this backend needs to implement covariant conversion.
 - VAR_TYPE_OVERRIDES and FIELD_TYPE_OVERRIDES imported from src/type_overrides
@@ -17,6 +17,14 @@ Frontend deficiencies (should be fixed in frontend.py):
   type is unknown - frontend should infer element types from iterable types and
   include them in the IR.
 - Frontend now emits NoOp IR nodes for skipped statements.
+- Auto-generates getKind() when struct implements "Node" and has "kind" field -
+  Parable-specific knowledge about AST Node interface contract. Frontend should
+  emit getter methods explicitly or IR should have interface satisfaction markers.
+- ParableFunctions._bytesToString() and _stringToBytes() helpers hardcode Parable's
+  byte encoding. Frontend should emit BytesToString/StringToBytes IR nodes that
+  backend renders with appropriate charset handling.
+- toSexp() calls cast to Node interface - Parable-specific method. Frontend should
+  annotate interface method calls so backend doesn't need domain knowledge.
 
 Middleend deficiencies (should be fixed in middleend.py):
 - None identified. Middleend correctly passes through type information; the gaps
@@ -47,8 +55,6 @@ Frontend deficiencies (should be fixed in frontend.py):
   types. Frontend should emit Optional wrapper for nullable fields. (~47 fields)
 - Complex iteration patterns: `IntStream.iterate(n-1, _x -> _x < -1, _x -> _x + -1)`
   instead of `for (int i = n-1; i >= 0; i--)`. Frontend should emit ForClassic. (~7 sites)
-- Exception types not in IR: TryCatch catches generic `Exception` instead of
-  specific types like `ParseError`. Frontend should include exception type. (~7 sites)
 - Last-element access: `list.get(list.size() - 1)` instead of `list.getLast()`.
   Frontend could emit Index with -1 sentinel that backend maps to getLast(). (~19 sites)
 
@@ -558,11 +564,17 @@ class JavaBackend:
     def _emit_struct(self, struct: Struct) -> None:
         class_name = _java_safe_class(struct.name)
         self.current_class = class_name
+        # Exception structs extend their parent or RuntimeException
+        if struct.is_exception:
+            parent = struct.embedded_type or "RuntimeException"
+            extends_clause = f" extends {parent}"
+        else:
+            extends_clause = ""
         implements_clause = ""
         if struct.implements:
             impl_names = [_java_safe_class(n) for n in struct.implements]
             implements_clause = f" implements {', '.join(impl_names)}"
-        self._line(f"class {class_name}{implements_clause} {{")
+        self._line(f"class {class_name}{extends_clause}{implements_clause} {{")
         self.indent += 1
         for fld in struct.fields:
             self._emit_field(fld)
@@ -588,9 +600,16 @@ class JavaBackend:
 
     def _emit_default_constructor(self, struct: Struct) -> None:
         """Emit a constructor with all fields as parameters."""
-        if not struct.fields:
-            return
         class_name = _java_safe_class(struct.name)
+        if not struct.fields:
+            # Empty exception structs need a constructor matching Raise emission
+            if struct.is_exception:
+                self._line(f"{class_name}(String message, int pos, int line) {{")
+                self.indent += 1
+                self._line("super(message, pos, line);")
+                self.indent -= 1
+                self._line("}")
+            return
         params = ", ".join(f"{self._type(f.typ)} {_java_safe_name(f.name)}" for f in struct.fields)
         self._line(f"{class_name}({params}) {{")
         self.indent += 1
@@ -872,11 +891,15 @@ class JavaBackend:
                 if not no_scope:
                     self.indent -= 1
                     self._line("}")
-            case TryCatch(body=body, catch_var=catch_var, catch_body=catch_body, reraise=reraise):
-                self._emit_try_catch(stmt, body, catch_var, catch_body, reraise)
-            case Raise(error_type=error_type, message=message, pos=pos):
-                msg = self._expr(message)
-                self._line(f"throw new RuntimeException({msg});")
+            case TryCatch(body=body, catch_var=catch_var, catch_type=catch_type, catch_body=catch_body, reraise=reraise):
+                self._emit_try_catch(stmt, body, catch_var, catch_type, catch_body, reraise)
+            case Raise(error_type=error_type, message=message, pos=pos, reraise_var=reraise_var):
+                if reraise_var:
+                    self._line(f"throw {reraise_var};")
+                else:
+                    msg = self._expr(message)
+                    p = self._expr(pos)
+                    self._line(f"throw new {error_type}({msg}, {p}, 0);")
             case SoftFail():
                 self._line("return null;")
             case _:
@@ -1071,6 +1094,7 @@ class JavaBackend:
         stmt: Stmt,
         body: list[Stmt],
         catch_var: str | None,
+        catch_type: Type | None,
         catch_body: list[Stmt],
         reraise: bool,
     ) -> None:
@@ -1081,7 +1105,8 @@ class JavaBackend:
             self._emit_stmt(s)
         self.indent -= 1
         var = _java_safe_name(catch_var) if catch_var else "e"
-        self._line(f"}} catch (Exception {var}) {{")
+        exc_type = catch_type.name if isinstance(catch_type, StructRef) else "Exception"
+        self._line(f"}} catch ({exc_type} {var}) {{")
         self.indent += 1
         for s in catch_body:
             self._emit_stmt(s)
@@ -1503,8 +1528,19 @@ class JavaBackend:
                     return "new HashSet<>()"
                 elems = ", ".join(self._expr(e) for e in elements)
                 return f"new HashSet<>(Set.of({elems}))"
-            case StructLit(struct_name=struct_name, fields=fields):
+            case StructLit(struct_name=struct_name, fields=fields, embedded_value=embedded_value):
                 safe_name = _java_safe_class(struct_name)
+                # For exception inheritance, use parent's field values as constructor args
+                if embedded_value and isinstance(embedded_value, StructLit):
+                    parent_field_info = self.struct_fields.get(embedded_value.struct_name, [])
+                    if parent_field_info:
+                        ordered_args = []
+                        for field_name, field_type in parent_field_info:
+                            if field_name in embedded_value.fields:
+                                ordered_args.append(self._expr(embedded_value.fields[field_name]))
+                            else:
+                                ordered_args.append(self._default_value(field_type))
+                        return f"new {safe_name}({', '.join(ordered_args)})"
                 # Use struct field order, fill in missing fields with defaults
                 field_info = self.struct_fields.get(struct_name, [])
                 if field_info:

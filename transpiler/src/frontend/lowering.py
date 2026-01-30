@@ -2587,12 +2587,18 @@ def lower_stmt_Try(
 
     body = dispatch.lower_stmts(node.get("body", []))
     catch_var = None
+    catch_type: ir.Type | None = None
     catch_body: list[ir.Stmt] = []
     reraise = False
     handlers = node.get("handlers", [])
     if handlers:
         handler = handlers[0]
         catch_var = handler.get("name")
+        # Extract exception type from handler
+        catch_type_node = handler.get("type")
+        if catch_type_node and is_type(catch_type_node, ["Name"]):
+            type_name = catch_type_node.get("id")
+            catch_type = ir.StructRef(type_name)
         handler_body = handler.get("body", [])
         # Set catch var context so raise e can be detected
         saved_catch_var = set_catch_var(catch_var)
@@ -2605,6 +2611,7 @@ def lower_stmt_Try(
     return ir.TryCatch(
         body=body,
         catch_var=catch_var,
+        catch_type=catch_type,
         catch_body=catch_body,
         reraise=reraise,
         loc=loc_from_node(node),

@@ -17,8 +17,6 @@ Frontend deficiencies (should be fixed in frontend.py):
 - Pointer/Optional conflation: Pointer(StructRef("X")) renders as `X` but should
   be `X | None` when field is nullable. Example: `word: Word = None` should be
   `word: Word | None = None`. (~50 fields affected)
-- Exception type not in IR: TryCatch doesn't carry exception type, so backend
-  emits `except Exception` instead of specific types like `except ParseError`.
 
 Middleend deficiencies (should be fixed in middleend.py):
 - None. The while loops and accumulator patterns in the output faithfully reflect
@@ -419,8 +417,8 @@ class PythonBackend:
             case Block(body=body):
                 for s in body:
                     self._emit_stmt(s)
-            case TryCatch(body=body, catch_var=catch_var, catch_body=catch_body, reraise=reraise):
-                self._emit_try_catch(body, catch_var, catch_body, reraise)
+            case TryCatch(body=body, catch_var=catch_var, catch_type=catch_type, catch_body=catch_body, reraise=reraise):
+                self._emit_try_catch(body, catch_var, catch_type, catch_body, reraise)
             case Raise(error_type=error_type, message=message, pos=pos, reraise_var=reraise_var):
                 if reraise_var:
                     self._line(f"raise {reraise_var}")
@@ -539,6 +537,7 @@ class PythonBackend:
         self,
         body: list[Stmt],
         catch_var: str | None,
+        catch_type: Type | None,
         catch_body: list[Stmt],
         reraise: bool,
     ) -> None:
@@ -550,7 +549,8 @@ class PythonBackend:
             self._emit_stmt(s)
         self.indent -= 1
         var = _safe_name(catch_var) if catch_var else "_e"
-        self._line(f"except Exception as {var}:")
+        exc_type = catch_type.name if isinstance(catch_type, StructRef) else "Exception"
+        self._line(f"except {exc_type} as {var}:")
         self.indent += 1
         if _is_empty_body(catch_body) and not reraise:
             self._line("pass")

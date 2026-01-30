@@ -213,6 +213,7 @@ from src.ir import (
     MethodCall,
     Module,
     NilLit,
+    NoOp,
     OpAssign,
     Optional,
     Param,
@@ -788,12 +789,14 @@ class JavaBackend:
                             self._line(f"Object {lv} = {val_str}[{i}];")
                         else:
                             self._line(f"{lv} = {val_str}[{i}];")
+            case NoOp():
+                pass  # No output for NoOp
             case ExprStmt(expr=Var(name=name)) if name in (
                 "_skip_docstring",
                 "_pass",
                 "_skip_super_init",
             ):
-                pass  # Skip marker statements
+                pass  # Skip marker statements (legacy)
             case ExprStmt(expr=expr):
                 e = self._expr(expr)
                 self._line(f"{e};")

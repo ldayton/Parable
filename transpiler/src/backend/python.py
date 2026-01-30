@@ -78,6 +78,7 @@ from src.ir import (
     MethodCall,
     Module,
     NilLit,
+    NoOp,
     OpAssign,
     Optional,
     Param,
@@ -381,8 +382,10 @@ class PythonBackend:
                 lv = self._lvalue(target)
                 val = self._expr(value)
                 self._line(f"{lv} {op}= {val}")
+            case NoOp():
+                pass  # No output for NoOp
             case ExprStmt(expr=Var(name="_skip_docstring")):
-                pass  # Skip docstring markers
+                pass  # Skip docstring markers (legacy)
             case ExprStmt(expr=Var(name="_pass")):
                 self._line("pass")
             case ExprStmt(expr=expr):

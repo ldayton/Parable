@@ -1,0 +1,11 @@
+=== no skip_super_init marker
+class MyError(Exception):
+    def __init__(self, msg: str) -> None:
+        super().__init__(msg)
+        self.msg: str = msg
+--- python
+def NewMyError(msg: str) -> MyError:
+    self = MyError()
+    self.msg = msg
+    return self
+---

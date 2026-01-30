@@ -1365,10 +1365,10 @@ def lower_stmt_Expr(
     # Skip docstrings
     value = node.get("value")
     if is_type(value, ["Constant"]) and isinstance(value.get("value"), str):
-        return ir.ExprStmt(expr=ir.Var(name="_skip_docstring", typ=VOID))
+        return ir.NoOp()
     # Skip super().__init__() calls - handled by Go embedding
     if is_super_init_call(value):
-        return ir.ExprStmt(expr=ir.Var(name="_skip_super_init", typ=VOID))
+        return ir.NoOp()
     return ir.ExprStmt(expr=lower_expr(value), loc=loc_from_node(node))
 
 

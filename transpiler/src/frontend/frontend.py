@@ -29,6 +29,7 @@ from . import type_inference
 from . import lowering
 from . import collection
 from . import signatures
+from . import fields
 from . import builders
 from .names import NameResult
 
@@ -116,7 +117,7 @@ class Frontend:
 
     def _collect_fields(self, tree: ASTNode) -> None:
         """Pass 4: Collect struct fields from class definitions."""
-        collection.collect_fields(
+        fields.collect_fields(
             tree, self.symbols, self._make_collection_callbacks_with_inference()
         )
 

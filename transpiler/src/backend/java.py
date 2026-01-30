@@ -19,8 +19,7 @@ Frontend deficiencies (should be fixed in frontend.py):
 - Loop variable types in ForRange sometimes fall back to "Object" when element
   type is unknown - frontend should infer element types from iterable types and
   include them in the IR.
-- Marker variables "_skip_docstring", "_pass", "_skip_super_init" require filtering.
-  Frontend should use a dedicated NoOp IR node or not emit these.
+- Frontend now emits NoOp IR nodes for skipped statements.
 
 Middleend deficiencies (should be fixed in middleend.py):
 - None identified. Middleend correctly passes through type information; the gaps
@@ -799,12 +798,6 @@ class JavaBackend:
                             self._line(f"{lv} = {val_str}[{i}];")
             case NoOp():
                 pass  # No output for NoOp
-            case ExprStmt(expr=Var(name=name)) if name in (
-                "_skip_docstring",
-                "_pass",
-                "_skip_super_init",
-            ):
-                pass  # Skip marker statements (legacy)
             case ExprStmt(expr=expr):
                 e = self._expr(expr)
                 self._line(f"{e};")

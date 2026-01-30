@@ -16,8 +16,7 @@ Frontend deficiencies (should be fixed in frontend.py):
   semantics that don't map cleanly to JS trimStart/trimEnd.
 - FieldAccess for "this.method" emits ".bind(this)" - frontend should emit FuncRef
   IR for method references, not FieldAccess that backend must detect and fix.
-- Marker variables "_skip_docstring", "_pass", "_skip_super_init" require filtering.
-  Frontend should use a dedicated NoOp IR node or not emit these.
+- Frontend now emits NoOp IR nodes for skipped statements.
 
 Middleend deficiencies (should be fixed in middleend.py):
 - VarDecl and Assign use "any" type because middleend doesn't track that the same
@@ -419,12 +418,6 @@ class TsBackend:
                 self._line(f"{lv} {op}= {val};")
             case NoOp():
                 pass  # No output for NoOp
-            case ExprStmt(expr=Var(name=name)) if name in (
-                "_skip_docstring",
-                "_pass",
-                "_skip_super_init",
-            ):
-                pass  # Skip marker statements (legacy)
             case ExprStmt(expr=expr):
                 self._line(f"{self._expr(expr)};")
             case Return(value=value):

@@ -869,8 +869,7 @@ func _Substring(s string, start int, end int) string {
                 return
             # For other types (like structs with Pop method), fall through to normal handling
         expr = self._emit_expr(stmt.expr)
-        # Filter out placeholder expressions (after camelCase conversion)
-        if expr and not expr.startswith(("skip", "pass", "localFunc", "unknown")):
+        if expr:
             self._line(expr)
 
     def _emit_stmt_Return(self, stmt: Return) -> None:

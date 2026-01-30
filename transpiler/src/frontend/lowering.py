@@ -1397,14 +1397,14 @@ def lower_stmt_Pass(node: ASTNode) -> "ir.Stmt":
     """Lower pass statement."""
     from .. import ir
 
-    return ir.ExprStmt(expr=ir.Var(name="_pass", typ=VOID), loc=loc_from_node(node))
+    return ir.NoOp(loc=loc_from_node(node))
 
 
 def lower_stmt_FunctionDef(node: ASTNode) -> "ir.Stmt":
     """Lower local function definition (placeholder)."""
     from .. import ir
 
-    return ir.ExprStmt(expr=ir.Var(name=f"_local_func_{node.get('name')}", typ=VOID))
+    return ir.NoOp()
 
 
 def lower_stmt_Return(
@@ -2308,7 +2308,7 @@ def lower_stmt_AnnAssign(
                         ctx.node_types,
                     )
         return ir.Assign(target=lval, value=value, loc=loc_from_node(node))
-    return ir.ExprStmt(expr=ir.Var(name="_skip_ann", typ=VOID))
+    return ir.NoOp()
 
 
 def collect_isinstance_chain(

@@ -28,6 +28,7 @@ from .context import FrontendContext, LoweringDispatch, TypeContext
 from . import type_inference
 from . import lowering
 from . import collection
+from . import signatures
 from . import builders
 from .names import NameResult
 
@@ -111,7 +112,7 @@ class Frontend:
 
     def _collect_signatures(self, tree: ASTNode) -> None:
         """Pass 3: Collect function and method signatures."""
-        collection.collect_signatures(tree, self.symbols, self._make_collection_callbacks_basic())
+        signatures.collect_signatures(tree, self.symbols, self._make_collection_callbacks_basic())
 
     def _collect_fields(self, tree: ASTNode) -> None:
         """Pass 4: Collect struct fields from class definitions."""

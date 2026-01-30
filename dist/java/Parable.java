@@ -2273,7 +2273,7 @@ class Word implements Node {
         }
         String inner = ParableFunctions._substring(value, 1, value.length() - 1);
         List<Byte> literalBytes = this._ansiCToBytes(inner);
-        String literalStr = String.valueOf(literalBytes);
+        String literalStr = ParableFunctions._bytesToString(literalBytes);
         return this._shSingleQuote(literalStr);
     }
 

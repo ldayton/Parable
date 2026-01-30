@@ -1601,6 +1601,11 @@ class JavaBackend:
             if to_type.kind == "byte":
                 return f"(byte) ({inner_str})"
             if to_type.kind == "string":
+                # Handle List<Byte> -> String (decoding)
+                inner_type = inner.typ
+                if isinstance(inner_type, Slice):
+                    if isinstance(inner_type.element, Primitive) and inner_type.element.kind == "byte":
+                        return f"ParableFunctions._bytesToString({inner_str})"
                 return f"String.valueOf({inner_str})"
         # Handle String -> List<Byte> (encoding)
         if isinstance(to_type, Slice):

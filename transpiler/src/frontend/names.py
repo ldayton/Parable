@@ -49,6 +49,7 @@ class NameInfo:
         col: int,
         decl_class: str,
         decl_func: str,
+        bases: list[str] | None = None,
     ):
         self.name: str = name
         self.kind: str = kind  # "class" | "function" | "variable" | "parameter" | "field" | "builtin" | "constant"
@@ -57,6 +58,7 @@ class NameInfo:
         self.col: int = col
         self.decl_class: str = decl_class  # Class name if field/method
         self.decl_func: str = decl_func  # Function name if local/param
+        self.bases: list[str] = bases if bases is not None else []
 
     def __repr__(self) -> str:
         return "NameInfo(" + self.name + ", " + self.kind + ", " + self.scope + ")"
@@ -234,6 +236,14 @@ class NameResolver:
         self.current_class: str = ""
         self.current_func: str = ""
 
+    def _get_base_name(self, base: ASTNode) -> str:
+        """Extract base class name from AST node."""
+        if base.get("_type") == "Name":
+            return base.get("id", "")
+        if base.get("_type") == "Attribute":
+            return base.get("attr", "")
+        return ""
+
     def error(self, node: ASTNode, category: str, message: str) -> None:
         lineno = node.get("lineno", 0)
         col = node.get("col_offset", 0)
@@ -266,7 +276,12 @@ class NameResolver:
                 if existing is not None:
                     self.error(stmt, "redefinition", "'" + name + "' already defined at line " + str(existing.lineno))
                 else:
-                    info = NameInfo(name, "class", "module", lineno, col, "", "")
+                    bases: list[str] = []
+                    for base in stmt.get("bases", []):
+                        base_name = self._get_base_name(base)
+                        if base_name:
+                            bases.append(base_name)
+                    info = NameInfo(name, "class", "module", lineno, col, "", "", bases=bases)
                     self.result.table.add_module(info)
             elif node_type == "FunctionDef":
                 name = stmt.get("name", "")

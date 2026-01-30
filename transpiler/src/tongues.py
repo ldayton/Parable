@@ -73,8 +73,27 @@ def run_verify_stdin() -> int:
 def run_transpile(target: str) -> int:
     """Transpile source from stdin to target language. Returns exit code."""
     source = sys.stdin.read()
+    ast_dict = parse(source)
+    result = verify_subset(ast_dict)
+    errors = result.errors()
+    if len(errors) > 0:
+        i = 0
+        while i < len(errors):
+            e = errors[i]
+            print(str(e), file=sys.stderr)
+            i += 1
+        return 1
+    name_result = resolve_names(ast_dict)
+    errors = name_result.errors()
+    if len(errors) > 0:
+        i = 0
+        while i < len(errors):
+            e = errors[i]
+            print(str(e), file=sys.stderr)
+            i += 1
+        return 1
     fe = Frontend()
-    module = fe.transpile(source)
+    module = fe.transpile(source, ast_dict, name_result=name_result)
     analyze(module)
     backend_cls = BACKENDS.get(target)
     if backend_cls is None:

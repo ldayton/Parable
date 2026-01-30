@@ -20,6 +20,7 @@ from ..ir import (
     Module,
     Slice,
     Stmt,
+    StructInfo,
     SymbolTable,
     Type,
 )
@@ -28,6 +29,7 @@ from . import type_inference
 from . import lowering
 from . import collection
 from . import builders
+from .names import NameResult
 
 # Python type -> IR type mapping for primitives
 TYPE_MAP: dict[str, Type] = {
@@ -55,12 +57,24 @@ class Frontend:
         self._kind_to_struct: dict[str, str] = {}
         self._kind_to_class: dict[str, str] = {}
 
-    def transpile(self, source: str, tree: ASTNode | None = None) -> Module:
+    def _populate_structs_from_names(self, name_result: NameResult) -> None:
+        """Populate structs from NameTable (Phase 4 integration)."""
+        for name, info in name_result.table.module_names.items():
+            if info.kind == "class":
+                self.symbols.structs[name] = StructInfo(name=name, bases=info.bases)
+
+    def transpile(
+        self, source: str, tree: ASTNode | None = None, name_result: NameResult | None = None
+    ) -> Module:
         """Parse Python source and produce IR Module."""
+        from .names import resolve_names
+
         if tree is None:
             tree = parse(source)
-        # Pass 1: Collect class names and inheritance
-        collection.collect_class_names(tree, self.symbols)
+        # Pass 1: Collect class names and inheritance (from Phase 4 name_result)
+        if name_result is None:
+            name_result = resolve_names(tree)
+        self._populate_structs_from_names(name_result)
         # Pass 2: Mark Node subclasses
         collection.mark_node_subclasses(self.symbols, self._node_types)
         # Pass 2b: Mark Exception subclasses

@@ -93,23 +93,6 @@ def detect_mutated_params(node: ASTNode) -> set[str]:
     return mutated
 
 
-def get_base_name(base: ASTNode) -> str:
-    """Extract base class name from AST node."""
-    if is_type(base, ["Name"]):
-        return base.get("id", "")
-    if is_type(base, ["Attribute"]):
-        return base.get("attr", "")
-    return ""
-
-
-def collect_class_names(tree: ASTNode, symbols: SymbolTable) -> None:
-    """Pass 1: Collect all class names and their bases."""
-    for node in dict_walk(tree):
-        if is_type(node, ["ClassDef"]):
-            bases = [get_base_name(b) for b in node.get("bases", [])]
-            symbols.structs[node.get("name")] = StructInfo(name=node.get("name"), bases=bases)
-
-
 def mark_node_subclasses(symbols: SymbolTable, node_types: set[str]) -> None:
     """Pass 2: Mark classes that inherit from Node."""
     for name, info in symbols.structs.items():

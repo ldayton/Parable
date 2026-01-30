@@ -29,7 +29,7 @@ def compile(source: str) -> "Module":
 
     # Phases 5-9: Use existing Frontend with dict AST
     fe = Frontend()
-    return fe.transpile(source, ast_dict)
+    return fe.transpile(source, ast_dict, name_result=name_result)
 
 
 __all__ = [

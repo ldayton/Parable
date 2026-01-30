@@ -50,7 +50,7 @@ Read `transpiler/spec.md` to determine which phase should handle the fix:
 
 ## Fixing at the right layer
 
-**Never compensate in backends for problems in lowering.** If lowering emits non-semantic IR that produces ugly output, fix lowering to emit semantic IR—even if it means updating other backends.
+**Prefer fixing lowering over compensating in backends.** If lowering emits non-semantic IR that produces ugly output, fix lowering to emit semantic IR—even if it means updating other backends.
 
 Example of the wrong approach:
 - Lowering expands `a, b = stack.pop()` into 4 statements for Go's benefit
@@ -80,7 +80,7 @@ For Python, omit `--- python` to use input as expected (identity transform).
 
 **IMPORTANT:** Verify the test FAILS before proceeding:
 ```bash
-just test-codegen
+just -f /Users/lily/source/Parable/transpiler/justfile test-codegen
 ```
 
 If the test passes, the pattern is already idiomatic—find a different one.
@@ -99,10 +99,14 @@ Run the full check suite **from the repository root** (not from transpiler/):
 just -f /Users/lily/source/Parable/justfile check
 ```
 
-If all checks pass:
+If all checks pass, create a branch and commit (repo requires PRs to main):
 ```bash
+git -C /Users/lily/source/Parable checkout -b <lang>-<brief-description>
 git -C /Users/lily/source/Parable add transpiler/ dist/
 git -C /Users/lily/source/Parable commit -m "transpiler/<lang>: [fix description]"
+git -C /Users/lily/source/Parable push -u origin HEAD
+gh pr create --repo ldayton/Parable --title "transpiler/<lang>: [fix description]" --body "## Summary
+- [what changed]"
 ```
 
 Do NOT commit if `just check` fails.
@@ -114,6 +118,7 @@ Pattern: [what was non-idiomatic]
 Phase: [lowering|backend]
 Fix: [what you changed]
 Test: [test name in <lang>_idioms.tests]
+PR: [URL from gh pr create]
 ```
 
 ## Common non-idiomatic patterns by language

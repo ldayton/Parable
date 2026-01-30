@@ -8,23 +8,21 @@
 </pre>
 </div>
 
-Parse bash exactly as bash does. Python, Javascript, or Go—your choice. One file, zero dependencies. This is the only complete bash parser for Python, JS, or Go. Extensively validated against bash itself.
+Parse bash exactly as bash does. Python, Typescript, Go, or Java—your choice. One file, zero dependencies. This is the only complete bash parser for these languages. Extensively validated against bash itself.
 
 ---
 
 ## Philosophy
 
-**LLM-driven development.** This project is an exercise in maximizing what LLMs can do. An 11,000-line recursive descent parser for one of the gnarliest grammars in computing, plus two custom transpilers, built and maintained almost entirely through AI assistance—it wouldn't exist without them.
+**LLM-driven development.** This project is an exercise in maximizing what LLMs can do. An 11,000-line recursive descent parser for one of the gnarliest grammars in computing, plus a custom multi-target transpiler, built and maintained almost entirely through AI assistance—it wouldn't exist without them.
 
 **Match bash exactly.** Bash is the oracle. We [patched](https://github.com/ldayton/bash-oracle) GNU Bash 5.3 so it reveals its internal parse tree, then test against it. No spec interpretation, no "close enough"—if bash parses it one way, so do we. Bash always tells the truth, even when it's lying.
 
-**Portable performance.** Hand-written recursive descent—no generators, no native extensions, no imports. Pure Python transpiles to idiomatic JS and Go. All three run the same tests.
+**Portable performance.** Hand-written recursive descent—no generators, no native extensions, no imports. Pure Python transpiles to Go, TypeScript, and Java. All run the same tests.
 
 ## Transpiled Outputs
 
-The Python implementation uses idiomatic Python that transpiles naturally to idiomatic Javascript and Go. A custom transpiler produces perfectly readable code—not minified, not obfuscated, but clean code that looks like a human wrote it.
-
-All outputs are validated the same way as Python. Same tests, same bash AST comparisons, same edge cases. If Python parses it correctly, so do JS and Go. Typescript definitions are auto-generated from the transpiled JS.
+The Python implementation transpiles to Go, TypeScript, Java, and Python via a custom IR-based transpiler. All outputs are validated the same way—same tests, same bash AST comparisons, same edge cases.
 
 ## Why Parable?
 
@@ -36,7 +34,7 @@ Bash's grammar is notoriously irregular. Existing tools make tradeoffs:
 - **mvdan/sh** — Go-native, but [doesn't fully match bash](https://github.com/mvdan/sh#caveats). Targets POSIX with bash extensions.
 - **sh-syntax** — WASM port of mvdan/sh, not pure JS. Inherits the same limitations.
 
-Parable is the only library (Python, JS, or Go) that parses bash exactly as bash does—tested against bash's own AST. For security and sandboxing, 95% coverage is 100% inadequate.
+Parable is the only library in these languages that parses bash exactly as bash does—tested against bash's own AST. For security and sandboxing, 95% coverage is 100% inadequate.
 
 **Use cases:**
 - **Security auditing** — Analyze scripts for command injection, dangerous patterns, or policy violations. The construct you can't parse is the one that owns you.
@@ -101,7 +99,7 @@ Every test validated against real bash 5.3 ASTs.
 - **GNU Bash test corpus:** 19,370 lines
 - **Oils bash corpus:** 2,495 tests
 - **tree-sitter-bash corpus:** 125 tests
-- **Parable hand-written tests:** 1,800+ tests
+- **Parable hand-written tests:** 1,900+ tests
 
 ## Usage
 
@@ -123,24 +121,6 @@ print(ast[0].to_sexp())
 # (command (word "cat") (redirect "<<" "heredoc content\n"))
 ```
 
-### Javascript
-
-```javascript
-import { parse } from './src/parable.js';
-
-const ast = parse("ps aux | grep python | awk '{print $2}'");
-console.log(ast[0].toSexp());
-```
-
-### Go
-
-```go
-import "github.com/parable-parser/parable"
-
-ast := parable.Parse("ps aux | grep python | awk '{print $2}'")
-fmt.Println(ast[0].ToSexp())
-```
-
 ## Installation
 
 ```bash
@@ -151,9 +131,10 @@ cd Parable && uv pip install -e .
 ## Tests
 
 ```bash
-just test      # Python
-just test-js   # Javascript
-just test-go   # Go
+just src-test             # Python
+just backend-test go      # Go
+just backend-test ts      # TypeScript
+just backend-test java    # Java
 ```
 
 See [tests/README.md](tests/README.md) for options and coverage details.
@@ -162,10 +143,13 @@ See [tests/README.md](tests/README.md) for options and coverage details.
 
 ```
 src/
-├── parable.py                   # Single-file Python parser
-├── parable.js                   # Transpiled Javascript parser
-├── parable.d.ts                 # Typescript definitions
-└── parable.go                   # Transpiled Go parser
+└── parable.py                   # Single-file Python parser
+
+dist/                            # Transpiled outputs
+├── go/parable.go
+├── java/Parable.java
+├── python/parable.py
+└── ts/parable.ts
 
 tests/
 ├── bin/                         # Test runners + corpus utilities
@@ -173,12 +157,24 @@ tests/
 └── corpus/                      # Validation corpus
 
 tools/
-├── fuzzer/                      # Differential fuzzers
-└── transpiler/
-    ├── transpile_js.py          # Python → Javascript
-    ├── transpile_dts.py         # Javascript → Typescript definitions
-    └── transpile_go.py          # Python → Go
+└── fuzzer/                      # Differential fuzzers
+
+transpiler/                      # Python → multi-language transpiler
+├── src/frontend/                # Parser and type inference
+├── src/middleend/               # Analysis passes
+└── src/backend/                 # Code generators
 ```
+
+## Transpiler
+
+The transpiler is under active development. It uses an intermediate representation (IR) to generate code for multiple target languages:
+
+- **Go**
+- **TypeScript**
+- **Java**
+- **Python**
+
+Output code quality is a work in progress. The transpiler prioritizes correctness over readability; generated code may not yet match hand-written idioms in all cases.
 
 ## License
 

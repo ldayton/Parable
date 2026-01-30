@@ -166,6 +166,7 @@ class Frontend:
             class_name,
             func_info,
             self._hierarchy.node_types,
+            self._kind_to_struct,
         )
         self._type_ctx = type_ctx
         return self._lower_stmts(stmts)

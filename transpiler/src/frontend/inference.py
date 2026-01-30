@@ -1050,6 +1050,9 @@ class _ExprTypeCtx:
     current_class_name: str
     current_func_info: FuncInfo | None
     node_types: set[str]
+    kind_to_struct: dict[str, str]
+    kind_source_vars: dict[str, str]  # Maps kind var -> source node var
+    narrowed_attr_paths: dict[tuple[str, ...], str]  # Maps attr path -> struct name
 
 
 _EXPR_NODE_TYPES = frozenset(
@@ -1080,7 +1083,11 @@ def _compute_expr_in_stmt(
     """Compute types for all expressions in a single statement."""
     from .context import TypeContext
 
-    type_ctx = TypeContext(var_types=local_var_types)
+    type_ctx = TypeContext(
+        var_types=local_var_types,
+        kind_source_vars=ctx.kind_source_vars,
+        narrowed_attr_paths=ctx.narrowed_attr_paths,
+    )
     for subnode in dict_walk(stmt):
         node_t = subnode.get("_type") if isinstance(subnode, dict) else None
         if node_t in _EXPR_NODE_TYPES:
@@ -1095,12 +1102,32 @@ def _compute_expr_in_stmt(
             subnode["_expr_type"] = typ
 
 
+def _track_kind_sources(stmt: ASTNode, ctx: _ExprTypeCtx) -> None:
+    """Track 'kind = node.kind' assignments for aliased kind checks."""
+    if not is_type(stmt, ["Assign"]):
+        return
+    targets = stmt.get("targets", [])
+    if len(targets) != 1:
+        return
+    target = targets[0]
+    value = stmt.get("value", {})
+    if (
+        is_type(target, ["Name"])
+        and is_type(value, ["Attribute"])
+        and value.get("attr") == "kind"
+        and is_type(value.get("value"), ["Name"])
+    ):
+        ctx.kind_source_vars[target.get("id")] = value.get("value", {}).get("id")
+
+
 def _process_expr_stmts(
     stmt_list: list[ASTNode], local_var_types: dict[str, "Type"], ctx: _ExprTypeCtx
 ) -> None:
     """Process statements in order with local var_types context."""
     for stmt in stmt_list:
         stmt_type = stmt.get("_type") if isinstance(stmt, dict) else None
+        # Track kind source vars before processing
+        _track_kind_sources(stmt, ctx)
         if stmt_type == "If":
             _process_expr_if(stmt, local_var_types, ctx)
         elif stmt_type in ("For", "While", "With"):
@@ -1144,6 +1171,24 @@ def _process_expr_if(stmt: ASTNode, local_var_types: dict[str, "Type"], ctx: _Ex
             _process_expr_stmts(body, then_var_types, ctx)
             _process_expr_stmts(orelse, local_var_types, ctx)
             return
+    # Check for kind check narrowing (x.kind == "value" or aliased kind == "value")
+    kind_check = extract_kind_check(test, ctx.kind_to_struct, ctx.kind_source_vars)
+    if kind_check:
+        narrowed_var, struct_name = kind_check
+        then_var_types = local_var_types.copy()
+        then_var_types[narrowed_var] = Pointer(StructRef(struct_name))
+        _process_expr_stmts(body, then_var_types, ctx)
+        _process_expr_stmts(orelse, local_var_types, ctx)
+        return
+    # Check for attribute path narrowing (node.body.kind == "value")
+    attr_kind_check = extract_attr_kind_check(test, ctx.kind_to_struct)
+    if attr_kind_check:
+        attr_path, struct_name = attr_kind_check
+        ctx.narrowed_attr_paths[attr_path] = struct_name
+        _process_expr_stmts(body, local_var_types, ctx)
+        ctx.narrowed_attr_paths.pop(attr_path, None)
+        _process_expr_stmts(orelse, local_var_types, ctx)
+        return
     # No narrowing - use same var_types for both branches
     _process_expr_stmts(body, local_var_types, ctx)
     _process_expr_stmts(orelse, local_var_types, ctx)
@@ -1156,16 +1201,22 @@ def compute_expr_types(
     current_class_name: str,
     current_func_info: FuncInfo | None,
     node_types: set[str],
+    kind_to_struct: dict[str, str] | None = None,
 ) -> None:
     """Compute types for all expressions in statements.
 
     Stores computed type directly in each AST node as '_expr_type' field.
     Processes statements in order, handling isinstance/kind narrowing in if-blocks.
     """
+    if kind_to_struct is None:
+        kind_to_struct = {}
     ctx = _ExprTypeCtx(
         symbols=symbols,
         current_class_name=current_class_name,
         current_func_info=current_func_info,
         node_types=node_types,
+        kind_to_struct=kind_to_struct,
+        kind_source_vars={},
+        narrowed_attr_paths={},
     )
     _process_expr_stmts(stmts, var_types, ctx)

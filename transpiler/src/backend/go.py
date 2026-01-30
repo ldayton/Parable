@@ -719,6 +719,10 @@ func _Substring(s string, start int, end int) string {
 
     def _emit_stmt_TupleAssign(self, stmt: TupleAssign) -> None:
         """Emit tuple unpacking: a, b := func()"""
+        # Special case: a, b = slice.pop() - Go slices don't have pop()
+        if isinstance(stmt.value, MethodCall) and stmt.value.method == "pop":
+            self._emit_tuple_pop(stmt)
+            return
         targets = []
         unused_indices = stmt.unused_indices
         for i, t in enumerate(stmt.targets):
@@ -751,6 +755,49 @@ func _Substring(s string, start int, end int) string {
             self._line(f"{target_str} := {value}")
         else:
             self._line(f"{target_str} = {value}")
+
+    def _emit_tuple_pop(self, stmt: TupleAssign) -> None:
+        """Emit tuple unpacking from slice.pop(): a, b = slice.pop()
+
+        Go slices don't have pop(), so expand to:
+            _entry := slice[len(slice)-1]
+            slice = slice[:len(slice)-1]
+            a, b = _entry.F0, _entry.F1
+        """
+        mc = stmt.value
+        if not isinstance(mc, MethodCall):
+            return
+        obj = self._emit_expr(mc.obj)
+        obj_lv = self._emit_lvalue_from_expr(mc.obj)
+        # Emit: _entry := slice[len(slice)-1]
+        self._line(f"_entry := {obj}[len({obj})-1]")
+        # Emit: slice = slice[:len(slice)-1]
+        self._line(f"{obj_lv} = {obj}[:len({obj})-1]")
+        # Emit tuple field assignments
+        targets = []
+        for i, t in enumerate(stmt.targets):
+            if isinstance(t, VarLV) and t.name == "_":
+                targets.append("_")
+            elif isinstance(t, VarLV):
+                targets.append(go_to_camel(t.name))
+            else:
+                targets.append(self._emit_lvalue(t))
+        if len(targets) == 2:
+            self._line(f"{targets[0]}, {targets[1]} = _entry.F0, _entry.F1")
+        else:
+            for i, target in enumerate(targets):
+                self._line(f"{target} = _entry.F{i}")
+
+    def _emit_lvalue_from_expr(self, expr: Expr) -> str:
+        """Convert an expression to its lvalue form for assignment."""
+        if isinstance(expr, Var):
+            if expr.name == self._receiver_name:
+                return self._receiver_name
+            return go_to_camel(expr.name)
+        if isinstance(expr, FieldAccess):
+            obj = self._emit_expr(expr.obj)
+            return f"{obj}.{go_to_pascal(expr.field)}"
+        return self._emit_expr(expr)
 
     def _emit_stmt_OpAssign(self, stmt: OpAssign) -> None:
         target = self._emit_lvalue(stmt.target)

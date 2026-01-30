@@ -1821,7 +1821,8 @@ def _binary_op(op: str) -> str:
 
 
 def _is_string_type(typ: Type) -> bool:
-    return isinstance(typ, Primitive) and typ.kind == "string"
+    # Also treat rune as string since Java converts it to String via String.valueOf()
+    return isinstance(typ, Primitive) and typ.kind in ("string", "rune")
 
 
 def _string_literal(value: str) -> str:

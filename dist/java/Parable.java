@@ -1988,15 +1988,15 @@ class Word implements Node {
         QuoteState quote = ParableFunctions.newQuoteState();
         for (int _i = 0; _i < value.length(); _i++) {
             String c = String.valueOf(value.charAt(_i));
-            if (c == "'" && !quote.double_) {
+            if (c.equals("'") && !quote.double_) {
                 quote.single = !quote.single;
             } else {
-                if (c == "\"" && !quote.single) {
+                if (c.equals("\"") && !quote.single) {
                     quote.double_ = !quote.double_;
                 }
             }
             result.add(c);
-            if (c == "") {
+            if (c.equals("")) {
                 if (quote.double_) {
                     int bsCount = 0;
                     for (Integer j : java.util.stream.IntStream.iterate(result.size() - 2, _x -> _x > -1, _x -> _x + -1).boxed().toList()) {
@@ -2103,7 +2103,7 @@ class Word implements Node {
         List<String> result = new ArrayList<>(Arrays.asList("'"));
         for (int _i = 0; _i < s.length(); _i++) {
             String c = String.valueOf(s.charAt(_i));
-            if (c == "'") {
+            if (c.equals("'")) {
                 result.add("'\\''");
             } else {
                 result.add(c);
@@ -7000,7 +7000,7 @@ class Parser {
                                 isValidVarfd = true;
                                 for (int _i = 0; _i < base.substring(1).length(); _i++) {
                                     String c = String.valueOf(base.substring(1).charAt(_i));
-                                    if (!(c.chars().allMatch(Character::isLetterOrDigit) || c == "_")) {
+                                    if (!(c.chars().allMatch(Character::isLetterOrDigit) || c.equals("_"))) {
                                         isValidVarfd = false;
                                         break;
                                     }
@@ -7011,7 +7011,7 @@ class Parser {
                         isValidVarfd = true;
                         for (int _i = 0; _i < varname.substring(1).length(); _i++) {
                             String c = String.valueOf(varname.substring(1).charAt(_i));
-                            if (!(c.chars().allMatch(Character::isLetterOrDigit) || c == "_")) {
+                            if (!(c.chars().allMatch(Character::isLetterOrDigit) || c.equals("_"))) {
                                 isValidVarfd = false;
                                 break;
                             }
@@ -10588,7 +10588,7 @@ final class ParableFunctions {
         boolean prevWasWs = false;
         for (int _i = 0; _i < s.length(); _i++) {
             String c = String.valueOf(s.charAt(_i));
-            if (c == " " || c == "\t") {
+            if (c.equals(" ") || c.equals("\t")) {
                 if (!prevWasWs) {
                     result.add(" ");
                 }
@@ -10963,7 +10963,7 @@ final class ParableFunctions {
         }
         for (int _i = 0; _i < name.substring(1).length(); _i++) {
             String c = String.valueOf(name.substring(1).charAt(_i));
-            if (!(c.chars().allMatch(Character::isLetterOrDigit) || c == "_")) {
+            if (!(c.chars().allMatch(Character::isLetterOrDigit) || c.equals("_"))) {
                 return false;
             }
         }

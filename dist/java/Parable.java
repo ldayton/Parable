@@ -3771,7 +3771,7 @@ class ListNode implements Node {
         for (Integer i : java.util.stream.IntStream.iterate(1, _x -> _x < parts.size() - 1, _x -> _x + 2).boxed().toList()) {
             Node op = parts.get(i);
             Node cmd = parts.get(i + 1);
-            Object opName = opNames.getOrDefault(((Operator) op).op, ((Operator) op).op);
+            String opName = opNames.getOrDefault(((Operator) op).op, ((Operator) op).op);
             result = "(" + opName + " " + result + " " + ((Node) cmd).toSexp() + ")";
         }
         return result;
@@ -9515,7 +9515,7 @@ final class ParableFunctions {
                 result = String.join(" ", parts);
             }
             for (HereDoc h : heredocs) {
-                result = result + ParableFunctions._formatHeredocBody(h);
+                result = result + ParableFunctions._formatHeredocBody(((Node) h));
             }
             return result;
         }

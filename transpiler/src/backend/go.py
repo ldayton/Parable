@@ -1615,6 +1615,22 @@ func _Substring(s string, start int, end int) string {
             elif right_is_rune and isinstance(expr.left, StringLit) and len(expr.left.value) == 1:
                 left_str = self._emit_rune_literal(expr.left.value)
             return f"{left_str} {expr.op} {right_str}"
+        # Handle comparisons with optional (pointer) types - dereference the pointer
+        # Pattern: x > 0 where x is *int needs to become *x > 0
+        if expr.op in ("<", ">", "<=", ">="):
+            left_type = expr.left.typ
+            right_type = expr.right.typ
+            left_str = self._emit_expr(expr.left)
+            right_str = self._emit_expr(expr.right)
+            # Dereference left if it's a pointer/optional to a primitive
+            left_inner = left_type.target if isinstance(left_type, Pointer) else (left_type.inner if isinstance(left_type, Optional) else None)
+            if left_inner in (INT, FLOAT):
+                left_str = f"*{left_str}"
+            # Dereference right if it's a pointer/optional to a primitive
+            right_inner = right_type.target if isinstance(right_type, Pointer) else (right_type.inner if isinstance(right_type, Optional) else None)
+            if right_inner in (INT, FLOAT):
+                right_str = f"*{right_str}"
+            return f"{left_str} {expr.op} {right_str}"
         left = self._emit_expr(expr.left)
         right = self._emit_expr(expr.right)
         # Handle 'in' and 'not in' operators
@@ -1735,6 +1751,15 @@ func _Substring(s string, start int, end int) string {
 
     def _emit_expr_TypeAssert(self, expr: TypeAssert) -> str:
         inner = self._emit_expr(expr.expr)
+        # In Go, you can only type-assert FROM an interface, not from a concrete type
+        # If inner is a concrete struct pointer and we're asserting TO an interface,
+        # skip the assertion (Go implicitly converts concrete types to interfaces)
+        inner_type = expr.expr.typ
+        is_concrete = isinstance(inner_type, Pointer) and isinstance(inner_type.target, StructRef)
+        asserting_to_interface = isinstance(expr.asserted, InterfaceRef)
+        if is_concrete and asserting_to_interface:
+            # Concrete struct pointer to interface - no assertion needed
+            return inner
         asserted = self._type_to_go(expr.asserted)
         return f"{inner}.({asserted})"
 

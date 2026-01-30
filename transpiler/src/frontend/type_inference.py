@@ -388,6 +388,11 @@ def infer_iterable_type(
         name_id = node.get("id")
         if name_id in var_types:
             return var_types[name_id]
+    # Subscript (slicing): base[1:] -> same type as base (string slice returns string)
+    if is_type(node, ["Subscript"]):
+        container_type = infer_iterable_type(node.get("value"), var_types, current_class_name, symbols)
+        # Slicing a string returns a string, slicing a slice returns same slice type
+        return container_type
     return InterfaceRef("any")
 
 
@@ -484,6 +489,14 @@ def synthesize_method_return_type(
         "isspace",
     ):
         return BOOL
+    # Map methods
+    if isinstance(obj_type, Map):
+        if method == "get":
+            return obj_type.value
+        if method == "keys":
+            return Slice(obj_type.key)
+        if method == "values":
+            return Slice(obj_type.value)
     # Node interface methods
     if is_node_interface_type(obj_type):
         if method in ("to_sexp", "ToSexp"):

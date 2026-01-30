@@ -47,6 +47,29 @@ def loc_from_node(node: ASTNode) -> Loc:
     return loc_unknown()
 
 
+def get_expr_type(node: ASTNode) -> "Type":
+    """Get pre-computed expression type from AST node.
+
+    Falls back to basic type inference for Constant nodes (needed for
+    module-level constants that don't go through compute_expr_types).
+    """
+    typ = node.get("_expr_type")
+    if typ is not None:
+        return typ
+    # Constant nodes: infer type from value
+    if node.get("_type") == "Constant":
+        value = node.get("value")
+        if isinstance(value, bool):
+            return BOOL
+        if isinstance(value, int):
+            return INT
+        if isinstance(value, str):
+            return STRING
+        if isinstance(value, float):
+            return FLOAT
+    return InterfaceRef("any")
+
+
 def make_default_value(typ: "Type", loc: Loc) -> "ir.Expr":
     """Create a default value expression for a given type."""
     from .. import ir
@@ -340,7 +363,6 @@ def add_address_of_for_ptr_params(
     orig_args: list[ASTNode],
     symbols: "SymbolTable",
     extract_struct_name: Callable[["Type"], str | None],
-    infer_expr_type_from_ast: Callable[[ASTNode], "Type"],
 ) -> list["ir.Expr"]:
     """Add & when passing slice to pointer-to-slice parameter."""
     from .. import ir
@@ -359,8 +381,8 @@ def add_address_of_for_ptr_params(
         param_type = param.typ
         # Check if param expects pointer to slice but arg is slice
         if isinstance(param_type, Pointer) and isinstance(param_type.target, Slice):
-            # Infer arg type from AST
-            arg_type = infer_expr_type_from_ast(orig_args[i])
+            # Get arg type from pre-computed _expr_type
+            arg_type = get_expr_type(orig_args[i])
             if isinstance(arg_type, Slice) and not isinstance(arg_type, Pointer):
                 # Wrap with address-of
                 result[i] = ir.UnaryOp(
@@ -379,7 +401,6 @@ def deref_for_slice_params(
     orig_args: list[ASTNode],
     symbols: "SymbolTable",
     extract_struct_name: Callable[["Type"], str | None],
-    infer_expr_type_from_ast: Callable[[ASTNode], "Type"],
 ) -> list["ir.Expr"]:
     """Dereference * when passing pointer-to-slice to slice parameter."""
     from .. import ir
@@ -398,7 +419,7 @@ def deref_for_slice_params(
         param_type = param.typ
         # Check if param expects slice but arg is pointer/optional to slice
         if isinstance(param_type, Slice) and not isinstance(param_type, Pointer):
-            arg_type = infer_expr_type_from_ast(orig_args[i])
+            arg_type = get_expr_type(orig_args[i])
             inner_slice = get_inner_slice(arg_type)
             if inner_slice is not None:
                 result[i] = ir.UnaryOp(
@@ -415,7 +436,6 @@ def deref_for_func_slice_params(
     args: list["ir.Expr"],
     orig_args: list[ASTNode],
     symbols: "SymbolTable",
-    infer_expr_type_from_ast: Callable[[ASTNode], "Type"],
 ) -> list["ir.Expr"]:
     """Dereference * when passing pointer-to-slice to slice parameter for free functions."""
     from .. import ir
@@ -431,7 +451,7 @@ def deref_for_func_slice_params(
         param_type = param.typ
         # Check if param expects slice but arg is pointer/optional to slice
         if isinstance(param_type, Slice) and not isinstance(param_type, Pointer):
-            arg_type = infer_expr_type_from_ast(orig_args[i])
+            arg_type = get_expr_type(orig_args[i])
             inner_slice = get_inner_slice(arg_type)
             if inner_slice is not None:
                 result[i] = ir.UnaryOp(
@@ -672,7 +692,6 @@ def lower_expr_Subscript(
     node: ASTNode,
     type_ctx: "TypeContext",
     lower_expr: Callable[[ASTNode], "ir.Expr"],
-    infer_expr_type_from_ast: Callable[[ASTNode], "Type"],
 ) -> "ir.Expr":
     """Lower Python subscript access to IR index or slice expression."""
     from .. import ir
@@ -697,7 +716,7 @@ def lower_expr_Subscript(
         low = convert_negative_index(slice_lower, obj, node, lower_expr) if slice_lower else None
         high = convert_negative_index(slice_upper, obj, node, lower_expr) if slice_upper else None
         # Slicing preserves type - string slice is still string, slice of slice is still slice
-        slice_type: "Type" = infer_expr_type_from_ast(node_value)
+        slice_type: "Type" = get_expr_type(node_value)
         if slice_type == InterfaceRef("any"):
             slice_type = obj.typ
         return ir.SliceExpr(obj=obj, low=low, high=high, typ=slice_type, loc=loc_from_node(node))
@@ -722,8 +741,8 @@ def lower_expr_Subscript(
     index_expr = ir.Index(obj=obj, index=idx, typ=elem_type, loc=loc_from_node(node))
     # Check if indexing a string - if so, wrap with Cast to string
     # In Go, string[i] returns byte, but Python returns str
-    # Check both AST inference and lowered expression type
-    is_string = infer_expr_type_from_ast(node_value) == STRING
+    # Check both pre-computed _expr_type and lowered expression type
+    is_string = get_expr_type(node_value) == STRING
     if not is_string and obj.typ == STRING:
         is_string = True
     if is_string:
@@ -739,7 +758,6 @@ def lower_expr_Subscript(
 def lower_expr_BinOp(
     node: ASTNode,
     lower_expr: Callable[[ASTNode], "ir.Expr"],
-    infer_expr_type_from_ast: Callable[[ASTNode], "Type"],
 ) -> "ir.Expr":
     """Lower Python binary operation to IR."""
     from .. import ir
@@ -753,8 +771,8 @@ def lower_expr_BinOp(
     if is_type(node_op, ["BitAnd", "BitOr", "BitXor", "LShift", "RShift"]):
         result_type = INT
     elif is_type(node_op, ["Add", "Sub", "Mult", "FloorDiv", "Mod"]):
-        left_type = infer_expr_type_from_ast(node.get("left"))
-        right_type = infer_expr_type_from_ast(node.get("right"))
+        left_type = get_expr_type(node.get("left"))
+        right_type = get_expr_type(node.get("right"))
         # String concatenation
         if left_type == STRING or right_type == STRING:
             result_type = STRING
@@ -800,7 +818,6 @@ def is_sentinel_int(
 def lower_expr_Compare(
     node: ASTNode,
     lower_expr: Callable[[ASTNode], "ir.Expr"],
-    infer_expr_type_from_ast: Callable[[ASTNode], "Type"],
     type_ctx: "TypeContext",
     current_class_name: str,
     sentinel_int_fields: dict[tuple[str, str], int],
@@ -823,7 +840,7 @@ def lower_expr_Compare(
             and comparators[0].get("value") is None
         ):
             # For strings, compare to empty string; for bools, compare to false
-            left_type = infer_expr_type_from_ast(node_left)
+            left_type = get_expr_type(node_left)
             if left_type == STRING:
                 cmp_op = "=="
                 return ir.BinaryOp(
@@ -854,7 +871,7 @@ def lower_expr_Compare(
             and comparators[0].get("value") is None
         ):
             # For strings, compare to non-empty string; for bools, just use the bool itself
-            left_type = infer_expr_type_from_ast(node_left)
+            left_type = get_expr_type(node_left)
             if left_type == STRING:
                 cmp_op = "!="
                 return ir.BinaryOp(
@@ -907,8 +924,8 @@ def lower_expr_Compare(
                 return result
             return ir.BoolLit(value=not negated, typ=BOOL, loc=loc_from_node(node))
         # Handle string vs pointer/optional string comparison: dereference the pointer side
-        left_type = infer_expr_type_from_ast(node_left)
-        right_type = infer_expr_type_from_ast(comparators[0])
+        left_type = get_expr_type(node_left)
+        right_type = get_expr_type(comparators[0])
         if left_type == STRING and isinstance(right_type, (Optional, Pointer)):
             inner = right_type.inner if isinstance(right_type, Optional) else right_type.target
             if inner == STRING:
@@ -986,7 +1003,6 @@ def lower_expr_UnaryOp(
 def lower_expr_List(
     node: ASTNode,
     lower_expr: Callable[[ASTNode], "ir.Expr"],
-    infer_expr_type_from_ast: Callable[[ASTNode], "Type"],
     expected_type_ctx: "Type | None",
     expected_type: "Type | None" = None,
 ) -> "ir.Expr":
@@ -1003,7 +1019,7 @@ def lower_expr_List(
     elif node.get("elts"):
         # Fall back to inferring from first element
         elts = node.get("elts", [])
-        element_type = infer_expr_type_from_ast(elts[0])
+        element_type = get_expr_type(elts[0])
     return ir.SliceLit(
         element_type=element_type,
         elements=elements,
@@ -1062,7 +1078,6 @@ def lower_list_call_with_expected_type(
 def lower_expr_Dict(
     node: ASTNode,
     lower_expr: Callable[[ASTNode], "ir.Expr"],
-    infer_expr_type_from_ast: Callable[[ASTNode], "Type"],
 ) -> "ir.Expr":
     """Lower Python dict literal to IR map literal."""
     from .. import ir
@@ -1078,7 +1093,7 @@ def lower_expr_Dict(
     value_type: "Type" = InterfaceRef("any")
     if values and values[0]:
         first_val = values[0]
-        value_type = infer_expr_type_from_ast(first_val)
+        value_type = get_expr_type(first_val)
     return ir.MapLit(
         key_type=key_type,
         value_type=value_type,
@@ -1144,7 +1159,6 @@ def lower_expr_as_bool(
     node: ASTNode,
     lower_expr: Callable[[ASTNode], "ir.Expr"],
     lower_expr_as_bool_self: Callable[[ASTNode], "ir.Expr"],
-    infer_expr_type_from_ast: Callable[[ASTNode], "Type"],
     is_isinstance_call: Callable[[ASTNode], tuple[str, str] | None],
     resolve_type_name: Callable[[str], "Type"],
     type_ctx: "TypeContext",
@@ -1210,7 +1224,7 @@ def lower_expr_as_bool(
             ):
                 return lower_expr(node)
             # Check if the method returns bool by looking up its return type
-            method_return_type = infer_expr_type_from_ast(node)
+            method_return_type = get_expr_type(node)
             if method_return_type == BOOL:
                 return lower_expr(node)
         elif is_type(func, ["Name"]):
@@ -1224,8 +1238,8 @@ def lower_expr_as_bool(
                     return lower_expr(node)
     # Non-boolean expression - needs truthy check
     expr = lower_expr(node)
-    # Use the IR expression's type if available, otherwise infer from AST
-    expr_type = expr.typ if expr.typ != InterfaceRef("any") else infer_expr_type_from_ast(node)
+    # Use the IR expression's type if available, otherwise use pre-computed _expr_type
+    expr_type = expr.typ if expr.typ != InterfaceRef("any") else get_expr_type(node)
     # Bool expressions don't need nil check
     if expr_type == BOOL:
         return expr
@@ -1547,7 +1561,7 @@ def lower_expr_Call(
         # Handle Python list methods that need special Go treatment
         if method == "append" and args:
             # Look up actual type of the object (might be pointer to slice for params)
-            obj_type = dispatch.infer_expr_type_from_ast(func_value)
+            obj_type = get_expr_type(func_value)
             # Check if appending to a byte slice - need to cast int to byte
             elem_type = None
             if isinstance(obj_type, Slice):
@@ -1558,8 +1572,8 @@ def lower_expr_Call(
             coerced_args = args
             if elem_type == BYTE and len(args) == 1:
                 arg = args[0]
-                # Check if arg is int-typed (via AST inference or lowered type)
-                arg_ast_type = dispatch.infer_expr_type_from_ast(node_args[0])
+                # Check if arg is int-typed (via pre-computed _expr_type or lowered type)
+                arg_ast_type = get_expr_type(node_args[0])
                 if arg_ast_type == INT or arg.typ == INT:
                     coerced_args = [ir.Cast(expr=arg, to_type=BYTE, typ=BYTE, loc=arg.loc)]
             # list.append(x) -> append(list, x) in Go (handled via MethodCall for now)
@@ -1574,7 +1588,11 @@ def lower_expr_Call(
                 loc=loc_from_node(node),
             )
         # Infer receiver type for proper method lookup
-        obj_type = dispatch.infer_expr_type_from_ast(func_value)
+        # Use pre-computed type, but fall back to callback for narrowed contexts
+        obj_type = get_expr_type(func_value)
+        if obj_type == InterfaceRef("any"):
+            # Pre-computed type is generic - use callback which has narrowing context
+            obj_type = dispatch.infer_expr_type_from_ast(func_value)
         if method == "pop" and not args and isinstance(obj_type, Slice):
             # list.pop() -> return last element and shrink slice (only for slices)
             return ir.MethodCall(
@@ -1627,7 +1645,7 @@ def lower_expr_Call(
         # Check for len()
         if func_name == "len" and args:
             arg = args[0]
-            arg_type = dispatch.infer_expr_type_from_ast(node_args[0])
+            arg_type = get_expr_type(node_args[0])
             # Dereference Pointer(Slice) or Optional(Slice) for len()
             inner_slice = get_inner_slice(arg_type)
             if inner_slice is not None:
@@ -1636,7 +1654,7 @@ def lower_expr_Call(
         # Check for bool() - convert to comparison
         if func_name == "bool" and args:
             # bool(x) -> x != 0 for ints, x != "" for strings, x != nil for pointers
-            arg_type = dispatch.infer_expr_type_from_ast(node_args[0])
+            arg_type = get_expr_type(node_args[0])
             if arg_type == INT:
                 return ir.BinaryOp(
                     op="!=",
@@ -1685,7 +1703,7 @@ def lower_expr_Call(
             return ir.Call(func="_parseInt", args=args, typ=INT, loc=loc_from_node(node))
         # Check for int(s) - string to int conversion
         if func_name == "int" and len(args) == 1:
-            arg_type = dispatch.infer_expr_type_from_ast(node_args[0])
+            arg_type = get_expr_type(node_args[0])
             if arg_type == STRING:
                 # String to int: use _parseInt with base 10
                 return ir.Call(
@@ -1699,7 +1717,10 @@ def lower_expr_Call(
                 return ir.Cast(expr=args[0], to_type=INT, typ=INT, loc=loc_from_node(node))
         # Check for str(n) - int to string conversion
         if func_name == "str" and len(args) == 1:
-            arg_type = dispatch.infer_expr_type_from_ast(node_args[0])
+            arg_type = get_expr_type(node_args[0])
+            # Fall back to callback if type is any
+            if arg_type == InterfaceRef("any"):
+                arg_type = dispatch.infer_expr_type_from_ast(node_args[0])
             if arg_type == INT:
                 return ir.Call(func="_intToStr", args=args, typ=STRING, loc=loc_from_node(node))
             # Handle *int or Optional[int] - dereference first
@@ -1718,7 +1739,7 @@ def lower_expr_Call(
         if func_name == "ord" and len(args) == 1:
             # ord(c) -> cast the first character to int
             # In Go: int(c[0]) for strings, int(c) for bytes/runes
-            arg_type = dispatch.infer_expr_type_from_ast(node_args[0])
+            arg_type = get_expr_type(node_args[0])
             if arg_type in (BYTE, RUNE):
                 # Already a byte/rune: just cast to int
                 return ir.Cast(expr=args[0], to_type=INT, typ=INT, loc=loc_from_node(node))
@@ -1983,7 +2004,7 @@ def lower_stmt_Assign(
             ):
                 func_value = node_value_func.get("value")
                 obj = dispatch.lower_expr(func_value)
-                obj_type = dispatch.infer_expr_type_from_ast(func_value)
+                obj_type = get_expr_type(func_value)
                 if isinstance(obj_type, Slice):
                     obj_lval = dispatch.lower_lvalue(func_value)
                     lval = dispatch.lower_lvalue(target)
@@ -2509,7 +2530,10 @@ def lower_stmt_For(
     node_body = node.get("body", [])
     iterable = dispatch.lower_expr(node_iter)
     # Determine loop variable types based on iterable type
-    iterable_type = dispatch.infer_expr_type_from_ast(node_iter)
+    iterable_type = get_expr_type(node_iter)
+    # Fall back to callback for narrowed contexts
+    if iterable_type == InterfaceRef("any"):
+        iterable_type = dispatch.infer_expr_type_from_ast(node_iter)
     # Dereference Pointer(Slice) or Optional(Slice) for range
     inner_slice = get_inner_slice(iterable_type)
     if inner_slice is not None:
@@ -2524,6 +2548,14 @@ def lower_stmt_For(
         elem_type = RUNE
     elif isinstance(iterable_type, Slice):
         elem_type = iterable_type.element
+    # Check for list_element_unions - iterable may have tracked union element types
+    iterable_union_types: list[str] | None = None
+    if is_type(node_iter, ["Name"]):
+        iter_name = node_iter.get("id")
+        if iter_name in type_ctx.list_element_unions:
+            iterable_union_types = type_ctx.list_element_unions[iter_name]
+            # When iterating a list with union types, element type is Node
+            elem_type = InterfaceRef("Node")
     if is_type(node_target, ["Name"]):
         target_id = node_target.get("id")
         if target_id == "_":
@@ -2532,6 +2564,9 @@ def lower_stmt_For(
             value = target_id
             if elem_type:
                 type_ctx.var_types[value] = elem_type
+            # Propagate union types from iterable to loop variable
+            if iterable_union_types:
+                type_ctx.union_types[value] = iterable_union_types
     elif is_type(node_target, ["Tuple"]):
         target_elts = node_target.get("elts", [])
         if len(target_elts) == 2:
@@ -2690,14 +2725,13 @@ def _lower_expr_Subscript_dispatch(
         node,
         ctx.type_ctx,
         d.lower_expr,
-        d.infer_expr_type_from_ast,
     )
 
 
 def _lower_expr_BinOp_dispatch(
     node: ASTNode, ctx: "FrontendContext", d: "LoweringDispatch"
 ) -> "ir.Expr":
-    return lower_expr_BinOp(node, d.lower_expr, d.infer_expr_type_from_ast)
+    return lower_expr_BinOp(node, d.lower_expr)
 
 
 def _lower_expr_Compare_dispatch(
@@ -2708,7 +2742,6 @@ def _lower_expr_Compare_dispatch(
     return lower_expr_Compare(
         node,
         d.lower_expr,
-        d.infer_expr_type_from_ast,
         ctx.type_ctx,
         ctx.current_class_name,
         SENTINEL_INT_FIELDS,
@@ -2743,14 +2776,14 @@ def _lower_expr_List_dispatch(
     node: ASTNode, ctx: "FrontendContext", d: "LoweringDispatch"
 ) -> "ir.Expr":
     return lower_expr_List(
-        node, d.lower_expr, d.infer_expr_type_from_ast, ctx.type_ctx.expected, None
+        node, d.lower_expr, ctx.type_ctx.expected, None
     )
 
 
 def _lower_expr_Dict_dispatch(
     node: ASTNode, ctx: "FrontendContext", d: "LoweringDispatch"
 ) -> "ir.Expr":
-    return lower_expr_Dict(node, d.lower_expr, d.infer_expr_type_from_ast)
+    return lower_expr_Dict(node, d.lower_expr)
 
 
 def _lower_expr_JoinedStr_dispatch(

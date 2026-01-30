@@ -9398,7 +9398,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
       var result: any = parts.join(" ");
     }
     for (const h of heredocs as HereDoc[]) {
-      var result: any = result + FormatHeredocBody(h);
+      var result: any = result + FormatHeredocBody((h as unknown as Node));
     }
     return result;
   }
@@ -9764,7 +9764,7 @@ function FormatRedirect(r: Node, compact: boolean, heredocOpOnly: boolean): stri
       var op: any = "<<";
     }
     if (r.fd !== null && r.fd > 0) {
-      var op: any = String(r.fd) + op;
+      var op: any = (r.fd as unknown as string) + op;
     }
     if (r.quoted) {
       var delim: any = "'" + r.delimiter + "'";

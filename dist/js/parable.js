@@ -9895,7 +9895,7 @@ function FormatRedirect(r, compact, heredocOpOnly) {
             var op = "<<";
         }
         if (r.fd !== null && r.fd > 0) {
-            var op = String(r.fd) + op;
+            var op = r.fd + op;
         }
         if (r.quoted) {
             var delim = "'" + r.delimiter + "'";

@@ -16,6 +16,7 @@ from ..ir import (
     BYTE,
     FLOAT,
     INT,
+    RUNE,
     FuncInfo,
     InterfaceRef,
     Map,
@@ -87,6 +88,7 @@ __all__ = [
     "get_attr_path",
     # Pre-scan type collection (moved from collection.py)
     "collect_var_types",
+    "compute_expr_types",
     "unify_branch_types",
     "collect_branch_var_types",
     "infer_branch_expr_type",
@@ -287,6 +289,33 @@ class InferenceCallbacks:
     is_kind_check: Callable[[ASTNode], tuple[str, str] | None]
     infer_call_return_type: Callable[[ASTNode], "Type"]
     infer_iterable_type: Callable[[ASTNode, dict[str, "Type"]], "Type"]
+
+
+def infer_attr_chain_type(
+    node: ASTNode,
+    var_types: dict[str, "Type"],
+    symbols: "SymbolTable",
+    current_class_name: str,
+) -> "Type":
+    """Recursively infer type of chained attribute access like self.target.value."""
+    if is_type(node, ["Name"]):
+        name_id = node.get("id")
+        if name_id == "self" and current_class_name:
+            return Pointer(StructRef(current_class_name))
+        if name_id in var_types:
+            return var_types[name_id]
+        return InterfaceRef("any")
+    if is_type(node, ["Attribute"]):
+        obj_type = infer_attr_chain_type(
+            node.get("value", {}), var_types, symbols, current_class_name
+        )
+        struct_name = extract_struct_name(obj_type)
+        if struct_name and struct_name in symbols.structs:
+            field_info = symbols.structs[struct_name].fields.get(node.get("attr"))
+            if field_info:
+                return field_info.typ
+        return InterfaceRef("any")
+    return InterfaceRef("any")
 
 
 def unify_branch_types(
@@ -630,7 +659,10 @@ def collect_var_types(
                     var_types[loop_var] = INT
                 else:
                     iterable_type = callbacks.infer_iterable_type(iter_node, var_types)
-                    if isinstance(iterable_type, Slice):
+                    if iterable_type == STRING:
+                        # Iterating over a string gives runes (single characters)
+                        var_types[loop_var] = RUNE
+                    elif isinstance(iterable_type, Slice):
                         var_types[loop_var] = iterable_type.element
             elif is_type(target, ["Tuple"]) and len(target.get("elts", [])) == 2:
                 elts = target.get("elts", [])
@@ -731,23 +763,13 @@ def collect_var_types(
                 elif is_type(value, ["Dict"]):
                     var_types[var_name] = Map(STRING, InterfaceRef("any"))
                 # Infer from field access: var = obj.field -> var has field's type
+                # Handles chained access like self.target.value
                 elif is_type(value, ["Attribute"]):
-                    # Look up field type using local var_types (not self._type_ctx)
-                    attr_node = value
-                    field_name = attr_node.get("attr")
-                    obj_type: "Type" = InterfaceRef("any")
-                    attr_value = attr_node.get("value", {})
-                    if is_type(attr_value, ["Name"]):
-                        obj_name = attr_value.get("id")
-                        if obj_name == "self" and current_class_name:
-                            obj_type = Pointer(StructRef(current_class_name))
-                        elif obj_name in var_types:
-                            obj_type = var_types[obj_name]
-                    struct_name = callbacks.extract_struct_name(obj_type)
-                    if struct_name and struct_name in symbols.structs:
-                        field_info = symbols.structs[struct_name].fields.get(field_name)
-                        if field_info:
-                            var_types[var_name] = field_info.typ
+                    field_type = infer_attr_chain_type(
+                        value, var_types, symbols, current_class_name
+                    )
+                    if field_type != InterfaceRef("any"):
+                        var_types[var_name] = field_type
                 # Infer from subscript/slice: var = container[...] -> element type
                 elif is_type(value, ["Subscript"]):
                     container_type: "Type" = InterfaceRef("any")
@@ -797,6 +819,20 @@ def collect_var_types(
                     method_name = func.get("attr")
                     obj_type: "Type" = InterfaceRef("any")
                     func_value = func.get("value", {})
+                    # Handle string literal method calls: "".join(...), " ".join(...), etc.
+                    if is_type(func_value, ["Constant"]) and isinstance(func_value.get("value"), str):
+                        if method_name in (
+                            "join",
+                            "replace",
+                            "lower",
+                            "upper",
+                            "strip",
+                            "lstrip",
+                            "rstrip",
+                            "format",
+                        ):
+                            var_types[var_name] = STRING
+                            continue
                     if is_type(func_value, ["Name"]):
                         obj_name = func_value.get("id")
                         if obj_name == "self" and current_class_name:
@@ -938,6 +974,30 @@ def collect_var_types(
                                 idx = slice_node.get("value")
                                 if 0 <= idx and idx < len(container_type.elements):
                                     var_types[var_name] = container_type.elements[idx]
+    # Fourth-and-a-half pass: re-process For loops now that assignments are typed
+    # This catches cases like: for c in base[1:]: where base was typed in the second pass
+    for stmt in dict_walk({"_type": "Module", "body": stmts}):
+        if is_type(stmt, ["For"]):
+            target = stmt.get("target", {})
+            if is_type(target, ["Name"]):
+                loop_var = target.get("id")
+                # Skip if already typed (from First pass)
+                if loop_var in var_types:
+                    continue
+                iter_node = stmt.get("iter", {})
+                # Check for range() call - loop variable is INT
+                if (
+                    is_type(iter_node, ["Call"])
+                    and is_type(iter_node.get("func"), ["Name"])
+                    and iter_node.get("func", {}).get("id") == "range"
+                ):
+                    var_types[loop_var] = INT
+                else:
+                    iterable_type = callbacks.infer_iterable_type(iter_node, var_types)
+                    if iterable_type == STRING:
+                        var_types[loop_var] = RUNE
+                    elif isinstance(iterable_type, Slice):
+                        var_types[loop_var] = iterable_type.element
     # Fifth pass: unify types from if/else branches
     for stmt in dict_walk({"_type": "Module", "body": stmts}):
         if is_type(stmt, ["If"]) and stmt.get("orelse"):
@@ -974,3 +1034,45 @@ def collect_var_types(
         if var_name not in vars_assigned_none and concrete_type == InterfaceRef("Node"):
             var_types[var_name] = InterfaceRef("Node")
     return var_types, tuple_vars, sentinel_ints, list_element_unions
+
+
+def compute_expr_types(
+    stmts: list[ASTNode],
+    var_types: dict[str, "Type"],
+    symbols: "SymbolTable",
+    current_class_name: str,
+    current_func_info: FuncInfo | None,
+    node_types: set[str],
+) -> None:
+    """Compute types for all expressions in statements.
+
+    Stores computed type directly in each AST node as '_expr_type' field.
+    """
+    from .context import TypeContext
+
+    type_ctx = TypeContext(var_types=var_types)
+    expr_node_types = {
+        "Constant",
+        "Name",
+        "Attribute",
+        "Subscript",
+        "Call",
+        "BinOp",
+        "Compare",
+        "BoolOp",
+        "UnaryOp",
+        "IfExp",
+        "List",
+        "Dict",
+        "Set",
+        "Tuple",
+        "JoinedStr",
+        "FormattedValue",
+    }
+    for stmt in dict_walk({"_type": "Module", "body": stmts}):
+        node_t = stmt.get("_type") if isinstance(stmt, dict) else None
+        if node_t in expr_node_types:
+            typ = infer_expr_type_from_ast(
+                stmt, type_ctx, symbols, current_func_info, current_class_name, node_types
+            )
+            stmt["_expr_type"] = typ

@@ -53,7 +53,6 @@ class LoweringDispatch:
     Why these callbacks must stay (cannot be inlined):
     - lower_expr/lower_expr_as_bool/lower_stmts/lower_lvalue: Recursive calls
     - lower_expr_List: Bidirectional type inference for constructors
-    - infer_expr_type_from_ast: Uses mutable _type_ctx state
     - annotation_to_str: Recursive AST traversal with self reference
     - merge_keyword_args/fill_default_args/etc: Pass lower_expr/infer callbacks
     - set_catch_var: Mutates Frontend instance state
@@ -66,8 +65,6 @@ class LoweringDispatch:
     lower_lvalue: Callable[[ASTNode], "ir.LValue"]
     # Bidirectional type inference (MUST STAY - uses expected type context)
     lower_expr_List: Callable[[ASTNode, "Type | None"], "ir.Expr"]
-    # Type inference (MUST STAY - uses mutable _type_ctx)
-    infer_expr_type_from_ast: Callable[[ASTNode], "Type"]
     # Helper (MUST STAY - recursive AST traversal)
     annotation_to_str: Callable[[ASTNode | None], str]
     # Argument handling (MUST STAY - pass lower_expr/infer callbacks internally)
@@ -78,5 +75,7 @@ class LoweringDispatch:
     deref_for_slice_params: Callable[["Type", str, list, list[ASTNode]], list]
     deref_for_func_slice_params: Callable[[str, list, list[ASTNode]], list]
     coerce_sentinel_to_ptr: Callable[["Type", str, list, list], list]
+    # Type inference (MUST STAY - needed for narrowing contexts)
+    infer_expr_type_from_ast: Callable[[ASTNode], "Type"]
     # Exception handling (MUST STAY - mutates instance state)
     set_catch_var: Callable[[str | None], str | None]

@@ -157,6 +157,16 @@ class Frontend:
         """Set up type context and lower statements."""
         self._current_class_name = class_name
         self._current_func_info = func_info
+        # Compute expr_types for all expressions in the function body
+        # Types are stored directly in each AST node as '_expr_type' field
+        inference.compute_expr_types(
+            stmts,
+            type_ctx.var_types,
+            self.symbols,
+            class_name,
+            func_info,
+            self._hierarchy.node_types,
+        )
         self._type_ctx = type_ctx
         return self._lower_stmts(stmts)
 
@@ -293,7 +303,6 @@ class Frontend:
             orig_args,
             self.symbols,
             type_inference.extract_struct_name,
-            self._infer_expr_type_from_ast,
         )
 
     def _deref_for_slice_params(
@@ -306,14 +315,13 @@ class Frontend:
             orig_args,
             self.symbols,
             type_inference.extract_struct_name,
-            self._infer_expr_type_from_ast,
         )
 
     def _deref_for_func_slice_params(
         self, func_name: str, args: list[Expr], orig_args: list[ASTNode]
     ) -> list[Expr]:
         return lowering.deref_for_func_slice_params(
-            func_name, args, orig_args, self.symbols, self._infer_expr_type_from_ast
+            func_name, args, orig_args, self.symbols
         )
 
     def _coerce_sentinel_to_ptr(
@@ -361,7 +369,6 @@ class Frontend:
             lower_stmts=self._lower_stmts,
             lower_lvalue=self._lower_lvalue,
             lower_expr_List=self._lower_expr_List,
-            infer_expr_type_from_ast=self._infer_expr_type_from_ast,
             annotation_to_str=self._annotation_to_str,
             merge_keyword_args=self._merge_keyword_args,
             fill_default_args=self._fill_default_args,
@@ -370,6 +377,7 @@ class Frontend:
             deref_for_slice_params=self._deref_for_slice_params,
             deref_for_func_slice_params=self._deref_for_func_slice_params,
             coerce_sentinel_to_ptr=self._coerce_sentinel_to_ptr,
+            infer_expr_type_from_ast=self._infer_expr_type_from_ast,
             set_catch_var=self._set_catch_var,
         )
         return ctx, dispatch
@@ -380,7 +388,6 @@ class Frontend:
             node,
             self._lower_expr,
             self._lower_expr_as_bool,
-            self._infer_expr_type_from_ast,
             self._is_isinstance_call,
             self._resolve_type_name,
             self._type_ctx,
@@ -407,7 +414,6 @@ class Frontend:
         return lowering.lower_expr_List(
             node,
             self._lower_expr,
-            self._infer_expr_type_from_ast,
             self._type_ctx.expected,
             expected_type,
         )

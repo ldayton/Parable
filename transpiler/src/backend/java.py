@@ -1271,8 +1271,6 @@ class JavaBackend:
                 if func == "_intPtr" or func == "_int_ptr":
                     # Java auto-boxes int to Integer
                     return f"({self._expr(args[0])})"
-                if func == "_intToStr" or func == "_int_to_str":
-                    return f"String.valueOf({self._expr(args[0])})"
                 # Check if calling a function-typed parameter
                 if func in self._func_params:
                     return f"{func}.call()"

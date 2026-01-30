@@ -11,7 +11,6 @@ Frontend deficiencies (should be fixed in frontend.py):
 - UnaryOp "!(len(x) > 0)" similarly converted back to "not x" - same issue.
 - Marker variables "_skip_docstring" and "_pass" require special-case filtering.
   Frontend should either not emit these or use a dedicated NoOp IR node.
-- Call(_parseInt, ...) and Call(_intToStr, ...) converted back to int()/str().
 
 Middleend deficiencies (should be fixed in middleend.py):
 - None identified. Python backend is cleanest because source language matches.
@@ -621,12 +620,6 @@ class PythonBackend:
             case IntToStr(value=v):
                 return f"str({self._expr(v)})"
             case Call(func=func, args=args):
-                # Map helper functions to Python builtins
-                if func == "_parseInt":
-                    args_str = ", ".join(self._expr(a) for a in args)
-                    return f"int({args_str})"
-                if func == "_intToStr":
-                    return f"str({self._expr(args[0])})"
                 args_str = ", ".join(self._expr(a) for a in args)
                 return f"{func}({args_str})"
             case MethodCall(obj=obj, method=method, args=args, receiver_type=receiver_type):

@@ -7,23 +7,23 @@ Fix Java backend test failures.
 
 ## Paths
 
-| Path | Description |
-|------|-------------|
-| `transpiler/src/backend/java.py` | Java backend (edit this) |
-| `dist/java/` | Generated output (don't edit directly, but commit changes) |
+| Path                             | Description                                                |
+| -------------------------------- | ---------------------------------------------------------- |
+| `transpiler/src/backend/java.py` | Java backend (edit this)                                   |
+| `dist/java/`                     | Generated output (don't edit directly, but commit changes) |
 
 ## Step 1: Get baseline and first failure
 
 ```bash
 cd /Users/lily/source/Parable
-just backend-test java 2>&1 | tail -1
+just backend-test java 2>&1 | tail -2 | head -1
 ```
 
 Store baseline counts from `X passed, Y failed`.
 
 Then get actual failures:
 ```bash
-java -cp dist/java/classes Parable --run-tests tests -f 01_words 2>&1 | head -50
+java -cp dist/java/classes RunTests tests -f 01_words 2>&1 | head -50
 ```
 
 This filters to one test file and shows error details:
@@ -39,7 +39,7 @@ The error trace points to a method in `dist/java/Parable.java`. Find the corresp
 ## Step 3: Verify and commit
 
 ```bash
-just backend-test java 2>&1 | tail -1
+just backend-test java 2>&1 | tail -2 | head -1
 ```
 
 If `new_passed > baseline_passed`, run `just check` first:

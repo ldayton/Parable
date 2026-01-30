@@ -611,6 +611,15 @@ class JavaBackend:
             if i > 0:
                 self._line("")
             self._emit_function(func)
+        # Emit _bytesToString helper for bytes.decode() calls
+        self._line("")
+        self._line("static String _bytesToString(List<Byte> bytes) {")
+        self.indent += 1
+        self._line("byte[] arr = new byte[bytes.size()];")
+        self._line("for (int i = 0; i < bytes.size(); i++) arr[i] = bytes.get(i);")
+        self._line("return new String(arr, java.nio.charset.StandardCharsets.UTF_8);")
+        self.indent -= 1
+        self._line("}")
         self.indent -= 1
         self._line("}")
 
@@ -622,6 +631,17 @@ class JavaBackend:
         params = self._params(func.params)
         ret = self._type(func.ret)
         name = to_camel(func.name)
+        # Special case: _stringToBytes needs native implementation to avoid recursion
+        if func.name == "_string_to_bytes":
+            self._line(f"static {ret} {name}({params}) {{")
+            self.indent += 1
+            self._line("byte[] bytes = s.getBytes(java.nio.charset.StandardCharsets.UTF_8);")
+            self._line("List<Byte> result = new ArrayList<>(bytes.length);")
+            self._line("for (byte b : bytes) result.add(b);")
+            self._line("return result;")
+            self.indent -= 1
+            self._line("}")
+            return
         self._line(f"static {ret} {name}({params}) {{")
         self.indent += 1
         if not func.body:
@@ -1138,6 +1158,11 @@ class JavaBackend:
                     # Frontend generates _parseInt for int(s, base)
                     return f"Integer.parseInt({args_str})"
                 if func == "str":
+                    # Check if converting bytes to string (List<Byte>)
+                    if args and isinstance(args[0].typ, Slice):
+                        elem_type = args[0].typ.element
+                        if isinstance(elem_type, Primitive) and elem_type.kind == "byte":
+                            return f"ParableFunctions._bytesToString({args_str})"
                     return f"String.valueOf({args_str})"
                 if func == "len":
                     arg = self._expr(args[0])
@@ -1155,8 +1180,19 @@ class JavaBackend:
                         start = self._expr(args[0])
                         stop = self._expr(args[1])
                         step = self._expr(args[2])
-                        # Use _x as lambda param to avoid conflicts with outer variables
-                        return f"java.util.stream.IntStream.iterate({start}, _x -> _x < {stop}, _x -> _x + {step}).boxed().toList()"
+                        # Detect negative step to use correct comparison
+                        # For negative step: iterate while _x > stop
+                        # For positive step: iterate while _x < stop
+                        step_arg = args[2]
+                        is_negative_step = (
+                            isinstance(step_arg, IntLit) and step_arg.value < 0
+                        ) or (
+                            isinstance(step_arg, UnaryOp)
+                            and step_arg.op == "-"
+                            and isinstance(step_arg.operand, IntLit)
+                        )
+                        cmp = ">" if is_negative_step else "<"
+                        return f"java.util.stream.IntStream.iterate({start}, _x -> _x {cmp} {stop}, _x -> _x + {step}).boxed().toList()"
                 if func == "ord":
                     return f"(int) ({self._expr(args[0])}.charAt(0))"
                 if func == "chr":
@@ -1256,6 +1292,12 @@ class JavaBackend:
                 # Bitwise operators need parens due to low precedence
                 if java_op in ("&", "|", "^"):
                     return f"({left_str} {java_op} {right_str})"
+                # Add parens around || when inside && to preserve precedence
+                if java_op == "&&":
+                    if isinstance(left, BinaryOp) and left.op == "||":
+                        left_str = f"({left_str})"
+                    if isinstance(right, BinaryOp) and right.op == "||":
+                        right_str = f"({right_str})"
                 return f"{left_str} {java_op} {right_str}"
             case UnaryOp(op="&", operand=operand):
                 return self._expr(operand)  # Java passes objects by reference
@@ -1295,8 +1337,12 @@ class JavaBackend:
             case UnaryOp(op=op, operand=operand):
                 return f"{op}{self._expr(operand)}"
             case Ternary(cond=cond, then_expr=then_expr, else_expr=else_expr):
+                # When else is null but then is a list, use empty ArrayList instead
+                else_str = self._expr(else_expr)
+                if isinstance(else_expr, NilLit) and isinstance(then_expr.typ, Slice):
+                    else_str = "new ArrayList<>()"
                 # Wrap in parens to avoid precedence issues (?: has very low precedence in Java)
-                return f"({self._expr(cond)} ? {self._expr(then_expr)} : {self._expr(else_expr)})"
+                return f"({self._expr(cond)} ? {self._expr(then_expr)} : {else_str})"
             case Cast(expr=inner, to_type=to_type):
                 return self._cast(inner, to_type)
             case TypeAssert(expr=inner, asserted=asserted, safe=safe):
@@ -1339,7 +1385,8 @@ class JavaBackend:
                 if not elements:
                     return "new ArrayList<>()"
                 elems = ", ".join(self._expr(e) for e in elements)
-                return f"new ArrayList<>(List.of({elems}))"
+                # List.of() doesn't allow nulls - use Arrays.asList() which does
+                return f"new ArrayList<>(Arrays.asList({elems}))"
             case MapLit(entries=entries, key_type=key_type, value_type=value_type):
                 if not entries:
                     return "new HashMap<>()"
@@ -1373,6 +1420,9 @@ class JavaBackend:
                                 and field_type.kind == "int"
                             ):
                                 ordered_args.append("-1")
+                            # Handle null for list fields - use empty ArrayList
+                            elif isinstance(field_val, NilLit) and isinstance(field_type, Slice):
+                                ordered_args.append("new ArrayList<>()")
                             else:
                                 ordered_args.append(self._expr(field_val))
                         else:
@@ -1456,6 +1506,9 @@ class JavaBackend:
                 key = self._expr(args[0])
                 default = self._expr(args[1])
                 return f"{obj_str}.getOrDefault({key}, {default})"
+        # Handle bytes.decode() -> convert List<Byte> to String
+        if method == "decode":
+            return f"ParableFunctions._bytesToString({obj_str})"
         # Fallback: convert common Python methods to Java equivalents
         if method == "append":
             return f"{obj_str}.add({args_str})"

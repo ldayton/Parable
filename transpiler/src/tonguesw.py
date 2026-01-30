@@ -1,4 +1,5 @@
 """CLI wrapper with file I/O - not in subset, delegates to cli.py."""
+# tongues: skip
 
 from __future__ import annotations
 
@@ -12,7 +13,17 @@ from .frontend.subset import (
     extract_imports,
     ImportInfo,
     ProjectVerifyResult,
+    VerifyResult,
 )
+
+
+def should_skip_file(source: str) -> bool:
+    """Check if file has a tongues: skip directive in first 5 lines."""
+    lines = source.split("\n", 5)
+    for line in lines[:5]:
+        if "tongues: skip" in line:
+            return True
+    return False
 
 
 def resolve_import(
@@ -49,6 +60,8 @@ def verify_project(path: str) -> ProjectVerifyResult:
     if os.path.isfile(path):
         with open(path, "r") as f:
             source = f.read()
+        if should_skip_file(source):
+            return result
         ast_dict = parse(source)
         result.file_results[path] = verify_subset(ast_dict)
         return result
@@ -72,6 +85,8 @@ def verify_project(path: str) -> ProjectVerifyResult:
 
         with open(file_path, "r") as f:
             source = f.read()
+        if should_skip_file(source):
+            continue
         ast_dict = parse(source)
         result.file_results[file_path] = verify_subset(ast_dict)
 

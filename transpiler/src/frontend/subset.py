@@ -891,8 +891,16 @@ class Verifier:
             i += 1
 
     def visit_Import(self, node: ASTNode) -> None:
-        """Check import constraints."""
-        self.error(node, "import", "import: not allowed, code must be self-contained")
+        """Check import constraints. Only 'import sys' allowed for I/O."""
+        names = node.get("names", [])
+        i = 0
+        while i < len(names):
+            alias = names[i]
+            if isinstance(alias, dict):
+                name = alias.get("name", "")
+                if name != "sys":
+                    self.error(node, "import", "import " + name + ": not allowed, code must be self-contained")
+            i += 1
 
     def visit_ImportFrom(self, node: ASTNode) -> None:
         """Check from import constraints.

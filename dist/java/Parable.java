@@ -3894,10 +3894,10 @@ class Redirect implements Node {
                 }
             }
             String raw = ParableFunctions._substring(targetVal, 1, targetVal.length());
-            if ((raw.length() > 0 && raw.chars().allMatch(Character::isDigit)) && (int) Long.parseLong(raw, 10) <= 2147483647) {
+            if ((raw.length() > 0 && raw.chars().allMatch(Character::isDigit)) && Long.parseLong(raw, 10) <= 2147483647L) {
                 return "(redirect \"" + op + "\" " + String.valueOf((int) Long.parseLong(raw, 10)) + ")";
             }
-            if (raw.endsWith("-") && (raw.substring(0, raw.length() - 1).length() > 0 && raw.substring(0, raw.length() - 1).chars().allMatch(Character::isDigit)) && (int) Long.parseLong(raw.substring(0, raw.length() - 1), 10) <= 2147483647) {
+            if (raw.endsWith("-") && (raw.substring(0, raw.length() - 1).length() > 0 && raw.substring(0, raw.length() - 1).chars().allMatch(Character::isDigit)) && Long.parseLong(raw.substring(0, raw.length() - 1), 10) <= 2147483647L) {
                 return "(redirect \"" + op + "\" " + String.valueOf((int) Long.parseLong(raw.substring(0, raw.length() - 1), 10)) + ")";
             }
             if (targetVal.equals("&-")) {
@@ -3907,13 +3907,13 @@ class Redirect implements Node {
             return "(redirect \"" + op + "\" \"" + fdTarget + "\")";
         }
         if (op.equals(">&") || op.equals("<&")) {
-            if ((targetVal.length() > 0 && targetVal.chars().allMatch(Character::isDigit)) && (int) Long.parseLong(targetVal, 10) <= 2147483647) {
+            if ((targetVal.length() > 0 && targetVal.chars().allMatch(Character::isDigit)) && Long.parseLong(targetVal, 10) <= 2147483647L) {
                 return "(redirect \"" + op + "\" " + String.valueOf((int) Long.parseLong(targetVal, 10)) + ")";
             }
             if (targetVal.equals("-")) {
                 return "(redirect \">&-\" 0)";
             }
-            if (targetVal.endsWith("-") && (targetVal.substring(0, targetVal.length() - 1).length() > 0 && targetVal.substring(0, targetVal.length() - 1).chars().allMatch(Character::isDigit)) && (int) Long.parseLong(targetVal.substring(0, targetVal.length() - 1), 10) <= 2147483647) {
+            if (targetVal.endsWith("-") && (targetVal.substring(0, targetVal.length() - 1).length() > 0 && targetVal.substring(0, targetVal.length() - 1).chars().allMatch(Character::isDigit)) && Long.parseLong(targetVal.substring(0, targetVal.length() - 1), 10) <= 2147483647L) {
                 return "(redirect \"" + op + "\" " + String.valueOf((int) Long.parseLong(targetVal.substring(0, targetVal.length() - 1), 10)) + ")";
             }
             String outVal = (targetVal.endsWith("-") ? targetVal.substring(0, targetVal.length() - 1) : targetVal);

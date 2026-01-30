@@ -1267,6 +1267,16 @@ class JavaBackend:
                         return f"{inner_str}.isEmpty()"
                     if java_op == "<=":
                         return f"{inner_str}.isEmpty()"
+                # Compare _parseInt result as long to avoid int overflow before comparison
+                # e.g., int(s) <= 2147483647 -> Long.parseLong(s, 10) <= 2147483647L
+                if (
+                    isinstance(left, Call)
+                    and left.func == "_parseInt"
+                    and java_op in ("<=", "<", ">", ">=")
+                    and isinstance(right, IntLit)
+                ):
+                    args_str = ", ".join(self._expr(a) for a in left.args)
+                    return f"Long.parseLong({args_str}) {java_op} {right.value}L"
                 # Char comparison: s.charAt(i) == 'c' instead of String.valueOf(...).equals(...)
                 # Pattern: Index(string, i) == StringLit(single_char) or Cast(Index(...)) == StringLit
                 if (

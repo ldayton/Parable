@@ -107,6 +107,13 @@ style:
     done
     exit $failed
 
-# Run transpiler tests using subset-compliant runner
-test-transpiler:
-    python3 tests/run_testsw.py tests/
+# Run phase tests (subset/names verification)
+test-phases:
+    python3 tests/run_testsw.py tests/phases/
+
+# Run codegen tests
+test-codegen:
+    python3 tests/run_codegen_testsw.py tests/codegen/
+
+# Run all transpiler tests
+test-transpiler: test-phases test-codegen

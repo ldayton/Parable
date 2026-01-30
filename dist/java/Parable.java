@@ -5126,7 +5126,7 @@ class Parser {
     }
 
     public SavedParserState _saveParserState() {
-        return new SavedParserState(this._parserState, this._dolbraceState, null /* TODO: SliceConvert */, this._ctx.copyStack(), this._eofToken);
+        return new SavedParserState(this._parserState, this._dolbraceState, null /* TODO: unknown expression */, this._ctx.copyStack(), this._eofToken);
     }
 
     public void _restoreParserState(SavedParserState saved) {

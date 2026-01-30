@@ -131,7 +131,7 @@ interface Node {
     String toSexp();
 }
 
-class ParseError {
+class ParseError extends RuntimeException {
     String message;
     int pos;
     int line;
@@ -154,7 +154,10 @@ class ParseError {
     }
 }
 
-class MatchedPairError {
+class MatchedPairError extends ParseError {
+    MatchedPairError(String message, int pos, int line) {
+        super(message, pos, line);
+    }
 
 }
 
@@ -577,7 +580,7 @@ class Lexer {
                 return new Tuple2(String.join("", chars), sawNewline);
             }
         }
-        throw new RuntimeException("Unterminated single quote");
+        throw new ParseError("Unterminated single quote", start, 0);
     }
 
     public boolean _isWordTerminator(int ctx, String ch, int bracketDepth, int parenDepth) {
@@ -745,7 +748,7 @@ class Lexer {
         boolean wasGtlt = false;
         while (count > 0) {
             if (this.atEnd()) {
-                throw new RuntimeException(String.format("unexpected EOF while looking for matching `%s'", closeChar));
+                throw new MatchedPairError(String.format("unexpected EOF while looking for matching `%s'", closeChar), start, 0);
             }
             String ch = this.advance();
             if ((((flags & Constants.MATCHEDPAIRFLAGS_DOLBRACE)) != 0) && this._dolbraceState == Constants.DOLBRACESTATE_OP) {
@@ -1133,7 +1136,7 @@ class Lexer {
                         }
                     }
                     if (this.atEnd()) {
-                        throw new RuntimeException("Unterminated double quote");
+                        throw new ParseError("Unterminated double quote", start, 0);
                     }
                     chars.add(this.advance());
                 } else {
@@ -1276,7 +1279,7 @@ class Lexer {
             chars.add(this.advance());
         }
         if (bracketDepth > 0 && bracketStartPos != -1 && this.atEnd()) {
-            throw new RuntimeException("unexpected EOF looking for `]'");
+            throw new MatchedPairError("unexpected EOF looking for `]'", bracketStartPos, 0);
         }
         if (!(!chars.isEmpty())) {
             return null;
@@ -1394,7 +1397,7 @@ class Lexer {
             }
         }
         if (!foundClose) {
-            throw new RuntimeException("unexpected EOF while looking for matching `''");
+            throw new MatchedPairError("unexpected EOF while looking for matching `''", start, 0);
         }
         String text = ParableFunctions._substring(this.source, start, this.pos);
         String content = String.join("", contentChars);
@@ -1778,7 +1781,7 @@ class Lexer {
 
     public Tuple3 _readBracedParam(int start, boolean inDquote) {
         if (this.atEnd()) {
-            throw new RuntimeException("unexpected EOF looking for `}'");
+            throw new MatchedPairError("unexpected EOF looking for `}'", start, 0);
         }
         int savedDolbrace = this._dolbraceState;
         this._dolbraceState = Constants.DOLBRACESTATE_PARAM;
@@ -1837,7 +1840,7 @@ class Lexer {
                 }
                 if (this.atEnd()) {
                     this._dolbraceState = savedDolbrace;
-                    throw new RuntimeException("unexpected EOF looking for `}'");
+                    throw new MatchedPairError("unexpected EOF looking for `}'", start, 0);
                 }
                 this.pos = start + 2;
             } else {
@@ -1857,7 +1860,7 @@ class Lexer {
         }
         if (this.atEnd()) {
             this._dolbraceState = savedDolbrace;
-            throw new RuntimeException("unexpected EOF looking for `}'");
+            throw new MatchedPairError("unexpected EOF looking for `}'", start, 0);
         }
         if (this.peek().equals("}")) {
             this.advance();
@@ -1890,7 +1893,7 @@ class Lexer {
                     }
                     if (this.atEnd()) {
                         this._dolbraceState = savedDolbrace;
-                        throw new RuntimeException("Unterminated backtick");
+                        throw new ParseError("Unterminated backtick", backtickPos, 0);
                     }
                     this.advance();
                     op = "`";
@@ -1919,9 +1922,9 @@ class Lexer {
             int flags = (inDquote ? Constants.MATCHEDPAIRFLAGS_DQUOTE : Constants.MATCHEDPAIRFLAGS_NONE);
             boolean paramEndsWithDollar = !param.equals("") && param.endsWith("$");
             arg = this._collectParamArgument(flags, paramEndsWithDollar);
-        } catch (Exception e) {
+        } catch (MatchedPairError e) {
             this._dolbraceState = savedDolbrace;
-            throw new RuntimeException("");
+            throw e;
         }
         if ((op.equals("<") || op.equals(">")) && arg.startsWith("(") && arg.endsWith(")")) {
             String inner = arg.substring(1, arg.length() - 1);
@@ -5442,22 +5445,22 @@ class Parser {
         if (this.peek().equals("{")) {
             BraceGroup brace = this.parseBraceGroup();
             if (brace == null) {
-                throw new RuntimeException(String.format("Expected brace group body in %s", context));
+                throw new ParseError(String.format("Expected brace group body in %s", context), this._lexPeekToken().pos, 0);
             }
             return brace.body;
         }
         if (this._lexConsumeWord("do")) {
             Node body = this.parseListUntil(new HashSet<>(Set.of("done")));
             if (body == null) {
-                throw new RuntimeException("Expected commands after 'do'");
+                throw new ParseError("Expected commands after 'do'", this._lexPeekToken().pos, 0);
             }
             this.skipWhitespaceAndNewlines();
             if (!this._lexConsumeWord("done")) {
-                throw new RuntimeException(String.format("Expected 'done' to close %s", context));
+                throw new ParseError(String.format("Expected 'done' to close %s", context), this._lexPeekToken().pos, 0);
             }
             return body;
         }
-        throw new RuntimeException(String.format("Expected 'do' or '{' in %s", context));
+        throw new ParseError(String.format("Expected 'do' or '{' in %s", context), this._lexPeekToken().pos, 0);
     }
 
     public String peekWord() {
@@ -5550,7 +5553,7 @@ class Parser {
             }
         }
         if (this.atEnd()) {
-            throw new RuntimeException("Unterminated double quote");
+            throw new ParseError("Unterminated double quote", start, 0);
         }
         chars.add(this.advance());
     }
@@ -5683,7 +5686,7 @@ class Parser {
         this.skipWhitespaceAndNewlines();
         if (this.atEnd() || !this.peek().equals("}")) {
             this._restoreParserState(saved);
-            throw new RuntimeException("unexpected EOF looking for `}'");
+            throw new MatchedPairError("unexpected EOF looking for `}'", start, 0);
         }
         this.advance();
         String text = ParableFunctions._substring(this.source, start, this.pos);
@@ -5958,7 +5961,7 @@ class Parser {
             textChars.add(ch);
         }
         if (this.atEnd()) {
-            throw new RuntimeException("Unterminated backtick");
+            throw new ParseError("Unterminated backtick", start, 0);
         }
         this.advance();
         textChars.add("`");
@@ -6008,7 +6011,7 @@ class Parser {
             }
             this.skipWhitespaceAndNewlines();
             if (this.atEnd() || !this.peek().equals(")")) {
-                throw new RuntimeException("Invalid process substitution");
+                throw new ParseError("Invalid process substitution", start, 0);
             }
             this.advance();
             int textEnd = this.pos;
@@ -6017,12 +6020,12 @@ class Parser {
             this._restoreParserState(saved);
             this._inProcessSub = oldInProcessSub;
             return new Tuple3(new ProcessSubstitution(direction, cmd, "procsub"), text);
-        } catch (Exception e) {
+        } catch (ParseError e) {
             this._restoreParserState(saved);
             this._inProcessSub = oldInProcessSub;
             String contentStartChar = (start + 2 < this.length ? String.valueOf(this.source.charAt(start + 2)) : "");
             if (" \t\n".indexOf(contentStartChar) != -1) {
-                throw new RuntimeException("");
+                throw e;
             }
             this.pos = start + 2;
             this._lexer.pos = this.pos;
@@ -6046,7 +6049,7 @@ class Parser {
             this.skipWhitespaceAndNewlines();
             if (this.atEnd()) {
                 this._clearState(Constants.PARSERSTATEFLAGS_PST_COMPASSIGN);
-                throw new RuntimeException("Unterminated array literal");
+                throw new ParseError("Unterminated array literal", start, 0);
             }
             if (this.peek().equals(")")) {
                 break;
@@ -6057,13 +6060,13 @@ class Parser {
                     break;
                 }
                 this._clearState(Constants.PARSERSTATEFLAGS_PST_COMPASSIGN);
-                throw new RuntimeException("Expected word in array literal");
+                throw new ParseError("Expected word in array literal", this.pos, 0);
             }
             elements.add(word);
         }
         if (this.atEnd() || !this.peek().equals(")")) {
             this._clearState(Constants.PARSERSTATEFLAGS_PST_COMPASSIGN);
-            throw new RuntimeException("Expected ) to close array literal");
+            throw new ParseError("Expected ) to close array literal", this.pos, 0);
         }
         this.advance();
         String text = ParableFunctions._substring(this.source, start, this.pos);
@@ -6142,7 +6145,7 @@ class Parser {
         }
         if (depth != 0) {
             if (this.atEnd()) {
-                throw new RuntimeException("unexpected EOF looking for `))'");
+                throw new MatchedPairError("unexpected EOF looking for `))'", start, 0);
             }
             this.pos = start;
             return new Tuple3(null, "");
@@ -6158,7 +6161,7 @@ class Parser {
         Node expr = null;
         try {
             expr = this._parseArithExpr(content);
-        } catch (Exception e) {
+        } catch (ParseError e) {
             this.pos = start;
             return new Tuple3(null, "");
         }
@@ -6581,7 +6584,7 @@ class Parser {
                             Node index = this._arithParseComma();
                             this._arithSkipWs();
                             if (!this._arithConsume("]")) {
-                                throw new RuntimeException("Expected ']' in array subscript");
+                                throw new ParseError("Expected ']' in array subscript", this._arithPos, 0);
                             }
                             left = new ArithSubscript(leftArithVar.name, index, "subscript");
                         } else {
@@ -6605,7 +6608,7 @@ class Parser {
             Node expr = this._arithParseComma();
             this._arithSkipWs();
             if (!this._arithConsume(")")) {
-                throw new RuntimeException("Expected ')' in arithmetic expression");
+                throw new ParseError("Expected ')' in arithmetic expression", this._arithPos, 0);
             }
             return expr;
         }
@@ -6628,7 +6631,7 @@ class Parser {
         if (c.equals("\\")) {
             this._arithAdvance();
             if (this._arithAtEnd()) {
-                throw new RuntimeException("Unexpected end after backslash in arithmetic");
+                throw new ParseError("Unexpected end after backslash in arithmetic", this._arithPos, 0);
             }
             String escapedChar = this._arithAdvance();
             return new ArithEscape(escapedChar, "escape");
@@ -6641,7 +6644,7 @@ class Parser {
 
     public Node _arithParseExpansion() {
         if (!this._arithConsume("$")) {
-            throw new RuntimeException("Expected '$'");
+            throw new ParseError("Expected '$'", this._arithPos, 0);
         }
         String c = this._arithPeek(0);
         if (c.equals("(")) {
@@ -6665,7 +6668,7 @@ class Parser {
             }
         }
         if (!(!nameChars.isEmpty())) {
-            throw new RuntimeException("Expected variable name after $");
+            throw new ParseError("Expected variable name after $", this._arithPos, 0);
         }
         return new ParamExpansion(String.join("", nameChars), "", "", "param");
     }
@@ -6829,7 +6832,7 @@ class Parser {
         }
         String content = ParableFunctions._substring(this._arithSrc, contentStart, this._arithPos);
         if (!this._arithConsume("'")) {
-            throw new RuntimeException("Unterminated single quote in arithmetic");
+            throw new ParseError("Unterminated single quote in arithmetic", this._arithPos, 0);
         }
         return new ArithNumber(content, "number");
     }
@@ -6848,7 +6851,7 @@ class Parser {
         }
         String content = ParableFunctions._substring(this._arithSrc, contentStart, this._arithPos);
         if (!this._arithConsume("\"")) {
-            throw new RuntimeException("Unterminated double quote in arithmetic");
+            throw new ParseError("Unterminated double quote in arithmetic", this._arithPos, 0);
         }
         return new ArithNumber(content, "number");
     }
@@ -6867,7 +6870,7 @@ class Parser {
         }
         String content = ParableFunctions._substring(this._arithSrc, contentStart, this._arithPos);
         if (!this._arithConsume("`")) {
-            throw new RuntimeException("Unterminated backtick in arithmetic");
+            throw new ParseError("Unterminated backtick in arithmetic", this._arithPos, 0);
         }
         Parser subParser = ParableFunctions.newParser(content, false, this._extglob);
         Node cmd = subParser.parseList(true);
@@ -6906,7 +6909,7 @@ class Parser {
             }
             return new ArithVar(String.join("", chars), "var");
         }
-        throw new RuntimeException("Unexpected character '" + c + "' in arithmetic expression");
+        throw new ParseError("Unexpected character '" + c + "' in arithmetic expression", this._arithPos, 0);
     }
 
     public Tuple3 _parseDeprecatedArithmetic() {
@@ -7041,7 +7044,7 @@ class Parser {
             this.skipWhitespace();
             target = this.parseWord(false, false, false);
             if (target == null) {
-                throw new RuntimeException("Expected target for redirect " + op);
+                throw new ParseError("Expected target for redirect " + op, this.pos, 0);
             }
             return new Redirect(op, target, null, "redirect");
         }
@@ -7149,7 +7152,7 @@ class Parser {
                             target = new Word("&" + innerWord.value, new ArrayList<>(), "word");
                             target.parts = innerWord.parts;
                         } else {
-                            throw new RuntimeException("Expected target for redirect " + op);
+                            throw new ParseError("Expected target for redirect " + op, this.pos, 0);
                         }
                     } else {
                         target = new Word("&" + fdTarget, new ArrayList<>(), "word");
@@ -7160,7 +7163,7 @@ class Parser {
                         target = new Word("&" + innerWord.value, new ArrayList<>(), "word");
                         target.parts = innerWord.parts;
                     } else {
-                        throw new RuntimeException("Expected target for redirect " + op);
+                        throw new ParseError("Expected target for redirect " + op, this.pos, 0);
                     }
                 }
             }
@@ -7178,7 +7181,7 @@ class Parser {
             }
         }
         if (target == null) {
-            throw new RuntimeException("Expected target for redirect " + op);
+            throw new ParseError("Expected target for redirect " + op, this.pos, 0);
         }
         return new Redirect(op, target, null, "redirect");
     }
@@ -7559,12 +7562,12 @@ class Parser {
         Node body = this.parseList(true);
         if (body == null) {
             this._clearState(Constants.PARSERSTATEFLAGS_PST_SUBSHELL);
-            throw new RuntimeException("Expected command in subshell");
+            throw new ParseError("Expected command in subshell", this.pos, 0);
         }
         this.skipWhitespace();
         if (this.atEnd() || !this.peek().equals(")")) {
             this._clearState(Constants.PARSERSTATEFLAGS_PST_SUBSHELL);
-            throw new RuntimeException("Expected ) to close subshell");
+            throw new ParseError("Expected ) to close subshell", this.pos, 0);
         }
         this.advance();
         this._clearState(Constants.PARSERSTATEFLAGS_PST_SUBSHELL);
@@ -7635,7 +7638,7 @@ class Parser {
             }
         }
         if (this.atEnd()) {
-            throw new RuntimeException("unexpected EOF looking for `))'");
+            throw new MatchedPairError("unexpected EOF looking for `))'", savedPos, 0);
         }
         if (depth != 1) {
             this.pos = savedPos;
@@ -7669,7 +7672,7 @@ class Parser {
         if (this.atEnd() || !this.peek().equals("]") || this.pos + 1 >= this.length || this.source.charAt(this.pos + 1) != ']') {
             this._clearState(Constants.PARSERSTATEFLAGS_PST_CONDEXPR);
             this._wordContext = Constants.WORD_CTX_NORMAL;
-            throw new RuntimeException("Expected ]] to close conditional expression");
+            throw new ParseError("Expected ]] to close conditional expression", this.pos, 0);
         }
         this.advance();
         this.advance();
@@ -7730,7 +7733,7 @@ class Parser {
     public Node _parseCondTerm() {
         this._condSkipWhitespace();
         if (this._condAtEnd()) {
-            throw new RuntimeException("Unexpected end of conditional expression");
+            throw new ParseError("Unexpected end of conditional expression", this.pos, 0);
         }
         Node operand = null;
         if (this.peek().equals("!")) {
@@ -7746,20 +7749,20 @@ class Parser {
             Node inner = this._parseCondOr();
             this._condSkipWhitespace();
             if (this.atEnd() || !this.peek().equals(")")) {
-                throw new RuntimeException("Expected ) in conditional expression");
+                throw new ParseError("Expected ) in conditional expression", this.pos, 0);
             }
             this.advance();
             return new CondParen(inner, "cond-paren");
         }
         Word word1 = this._parseCondWord();
         if (word1 == null) {
-            throw new RuntimeException("Expected word in conditional expression");
+            throw new ParseError("Expected word in conditional expression", this.pos, 0);
         }
         this._condSkipWhitespace();
         if (Constants.COND_UNARY_OPS.contains(word1.value)) {
             operand = this._parseCondWord();
             if (operand == null) {
-                throw new RuntimeException("Expected operand after " + word1.value);
+                throw new ParseError("Expected operand after " + word1.value, this.pos, 0);
             }
             return new UnaryTest(word1.value, operand, "unary-test");
         }
@@ -7770,7 +7773,7 @@ class Parser {
                 this._condSkipWhitespace();
                 word2 = this._parseCondWord();
                 if (word2 == null) {
-                    throw new RuntimeException("Expected operand after " + op);
+                    throw new ParseError("Expected operand after " + op, this.pos, 0);
                 }
                 return new BinaryTest(op, word1, word2, "binary-test");
             }
@@ -7784,7 +7787,7 @@ class Parser {
                     word2 = this._parseCondWord();
                 }
                 if (word2 == null) {
-                    throw new RuntimeException("Expected operand after " + opWord.value);
+                    throw new ParseError("Expected operand after " + opWord.value, this.pos, 0);
                 }
                 return new BinaryTest(opWord.value, word1, word2, "binary-test");
             } else {
@@ -7832,11 +7835,11 @@ class Parser {
         this.skipWhitespaceAndNewlines();
         Node body = this.parseList(true);
         if (body == null) {
-            throw new RuntimeException("Expected command in brace group");
+            throw new ParseError("Expected command in brace group", this._lexPeekToken().pos, 0);
         }
         this.skipWhitespace();
         if (!this._lexConsumeWord("}")) {
-            throw new RuntimeException("Expected } to close brace group");
+            throw new ParseError("Expected } to close brace group", this._lexPeekToken().pos, 0);
         }
         return new BraceGroup(body, this._collectRedirects(), "brace-group");
     }
@@ -7848,15 +7851,15 @@ class Parser {
         }
         Node condition = this.parseListUntil(new HashSet<>(Set.of("then")));
         if (condition == null) {
-            throw new RuntimeException("Expected condition after 'if'");
+            throw new ParseError("Expected condition after 'if'", this._lexPeekToken().pos, 0);
         }
         this.skipWhitespaceAndNewlines();
         if (!this._lexConsumeWord("then")) {
-            throw new RuntimeException("Expected 'then' after if condition");
+            throw new ParseError("Expected 'then' after if condition", this._lexPeekToken().pos, 0);
         }
         Node thenBody = this.parseListUntil(new HashSet<>(Set.of("elif", "else", "fi")));
         if (thenBody == null) {
-            throw new RuntimeException("Expected commands after 'then'");
+            throw new ParseError("Expected commands after 'then'", this._lexPeekToken().pos, 0);
         }
         this.skipWhitespaceAndNewlines();
         Node elseBody = null;
@@ -7864,15 +7867,15 @@ class Parser {
             this._lexConsumeWord("elif");
             Node elifCondition = this.parseListUntil(new HashSet<>(Set.of("then")));
             if (elifCondition == null) {
-                throw new RuntimeException("Expected condition after 'elif'");
+                throw new ParseError("Expected condition after 'elif'", this._lexPeekToken().pos, 0);
             }
             this.skipWhitespaceAndNewlines();
             if (!this._lexConsumeWord("then")) {
-                throw new RuntimeException("Expected 'then' after elif condition");
+                throw new ParseError("Expected 'then' after elif condition", this._lexPeekToken().pos, 0);
             }
             Node elifThenBody = this.parseListUntil(new HashSet<>(Set.of("elif", "else", "fi")));
             if (elifThenBody == null) {
-                throw new RuntimeException("Expected commands after 'then'");
+                throw new ParseError("Expected commands after 'then'", this._lexPeekToken().pos, 0);
             }
             this.skipWhitespaceAndNewlines();
             Node innerElse = null;
@@ -7883,7 +7886,7 @@ class Parser {
                     this._lexConsumeWord("else");
                     innerElse = this.parseListUntil(new HashSet<>(Set.of("fi")));
                     if (innerElse == null) {
-                        throw new RuntimeException("Expected commands after 'else'");
+                        throw new ParseError("Expected commands after 'else'", this._lexPeekToken().pos, 0);
                     }
                 }
             }
@@ -7893,13 +7896,13 @@ class Parser {
                 this._lexConsumeWord("else");
                 elseBody = this.parseListUntil(new HashSet<>(Set.of("fi")));
                 if (elseBody == null) {
-                    throw new RuntimeException("Expected commands after 'else'");
+                    throw new ParseError("Expected commands after 'else'", this._lexPeekToken().pos, 0);
                 }
             }
         }
         this.skipWhitespaceAndNewlines();
         if (!this._lexConsumeWord("fi")) {
-            throw new RuntimeException("Expected 'fi' to close if statement");
+            throw new ParseError("Expected 'fi' to close if statement", this._lexPeekToken().pos, 0);
         }
         return new If(condition, thenBody, elseBody, this._collectRedirects(), "if");
     }
@@ -7908,15 +7911,15 @@ class Parser {
         this._lexConsumeWord("elif");
         Node condition = this.parseListUntil(new HashSet<>(Set.of("then")));
         if (condition == null) {
-            throw new RuntimeException("Expected condition after 'elif'");
+            throw new ParseError("Expected condition after 'elif'", this._lexPeekToken().pos, 0);
         }
         this.skipWhitespaceAndNewlines();
         if (!this._lexConsumeWord("then")) {
-            throw new RuntimeException("Expected 'then' after elif condition");
+            throw new ParseError("Expected 'then' after elif condition", this._lexPeekToken().pos, 0);
         }
         Node thenBody = this.parseListUntil(new HashSet<>(Set.of("elif", "else", "fi")));
         if (thenBody == null) {
-            throw new RuntimeException("Expected commands after 'then'");
+            throw new ParseError("Expected commands after 'then'", this._lexPeekToken().pos, 0);
         }
         this.skipWhitespaceAndNewlines();
         Node elseBody = null;
@@ -7927,7 +7930,7 @@ class Parser {
                 this._lexConsumeWord("else");
                 elseBody = this.parseListUntil(new HashSet<>(Set.of("fi")));
                 if (elseBody == null) {
-                    throw new RuntimeException("Expected commands after 'else'");
+                    throw new ParseError("Expected commands after 'else'", this._lexPeekToken().pos, 0);
                 }
             }
         }
@@ -7941,19 +7944,19 @@ class Parser {
         }
         Node condition = this.parseListUntil(new HashSet<>(Set.of("do")));
         if (condition == null) {
-            throw new RuntimeException("Expected condition after 'while'");
+            throw new ParseError("Expected condition after 'while'", this._lexPeekToken().pos, 0);
         }
         this.skipWhitespaceAndNewlines();
         if (!this._lexConsumeWord("do")) {
-            throw new RuntimeException("Expected 'do' after while condition");
+            throw new ParseError("Expected 'do' after while condition", this._lexPeekToken().pos, 0);
         }
         Node body = this.parseListUntil(new HashSet<>(Set.of("done")));
         if (body == null) {
-            throw new RuntimeException("Expected commands after 'do'");
+            throw new ParseError("Expected commands after 'do'", this._lexPeekToken().pos, 0);
         }
         this.skipWhitespaceAndNewlines();
         if (!this._lexConsumeWord("done")) {
-            throw new RuntimeException("Expected 'done' to close while loop");
+            throw new ParseError("Expected 'done' to close while loop", this._lexPeekToken().pos, 0);
         }
         return new While(condition, body, this._collectRedirects(), "while");
     }
@@ -7965,19 +7968,19 @@ class Parser {
         }
         Node condition = this.parseListUntil(new HashSet<>(Set.of("do")));
         if (condition == null) {
-            throw new RuntimeException("Expected condition after 'until'");
+            throw new ParseError("Expected condition after 'until'", this._lexPeekToken().pos, 0);
         }
         this.skipWhitespaceAndNewlines();
         if (!this._lexConsumeWord("do")) {
-            throw new RuntimeException("Expected 'do' after until condition");
+            throw new ParseError("Expected 'do' after until condition", this._lexPeekToken().pos, 0);
         }
         Node body = this.parseListUntil(new HashSet<>(Set.of("done")));
         if (body == null) {
-            throw new RuntimeException("Expected commands after 'do'");
+            throw new ParseError("Expected commands after 'do'", this._lexPeekToken().pos, 0);
         }
         this.skipWhitespaceAndNewlines();
         if (!this._lexConsumeWord("done")) {
-            throw new RuntimeException("Expected 'done' to close until loop");
+            throw new ParseError("Expected 'done' to close until loop", this._lexPeekToken().pos, 0);
         }
         return new Until(condition, body, this._collectRedirects(), "until");
     }
@@ -7995,13 +7998,13 @@ class Parser {
         if (this.peek().equals("$")) {
             Word varWord = this.parseWord(false, false, false);
             if (varWord == null) {
-                throw new RuntimeException("Expected variable name after 'for'");
+                throw new ParseError("Expected variable name after 'for'", this._lexPeekToken().pos, 0);
             }
             varName = varWord.value;
         } else {
             varName = this.peekWord();
             if (varName.equals("")) {
-                throw new RuntimeException("Expected variable name after 'for'");
+                throw new ParseError("Expected variable name after 'for'", this._lexPeekToken().pos, 0);
             }
             this.consumeWord(varName);
         }
@@ -8036,7 +8039,7 @@ class Parser {
                     if (sawDelimiter) {
                         break;
                     }
-                    throw new RuntimeException("Expected ';' or newline before 'do'");
+                    throw new ParseError("Expected ';' or newline before 'do'", this._lexPeekToken().pos, 0);
                 }
                 Word word = this.parseWord(false, false, false);
                 if (word == null) {
@@ -8049,20 +8052,20 @@ class Parser {
         if (this.peek().equals("{")) {
             BraceGroup braceGroup = this.parseBraceGroup();
             if (braceGroup == null) {
-                throw new RuntimeException("Expected brace group in for loop");
+                throw new ParseError("Expected brace group in for loop", this._lexPeekToken().pos, 0);
             }
             return new For(varName, words, braceGroup.body, this._collectRedirects(), "for");
         }
         if (!this._lexConsumeWord("do")) {
-            throw new RuntimeException("Expected 'do' in for loop");
+            throw new ParseError("Expected 'do' in for loop", this._lexPeekToken().pos, 0);
         }
         Node body = this.parseListUntil(new HashSet<>(Set.of("done")));
         if (body == null) {
-            throw new RuntimeException("Expected commands after 'do'");
+            throw new ParseError("Expected commands after 'do'", this._lexPeekToken().pos, 0);
         }
         this.skipWhitespaceAndNewlines();
         if (!this._lexConsumeWord("done")) {
-            throw new RuntimeException("Expected 'done' to close for loop");
+            throw new ParseError("Expected 'done' to close for loop", this._lexPeekToken().pos, 0);
         }
         return new For(varName, words, body, this._collectRedirects(), "for");
     }
@@ -8105,7 +8108,7 @@ class Parser {
             }
         }
         if (parts.size() != 3) {
-            throw new RuntimeException("Expected three expressions in for ((;;))");
+            throw new ParseError("Expected three expressions in for ((;;))", this.pos, 0);
         }
         String init = parts.get(0);
         String cond = parts.get(1);
@@ -8127,7 +8130,7 @@ class Parser {
         this.skipWhitespace();
         String varName = this.peekWord();
         if (varName.equals("")) {
-            throw new RuntimeException("Expected variable name after 'select'");
+            throw new ParseError("Expected variable name after 'select'", this._lexPeekToken().pos, 0);
         }
         this.consumeWord(varName);
         this.skipWhitespace();
@@ -8183,11 +8186,11 @@ class Parser {
         this.skipWhitespace();
         Word word = this.parseWord(false, false, false);
         if (word == null) {
-            throw new RuntimeException("Expected word after 'case'");
+            throw new ParseError("Expected word after 'case'", this._lexPeekToken().pos, 0);
         }
         this.skipWhitespaceAndNewlines();
         if (!this._lexConsumeWord("in")) {
-            throw new RuntimeException("Expected 'in' after case word");
+            throw new ParseError("Expected 'in' after case word", this._lexPeekToken().pos, 0);
         }
         this.skipWhitespaceAndNewlines();
         List<Node> patterns = new ArrayList<>();
@@ -8377,7 +8380,7 @@ class Parser {
             }
             String pattern = String.join("", patternChars);
             if (!(!pattern.isEmpty())) {
-                throw new RuntimeException("Expected pattern in case statement");
+                throw new ParseError("Expected pattern in case statement", this._lexPeekToken().pos, 0);
             }
             this.skipWhitespace();
             Node body = null;
@@ -8400,7 +8403,7 @@ class Parser {
         this.skipWhitespaceAndNewlines();
         if (!this._lexConsumeWord("esac")) {
             this._clearState(Constants.PARSERSTATEFLAGS_PST_CASESTMT);
-            throw new RuntimeException("Expected 'esac' to close case statement");
+            throw new ParseError("Expected 'esac' to close case statement", this._lexPeekToken().pos, 0);
         }
         this._clearState(Constants.PARSERSTATEFLAGS_PST_CASESTMT);
         return new Case(word, patterns, this._collectRedirects(), "case");
@@ -8490,7 +8493,7 @@ class Parser {
         if (body != null) {
             return new Coproc(body, name, "coproc");
         }
-        throw new RuntimeException("Expected command after coproc");
+        throw new ParseError("Expected command after coproc", this.pos, 0);
     }
 
     public Function parseFunction() {
@@ -8520,7 +8523,7 @@ class Parser {
             this.skipWhitespaceAndNewlines();
             body = this._parseCompoundCommand();
             if (body == null) {
-                throw new RuntimeException("Expected function body");
+                throw new ParseError("Expected function body", this.pos, 0);
             }
             return new Function(name, body, "function");
         }
@@ -8579,7 +8582,7 @@ class Parser {
         this.skipWhitespaceAndNewlines();
         body = this._parseCompoundCommand();
         if (body == null) {
-            throw new RuntimeException("Expected function body");
+            throw new ParseError("Expected function body", this.pos, 0);
         }
         return new Function(name, body, "function");
     }
@@ -8718,7 +8721,7 @@ class Parser {
             }
             pipeline = this.parsePipeline();
             if (pipeline == null) {
-                throw new RuntimeException("Expected command after " + op);
+                throw new ParseError("Expected command after " + op, this.pos, 0);
             }
             parts.add(pipeline);
         }
@@ -8767,7 +8770,7 @@ class Parser {
             }
         }
         if (reserved.equals("fi") || reserved.equals("then") || reserved.equals("elif") || reserved.equals("else") || reserved.equals("done") || reserved.equals("esac") || reserved.equals("do") || reserved.equals("in")) {
-            throw new RuntimeException(String.format("Unexpected reserved word '%s'", reserved));
+            throw new ParseError(String.format("Unexpected reserved word '%s'", reserved), this._lexPeekToken().pos, 0);
         }
         if (reserved.equals("if")) {
             return this.parseIf();
@@ -8925,7 +8928,7 @@ class Parser {
             }
             cmd = this.parseCompoundCommand();
             if (cmd == null) {
-                throw new RuntimeException("Expected command after |");
+                throw new ParseError("Expected command after |", this.pos, 0);
             }
             commands.add(cmd);
         }
@@ -9053,7 +9056,7 @@ class Parser {
             }
             pipeline = this.parsePipeline();
             if (pipeline == null) {
-                throw new RuntimeException("Expected command after " + op);
+                throw new ParseError("Expected command after " + op, this.pos, 0);
             }
             parts.add(pipeline);
             if (this._inState(Constants.PARSERSTATEFLAGS_PST_EOFTOKEN) && this._atEofToken()) {
@@ -9115,7 +9118,7 @@ class Parser {
                 this.skipWhitespace();
             }
             if (!foundNewline && !this.atEnd()) {
-                throw new RuntimeException("Syntax error");
+                throw new ParseError("Syntax error", this.pos, 0);
             }
         }
         if (!(!results.isEmpty())) {
@@ -10587,7 +10590,7 @@ final class ParableFunctions {
             }
         }
         String joined = String.join("", result);
-        return joined.trim();
+        return joined.replaceFirst("^[" + " \t" + "]+", "").replaceFirst("[" + " \t" + "]+$", "");
     }
 
     static int _countTrailingBackslashes(String s) {
@@ -10972,7 +10975,7 @@ final class ParableFunctions {
     }
 
     static MatchedPairError newMatchedPairError(String message, int pos, int line) {
-        return new MatchedPairError();
+        return new MatchedPairError(message, pos, line);
     }
 
     static QuoteState newQuoteState() {

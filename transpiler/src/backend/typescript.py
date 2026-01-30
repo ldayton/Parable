@@ -10,14 +10,10 @@ Frontend deficiencies (should be fixed in frontend.py):
   specific. Frontend should emit interface fields explicitly.
 - Auto-generated getKind() for Node implementations - backend has Parable-specific
   knowledge about Node interface contract.
-- String methods (isalnum, isdigit, isalpha, isspace) translated to regex patterns
-  inline - frontend should emit generic IR; backend shouldn't know Python method names.
-- lstrip/rstrip/strip with char arguments require regex - frontend emits Python
-  semantics that don't map cleanly to JS trimStart/trimEnd.
+- Frontend now emits TrimChars IR nodes for strip/lstrip/rstrip methods.
 - FieldAccess for "this.method" emits ".bind(this)" - frontend should emit FuncRef
   IR for method references, not FieldAccess that backend must detect and fix.
-- Marker variables "_skip_docstring", "_pass", "_skip_super_init" require filtering.
-  Frontend should use a dedicated NoOp IR node or not emit these.
+- Frontend now emits NoOp IR nodes for skipped statements.
 
 Middleend deficiencies (should be fixed in middleend.py):
 - VarDecl and Assign use "any" type because middleend doesn't track that the same
@@ -76,6 +72,7 @@ from src.ir import (
     Break,
     Call,
     Cast,
+    CharClassify,
     Constant,
     Continue,
     DerefLV,
@@ -139,6 +136,7 @@ from src.ir import (
     TupleLit,
     Ternary,
     TryCatch,
+    TrimChars,
     Truthy,
     Tuple,
     Type,
@@ -419,12 +417,6 @@ class TsBackend:
                 self._line(f"{lv} {op}= {val};")
             case NoOp():
                 pass  # No output for NoOp
-            case ExprStmt(expr=Var(name=name)) if name in (
-                "_skip_docstring",
-                "_pass",
-                "_skip_super_init",
-            ):
-                pass  # Skip marker statements (legacy)
             case ExprStmt(expr=expr):
                 self._line(f"{self._expr(expr)};")
             case Return(value=value):
@@ -800,6 +792,28 @@ class TsBackend:
                 return f"parseInt({self._expr(s)}, {self._expr(b)})"
             case IntToStr(value=v):
                 return f"String({self._expr(v)})"
+            case CharClassify(kind=kind, char=char):
+                regex_map = {
+                    "digit": r"/^\d+$/",
+                    "alpha": r"/^[a-zA-Z]+$/",
+                    "alnum": r"/^[a-zA-Z0-9]+$/",
+                    "space": r"/^\s+$/",
+                    "upper": r"/^[A-Z]+$/",
+                    "lower": r"/^[a-z]+$/",
+                }
+                return f"{regex_map[kind]}.test({self._expr(char)})"
+            case TrimChars(string=s, chars=chars, mode=mode):
+                s_str = self._expr(s)
+                if isinstance(chars, StringLit) and chars.value == " \t\n\r":
+                    method_map = {"left": "trimStart", "right": "trimEnd", "both": "trim"}
+                    return f"{s_str}.{method_map[mode]}()"
+                escaped = _escape_regex_class(chars.value) if isinstance(chars, StringLit) else "..."
+                if mode == "left":
+                    return f"{s_str}.replace(/^[{escaped}]+/, '')"
+                elif mode == "right":
+                    return f"{s_str}.replace(/[{escaped}]+$/, '')"
+                else:
+                    return f"{s_str}.replace(/^[{escaped}]+/, '').replace(/[{escaped}]+$/, '')"
             case Call(func="_intPtr", args=[arg]):
                 # _intPtr is a Python type hint, just return the argument
                 return self._expr(arg)
@@ -820,34 +834,6 @@ class TsBackend:
             ):
                 # arr.copy() → arr.slice()
                 return f"{self._expr(obj)}.slice()"
-            case MethodCall(obj=obj, method="isalnum", args=_, receiver_type=_):
-                return f"/^[a-zA-Z0-9]$/.test({self._expr(obj)})"
-            case MethodCall(obj=obj, method="isdigit", args=_, receiver_type=_):
-                return f"/^[0-9]+$/.test({self._expr(obj)})"
-            case MethodCall(obj=obj, method="isalpha", args=_, receiver_type=_):
-                return f"/^[a-zA-Z]$/.test({self._expr(obj)})"
-            case MethodCall(obj=obj, method="isspace", args=_, receiver_type=_):
-                return f"/^\\s$/.test({self._expr(obj)})"
-            case MethodCall(
-                obj=obj, method="lstrip", args=[StringLit(value=chars)], receiver_type=_
-            ):
-                # Python lstrip with chars → regex replace (JS trimStart takes no args)
-                escaped = _escape_regex_class(chars)
-                return f"{self._expr(obj)}.replace(/^[{escaped}]+/, '')"
-            case MethodCall(
-                obj=obj, method="rstrip", args=[StringLit(value=chars)], receiver_type=_
-            ):
-                # Python rstrip with chars → regex replace (JS trimEnd takes no args)
-                escaped = _escape_regex_class(chars)
-                return f"{self._expr(obj)}.replace(/[{escaped}]+$/, '')"
-            case MethodCall(
-                obj=obj, method="strip", args=[StringLit(value=chars)], receiver_type=_
-            ):
-                # Python strip with chars → regex replace (JS trim takes no args)
-                escaped = _escape_regex_class(chars)
-                return (
-                    f"{self._expr(obj)}.replace(/^[{escaped}]+/, '').replace(/[{escaped}]+$/, '')"
-                )
             case MethodCall(
                 obj=obj, method="get", args=[key, default], receiver_type=receiver_type
             ) if isinstance(receiver_type, Map):
@@ -1254,9 +1240,6 @@ def _safe_name(name: str) -> str:
 _STRING_METHOD_MAP = {
     "startswith": "startsWith",
     "endswith": "endsWith",
-    "rstrip": "trimEnd",
-    "lstrip": "trimStart",
-    "strip": "trim",
     "lower": "toLowerCase",
     "upper": "toUpperCase",
     "find": "indexOf",

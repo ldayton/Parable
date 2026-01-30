@@ -4,8 +4,7 @@ COMPENSATIONS FOR EARLIER STAGE DEFICIENCIES
 ============================================
 
 Frontend deficiencies (should be fixed in frontend.py):
-- Marker variables "_skip_docstring" and "_pass" require special-case filtering.
-  Frontend should either not emit these or use a dedicated NoOp IR node.
+- None identified. Frontend now emits NoOp IR nodes for skipped statements.
 
 Middleend deficiencies (should be fixed in middleend.py):
 - None identified. Python backend is cleanest because source language matches.
@@ -18,8 +17,6 @@ Frontend deficiencies (should be fixed in frontend.py):
 - Pointer/Optional conflation: Pointer(StructRef("X")) renders as `X` but should
   be `X | None` when field is nullable. Example: `word: Word = None` should be
   `word: Word | None = None`. (~50 fields affected)
-- Exception type not in IR: TryCatch doesn't carry exception type, so backend
-  emits `except Exception` instead of specific types like `except ParseError`.
 
 Middleend deficiencies (should be fixed in middleend.py):
 - None. The while loops and accumulator patterns in the output faithfully reflect
@@ -39,6 +36,7 @@ from src.ir import (
     Break,
     Call,
     Cast,
+    CharClassify,
     Constant,
     Continue,
     DerefLV,
@@ -99,6 +97,7 @@ from src.ir import (
     StructLit,
     StructRef,
     Ternary,
+    TrimChars,
     TryCatch,
     Tuple,
     TupleAssign,
@@ -115,6 +114,11 @@ from src.ir import (
     VarLV,
     While,
 )
+
+
+def _is_empty_body(body: list[Stmt]) -> bool:
+    """Check if body is empty or contains only NoOp statements."""
+    return not body or all(isinstance(s, NoOp) for s in body)
 
 
 # Python builtins that shouldn't be shadowed by variable names
@@ -317,7 +321,7 @@ class PythonBackend:
         self.indent += 1
         if func.doc:
             self._line(f'"""{func.doc}"""')
-        if not func.body:
+        if _is_empty_body(func.body):
             self._line("pass")
         for stmt in func.body:
             self._emit_stmt(stmt)
@@ -332,7 +336,7 @@ class PythonBackend:
             self._line(f'"""{func.doc}"""')
         if func.receiver:
             self.receiver_name = func.receiver.name
-        if not func.body:
+        if _is_empty_body(func.body):
             self._line("pass")
         for stmt in func.body:
             self._emit_stmt(stmt)
@@ -372,10 +376,6 @@ class PythonBackend:
                 self._line(f"{lv} {op}= {val}")
             case NoOp():
                 pass  # No output for NoOp
-            case ExprStmt(expr=Var(name="_skip_docstring")):
-                pass  # Skip docstring markers (legacy)
-            case ExprStmt(expr=Var(name="_pass")):
-                self._line("pass")
             case ExprStmt(expr=expr):
                 self._line(self._expr(expr))
             case Return(value=value):
@@ -388,7 +388,7 @@ class PythonBackend:
                     self._emit_stmt(init)
                 self._line(f"if {self._expr(cond)}:")
                 self.indent += 1
-                if not then_body:
+                if _is_empty_body(then_body):
                     self._line("pass")
                 for s in then_body:
                     self._emit_stmt(s)
@@ -405,7 +405,7 @@ class PythonBackend:
             case While(cond=cond, body=body):
                 self._line(f"while {self._expr(cond)}:")
                 self.indent += 1
-                if not body:
+                if _is_empty_body(body):
                     self._line("pass")
                 for s in body:
                     self._emit_stmt(s)
@@ -417,8 +417,8 @@ class PythonBackend:
             case Block(body=body):
                 for s in body:
                     self._emit_stmt(s)
-            case TryCatch(body=body, catch_var=catch_var, catch_body=catch_body, reraise=reraise):
-                self._emit_try_catch(body, catch_var, catch_body, reraise)
+            case TryCatch(body=body, catch_var=catch_var, catch_type=catch_type, catch_body=catch_body, reraise=reraise):
+                self._emit_try_catch(body, catch_var, catch_type, catch_body, reraise)
             case Raise(error_type=error_type, message=message, pos=pos, reraise_var=reraise_var):
                 if reraise_var:
                     self._line(f"raise {reraise_var}")
@@ -441,7 +441,7 @@ class PythonBackend:
             self._line(f"{keyword} isinstance({var}, {type_name}):")
             self.indent += 1
             self._line(f"{binding} = {var}")
-            if not case.body:
+            if _is_empty_body(case.body):
                 self._line("pass")
             for s in case.body:
                 self._emit_stmt(s)
@@ -460,7 +460,7 @@ class PythonBackend:
             patterns = " | ".join(self._expr(p) for p in case.patterns)
             self._line(f"case {patterns}:")
             self.indent += 1
-            if not case.body:
+            if _is_empty_body(case.body):
                 self._line("pass")
             for s in case.body:
                 self._emit_stmt(s)
@@ -495,7 +495,7 @@ class PythonBackend:
         else:
             self._line(f"for _ in {iter_expr}:")
         self.indent += 1
-        if not body:
+        if _is_empty_body(body):
             self._line("pass")
         for s in body:
             self._emit_stmt(s)
@@ -513,7 +513,7 @@ class PythonBackend:
             var_name, iterable_expr = range_info
             self._line(f"for {_safe_name(var_name)} in range(len({self._expr(iterable_expr)})):")
             self.indent += 1
-            if not body:
+            if _is_empty_body(body):
                 self._line("pass")
             for s in body:
                 self._emit_stmt(s)
@@ -525,7 +525,7 @@ class PythonBackend:
         cond_str = self._expr(cond) if cond else "True"
         self._line(f"while {cond_str}:")
         self.indent += 1
-        if not body and post is None:
+        if _is_empty_body(body) and post is None:
             self._line("pass")
         for s in body:
             self._emit_stmt(s)
@@ -537,20 +537,22 @@ class PythonBackend:
         self,
         body: list[Stmt],
         catch_var: str | None,
+        catch_type: Type | None,
         catch_body: list[Stmt],
         reraise: bool,
     ) -> None:
         self._line("try:")
         self.indent += 1
-        if not body:
+        if _is_empty_body(body):
             self._line("pass")
         for s in body:
             self._emit_stmt(s)
         self.indent -= 1
         var = _safe_name(catch_var) if catch_var else "_e"
-        self._line(f"except Exception as {var}:")
+        exc_type = catch_type.name if isinstance(catch_type, StructRef) else "Exception"
+        self._line(f"except {exc_type} as {var}:")
         self.indent += 1
-        if not catch_body and not reraise:
+        if _is_empty_body(catch_body) and not reraise:
             self._line("pass")
         for s in catch_body:
             self._emit_stmt(s)
@@ -560,7 +562,7 @@ class PythonBackend:
 
     def _emit_else_body(self, else_body: list[Stmt]) -> None:
         """Emit else body, converting single-If else to elif chains."""
-        if not else_body:
+        if _is_empty_body(else_body):
             return
         # Check for elif pattern: else body is single If statement
         if len(else_body) == 1 and isinstance(else_body[0], If):
@@ -569,7 +571,7 @@ class PythonBackend:
                 self._emit_stmt(elif_stmt.init)
             self._line(f"elif {self._expr(elif_stmt.cond)}:")
             self.indent += 1
-            if not elif_stmt.then_body:
+            if _is_empty_body(elif_stmt.then_body):
                 self._line("pass")
             for s in elif_stmt.then_body:
                 self._emit_stmt(s)
@@ -615,6 +617,19 @@ class PythonBackend:
                 return f"int({self._expr(s)}, {self._expr(b)})"
             case IntToStr(value=v):
                 return f"str({self._expr(v)})"
+            case CharClassify(kind=kind, char=char):
+                method_map = {
+                    "digit": "isdigit",
+                    "alpha": "isalpha",
+                    "alnum": "isalnum",
+                    "space": "isspace",
+                    "upper": "isupper",
+                    "lower": "islower",
+                }
+                return f"{self._expr(char)}.{method_map[kind]}()"
+            case TrimChars(string=s, chars=chars, mode=mode):
+                method_map = {"left": "lstrip", "right": "rstrip", "both": "strip"}
+                return f"{self._expr(s)}.{method_map[mode]}({self._expr(chars)})"
             case Call(func=func, args=args):
                 args_str = ", ".join(self._expr(a) for a in args)
                 return f"{func}({args_str})"

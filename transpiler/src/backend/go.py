@@ -7,15 +7,16 @@ COMPENSATIONS FOR EARLIER STAGE DEFICIENCIES
 
 Frontend deficiencies (should be fixed in frontend.py):
 - _extract_type_suffix checks hardcoded prefixes "Arith", "Cond" for type switch
-  binding names - frontend should emit type-agnostic IR for narrowed bindings
-- String character classification helpers (_strIsAlnum, _strIsDigit, etc.) are
-  emitted because frontend doesn't translate Python string methods to generic IR
-  calls that backends could map to stdlib. Instead, backend must provide runtime.
+  binding names - Parable-specific naming conventions for arithmetic/conditional
+  expression types. Frontend should emit type-agnostic IR for narrowed bindings.
 - _runeAt, _runeLen, _Substring helpers exist because frontend emits string
   indexing as Index nodes without distinguishing byte vs character semantics.
   Frontend should emit distinct IR for character-based string operations.
 - ExprStmt filters expressions starting with "skip", "pass", "localFunc" -
   frontend emits these markers that should be handled before backend.
+- Auto-generates GetKind() when struct implements "Node" - Parable-specific
+  knowledge about AST Node interface contract. Frontend should emit getter
+  methods explicitly or IR should have interface satisfaction markers.
 
 Middleend deficiencies (should be fixed in middleend.py):
 - _infer_tuple_element_type scans return statements to infer hoisted variable
@@ -80,6 +81,7 @@ from src.ir import (
     Break,
     Call,
     Cast,
+    CharClassify,
     Constant,
     Continue,
     DerefLV,
@@ -142,6 +144,7 @@ from src.ir import (
     StructRef,
     Ternary,
     TryCatch,
+    TrimChars,
     Truthy,
     TupleAssign,
     TupleLit,
@@ -869,8 +872,7 @@ func _Substring(s string, start int, end int) string {
                 return
             # For other types (like structs with Pop method), fall through to normal handling
         expr = self._emit_expr(stmt.expr)
-        # Filter out placeholder expressions (after camelCase conversion)
-        if expr and not expr.startswith(("skip", "pass", "localFunc", "unknown")):
+        if expr:
             self._line(expr)
 
     def _emit_stmt_Return(self, stmt: Return) -> None:
@@ -1404,6 +1406,10 @@ func _Substring(s string, start int, end int) string {
             return self._emit_expr_IntToStr(expr)
         if isinstance(expr, Truthy):
             return self._emit_expr_Truthy(expr)
+        if isinstance(expr, CharClassify):
+            return self._emit_expr_CharClassify(expr)
+        if isinstance(expr, TrimChars):
+            return self._emit_expr_TrimChars(expr)
         return "/* TODO: unknown expression */"
 
     def _emit_expr_IntLit(self, expr: IntLit) -> str:
@@ -1561,22 +1567,6 @@ func _Substring(s string, start int, end int) string {
             if method == "copy":
                 # Slice copy: append([]T{}, slice...)
                 return f"append({obj}[:0:0], {obj}...)"
-        # Handle Python string character classification methods (always, type inference may be imprecise)
-        # If receiver is a rune (from iterating over string), wrap in string()
-        is_rune = isinstance(expr.receiver_type, Primitive) and expr.receiver_type.kind == "rune"
-        str_obj = f"string({obj})" if is_rune else obj
-        if method == "isalnum":
-            return f"_strIsAlnum({str_obj})"
-        if method == "isalpha":
-            return f"_strIsAlpha({str_obj})"
-        if method == "isdigit":
-            return f"_strIsDigit({str_obj})"
-        if method == "isspace":
-            return f"_strIsSpace({str_obj})"
-        if method == "isupper":
-            return f"_strIsUpper({str_obj})"
-        if method == "islower":
-            return f"_strIsLower({str_obj})"
         # Handle Python string methods that map to strings package
         if method == "startswith" and expr.args:
             # Handle tuple argument: s.startswith((" ", "\n")) -> HasPrefix(s," ")||HasPrefix(s,"\n")
@@ -1611,18 +1601,6 @@ func _Substring(s string, start int, end int) string {
             return f"strings.ToLower({obj})"
         if method == "upper":
             return f"strings.ToUpper({obj})"
-        if method == "strip":
-            return f"strings.TrimSpace({obj})"
-        if method == "lstrip":
-            if expr.args:
-                arg = self._emit_expr(expr.args[0])
-                return f"strings.TrimLeft({obj}, {arg})"
-            return f'strings.TrimLeft({obj}, " \\t\\n\\r")'
-        if method == "rstrip":
-            if expr.args:
-                arg = self._emit_expr(expr.args[0])
-                return f"strings.TrimRight({obj}, {arg})"
-            return f'strings.TrimRight({obj}, " \\t\\n\\r")'
         if method == "split":
             if expr.args:
                 arg = self._emit_expr(expr.args[0])
@@ -1851,6 +1829,43 @@ func _Substring(s string, start int, end int) string {
         if isinstance(inner_type, Optional) and isinstance(inner_type.inner, (Slice, Map, Set)):
             return f"(len({inner}) > 0)"
         return f"({inner} != nil)"
+
+    def _emit_expr_CharClassify(self, expr: CharClassify) -> str:
+        char = self._emit_expr(expr.char)
+        char_type = expr.char.typ
+        is_rune = isinstance(char_type, Primitive) and char_type.kind == "rune"
+        unicode_map = {
+            "digit": "IsDigit",
+            "alpha": "IsLetter",
+            "alnum": ("IsLetter", "IsDigit"),  # needs both
+            "space": "IsSpace",
+            "upper": "IsUpper",
+            "lower": "IsLower",
+        }
+        helper_map = {
+            "digit": "_strIsDigit",
+            "alpha": "_strIsAlpha",
+            "alnum": "_strIsAlnum",
+            "space": "_strIsSpace",
+            "upper": "_strIsUpper",
+            "lower": "_strIsLower",
+        }
+        kind = expr.kind
+        if is_rune:
+            if kind == "alnum":
+                return f"(unicode.IsLetter({char}) || unicode.IsDigit({char}))"
+            return f"unicode.{unicode_map[kind]}({char})"
+        # String: use helper that iterates
+        return f"{helper_map[kind]}({char})"
+
+    def _emit_expr_TrimChars(self, expr: TrimChars) -> str:
+        s = self._emit_expr(expr.string)
+        chars = self._emit_expr(expr.chars)
+        if isinstance(expr.chars, StringLit) and expr.chars.value == " \t\n\r":
+            if expr.mode == "both":
+                return f"strings.TrimSpace({s})"
+        func_map = {"left": "TrimLeft", "right": "TrimRight", "both": "Trim"}
+        return f"strings.{func_map[expr.mode]}({s}, {chars})"
 
     def _emit_expr_Len(self, expr: Len) -> str:
         inner = self._emit_expr(expr.expr)

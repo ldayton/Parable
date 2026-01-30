@@ -1221,6 +1221,8 @@ def lower_expr_as_bool(
                 "isalpha",
                 "isalnum",
                 "isspace",
+                "isupper",
+                "islower",
             ):
                 return lower_expr(node)
             # Check if the method returns bool by looking up its return type
@@ -1397,14 +1399,14 @@ def lower_stmt_Pass(node: ASTNode) -> "ir.Stmt":
     """Lower pass statement."""
     from .. import ir
 
-    return ir.ExprStmt(expr=ir.Var(name="_pass", typ=VOID), loc=loc_from_node(node))
+    return ir.NoOp(loc=loc_from_node(node))
 
 
 def lower_stmt_FunctionDef(node: ASTNode) -> "ir.Stmt":
     """Lower local function definition (placeholder)."""
     from .. import ir
 
-    return ir.ExprStmt(expr=ir.Var(name=f"_local_func_{node.get('name')}", typ=VOID))
+    return ir.NoOp()
 
 
 def lower_stmt_Return(
@@ -1573,6 +1575,37 @@ def lower_expr_Call(
         if obj_type == InterfaceRef("any"):
             # Pre-computed type is generic - use callback which has narrowing context
             obj_type = dispatch.infer_expr_type_from_ast(func_value)
+        # Character classification methods -> CharClassify IR node
+        _CHAR_CLASSIFY_METHODS = {
+            "isdigit": "digit",
+            "isalpha": "alpha",
+            "isalnum": "alnum",
+            "isspace": "space",
+            "isupper": "upper",
+            "islower": "lower",
+        }
+        if method in _CHAR_CLASSIFY_METHODS and not args:
+            return ir.CharClassify(
+                kind=_CHAR_CLASSIFY_METHODS[method],
+                char=obj,
+                typ=BOOL,
+                loc=loc_from_node(node),
+            )
+        # String trimming methods -> TrimChars IR node
+        _TRIM_METHODS = {"strip": "both", "lstrip": "left", "rstrip": "right"}
+        if method in _TRIM_METHODS:
+            mode = _TRIM_METHODS[method]
+            if args:
+                chars = args[0]
+            else:
+                chars = ir.StringLit(value=" \t\n\r", typ=STRING, loc=loc_from_node(node))
+            return ir.TrimChars(
+                string=obj,
+                chars=chars,
+                mode=mode,
+                typ=STRING,
+                loc=loc_from_node(node),
+            )
         if method == "pop" and not args and isinstance(obj_type, Slice):
             # list.pop() -> return last element and shrink slice (only for slices)
             return ir.MethodCall(
@@ -2308,7 +2341,7 @@ def lower_stmt_AnnAssign(
                         ctx.node_types,
                     )
         return ir.Assign(target=lval, value=value, loc=loc_from_node(node))
-    return ir.ExprStmt(expr=ir.Var(name="_skip_ann", typ=VOID))
+    return ir.NoOp()
 
 
 def collect_isinstance_chain(
@@ -2554,12 +2587,18 @@ def lower_stmt_Try(
 
     body = dispatch.lower_stmts(node.get("body", []))
     catch_var = None
+    catch_type: ir.Type | None = None
     catch_body: list[ir.Stmt] = []
     reraise = False
     handlers = node.get("handlers", [])
     if handlers:
         handler = handlers[0]
         catch_var = handler.get("name")
+        # Extract exception type from handler
+        catch_type_node = handler.get("type")
+        if catch_type_node and is_type(catch_type_node, ["Name"]):
+            type_name = catch_type_node.get("id")
+            catch_type = ir.StructRef(type_name)
         handler_body = handler.get("body", [])
         # Set catch var context so raise e can be detected
         saved_catch_var = set_catch_var(catch_var)
@@ -2572,6 +2611,7 @@ def lower_stmt_Try(
     return ir.TryCatch(
         body=body,
         catch_var=catch_var,
+        catch_type=catch_type,
         catch_body=catch_body,
         reraise=reraise,
         loc=loc_from_node(node),

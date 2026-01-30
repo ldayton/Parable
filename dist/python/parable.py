@@ -1397,7 +1397,7 @@ class Lexer:
             flags = MatchedPairFlags_DQUOTE if in_dquote else MatchedPairFlags_NONE
             param_ends_with_dollar = param != "" and param.endswith("$")
             arg = self._collect_param_argument(flags, param_ends_with_dollar)
-        except Exception as e:
+        except MatchedPairError as e:
             self._dolbrace_state = saved_dolbrace
             raise e
         if (op == "<" or op == ">") and arg.startswith("(") and arg.endswith(")"):
@@ -2062,7 +2062,7 @@ class Word(Node):
                 in_whitespace = False
                 normalized.append(ch)
                 i += 1
-        return "".join(normalized).rstrip()
+        return "".join(normalized).rstrip(" \t\n\r")
 
     def _strip_arith_line_continuations(self, value: str) -> str:
         result = []
@@ -2430,7 +2430,7 @@ class Word(Node):
                     inner = _substring(value, i + 2, j - 1)
                     if in_arith:
                         result.append(direction + "(" + inner + ")")
-                    elif inner.strip():
+                    elif inner.strip(" \t\n\r"):
                         stripped = inner.lstrip(" \t")
                         result.append(direction + "(" + stripped + ")")
                     else:
@@ -2450,7 +2450,7 @@ class Word(Node):
                         depth -= 1
                     j += 1
                 inner = _substring(value, i + 2, j - 1)
-                if inner.strip() == "":
+                if inner.strip(" \t\n\r") == "":
                     result.append("${ }")
                 else:
                     try:
@@ -2568,7 +2568,7 @@ class Word(Node):
                                 if "<<" in part_content:
                                     pattern_parts.append(part_content)
                                 elif has_pipe:
-                                    pattern_parts.append(part_content.strip())
+                                    pattern_parts.append(part_content.strip(" \t\n\r"))
                                 else:
                                     pattern_parts.append(part_content)
                                 break
@@ -2584,7 +2584,7 @@ class Word(Node):
                                 if "<<" in part_content:
                                     pattern_parts.append(part_content)
                                 else:
-                                    pattern_parts.append(part_content.strip())
+                                    pattern_parts.append(part_content.strip(" \t\n\r"))
                                 current_part = []
                                 i += 1
                         else:
@@ -4257,7 +4257,7 @@ class Parser:
             self._restore_parser_state(saved)
             self._in_process_sub = old_in_process_sub
             return (ProcessSubstitution(direction=direction, command=cmd, kind="procsub"), text)
-        except Exception as e:
+        except ParseError as e:
             self._restore_parser_state(saved)
             self._in_process_sub = old_in_process_sub
             content_start_char = self.source[start + 2] if start + 2 < self.length else ""
@@ -4361,7 +4361,7 @@ class Parser:
         text = _substring(self.source, start, self.pos)
         try:
             expr = self._parse_arith_expr(content)
-        except Exception as _e:
+        except ParseError as _e:
             self.pos = start
             return (None, "")
         return (ArithmeticExpansion(expression=expr, kind="arith"), text)
@@ -6503,7 +6503,7 @@ class Parser:
         return Comment(text=text, kind="comment")
 
     def parse(self) -> list[Node]:
-        source = self.source.strip()
+        source = self.source.strip(" \t\n\r")
         if not source:
             return [Empty(kind="empty")]
         results = []

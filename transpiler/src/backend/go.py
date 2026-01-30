@@ -140,6 +140,7 @@ from src.ir import (
     StructRef,
     Ternary,
     TryCatch,
+    TrimChars,
     Truthy,
     TupleAssign,
     TupleLit,
@@ -1403,6 +1404,8 @@ func _Substring(s string, start int, end int) string {
             return self._emit_expr_Truthy(expr)
         if isinstance(expr, CharClassify):
             return self._emit_expr_CharClassify(expr)
+        if isinstance(expr, TrimChars):
+            return self._emit_expr_TrimChars(expr)
         return "/* TODO: unknown expression */"
 
     def _emit_expr_IntLit(self, expr: IntLit) -> str:
@@ -1594,18 +1597,6 @@ func _Substring(s string, start int, end int) string {
             return f"strings.ToLower({obj})"
         if method == "upper":
             return f"strings.ToUpper({obj})"
-        if method == "strip":
-            return f"strings.TrimSpace({obj})"
-        if method == "lstrip":
-            if expr.args:
-                arg = self._emit_expr(expr.args[0])
-                return f"strings.TrimLeft({obj}, {arg})"
-            return f'strings.TrimLeft({obj}, " \\t\\n\\r")'
-        if method == "rstrip":
-            if expr.args:
-                arg = self._emit_expr(expr.args[0])
-                return f"strings.TrimRight({obj}, {arg})"
-            return f'strings.TrimRight({obj}, " \\t\\n\\r")'
         if method == "split":
             if expr.args:
                 arg = self._emit_expr(expr.args[0])
@@ -1862,6 +1853,15 @@ func _Substring(s string, start int, end int) string {
             return f"unicode.{unicode_map[kind]}({char})"
         # String: use helper that iterates
         return f"{helper_map[kind]}({char})"
+
+    def _emit_expr_TrimChars(self, expr: TrimChars) -> str:
+        s = self._emit_expr(expr.string)
+        chars = self._emit_expr(expr.chars)
+        if isinstance(expr.chars, StringLit) and expr.chars.value == " \t\n\r":
+            if expr.mode == "both":
+                return f"strings.TrimSpace({s})"
+        func_map = {"left": "TrimLeft", "right": "TrimRight", "both": "Trim"}
+        return f"strings.{func_map[expr.mode]}({s}, {chars})"
 
     def _emit_expr_Len(self, expr: Len) -> str:
         inner = self._emit_expr(expr.expr)

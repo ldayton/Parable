@@ -99,6 +99,7 @@ from src.ir import (
     StructLit,
     StructRef,
     Ternary,
+    TrimChars,
     TryCatch,
     Tuple,
     TupleAssign,
@@ -626,6 +627,9 @@ class PythonBackend:
                     "lower": "islower",
                 }
                 return f"{self._expr(char)}.{method_map[kind]}()"
+            case TrimChars(string=s, chars=chars, mode=mode):
+                method_map = {"left": "lstrip", "right": "rstrip", "both": "strip"}
+                return f"{self._expr(s)}.{method_map[mode]}({self._expr(chars)})"
             case Call(func=func, args=args):
                 args_str = ", ".join(self._expr(a) for a in args)
                 return f"{func}({args_str})"

@@ -10013,7 +10013,7 @@ func collapseWhitespace(s string) string {
 		}
 	}
 	joined := strings.Join(result, "")
-	return strings.TrimSpace(joined)
+	return strings.Trim(joined, " \t")
 }
 
 func countTrailingBackslashes(s string) int {

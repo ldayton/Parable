@@ -237,6 +237,7 @@ from src.ir import (
     StructRef,
     Ternary,
     TryCatch,
+    TrimChars,
     Truthy,
     Tuple,
     TupleAssign,
@@ -1221,6 +1222,22 @@ class JavaBackend:
                 # Java always uses string pattern - even when IR type is rune (from string
                 # iteration), Java represents single chars as String, not primitive char
                 return f"({char_str}.length() > 0 && {char_str}.chars().allMatch(Character::{java_method}))"
+            case TrimChars(string=s, chars=chars, mode=mode):
+                s_str = self._expr(s)
+                if isinstance(chars, StringLit) and chars.value == " \t\n\r":
+                    if mode == "both":
+                        return f"{s_str}.trim()"
+                    elif mode == "left":
+                        return f"{s_str}.stripLeading()"
+                    else:
+                        return f"{s_str}.stripTrailing()"
+                chars_str = self._expr(chars)
+                if mode == "left":
+                    return f'{s_str}.replaceFirst("^[" + {chars_str} + "]+", "")'
+                elif mode == "right":
+                    return f'{s_str}.replaceFirst("[" + {chars_str} + "]+$", "")'
+                else:
+                    return f'{s_str}.replaceFirst("^[" + {chars_str} + "]+", "").replaceFirst("[" + {chars_str} + "]+$", "")'
             case Call(func=func, args=args):
                 args_str = ", ".join(self._expr(a) for a in args)
                 # Handle built-in functions
@@ -1558,18 +1575,6 @@ class JavaBackend:
                 return f"Arrays.asList({obj_str}.split({args_str}))"
             if method == "join":
                 return f"String.join({obj_str}, {args_str})"
-            if method == "strip" or method == "trim":
-                return f"{obj_str}.trim()"
-            if method == "lstrip":
-                if args:
-                    # lstrip with chars argument - use regex
-                    return f'{obj_str}.replaceFirst("^[" + {args_str} + "]+", "")'
-                return f"{obj_str}.stripLeading()"
-            if method == "rstrip":
-                if args:
-                    # rstrip with chars argument - use regex
-                    return f'{obj_str}.replaceFirst("[" + {args_str} + "]+$", "")'
-                return f"{obj_str}.stripTrailing()"
             if method == "lower":
                 return f"{obj_str}.toLowerCase()"
             if method == "upper":

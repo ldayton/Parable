@@ -10587,7 +10587,7 @@ final class ParableFunctions {
             }
         }
         String joined = String.join("", result);
-        return joined.trim();
+        return joined.replaceFirst("^[" + " \t" + "]+", "").replaceFirst("[" + " \t" + "]+$", "");
     }
 
     static int _countTrailingBackslashes(String s) {

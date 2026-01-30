@@ -1591,6 +1591,21 @@ def lower_expr_Call(
                 typ=BOOL,
                 loc=loc_from_node(node),
             )
+        # String trimming methods -> TrimChars IR node
+        _TRIM_METHODS = {"strip": "both", "lstrip": "left", "rstrip": "right"}
+        if method in _TRIM_METHODS:
+            mode = _TRIM_METHODS[method]
+            if args:
+                chars = args[0]
+            else:
+                chars = ir.StringLit(value=" \t\n\r", typ=STRING, loc=loc_from_node(node))
+            return ir.TrimChars(
+                string=obj,
+                chars=chars,
+                mode=mode,
+                typ=STRING,
+                loc=loc_from_node(node),
+            )
         if method == "pop" and not args and isinstance(obj_type, Slice):
             # list.pop() -> return last element and shrink slice (only for slices)
             return ir.MethodCall(

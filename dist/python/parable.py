@@ -2062,7 +2062,7 @@ class Word(Node):
                 in_whitespace = False
                 normalized.append(ch)
                 i += 1
-        return "".join(normalized).rstrip()
+        return "".join(normalized).rstrip(" \t\n\r")
 
     def _strip_arith_line_continuations(self, value: str) -> str:
         result = []
@@ -2430,7 +2430,7 @@ class Word(Node):
                     inner = _substring(value, i + 2, j - 1)
                     if in_arith:
                         result.append(direction + "(" + inner + ")")
-                    elif inner.strip():
+                    elif inner.strip(" \t\n\r"):
                         stripped = inner.lstrip(" \t")
                         result.append(direction + "(" + stripped + ")")
                     else:
@@ -2450,7 +2450,7 @@ class Word(Node):
                         depth -= 1
                     j += 1
                 inner = _substring(value, i + 2, j - 1)
-                if inner.strip() == "":
+                if inner.strip(" \t\n\r") == "":
                     result.append("${ }")
                 else:
                     try:
@@ -2568,7 +2568,7 @@ class Word(Node):
                                 if "<<" in part_content:
                                     pattern_parts.append(part_content)
                                 elif has_pipe:
-                                    pattern_parts.append(part_content.strip())
+                                    pattern_parts.append(part_content.strip(" \t\n\r"))
                                 else:
                                     pattern_parts.append(part_content)
                                 break
@@ -2584,7 +2584,7 @@ class Word(Node):
                                 if "<<" in part_content:
                                     pattern_parts.append(part_content)
                                 else:
-                                    pattern_parts.append(part_content.strip())
+                                    pattern_parts.append(part_content.strip(" \t\n\r"))
                                 current_part = []
                                 i += 1
                         else:
@@ -6503,7 +6503,7 @@ class Parser:
         return Comment(text=text, kind="comment")
 
     def parse(self) -> list[Node]:
-        source = self.source.strip()
+        source = self.source.strip(" \t\n\r")
         if not source:
             return [Empty(kind="empty")]
         results = []

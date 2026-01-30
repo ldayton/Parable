@@ -9,14 +9,6 @@ from typing import Protocol
 def _intPtr(val: int) -> int | None:
     return None if val == -1 else val
 
-
-def _parseInt(s: str, base: int) -> int:
-    return int(s, base)
-
-
-def _intToStr(n: int) -> str:
-    return str(n)
-
 ANSI_C_ESCAPES: dict[str, int] = {"a": 7, "b": 8, "e": 27, "E": 27, "f": 12, "n": 10, "r": 13, "t": 9, "v": 11, "\\": 92, "\"": 34, "?": 63}
 TokenType_EOF: int = 0
 TokenType_WORD: int = 1
@@ -1566,7 +1558,7 @@ class Word(Node):
                             j += 1
                         if not hex_str:
                             return result
-                        byte_val = _parseInt(hex_str, 16) & 255
+                        byte_val = int(hex_str, 16) & 255
                         if byte_val == 0:
                             return result
                         self._append_with_ctlesc(result, byte_val)
@@ -1576,7 +1568,7 @@ class Word(Node):
                         while j < len(inner) and j < i + 4 and _is_hex_digit(inner[j]):
                             j += 1
                         if j > i + 2:
-                            byte_val = _parseInt(_substring(inner, i + 2, j), 16)
+                            byte_val = int(_substring(inner, i + 2, j), 16)
                             if byte_val == 0:
                                 return result
                             self._append_with_ctlesc(result, byte_val)
@@ -1589,7 +1581,7 @@ class Word(Node):
                     while j < len(inner) and j < i + 6 and _is_hex_digit(inner[j]):
                         j += 1
                     if j > i + 2:
-                        codepoint = _parseInt(_substring(inner, i + 2, j), 16)
+                        codepoint = int(_substring(inner, i + 2, j), 16)
                         if codepoint == 0:
                             return result
                         result.extend(chr(codepoint).encode("utf-8"))
@@ -1602,7 +1594,7 @@ class Word(Node):
                     while j < len(inner) and j < i + 10 and _is_hex_digit(inner[j]):
                         j += 1
                     if j > i + 2:
-                        codepoint = _parseInt(_substring(inner, i + 2, j), 16)
+                        codepoint = int(_substring(inner, i + 2, j), 16)
                         if codepoint == 0:
                             return result
                         result.extend(chr(codepoint).encode("utf-8"))
@@ -1629,7 +1621,7 @@ class Word(Node):
                     while j < len(inner) and j < i + 4 and _is_octal_digit(inner[j]):
                         j += 1
                     if j > i + 2:
-                        byte_val = _parseInt(_substring(inner, i + 1, j), 8) & 255
+                        byte_val = int(_substring(inner, i + 1, j), 8) & 255
                         if byte_val == 0:
                             return result
                         self._append_with_ctlesc(result, byte_val)
@@ -1640,7 +1632,7 @@ class Word(Node):
                     j = i + 1
                     while j < len(inner) and j < i + 4 and _is_octal_digit(inner[j]):
                         j += 1
-                    byte_val = _parseInt(_substring(inner, i + 1, j), 8) & 255
+                    byte_val = int(_substring(inner, i + 1, j), 8) & 255
                     if byte_val == 0:
                         return result
                     self._append_with_ctlesc(result, byte_val)
@@ -2849,21 +2841,21 @@ class Redirect(Node):
             elif op == "<":
                 op = "<&"
             raw = _substring(target_val, 1, len(target_val))
-            if raw.isdigit() and _parseInt(raw, 10) <= 2147483647:
-                return "(redirect \"" + op + "\" " + _intToStr(_parseInt(raw, 10)) + ")"
-            if raw.endswith("-") and raw[:-1].isdigit() and _parseInt(raw[:-1], 10) <= 2147483647:
-                return "(redirect \"" + op + "\" " + _intToStr(_parseInt(raw[:-1], 10)) + ")"
+            if raw.isdigit() and int(raw, 10) <= 2147483647:
+                return "(redirect \"" + op + "\" " + str(int(raw, 10)) + ")"
+            if raw.endswith("-") and raw[:-1].isdigit() and int(raw[:-1], 10) <= 2147483647:
+                return "(redirect \"" + op + "\" " + str(int(raw[:-1], 10)) + ")"
             if target_val == "&-":
                 return "(redirect \">&-\" 0)"
             fd_target = raw[:-1] if raw.endswith("-") else raw
             return "(redirect \"" + op + "\" \"" + fd_target + "\")"
         if op == ">&" or op == "<&":
-            if target_val.isdigit() and _parseInt(target_val, 10) <= 2147483647:
-                return "(redirect \"" + op + "\" " + _intToStr(_parseInt(target_val, 10)) + ")"
+            if target_val.isdigit() and int(target_val, 10) <= 2147483647:
+                return "(redirect \"" + op + "\" " + str(int(target_val, 10)) + ")"
             if target_val == "-":
                 return "(redirect \">&-\" 0)"
-            if target_val.endswith("-") and target_val[:-1].isdigit() and _parseInt(target_val[:-1], 10) <= 2147483647:
-                return "(redirect \"" + op + "\" " + _intToStr(_parseInt(target_val[:-1], 10)) + ")"
+            if target_val.endswith("-") and target_val[:-1].isdigit() and int(target_val[:-1], 10) <= 2147483647:
+                return "(redirect \"" + op + "\" " + str(int(target_val[:-1], 10)) + ")"
             out_val = target_val[:-1] if target_val.endswith("-") else target_val
             return "(redirect \"" + op + "\" \"" + out_val + "\")"
         return "(redirect \"" + op + "\" \"" + target_val + "\")"
@@ -5016,7 +5008,7 @@ class Parser:
             fd_chars = []
             while not self.at_end() and self.peek().isdigit():
                 fd_chars.append(self.advance())
-            fd = _parseInt("".join(fd_chars), 10)
+            fd = int("".join(fd_chars), 10)
         ch = self.peek()
         if ch == "&" and self.pos + 1 < self.length and self.source[self.pos + 1] == ">":
             if fd != -1 or varfd:
@@ -5077,7 +5069,7 @@ class Parser:
         if varfd:
             op = "{" + varfd + "}" + op
         elif fd != -1:
-            op = _intToStr(fd) + op
+            op = str(fd) + op
         if not self.at_end() and self.peek() == "&":
             self.advance()
             self.skip_whitespace()
@@ -7153,7 +7145,7 @@ def _format_redirect(r: Node, compact: bool, heredoc_op_only: bool) -> str:
         else:
             op = "<<"
         if r.fd is not None and r.fd > 0:
-            op = _intToStr(r.fd) + op
+            op = str(r.fd) + op
         if r.quoted:
             delim = "'" + r.delimiter + "'"
         else:

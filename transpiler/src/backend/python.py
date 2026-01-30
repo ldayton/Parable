@@ -11,6 +11,7 @@ Frontend deficiencies (should be fixed in frontend.py):
 - UnaryOp "!(len(x) > 0)" similarly converted back to "not x" - same issue.
 - Marker variables "_skip_docstring" and "_pass" require special-case filtering.
   Frontend should either not emit these or use a dedicated NoOp IR node.
+- Call(_parseInt, ...) and Call(_intToStr, ...) converted back to int()/str().
 
 Middleend deficiencies (should be fixed in middleend.py):
 - None identified. Python backend is cleanest because source language matches.
@@ -19,9 +20,7 @@ UNCOMPENSATED DEFICIENCIES (non-idiomatic output)
 =================================================
 
 Frontend deficiencies (should be fixed in frontend.py):
-- Helper function indirection: frontend emits Call(_parseInt, ...) instead of
-  native int(). Result: `_parseInt(x, 10)` instead of `int(x, 10)`. Same for
-  `_intToStr(n)` → `str(n)` and `_intPtr(fd)` → inline ternary. (~18 call sites)
+- _intPtr(fd) emits helper instead of inline ternary.
 - Pointer/Optional conflation: Pointer(StructRef("X")) renders as `X` but should
   be `X | None` when field is nullable. Example: `word: Word = None` should be
   `word: Word | None = None`. (~50 fields affected)
@@ -235,14 +234,6 @@ class PythonBackend:
         self._line()
         self._line("def _intPtr(val: int) -> int | None:")
         self._line("    return None if val == -1 else val")
-        self._line()
-        self._line()
-        self._line("def _parseInt(s: str, base: int) -> int:")
-        self._line("    return int(s, base)")
-        self._line()
-        self._line()
-        self._line("def _intToStr(n: int) -> str:")
-        self._line("    return str(n)")
         need_blank = True
         if module.constants:
             self._line()
@@ -624,6 +615,12 @@ class PythonBackend:
             case SliceExpr(obj=obj, low=low, high=high):
                 return self._slice_expr(obj, low, high)
             case Call(func=func, args=args):
+                # Map helper functions to Python builtins
+                if func == "_parseInt":
+                    args_str = ", ".join(self._expr(a) for a in args)
+                    return f"int({args_str})"
+                if func == "_intToStr":
+                    return f"str({self._expr(args[0])})"
                 args_str = ", ".join(self._expr(a) for a in args)
                 return f"{func}({args_str})"
             case MethodCall(obj=obj, method=method, args=args, receiver_type=receiver_type):

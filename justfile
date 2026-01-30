@@ -28,10 +28,20 @@ src-lint *ARGS: (_banner "src-lint")
 src-fmt *ARGS: (_banner "src-fmt")
     uvx ruff format {{ if ARGS == "--fix" { "" } else { "--check" } }} src/
 
-# Check for banned Python constructions
+# Verify source is subset-compliant
 [group: 'source']
-src-style: (_banner "src-style")
-    just -f transpiler/justfile style "$(pwd)/src"
+src-subset: (_banner "src-subset")
+    uv run --directory transpiler python -m src.tongues --verify < src/parable.py
+
+# Verify transpiler is subset-compliant (self-hosting)
+[group: 'transpiler']
+transpiler-subset: (_banner "transpiler-subset")
+    just -f transpiler/justfile style
+
+# Run transpiler tests
+[group: 'transpiler']
+transpiler-test: (_banner "transpiler-test")
+    just -f transpiler/justfile test-transpiler
 
 # Verify lock file is up to date
 [group: 'source']
@@ -117,7 +127,7 @@ backend-compile-java: (_banner "backend-compile-java")
 # Internal: run all parallel checks
 [private]
 [parallel]
-_check-parallel: src-test src-lint src-fmt src-verify-lock src-style check-dump-ast (backend-test "go") (backend-test "python") (backend-test "ts") backend-compile-java
+_check-parallel: src-test src-lint src-fmt src-verify-lock src-subset transpiler-subset transpiler-test check-dump-ast (backend-test "go") (backend-test "python") (backend-test "ts") backend-compile-java
 
 # Ensure biome is installed (prevents race condition in parallel JS checks)
 [private]
@@ -130,7 +140,7 @@ check: _ensure-biome _check-parallel
 
 # Quick check: test source, transpile and test Go
 [group: 'ci']
-check-quick: src-style src-test (backend-test "go")
+check-quick: src-subset transpiler-subset src-test (backend-test "go")
 
 # --- Tools ---
 

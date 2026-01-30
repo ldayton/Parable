@@ -1,0 +1,230 @@
+=== lambda not allowed
+f = lambda x: x + 1
+---
+error: lambda
+---
+
+=== type() function not allowed
+def f(x: object) -> bool:
+    return type(x) == int
+---
+error: type()
+---
+
+=== multiple inheritance not allowed
+class A:
+    pass
+class B:
+    pass
+class C(A, B):
+    pass
+---
+error: multiple inheritance
+---
+
+=== single inheritance allowed
+class A:
+    pass
+class B(A):
+    pass
+---
+ok
+---
+
+=== exception inheritance allowed
+class A:
+    pass
+class MyError(A, Exception):
+    pass
+---
+ok
+---
+
+=== nested class not allowed
+class Outer:
+    class Inner:
+        pass
+---
+error: nested class
+---
+
+=== bare except not allowed
+def f() -> None:
+    try:
+        pass
+    except:
+        pass
+---
+error: bare except
+---
+
+=== typed except allowed
+def f() -> None:
+    try:
+        pass
+    except ValueError:
+        pass
+---
+ok
+---
+
+=== dunder method __str__ not allowed
+class Foo:
+    def __str__(self) -> str:
+        return "foo"
+---
+error: dunder method __str__
+---
+
+=== dunder method __eq__ not allowed
+class Foo:
+    def __eq__(self, other: object) -> bool:
+        return True
+---
+error: dunder method __eq__
+---
+
+=== dunder method __init__ allowed
+class Foo:
+    def __init__(self) -> None:
+        pass
+---
+ok
+---
+
+=== dunder method __new__ allowed
+class Foo:
+    def __new__(cls) -> "Foo":
+        return object.__new__(cls)
+---
+ok
+---
+
+=== dunder method __repr__ allowed
+class Foo:
+    def __repr__(self) -> str:
+        return "Foo()"
+---
+ok
+---
+
+=== starred args in call not allowed
+def f(a: int, b: int) -> int:
+    return a + b
+def g() -> int:
+    items: list[int] = [1, 2]
+    return f(*items)
+---
+error: *args in call
+---
+
+=== kwargs in call not allowed
+def f(a: int, b: int) -> int:
+    return a + b
+def g() -> int:
+    d: dict[str, int] = {"a": 1, "b": 2}
+    return f(**d)
+---
+error: **kwargs in call
+---
+
+=== is with non-none not allowed
+def f(a: int, b: int) -> bool:
+    return a is b
+---
+error: is/is not
+---
+
+=== is not with non-none not allowed
+def f(a: int, b: int) -> bool:
+    return a is not b
+---
+error: is/is not
+---
+
+=== is none allowed
+def f(a: int | None) -> bool:
+    return a is None
+---
+ok
+---
+
+=== is not none allowed
+def f(a: int | None) -> bool:
+    return a is not None
+---
+ok
+---
+
+=== none is x allowed
+def f(a: int | None) -> bool:
+    return None is a
+---
+ok
+---
+
+=== mutable default list not allowed
+def f(x: list[int] = []) -> list[int]:
+    return x
+---
+error: mutable default
+---
+
+=== mutable default dict not allowed
+def f(x: dict[str, int] = {}) -> dict[str, int]:
+    return x
+---
+error: mutable default
+---
+
+=== none default allowed
+def f(x: list[int] | None = None) -> list[int]:
+    if x is None:
+        x = []
+    return x
+---
+ok
+---
+
+=== dunder class attribute not allowed
+def f(x: object) -> type:
+    return x.__class__
+---
+error: __class__
+---
+
+=== nested function not allowed
+def outer() -> int:
+    def inner() -> int:
+        return 1
+    return inner()
+---
+error: nested function 'inner'
+---
+
+=== staticmethod decorator not allowed
+class Foo:
+    @staticmethod
+    def bar() -> int:
+        return 1
+---
+error: @staticmethod
+---
+
+=== classmethod decorator not allowed
+class Foo:
+    @classmethod
+    def bar(cls) -> int:
+        return 1
+---
+error: @classmethod
+---
+
+=== property decorator not allowed
+class Foo:
+    @property
+    def bar(self) -> int:
+        return 1
+---
+error: @property
+---

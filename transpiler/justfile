@@ -15,7 +15,7 @@ emit backend="go":
 check backend="go":
     #!/usr/bin/env bash
     set -euo pipefail
-    just style src
+    just style
     case "{{backend}}" in
         go)
             uv run python -m src.tongues --target go < {{source}} > /tmp/transpile-ir.go
@@ -93,12 +93,12 @@ errors backend="go":
     @echo "=== Compilation errors ==="
     @just check {{backend}} 2>&1 | head -50 || true
 
-# Check style constraints on Python source
-style dir="../src":
+# Verify all transpiler source is subset-compliant
+style:
     #!/usr/bin/env bash
     set -euo pipefail
     failed=0
-    for f in $(fd -e py . "{{dir}}"); do
+    for f in $(fd -e py . src) tests/run_tests.py; do
         if ! uv run python -m src.tongues --verify < "$f" 2>/dev/null; then
             echo "FAIL: $f"
             uv run python -m src.tongues --verify < "$f" 2>&1 | head -5
@@ -106,3 +106,7 @@ style dir="../src":
         fi
     done
     exit $failed
+
+# Run transpiler tests using subset-compliant runner
+test-transpiler:
+    python3 tests/run_testsw.py tests/

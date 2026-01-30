@@ -1,0 +1,232 @@
+=== undefined name
+def f() -> int:
+    return x
+---
+error: not defined
+---
+
+=== undefined name in expression
+def f() -> int:
+    y: int = 1
+    return x + y
+---
+error: 'x' is not defined
+---
+
+=== parameter in scope
+def f(x: int) -> int:
+    return x
+---
+ok
+---
+
+=== multiple parameters
+def f(x: int, y: int) -> int:
+    return x + y
+---
+ok
+---
+
+=== local variable
+def f() -> int:
+    x: int = 1
+    return x
+---
+ok
+---
+
+=== local assign without annotation
+def f() -> int:
+    x = 1
+    return x
+---
+ok
+---
+
+=== for loop variable
+def f() -> int:
+    total: int = 0
+    i = 0
+    while i < 10:
+        total = total + i
+        i = i + 1
+    return total
+---
+ok
+---
+
+=== for loop target in scope
+def f(items: list[int]) -> int:
+    total: int = 0
+    for x in items:
+        total = total + x
+    return total
+---
+ok
+---
+
+=== class method self field
+class Foo:
+    def __init__(self) -> None:
+        self.x: int = 1
+    def get(self) -> int:
+        return self.x
+---
+ok
+---
+
+=== class method self parameter
+class Foo:
+    def set(self, value: int) -> None:
+        self.x = value
+---
+ok
+---
+
+=== method parameter in scope
+class Foo:
+    def add(self, x: int, y: int) -> int:
+        return x + y
+---
+ok
+---
+
+=== builtin allowed
+def f(items: list[int]) -> int:
+    return len(items)
+---
+ok
+---
+
+=== builtin range
+def f() -> int:
+    total: int = 0
+    for i in range(10):
+        total = total + i
+    return total
+---
+ok
+---
+
+=== builtin print
+def f() -> None:
+    print("hello")
+---
+ok
+---
+
+=== builtin isinstance
+def f(x: object) -> bool:
+    return isinstance(x, int)
+---
+ok
+---
+
+=== function calls function
+def helper() -> int:
+    return 1
+def main() -> int:
+    return helper()
+---
+ok
+---
+
+=== function instantiates class
+class Foo:
+    def __init__(self) -> None:
+        pass
+def make() -> Foo:
+    return Foo()
+---
+ok
+---
+
+=== constant in function
+MAX_SIZE: int = 100
+def f() -> int:
+    return MAX_SIZE
+---
+ok
+---
+
+=== redefinition function
+def f() -> int:
+    return 1
+def f() -> int:
+    return 2
+---
+error: already defined
+---
+
+=== redefinition class
+class Foo:
+    pass
+class Foo:
+    pass
+---
+error: already defined
+---
+
+=== redefinition function and class
+def Foo() -> int:
+    return 1
+class Foo:
+    pass
+---
+error: already defined
+---
+
+=== tuple unpack in for
+def f(items: list[tuple[int, int]]) -> int:
+    total: int = 0
+    for x, y in items:
+        total = total + x + y
+    return total
+---
+ok
+---
+
+=== tuple unpack in assign
+def f() -> int:
+    x, y = 1, 2
+    return x + y
+---
+ok
+---
+
+=== empty function
+def f() -> None:
+    pass
+---
+ok
+---
+
+=== class with no methods
+class Empty:
+    pass
+---
+ok
+---
+
+=== class field annotation
+class Foo:
+    x: int
+    def get(self) -> int:
+        return self.x
+---
+ok
+---
+
+=== parameter shadows builtin
+def f(len: int) -> int:
+    return len
+---
+warning: shadows builtin
+---
+
+=== parameter no shadow
+def f(x: int) -> int:
+    return x
+---
+ok
+---

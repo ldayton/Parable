@@ -231,13 +231,9 @@ var QuoteState = /** @class */ (function () {
         this.double = false;
     };
     QuoteState.prototype.pop = function () {
+        var _a;
         if (this.Stack.length > 0) {
-            {
-                var Entry = this.Stack[this.Stack.length - 1];
-                this.Stack = this.Stack.slice(0, this.Stack.length - 1);
-                this.single = Entry[0];
-                this.double = Entry[1];
-            }
+            _a = this.Stack.pop(), this.single = _a[0], this.double = _a[1];
         }
     };
     QuoteState.prototype.inQuotes = function () {
@@ -5668,6 +5664,7 @@ var Parser = /** @class */ (function () {
         return Assignment(word.value, 0) !== -1;
     };
     Parser.prototype.ParseBacktickSubstitution = function () {
+        var _a, _b, _c;
         if (this.atEnd() || this.peek() !== "`") {
             return [null, ""];
         }
@@ -5702,12 +5699,7 @@ var Parser = /** @class */ (function () {
                     }
                     inHeredocBody = false;
                     if (pendingHeredocs.length > 0) {
-                        {
-                            var Entry = pendingHeredocs[pendingHeredocs.length - 1];
-                            pendingHeredocs = pendingHeredocs.slice(0, pendingHeredocs.length - 1);
-                            currentHeredocDelim = Entry[0];
-                            currentHeredocStrip = Entry[1];
-                        }
+                        _a = pendingHeredocs.pop(0), currentHeredocDelim = _a[0], currentHeredocStrip = _a[1];
                         inHeredocBody = true;
                     }
                 }
@@ -5715,26 +5707,21 @@ var Parser = /** @class */ (function () {
                     if (checkLine.startsWith(currentHeredocDelim) && checkLine.length > currentHeredocDelim.length) {
                         var tabsStripped = line.length - checkLine.length;
                         var endPos = tabsStripped + currentHeredocDelim.length;
-                        for (var _a = 0, _b = range(endPos); _a < _b.length; _a++) {
-                            var i = _b[_a];
+                        for (var _d = 0, _f = range(endPos); _d < _f.length; _d++) {
+                            var i = _f[_d];
                             contentChars.push(line[i]);
                             textChars.push(line[i]);
                         }
                         this.pos = lineStart + endPos;
                         inHeredocBody = false;
                         if (pendingHeredocs.length > 0) {
-                            {
-                                var Entry = pendingHeredocs[pendingHeredocs.length - 1];
-                                pendingHeredocs = pendingHeredocs.slice(0, pendingHeredocs.length - 1);
-                                currentHeredocDelim = Entry[0];
-                                currentHeredocStrip = Entry[1];
-                            }
+                            _b = pendingHeredocs.pop(0), currentHeredocDelim = _b[0], currentHeredocStrip = _b[1];
                             inHeredocBody = true;
                         }
                     }
                     else {
-                        for (var _c = 0, line_2 = line; _c < line_2.length; _c++) {
-                            var ch_2 = line_2[_c];
+                        for (var _g = 0, line_2 = line; _g < line_2.length; _g++) {
+                            var ch_2 = line_2[_g];
                             contentChars.push(ch_2);
                             textChars.push(ch_2);
                         }
@@ -5929,12 +5916,7 @@ var Parser = /** @class */ (function () {
                 contentChars.push(ch);
                 textChars.push(ch);
                 if (pendingHeredocs.length > 0) {
-                    {
-                        var Entry = pendingHeredocs[pendingHeredocs.length - 1];
-                        pendingHeredocs = pendingHeredocs.slice(0, pendingHeredocs.length - 1);
-                        currentHeredocDelim = Entry[0];
-                        currentHeredocStrip = Entry[1];
-                    }
+                    _c = pendingHeredocs.pop(0), currentHeredocDelim = _c[0], currentHeredocStrip = _c[1];
                     inHeredocBody = true;
                 }
                 continue;
@@ -5951,7 +5933,7 @@ var Parser = /** @class */ (function () {
         var text = textChars.join("");
         var content = contentChars.join("");
         if (pendingHeredocs.length > 0) {
-            var _d = FindHeredocContentEnd(this.source, this.pos, pendingHeredocs), heredocStart = _d[0], heredocEnd = _d[1];
+            var _h = FindHeredocContentEnd(this.source, this.pos, pendingHeredocs), heredocStart = _h[0], heredocEnd = _h[1];
             if (heredocEnd > heredocStart) {
                 content = content + Substring(this.source, heredocStart, heredocEnd);
                 if (this.CmdsubHeredocEnd === -1) {

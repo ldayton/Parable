@@ -2033,75 +2033,14 @@ def lower_stmt_Assign(
         # Handle tuple unpacking: a, b = func() where func returns tuple
         target_elts = target.get("elts", [])
         if is_type(target, ["Tuple"]) and len(target_elts) == 2:
-            # Special case for popping from stack with tuple unpacking
+            # Tuple unpacking from method call: a, b = obj.method()
             node_value_func = node_value.get("func") if is_type(node_value, ["Call"]) else None
             if is_type(node_value, ["Call"]) and is_type(node_value_func, ["Attribute"]):
-                if node_value_func.get("attr") == "pop":
-                    # a, b = stack.pop() -> entry := stack[len(stack)-1]; stack = stack[:len(stack)-1]; a = entry.F0; b = entry.F1
-                    func_value = node_value_func.get("value")
-                    obj = dispatch.lower_expr(func_value)
-                    obj_lval = dispatch.lower_lvalue(func_value)
-                    lval0 = dispatch.lower_lvalue(target_elts[0])
-                    lval1 = dispatch.lower_lvalue(target_elts[1])
-                    len_minus_1 = ir.BinaryOp(
-                        op="-",
-                        left=ir.Len(expr=obj, typ=INT),
-                        right=ir.IntLit(value=1, typ=INT),
-                        typ=INT,
-                    )
-                    # Infer tuple element type from the list's type if available
-                    entry_type: "Type" = Tuple((BOOL, BOOL))  # Default
-                    if is_type(func_value, ["Name"]):
-                        var_name = func_value.get("id")
-                        if var_name in type_ctx.var_types:
-                            list_type = type_ctx.var_types[var_name]
-                            if isinstance(list_type, Slice) and isinstance(
-                                list_type.element, Tuple
-                            ):
-                                entry_type = list_type.element
-                    # Get field types from entry_type
-                    f0_type = (
-                        entry_type.elements[0]
-                        if isinstance(entry_type, Tuple) and len(entry_type.elements) > 0
-                        else BOOL
-                    )
-                    f1_type = (
-                        entry_type.elements[1]
-                        if isinstance(entry_type, Tuple) and len(entry_type.elements) > 1
-                        else BOOL
-                    )
-                    entry_var = ir.Var(name="_entry", typ=entry_type)
-                    return ir.Block(
-                        body=[
-                            ir.VarDecl(
-                                name="_entry",
-                                typ=entry_type,
-                                value=ir.Index(obj=obj, index=len_minus_1, typ=entry_type),
-                            ),
-                            ir.Assign(
-                                target=obj_lval,
-                                value=ir.SliceExpr(
-                                    obj=obj, high=len_minus_1, typ=InterfaceRef("any")
-                                ),
-                            ),
-                            ir.Assign(
-                                target=lval0,
-                                value=ir.FieldAccess(obj=entry_var, field="F0", typ=f0_type),
-                            ),
-                            ir.Assign(
-                                target=lval1,
-                                value=ir.FieldAccess(obj=entry_var, field="F1", typ=f1_type),
-                            ),
-                        ],
-                        loc=loc_from_node(node),
-                    )
-                else:
-                    # General tuple unpacking: a, b = obj.method()
-                    lval0 = dispatch.lower_lvalue(target_elts[0])
-                    lval1 = dispatch.lower_lvalue(target_elts[1])
-                    return ir.TupleAssign(
-                        targets=[lval0, lval1], value=value, loc=loc_from_node(node)
-                    )
+                lval0 = dispatch.lower_lvalue(target_elts[0])
+                lval1 = dispatch.lower_lvalue(target_elts[1])
+                return ir.TupleAssign(
+                    targets=[lval0, lval1], value=value, loc=loc_from_node(node)
+                )
             # General tuple unpacking for function calls: a, b = func()
             if is_type(node_value, ["Call"]):
                 lval0 = dispatch.lower_lvalue(target_elts[0])

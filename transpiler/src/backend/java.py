@@ -747,6 +747,11 @@ class JavaBackend:
                 lv = self._lvalue(target)
                 val = self._expr(value)
                 self._line(f"{lv} {op}= {val};")
+            case TupleAssign(targets=targets, value=value) if isinstance(
+                value, MethodCall
+            ) and value.method == "pop":
+                # Java List doesn't have pop() - use remove()
+                self._emit_tuple_pop(stmt)
             case TupleAssign(targets=targets, value=value):
                 # Java doesn't have destructuring - emit individual assignments
                 val_str = self._expr(value)
@@ -1089,6 +1094,47 @@ class JavaBackend:
             self._line(f"throw {var};")
         self.indent -= 1
         self._line("}")
+
+    def _emit_tuple_pop(self, stmt: TupleAssign) -> None:
+        """Emit tuple unpacking from list.pop(): a, b = list.pop(0)
+
+        Java List doesn't have pop(), so expand to:
+            _entry = list.remove(index)
+            a = _entry.f0()
+            b = _entry.f1()
+        """
+        mc = stmt.value
+        if not isinstance(mc, MethodCall):
+            return
+        obj = self._expr(mc.obj)
+        # Get the index argument (0 for pop(0), or size-1 for pop())
+        if mc.args:
+            index = self._expr(mc.args[0])
+        else:
+            index = f"{obj}.size() - 1"
+        # Get tuple type from the list's element type
+        obj_type = mc.obj.typ if mc.obj else None
+        elem_type = obj_type.element if isinstance(obj_type, Slice) else mc.typ
+        record_name = self._tuple_record_name(elem_type) if isinstance(elem_type, Tuple) else "Object"
+        # Emit: _entry = list.remove(index)
+        self.temp_counter += 1
+        entry_var = f"_entry{self.temp_counter}"
+        self._line(f"{record_name} {entry_var} = {obj}.remove({index});")
+        # Emit field assignments
+        is_decl = stmt.is_declaration
+        new_targets = stmt.new_targets
+        for i, target in enumerate(stmt.targets):
+            lv = self._lvalue(target)
+            target_name = target.name if isinstance(target, VarLV) else None
+            is_hoisted = target_name and target_name in self._hoisted_vars
+            if isinstance(elem_type, Tuple) and i < len(elem_type.elements):
+                field_type = self._type(elem_type.elements[i])
+            else:
+                field_type = "Object"
+            if (is_decl or (target_name and target_name in new_targets)) and not is_hoisted:
+                self._line(f"{field_type} {lv} = {entry_var}.f{i}();")
+            else:
+                self._line(f"{lv} = {entry_var}.f{i}();")
 
     def _expr(self, expr: Expr) -> str:
         match expr:

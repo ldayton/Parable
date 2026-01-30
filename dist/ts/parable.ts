@@ -213,12 +213,7 @@ class QuoteState {
 
   pop(): void {
     if (this.Stack.length > 0) {
-      {
-        var Entry: any = this.Stack[this.Stack.length - 1];
-        this.Stack = this.Stack.slice(0, this.Stack.length - 1);
-        this.single = Entry[0];
-        this.double = Entry[1];
-      }
+      [this.single, this.double] = this.Stack.pop();
     }
   }
 
@@ -5683,12 +5678,7 @@ class Parser {
           }
           inHeredocBody = false;
           if (pendingHeredocs.length > 0) {
-            {
-              var Entry: any = pendingHeredocs[pendingHeredocs.length - 1];
-              pendingHeredocs = pendingHeredocs.slice(0, pendingHeredocs.length - 1);
-              currentHeredocDelim = Entry[0];
-              currentHeredocStrip = Entry[1];
-            }
+            [currentHeredocDelim, currentHeredocStrip] = pendingHeredocs.pop(0);
             inHeredocBody = true;
           }
         } else {
@@ -5702,12 +5692,7 @@ class Parser {
             this.pos = lineStart + endPos;
             inHeredocBody = false;
             if (pendingHeredocs.length > 0) {
-              {
-                var Entry: any = pendingHeredocs[pendingHeredocs.length - 1];
-                pendingHeredocs = pendingHeredocs.slice(0, pendingHeredocs.length - 1);
-                currentHeredocDelim = Entry[0];
-                currentHeredocStrip = Entry[1];
-              }
+              [currentHeredocDelim, currentHeredocStrip] = pendingHeredocs.pop(0);
               inHeredocBody = true;
             }
           } else {
@@ -5898,12 +5883,7 @@ class Parser {
         contentChars.push(ch);
         textChars.push(ch);
         if (pendingHeredocs.length > 0) {
-          {
-            var Entry: any = pendingHeredocs[pendingHeredocs.length - 1];
-            pendingHeredocs = pendingHeredocs.slice(0, pendingHeredocs.length - 1);
-            currentHeredocDelim = Entry[0];
-            currentHeredocStrip = Entry[1];
-          }
+          [currentHeredocDelim, currentHeredocStrip] = pendingHeredocs.pop(0);
           inHeredocBody = true;
         }
         continue;

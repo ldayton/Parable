@@ -376,15 +376,9 @@ func (self *QuoteState) Push() {
 
 func (self *QuoteState) Pop() {
 	if len(self.stack) > 0 {
-		{
-			var entry struct {
-				F0 bool
-				F1 bool
-			} = self.stack[len(self.stack)-1]
-			self.stack = self.stack[:len(self.stack)-1]
-			self.Single = entry.F0
-			self.Double = entry.F1
-		}
+		_entry := self.stack[len(self.stack)-1]
+		self.stack = self.stack[:len(self.stack)-1]
+		self.Single, self.Double = _entry.F0, _entry.F1
 	}
 }
 
@@ -5293,15 +5287,9 @@ func (self *Parser) parseBacktickSubstitution() (Node, string) {
 				}
 				inHeredocBody = false
 				if len(pendingHeredocs) > 0 {
-					{
-						var entry struct {
-							F0 string
-							F1 bool
-						} = pendingHeredocs[len(pendingHeredocs)-1]
-						pendingHeredocs = pendingHeredocs[:len(pendingHeredocs)-1]
-						currentHeredocDelim = entry.F0
-						currentHeredocStrip = entry.F1
-					}
+					_entry := pendingHeredocs[len(pendingHeredocs)-1]
+					pendingHeredocs = pendingHeredocs[:len(pendingHeredocs)-1]
+					currentHeredocDelim, currentHeredocStrip = _entry.F0, _entry.F1
 					inHeredocBody = true
 				}
 			} else if strings.HasPrefix(checkLine, currentHeredocDelim) && _runeLen(checkLine) > _runeLen(currentHeredocDelim) {
@@ -5314,15 +5302,9 @@ func (self *Parser) parseBacktickSubstitution() (Node, string) {
 				self.Pos = lineStart + endPos
 				inHeredocBody = false
 				if len(pendingHeredocs) > 0 {
-					{
-						var entry struct {
-							F0 string
-							F1 bool
-						} = pendingHeredocs[len(pendingHeredocs)-1]
-						pendingHeredocs = pendingHeredocs[:len(pendingHeredocs)-1]
-						currentHeredocDelim = entry.F0
-						currentHeredocStrip = entry.F1
-					}
+					_entry := pendingHeredocs[len(pendingHeredocs)-1]
+					pendingHeredocs = pendingHeredocs[:len(pendingHeredocs)-1]
+					currentHeredocDelim, currentHeredocStrip = _entry.F0, _entry.F1
 					inHeredocBody = true
 				}
 			} else {
@@ -5511,15 +5493,9 @@ func (self *Parser) parseBacktickSubstitution() (Node, string) {
 			contentChars = append(contentChars, ch)
 			textChars = append(textChars, ch)
 			if len(pendingHeredocs) > 0 {
-				{
-					var entry struct {
-						F0 string
-						F1 bool
-					} = pendingHeredocs[len(pendingHeredocs)-1]
-					pendingHeredocs = pendingHeredocs[:len(pendingHeredocs)-1]
-					currentHeredocDelim = entry.F0
-					currentHeredocStrip = entry.F1
-				}
+				_entry := pendingHeredocs[len(pendingHeredocs)-1]
+				pendingHeredocs = pendingHeredocs[:len(pendingHeredocs)-1]
+				currentHeredocDelim, currentHeredocStrip = _entry.F0, _entry.F1
 				inHeredocBody = true
 			}
 			continue

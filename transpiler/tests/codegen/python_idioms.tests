@@ -9,3 +9,15 @@ def NewMyError(msg: str) -> MyError:
     self.msg = msg
     return self
 ---
+
+=== tuple unpacking from pop uses pop
+@dataclass
+class QuoteState:
+    single: bool = False
+    double: bool = False
+    _stack: list[tuple[bool, bool]] = field(default_factory=list)
+
+    def pop(self) -> None:
+        if self._stack:
+            self.single, self.double = self._stack.pop()
+---

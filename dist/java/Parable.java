@@ -236,12 +236,9 @@ class QuoteState {
 
     public void pop() {
         if (!this._stack.isEmpty()) {
-            {
-                Tuple1 _entry = this._stack.get(this._stack.size() - 1);
-                this._stack = new ArrayList<>(this._stack.subList(0, this._stack.size() - 1));
-                this.single = _entry.f0();
-                this.double_ = _entry.f1();
-            }
+            Tuple1 _entry1 = this._stack.remove(this._stack.size() - 1);
+            this.single = _entry1.f0();
+            this.double_ = _entry1.f1();
         }
     }
 
@@ -864,9 +861,9 @@ class Lexer {
                     this.pos -= 1;
                     this._syncToParser();
                     boolean inDquote = (flags & Constants.MATCHEDPAIRFLAGS_DQUOTE) != 0;
-                    Tuple3 _tuple1 = this._parser._parseParamExpansion(inDquote);
-                    Node paramNode = _tuple1.f0();
-                    String paramText = _tuple1.f1();
+                    Tuple3 _tuple2 = this._parser._parseParamExpansion(inDquote);
+                    Node paramNode = _tuple2.f0();
+                    String paramText = _tuple2.f1();
                     this._syncFromParser();
                     if (paramNode != null) {
                         chars.add(paramText);
@@ -887,9 +884,9 @@ class Lexer {
                         Node cmdNode = null;
                         String cmdText = "";
                         if (this.pos + 2 < this.length && this.source.charAt(this.pos + 2) == '(') {
-                            Tuple3 _tuple2 = this._parser._parseArithmeticExpansion();
-                            arithNode = _tuple2.f0();
-                            arithText = _tuple2.f1();
+                            Tuple3 _tuple3 = this._parser._parseArithmeticExpansion();
+                            arithNode = _tuple3.f0();
+                            arithText = _tuple3.f1();
                             this._syncFromParser();
                             if (arithNode != null) {
                                 chars.add(arithText);
@@ -897,9 +894,9 @@ class Lexer {
                                 wasGtlt = false;
                             } else {
                                 this._syncToParser();
-                                Tuple3 _tuple3 = this._parser._parseCommandSubstitution();
-                                cmdNode = _tuple3.f0();
-                                cmdText = _tuple3.f1();
+                                Tuple3 _tuple4 = this._parser._parseCommandSubstitution();
+                                cmdNode = _tuple4.f0();
+                                cmdText = _tuple4.f1();
                                 this._syncFromParser();
                                 if (cmdNode != null) {
                                     chars.add(cmdText);
@@ -913,9 +910,9 @@ class Lexer {
                                 }
                             }
                         } else {
-                            Tuple3 _tuple4 = this._parser._parseCommandSubstitution();
-                            cmdNode = _tuple4.f0();
-                            cmdText = _tuple4.f1();
+                            Tuple3 _tuple5 = this._parser._parseCommandSubstitution();
+                            cmdNode = _tuple5.f0();
+                            cmdText = _tuple5.f1();
                             this._syncFromParser();
                             if (cmdNode != null) {
                                 chars.add(cmdText);
@@ -933,9 +930,9 @@ class Lexer {
                         if (nextCh.equals("[")) {
                             this.pos -= 1;
                             this._syncToParser();
-                            Tuple3 _tuple5 = this._parser._parseDeprecatedArithmetic();
-                            arithNode = _tuple5.f0();
-                            arithText = _tuple5.f1();
+                            Tuple3 _tuple6 = this._parser._parseDeprecatedArithmetic();
+                            arithNode = _tuple6.f0();
+                            arithText = _tuple6.f1();
                             this._syncFromParser();
                             if (arithNode != null) {
                                 chars.add(arithText);
@@ -956,9 +953,9 @@ class Lexer {
                 chars = new ArrayList<>(chars.subList(0, chars.size() - 1));
                 this.pos -= 1;
                 this._syncToParser();
-                Tuple3 _tuple6 = this._parser._parseProcessSubstitution();
-                Node procsubNode = _tuple6.f0();
-                String procsubText = _tuple6.f1();
+                Tuple3 _tuple7 = this._parser._parseProcessSubstitution();
+                Node procsubNode = _tuple7.f0();
+                String procsubText = _tuple7.f1();
                 this._syncFromParser();
                 if (procsubNode != null) {
                     chars.add(procsubText);
@@ -1073,9 +1070,9 @@ class Lexer {
             if (ch.equals("'")) {
                 this.advance();
                 boolean trackNewline = ctx == Constants.WORD_CTX_NORMAL;
-                Tuple2 _tuple7 = this._readSingleQuote(start);
-                content = _tuple7.f0();
-                boolean sawNewline = _tuple7.f1();
+                Tuple2 _tuple8 = this._readSingleQuote(start);
+                content = _tuple8.f0();
+                boolean sawNewline = _tuple8.f1();
                 chars.add(content);
                 if (trackNewline && sawNewline && this._parser != null) {
                     this._parser._sawNewlineInSingleQuote = true;
@@ -1119,9 +1116,9 @@ class Lexer {
                             } else {
                                 if (c.equals("`")) {
                                     this._syncToParser();
-                                    Tuple3 _tuple8 = this._parser._parseBacktickSubstitution();
-                                    cmdsubResult0 = _tuple8.f0();
-                                    cmdsubResult1 = _tuple8.f1();
+                                    Tuple3 _tuple9 = this._parser._parseBacktickSubstitution();
+                                    cmdsubResult0 = _tuple9.f0();
+                                    cmdsubResult1 = _tuple9.f1();
                                     this._syncFromParser();
                                     if (cmdsubResult0 != null) {
                                         parts.add(cmdsubResult0);
@@ -1159,9 +1156,9 @@ class Lexer {
                 continue;
             }
             if (ctx != Constants.WORD_CTX_REGEX && ch.equals("$") && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '\'') {
-                Tuple3 _tuple9 = this._readAnsiCQuote();
-                Node ansiResult0 = _tuple9.f0();
-                String ansiResult1 = _tuple9.f1();
+                Tuple3 _tuple10 = this._readAnsiCQuote();
+                Node ansiResult0 = _tuple10.f0();
+                String ansiResult1 = _tuple10.f1();
                 if (ansiResult0 != null) {
                     parts.add(ansiResult0);
                     chars.add(ansiResult1);
@@ -1171,10 +1168,10 @@ class Lexer {
                 continue;
             }
             if (ctx != Constants.WORD_CTX_REGEX && ch.equals("$") && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '"') {
-                Tuple4 _tuple10 = this._readLocaleString();
-                Node localeResult0 = _tuple10.f0();
-                String localeResult1 = _tuple10.f1();
-                List<Node> localeResult2 = _tuple10.f2();
+                Tuple4 _tuple11 = this._readLocaleString();
+                Node localeResult0 = _tuple11.f0();
+                String localeResult1 = _tuple11.f1();
+                List<Node> localeResult2 = _tuple11.f2();
                 if (localeResult0 != null) {
                     parts.add(localeResult0);
                     parts.addAll(localeResult2);
@@ -1202,9 +1199,9 @@ class Lexer {
             }
             if (ctx != Constants.WORD_CTX_REGEX && ch.equals("`")) {
                 this._syncToParser();
-                Tuple3 _tuple11 = this._parser._parseBacktickSubstitution();
-                cmdsubResult0 = _tuple11.f0();
-                cmdsubResult1 = _tuple11.f1();
+                Tuple3 _tuple12 = this._parser._parseBacktickSubstitution();
+                cmdsubResult0 = _tuple12.f0();
+                cmdsubResult1 = _tuple12.f1();
                 this._syncFromParser();
                 if (cmdsubResult0 != null) {
                     parts.add(cmdsubResult0);
@@ -1216,9 +1213,9 @@ class Lexer {
             }
             if (ctx != Constants.WORD_CTX_REGEX && ParableFunctions._isRedirectChar(ch) && this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '(') {
                 this._syncToParser();
-                Tuple3 _tuple12 = this._parser._parseProcessSubstitution();
-                Node procsubResult0 = _tuple12.f0();
-                String procsubResult1 = _tuple12.f1();
+                Tuple3 _tuple13 = this._parser._parseProcessSubstitution();
+                Node procsubResult0 = _tuple13.f0();
+                String procsubResult1 = _tuple13.f1();
                 this._syncFromParser();
                 if (procsubResult0 != null) {
                     parts.add(procsubResult0);
@@ -1246,9 +1243,9 @@ class Lexer {
                 }
                 if (isArrayAssign && (atCommandStart || inAssignBuiltin)) {
                     this._syncToParser();
-                    Tuple3 _tuple13 = this._parser._parseArrayLiteral();
-                    Node arrayResult0 = _tuple13.f0();
-                    String arrayResult1 = _tuple13.f1();
+                    Tuple3 _tuple14 = this._parser._parseArrayLiteral();
+                    Node arrayResult0 = _tuple14.f0();
+                    String arrayResult1 = _tuple14.f1();
                     this._syncFromParser();
                     if (arrayResult0 != null) {
                         parts.add(arrayResult0);
@@ -1451,28 +1448,14 @@ class Lexer {
                     String cmdsubText = "";
                     if (ch.equals("$") && this.pos + 2 < this.length && this.source.charAt(this.pos + 1) == '(' && this.source.charAt(this.pos + 2) == '(') {
                         this._syncToParser();
-                        Tuple3 _tuple14 = this._parser._parseArithmeticExpansion();
-                        Node arithNode = _tuple14.f0();
-                        String arithText = _tuple14.f1();
+                        Tuple3 _tuple15 = this._parser._parseArithmeticExpansion();
+                        Node arithNode = _tuple15.f0();
+                        String arithText = _tuple15.f1();
                         this._syncFromParser();
                         if (arithNode != null) {
                             innerParts.add(arithNode);
                             contentChars.add(arithText);
                         } else {
-                            this._syncToParser();
-                            Tuple3 _tuple15 = this._parser._parseCommandSubstitution();
-                            cmdsubNode = _tuple15.f0();
-                            cmdsubText = _tuple15.f1();
-                            this._syncFromParser();
-                            if (cmdsubNode != null) {
-                                innerParts.add(cmdsubNode);
-                                contentChars.add(cmdsubText);
-                            } else {
-                                contentChars.add(this.advance());
-                            }
-                        }
-                    } else {
-                        if (ParableFunctions._isExpansionStart(this.source, this.pos, "$(")) {
                             this._syncToParser();
                             Tuple3 _tuple16 = this._parser._parseCommandSubstitution();
                             cmdsubNode = _tuple16.f0();
@@ -1484,12 +1467,26 @@ class Lexer {
                             } else {
                                 contentChars.add(this.advance());
                             }
+                        }
+                    } else {
+                        if (ParableFunctions._isExpansionStart(this.source, this.pos, "$(")) {
+                            this._syncToParser();
+                            Tuple3 _tuple17 = this._parser._parseCommandSubstitution();
+                            cmdsubNode = _tuple17.f0();
+                            cmdsubText = _tuple17.f1();
+                            this._syncFromParser();
+                            if (cmdsubNode != null) {
+                                innerParts.add(cmdsubNode);
+                                contentChars.add(cmdsubText);
+                            } else {
+                                contentChars.add(this.advance());
+                            }
                         } else {
                             if (ch.equals("$")) {
                                 this._syncToParser();
-                                Tuple3 _tuple17 = this._parser._parseParamExpansion(false);
-                                Node paramNode = _tuple17.f0();
-                                String paramText = _tuple17.f1();
+                                Tuple3 _tuple18 = this._parser._parseParamExpansion(false);
+                                Node paramNode = _tuple18.f0();
+                                String paramText = _tuple18.f1();
                                 this._syncFromParser();
                                 if (paramNode != null) {
                                     innerParts.add(paramNode);
@@ -1500,9 +1497,9 @@ class Lexer {
                             } else {
                                 if (ch.equals("`")) {
                                     this._syncToParser();
-                                    Tuple3 _tuple18 = this._parser._parseBacktickSubstitution();
-                                    cmdsubNode = _tuple18.f0();
-                                    cmdsubText = _tuple18.f1();
+                                    Tuple3 _tuple19 = this._parser._parseBacktickSubstitution();
+                                    cmdsubNode = _tuple19.f0();
+                                    cmdsubText = _tuple19.f1();
                                     this._syncFromParser();
                                     if (cmdsubNode != null) {
                                         innerParts.add(cmdsubNode);
@@ -4274,24 +4271,24 @@ class CasePattern implements Node {
                                 int result0 = 0;
                                 List<String> result1 = new ArrayList<>();
                                 if (ch.equals("[")) {
-                                    Tuple6 _tuple19 = ParableFunctions._consumeBracketClass(this.pattern, i, depth);
-                                    result0 = _tuple19.f0();
-                                    result1 = _tuple19.f1();
-                                    boolean result2 = _tuple19.f2();
+                                    Tuple6 _tuple20 = ParableFunctions._consumeBracketClass(this.pattern, i, depth);
+                                    result0 = _tuple20.f0();
+                                    result1 = _tuple20.f1();
+                                    boolean result2 = _tuple20.f2();
                                     i = result0;
                                     current.addAll(result1);
                                 } else {
                                     if (ch.equals("'") && depth == 0) {
-                                        Tuple7 _tuple20 = ParableFunctions._consumeSingleQuote(this.pattern, i);
-                                        result0 = _tuple20.f0();
-                                        result1 = _tuple20.f1();
+                                        Tuple7 _tuple21 = ParableFunctions._consumeSingleQuote(this.pattern, i);
+                                        result0 = _tuple21.f0();
+                                        result1 = _tuple21.f1();
                                         i = result0;
                                         current.addAll(result1);
                                     } else {
                                         if (ch.equals("\"") && depth == 0) {
-                                            Tuple7 _tuple21 = ParableFunctions._consumeDoubleQuote(this.pattern, i);
-                                            result0 = _tuple21.f0();
-                                            result1 = _tuple21.f1();
+                                            Tuple7 _tuple22 = ParableFunctions._consumeDoubleQuote(this.pattern, i);
+                                            result0 = _tuple22.f0();
+                                            result1 = _tuple22.f1();
                                             i = result0;
                                             current.addAll(result1);
                                         } else {
@@ -5562,15 +5559,7 @@ class Parser {
         Node result0 = null;
         String result1 = "";
         if (this.pos + 2 < this.length && this.source.charAt(this.pos + 1) == '(' && this.source.charAt(this.pos + 2) == '(') {
-            Tuple3 _tuple22 = this._parseArithmeticExpansion();
-            result0 = _tuple22.f0();
-            result1 = _tuple22.f1();
-            if (result0 != null) {
-                parts.add(result0);
-                chars.add(result1);
-                return true;
-            }
-            Tuple3 _tuple23 = this._parseCommandSubstitution();
+            Tuple3 _tuple23 = this._parseArithmeticExpansion();
             result0 = _tuple23.f0();
             result1 = _tuple23.f1();
             if (result0 != null) {
@@ -5578,10 +5567,7 @@ class Parser {
                 chars.add(result1);
                 return true;
             }
-            return false;
-        }
-        if (this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '[') {
-            Tuple3 _tuple24 = this._parseDeprecatedArithmetic();
+            Tuple3 _tuple24 = this._parseCommandSubstitution();
             result0 = _tuple24.f0();
             result1 = _tuple24.f1();
             if (result0 != null) {
@@ -5591,8 +5577,8 @@ class Parser {
             }
             return false;
         }
-        if (this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '(') {
-            Tuple3 _tuple25 = this._parseCommandSubstitution();
+        if (this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '[') {
+            Tuple3 _tuple25 = this._parseDeprecatedArithmetic();
             result0 = _tuple25.f0();
             result1 = _tuple25.f1();
             if (result0 != null) {
@@ -5602,9 +5588,20 @@ class Parser {
             }
             return false;
         }
-        Tuple3 _tuple26 = this._parseParamExpansion(inDquote);
-        result0 = _tuple26.f0();
-        result1 = _tuple26.f1();
+        if (this.pos + 1 < this.length && this.source.charAt(this.pos + 1) == '(') {
+            Tuple3 _tuple26 = this._parseCommandSubstitution();
+            result0 = _tuple26.f0();
+            result1 = _tuple26.f1();
+            if (result0 != null) {
+                parts.add(result0);
+                chars.add(result1);
+                return true;
+            }
+            return false;
+        }
+        Tuple3 _tuple27 = this._parseParamExpansion(inDquote);
+        result0 = _tuple27.f0();
+        result1 = _tuple27.f1();
         if (result0 != null) {
             parts.add(result0);
             chars.add(result1);
@@ -5734,12 +5731,9 @@ class Parser {
                     }
                     inHeredocBody = false;
                     if (!pendingHeredocs.isEmpty()) {
-                        {
-                            Tuple2 _entry = pendingHeredocs.get(pendingHeredocs.size() - 1);
-                            pendingHeredocs = new ArrayList<>(pendingHeredocs.subList(0, pendingHeredocs.size() - 1));
-                            currentHeredocDelim = _entry.f0();
-                            currentHeredocStrip = _entry.f1();
-                        }
+                        Tuple2 _entry28 = pendingHeredocs.remove(0);
+                        currentHeredocDelim = _entry28.f0();
+                        currentHeredocStrip = _entry28.f1();
                         inHeredocBody = true;
                     }
                 } else {
@@ -5753,12 +5747,9 @@ class Parser {
                         this.pos = lineStart + endPos;
                         inHeredocBody = false;
                         if (!pendingHeredocs.isEmpty()) {
-                            {
-                                Tuple2 _entry = pendingHeredocs.get(pendingHeredocs.size() - 1);
-                                pendingHeredocs = new ArrayList<>(pendingHeredocs.subList(0, pendingHeredocs.size() - 1));
-                                currentHeredocDelim = _entry.f0();
-                                currentHeredocStrip = _entry.f1();
-                            }
+                            Tuple2 _entry29 = pendingHeredocs.remove(0);
+                            currentHeredocDelim = _entry29.f0();
+                            currentHeredocStrip = _entry29.f1();
                             inHeredocBody = true;
                         }
                     } else {
@@ -5955,12 +5946,9 @@ class Parser {
                 contentChars.add(ch);
                 textChars.add(ch);
                 if (!pendingHeredocs.isEmpty()) {
-                    {
-                        Tuple2 _entry = pendingHeredocs.get(pendingHeredocs.size() - 1);
-                        pendingHeredocs = new ArrayList<>(pendingHeredocs.subList(0, pendingHeredocs.size() - 1));
-                        currentHeredocDelim = _entry.f0();
-                        currentHeredocStrip = _entry.f1();
-                    }
+                    Tuple2 _entry30 = pendingHeredocs.remove(0);
+                    currentHeredocDelim = _entry30.f0();
+                    currentHeredocStrip = _entry30.f1();
                     inHeredocBody = true;
                 }
                 continue;
@@ -5977,9 +5965,9 @@ class Parser {
         String text = String.join("", textChars);
         String content = String.join("", contentChars);
         if (!pendingHeredocs.isEmpty()) {
-            Tuple9 _tuple27 = ParableFunctions._findHeredocContentEnd(this.source, this.pos, pendingHeredocs);
-            int heredocStart = _tuple27.f0();
-            int heredocEnd = _tuple27.f1();
+            Tuple9 _tuple31 = ParableFunctions._findHeredocContentEnd(this.source, this.pos, pendingHeredocs);
+            int heredocStart = _tuple31.f0();
+            int heredocEnd = _tuple31.f1();
             if (heredocEnd > heredocStart) {
                 content = content + ParableFunctions._substring(this.source, heredocStart, heredocEnd);
                 if (this._cmdsubHeredocEnd == -1) {
@@ -6940,9 +6928,9 @@ class Parser {
 
     public Tuple3 _parseParamExpansion(boolean inDquote) {
         this._syncLexer();
-        Tuple3 _tuple28 = this._lexer._readParamExpansion(inDquote);
-        Node result0 = _tuple28.f0();
-        String result1 = _tuple28.f1();
+        Tuple3 _tuple32 = this._lexer._readParamExpansion(inDquote);
+        Node result0 = _tuple32.f0();
+        String result1 = _tuple32.f1();
         this._syncParser();
         return new Tuple3(result0, result1);
     }
@@ -7460,12 +7448,12 @@ class Parser {
             int lineStart = this.pos;
             while (this.pos < this.length) {
                 lineStart = this.pos;
-                Tuple10 _tuple29 = this._readHeredocLine(heredoc.quoted);
-                String line = _tuple29.f0();
-                int lineEnd = _tuple29.f1();
-                Tuple11 _tuple30 = this._lineMatchesDelimiter(line, heredoc.delimiter, heredoc.stripTabs);
-                boolean matches = _tuple30.f0();
-                String checkLine = _tuple30.f1();
+                Tuple10 _tuple33 = this._readHeredocLine(heredoc.quoted);
+                String line = _tuple33.f0();
+                int lineEnd = _tuple33.f1();
+                Tuple11 _tuple34 = this._lineMatchesDelimiter(line, heredoc.delimiter, heredoc.stripTabs);
+                boolean matches = _tuple34.f0();
+                String checkLine = _tuple34.f1();
                 if (matches) {
                     this.pos = (lineEnd < this.length ? lineEnd + 1 : lineEnd);
                     break;
@@ -7506,9 +7494,9 @@ class Parser {
     public HereDoc _parseHeredoc(Integer fd, boolean stripTabs) {
         int startPos = this.pos;
         this._setState(Constants.PARSERSTATEFLAGS_PST_HEREDOC);
-        Tuple2 _tuple31 = this._parseHeredocDelimiter();
-        String delimiter = _tuple31.f0();
-        boolean quoted = _tuple31.f1();
+        Tuple2 _tuple35 = this._parseHeredocDelimiter();
+        String delimiter = _tuple35.f0();
+        boolean quoted = _tuple35.f1();
         for (HereDoc existing : this._pendingHeredocs) {
             if (existing._startPos == startPos && existing.delimiter.equals(delimiter)) {
                 this._clearState(Constants.PARSERSTATEFLAGS_PST_HEREDOC);
@@ -8920,9 +8908,9 @@ class Parser {
         List<Node> commands = new ArrayList<>(Arrays.asList(cmd));
         while (true) {
             this.skipWhitespace();
-            Tuple8 _tuple32 = this._lexPeekOperator();
-            int tokenType = _tuple32.f0();
-            String value = _tuple32.f1();
+            Tuple8 _tuple36 = this._lexPeekOperator();
+            int tokenType = _tuple36.f0();
+            String value = _tuple36.f1();
             if (tokenType == 0) {
                 break;
             }
@@ -8949,9 +8937,9 @@ class Parser {
 
     public String parseListOperator() {
         this.skipWhitespace();
-        Tuple8 _tuple33 = this._lexPeekOperator();
-        int tokenType = _tuple33.f0();
-        String __ = _tuple33.f1();
+        Tuple8 _tuple37 = this._lexPeekOperator();
+        int tokenType = _tuple37.f0();
+        String __ = _tuple37.f1();
         if (tokenType == 0) {
             return "";
         }

@@ -115,7 +115,7 @@ def normalize(s: str) -> str:
 def contains_normalized(haystack: str, needle: str) -> bool:
     """Check if needle appears in haystack, normalizing line-by-line whitespace."""
     needle_lines = [line.strip() for line in needle.strip().split("\n") if line.strip() != ""]
-    haystack_lines = [line.strip() for line in haystack.split("\n")]
+    haystack_lines = [line.strip() for line in haystack.split("\n") if line.strip() != ""]
     if len(needle_lines) == 0:
         return True
     i = 0

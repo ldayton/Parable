@@ -183,10 +183,7 @@ class QuoteState:
 
     def pop(self) -> None:
         if self._stack:
-            _entry: tuple[bool, bool] = self._stack[-1]
-            self._stack = self._stack[:-1]
-            self.single = _entry[0]
-            self.double = _entry[1]
+            self.single, self.double = self._stack.pop()
 
     def in_quotes(self) -> bool:
         return self.single or self.double
@@ -4050,10 +4047,7 @@ class Parser:
                         self.advance()
                     in_heredoc_body = False
                     if pending_heredocs:
-                        _entry: tuple[str, bool] = pending_heredocs[-1]
-                        pending_heredocs = pending_heredocs[:-1]
-                        current_heredoc_delim = _entry[0]
-                        current_heredoc_strip = _entry[1]
+                        current_heredoc_delim, current_heredoc_strip = pending_heredocs.pop(0)
                         in_heredoc_body = True
                 elif check_line.startswith(current_heredoc_delim) and len(check_line) > len(current_heredoc_delim):
                     tabs_stripped = len(line) - len(check_line)
@@ -4064,10 +4058,7 @@ class Parser:
                     self.pos = line_start + end_pos
                     in_heredoc_body = False
                     if pending_heredocs:
-                        _entry: tuple[str, bool] = pending_heredocs[-1]
-                        pending_heredocs = pending_heredocs[:-1]
-                        current_heredoc_delim = _entry[0]
-                        current_heredoc_strip = _entry[1]
+                        current_heredoc_delim, current_heredoc_strip = pending_heredocs.pop(0)
                         in_heredoc_body = True
                 else:
                     for ch in line:
@@ -4220,10 +4211,7 @@ class Parser:
                 content_chars.append(ch)
                 text_chars.append(ch)
                 if pending_heredocs:
-                    _entry: tuple[str, bool] = pending_heredocs[-1]
-                    pending_heredocs = pending_heredocs[:-1]
-                    current_heredoc_delim = _entry[0]
-                    current_heredoc_strip = _entry[1]
+                    current_heredoc_delim, current_heredoc_strip = pending_heredocs.pop(0)
                     in_heredoc_body = True
                 continue
             ch = self.advance()

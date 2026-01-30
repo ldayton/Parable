@@ -1,26 +1,53 @@
 """Liveness analysis: initial_value_unused, catch_var_unused, binding_unused, unused_indices."""
 
 from src.ir import (
+    AddrOf,
     Assign,
+    BinaryOp,
     Block,
+    Call,
+    Cast,
     DerefLV,
+    DictComp,
     Expr,
     ExprStmt,
+    FieldAccess,
     FieldLV,
     ForClassic,
     ForRange,
     Function,
     If,
+    Index,
     IndexLV,
+    IsNil,
+    IsType,
+    Len,
+    ListComp,
     LValue,
+    MakeMap,
+    MakeSlice,
+    MapLit,
     Match,
+    MethodCall,
     Module,
     OpAssign,
     Return,
+    SetComp,
+    SetLit,
+    SliceExpr,
+    SliceLit,
+    StaticCall,
     Stmt,
+    StringConcat,
+    StructLit,
+    Ternary,
+    Truthy,
     TryCatch,
     TupleAssign,
+    TupleLit,
+    TypeAssert,
     TypeSwitch,
+    UnaryOp,
     Var,
     VarDecl,
     VarLV,
@@ -225,59 +252,97 @@ def _expr_reads(name: str, expr: Expr | None) -> bool:
         return False
     if isinstance(expr, Var):
         return expr.name == name
-    # Check all expression children
-    for attr in (
-        "obj",
-        "left",
-        "right",
-        "operand",
-        "cond",
-        "then_expr",
-        "else_expr",
-        "expr",
-        "index",
-        "low",
-        "high",
-        "ptr",
-        "value",
-        "message",
-        "pos",
-        "iterable",
-        "target",
-        "inner",
-        "on_type",
-        "length",
-        "capacity",
-    ):
-        if hasattr(expr, attr) and _expr_reads(name, getattr(expr, attr)):
-            return True
-    if hasattr(expr, "args"):
+    # Binary/unary ops
+    if isinstance(expr, BinaryOp):
+        return _expr_reads(name, expr.left) or _expr_reads(name, expr.right)
+    if isinstance(expr, UnaryOp):
+        return _expr_reads(name, expr.operand)
+    # Field/index access
+    if isinstance(expr, FieldAccess):
+        return _expr_reads(name, expr.obj)
+    if isinstance(expr, Index):
+        return _expr_reads(name, expr.obj) or _expr_reads(name, expr.index)
+    if isinstance(expr, SliceExpr):
+        return _expr_reads(name, expr.obj) or _expr_reads(name, expr.low) or _expr_reads(name, expr.high)
+    # Calls
+    if isinstance(expr, Call):
         for arg in expr.args:
             if _expr_reads(name, arg):
                 return True
-    if hasattr(expr, "elements"):
+        return False
+    if isinstance(expr, MethodCall):
+        if _expr_reads(name, expr.obj):
+            return True
+        for arg in expr.args:
+            if _expr_reads(name, arg):
+                return True
+        return False
+    if isinstance(expr, StaticCall):
+        for arg in expr.args:
+            if _expr_reads(name, arg):
+                return True
+        return False
+    # Ternary
+    if isinstance(expr, Ternary):
+        return _expr_reads(name, expr.cond) or _expr_reads(name, expr.then_expr) or _expr_reads(name, expr.else_expr)
+    # Type operations
+    if isinstance(expr, Cast):
+        return _expr_reads(name, expr.expr)
+    if isinstance(expr, TypeAssert):
+        return _expr_reads(name, expr.expr)
+    if isinstance(expr, IsType):
+        return _expr_reads(name, expr.expr)
+    if isinstance(expr, IsNil):
+        return _expr_reads(name, expr.expr)
+    if isinstance(expr, Truthy):
+        return _expr_reads(name, expr.expr)
+    # Collections
+    if isinstance(expr, SliceLit):
         for elem in expr.elements:
             if _expr_reads(name, elem):
                 return True
-    if hasattr(expr, "parts"):
-        for part in expr.parts:
-            if _expr_reads(name, part):
+        return False
+    if isinstance(expr, TupleLit):
+        for elem in expr.elements:
+            if _expr_reads(name, elem):
                 return True
-    if hasattr(expr, "entries"):
-        entries = expr.entries
-        if isinstance(entries, dict):
-            for v in entries.values():
-                if _expr_reads(name, v):
-                    return True
-        else:
-            for item in entries:
-                if isinstance(item, tuple) and len(item) == 2:
-                    if _expr_reads(name, item[1]):
-                        return True
-    if hasattr(expr, "fields") and isinstance(expr.fields, dict):
+        return False
+    if isinstance(expr, SetLit):
+        for elem in expr.elements:
+            if _expr_reads(name, elem):
+                return True
+        return False
+    if isinstance(expr, MapLit):
+        for v in expr.entries.values():
+            if _expr_reads(name, v):
+                return True
+        return False
+    if isinstance(expr, StructLit):
         for v in expr.fields.values():
             if _expr_reads(name, v):
                 return True
+        return False
+    if isinstance(expr, StringConcat):
+        for part in expr.parts:
+            if _expr_reads(name, part):
+                return True
+        return False
+    # Make operations
+    if isinstance(expr, MakeSlice):
+        return _expr_reads(name, expr.length) or _expr_reads(name, expr.capacity)
+    if isinstance(expr, MakeMap):
+        return _expr_reads(name, expr.capacity)
+    if isinstance(expr, Len):
+        return _expr_reads(name, expr.expr)
+    if isinstance(expr, AddrOf):
+        return _expr_reads(name, expr.expr)
+    # Comprehensions
+    if isinstance(expr, ListComp):
+        return _expr_reads(name, expr.iterable) or _expr_reads(name, expr.element)
+    if isinstance(expr, SetComp):
+        return _expr_reads(name, expr.iterable) or _expr_reads(name, expr.element)
+    if isinstance(expr, DictComp):
+        return _expr_reads(name, expr.iterable) or _expr_reads(name, expr.key) or _expr_reads(name, expr.value)
     return False
 
 

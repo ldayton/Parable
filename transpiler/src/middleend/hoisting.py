@@ -50,23 +50,23 @@ def _vars_first_assigned_in(
     """Find variables first assigned in these statements (not already declared)."""
     result: dict[str, Type | None] = {}
     for stmt in stmts:
-        if isinstance(stmt, Assign) and getattr(stmt, "is_declaration", False):
+        if isinstance(stmt, Assign) and stmt.is_declaration:
             if isinstance(stmt.target, VarLV):
                 name = stmt.target.name
                 if name not in already_declared:
                     # Prefer decl_typ (unified type from frontend) over value.typ
-                    new_type = getattr(stmt, "decl_typ", None) or getattr(stmt.value, "typ", None)
+                    new_type = stmt.decl_typ if stmt.decl_typ is not None else stmt.value.typ
                     if name in result:
                         result[name] = join_types(result[name], new_type)
                     else:
                         result[name] = new_type
-        elif isinstance(stmt, TupleAssign) and getattr(stmt, "is_declaration", False):
+        elif isinstance(stmt, TupleAssign) and stmt.is_declaration:
             for i, target in enumerate(stmt.targets):
                 if isinstance(target, VarLV):
                     name = target.name
                     if name not in already_declared and name not in result:
                         # Type from tuple element if available
-                        val_typ = getattr(stmt.value, "typ", None)
+                        val_typ = stmt.value.typ
                         if isinstance(val_typ, Tuple) and i < len(val_typ.elements):
                             result[name] = val_typ.elements[i]
                         else:
@@ -168,10 +168,10 @@ def _analyze_stmts(
             _analyze_stmts(func_name, stmt.else_body, declared)
         elif isinstance(stmt, VarDecl):
             declared.add(stmt.name)
-        elif isinstance(stmt, Assign) and getattr(stmt, "is_declaration", False):
+        elif isinstance(stmt, Assign) and stmt.is_declaration:
             if isinstance(stmt.target, VarLV):
                 declared.add(stmt.target.name)
-        elif isinstance(stmt, TupleAssign) and getattr(stmt, "is_declaration", False):
+        elif isinstance(stmt, TupleAssign) and stmt.is_declaration:
             for target in stmt.targets:
                 if isinstance(target, VarLV):
                     declared.add(target.name)

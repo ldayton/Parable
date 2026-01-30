@@ -13,50 +13,50 @@ Sequential pipeline with clean phase boundaries. Each phase completes before the
 
 ## Supported Output Languages
 
-| Language   | Role   | Reference                          |
-| ---------- | ------ | ---------------------------------- |
-| C          | target | C11 (clang 18)                     |
-| Go         | target | Go 1.23                            |
-| Java       | target | OpenJDK 21                         |
-| Python¹    | source | CPython 3.12                       |
-| Rust       | target | rustc (2021 edition)               |
+| Language | Role   | Reference            |
+| -------- | ------ | -------------------- |
+| C        | target | C11 (clang 18)       |
+| Go       | target | Go 1.23              |
+| Java     | target | OpenJDK 21           |
+| Python¹  | source | CPython 3.12         |
+| Rust     | target | rustc (2021 edition) |
 
 ¹ Output Python reintroduces idioms that the subset input banned
 
 ## Supported Types
 
-| Type         | Syntax                   | Notes                              |
-| ------------ | ------------------------ | ---------------------------------- |
-| Primitives   | `int`, `float`, `str`, `bool`, `bytes` | `bytes` for binary I/O   |
-| Optional     | `T \| None`              | Nullable types                     |
-| Union        | `A \| B \| C`            | Discriminated by type              |
-| List         | `list[T]`                | Bare `list` banned                 |
-| Dict         | `dict[K, V]`             | Bare `dict` banned                 |
-| Set          | `set[T]`                 | Bare `set` banned                  |
-| Tuple        | `tuple[A, B, C]`         | Fixed-length, heterogeneous        |
-| Callable     | `Callable[[A, B], R]`    | Function types                     |
+| Type       | Syntax                                 | Notes                       |
+| ---------- | -------------------------------------- | --------------------------- |
+| Primitives | `int`, `float`, `str`, `bool`, `bytes` | `bytes` for binary I/O      |
+| Optional   | `T \| None`                            | Nullable types              |
+| Union      | `A \| B \| C`                          | Discriminated by type       |
+| List       | `list[T]`                              | Bare `list` banned          |
+| Dict       | `dict[K, V]`                           | Bare `dict` banned          |
+| Set        | `set[T]`                               | Bare `set` banned           |
+| Tuple      | `tuple[A, B, C]`                       | Fixed-length, heterogeneous |
+| Callable   | `Callable[[A, B], R]`                  | Function types              |
 
 ## Overview
 
-| Phase | Stage     | Module           | Description                                         |
-| :---: | --------- | ---------------- | --------------------------------------------------- |
-|   1   | cli       | `cli.py`         | Parse arguments, read input, invoke pipeline        |
-|  1.5  | frontend  | `__init__.py`    | Orchestrate phases 2–9                              |
-|   2   | frontend  | `parse.py`       | Tokenize and parse source; produce dict-based AST   |
-|   3   | frontend  | `subset.py`      | Reject unsupported Python features early            |
-|   4   | frontend  | `names.py`       | Scope analysis and name binding                     |
-|   5   | frontend  | `signatures.py`  | Type syntax parsing and kind checking               |
-|   6   | frontend  | `fields.py`      | Dataflow over `__init__`; infer field types         |
-|   7   | frontend  | `hierarchy.py`   | Class hierarchy; subtyping relations                |
-|   8   | frontend  | `inference.py`   | Bidirectional type inference (↑synth / ↓check)      |
-|   9   | frontend  | `lowering.py`    | Type-directed elaboration to IR                     |
-|  9.5  | middleend | `__init__.py`    | Orchestrate phases 10–14                            |
-|  10   | middleend | `scope.py`       | Variable declarations, reassignments, modifications |
-|  11   | middleend | `returns.py`     | Return pattern analysis                             |
-|  12   | middleend | `liveness.py`    | Unused values, catch vars, bindings                 |
-|  13   | middleend | `hoisting.py`    | Variables needing hoisting for Go emission          |
-|  14   | middleend | `ownership.py`   | Ownership inference and escape analysis             |
-|  15   | backend   | `<lang>.py`      | Emit target language source from annotated IR       |
+| Phase | Stage     | Module          | Description                                         |
+| :---: | --------- | --------------- | --------------------------------------------------- |
+|   1   | cli       | `cli.py`        | Parse arguments, read input, invoke pipeline        |
+|  1.5  | frontend  | `__init__.py`   | Orchestrate phases 2–9                              |
+|   2   | frontend  | `parse.py`      | Tokenize and parse source; produce dict-based AST   |
+|   3   | frontend  | `subset.py`     | Reject unsupported Python features early            |
+|   4   | frontend  | `names.py`      | Scope analysis and name binding                     |
+|   5   | frontend  | `signatures.py` | Type syntax parsing and kind checking               |
+|   6   | frontend  | `fields.py`     | Dataflow over `__init__`; infer field types         |
+|   7   | frontend  | `hierarchy.py`  | Class hierarchy; subtyping relations                |
+|   8   | frontend  | `inference.py`  | Bidirectional type inference (↑synth / ↓check)      |
+|   9   | frontend  | `lowering.py`   | Type-directed elaboration to IR                     |
+|  9.5  | middleend | `__init__.py`   | Orchestrate phases 10–14                            |
+|  10   | middleend | `scope.py`      | Variable declarations, reassignments, modifications |
+|  11   | middleend | `returns.py`    | Return pattern analysis                             |
+|  12   | middleend | `liveness.py`   | Unused values, catch vars, bindings                 |
+|  13   | middleend | `hoisting.py`   | Variables needing hoisting for Go emission          |
+|  14   | middleend | `ownership.py`  | Ownership inference and escape analysis             |
+|  15   | backend   | `<lang>.py`     | Emit target language source from annotated IR       |
 
 ## CLI (Phase 1)
 
@@ -64,14 +64,14 @@ Sequential pipeline with clean phase boundaries. Each phase completes before the
 
 Program entry point. Parses command-line arguments, reads source input, invokes the compilation pipeline, writes output. Written in the Tongues subset—uses only allowed I/O primitives (stdin/stdout/stderr, no file I/O).
 
-| Responsibility        | Implementation                                      |
-| --------------------- | --------------------------------------------------- |
-| Argument parsing      | Manual `sys.argv` processing (no argparse)          |
-| Source input          | `sys.stdin.read()`                                  |
-| Target selection      | `--target` flag: `go`, `rust`, `c`, `java`, `py`    |
-| Output                | `print()` to stdout                                 |
-| Error reporting       | `print(..., file=sys.stderr)` with exit code        |
-| Pipeline invocation   | Call `frontend.compile()` → `middleend.analyze()` → `backend.emit()` |
+| Responsibility      | Implementation                                                       |
+| ------------------- | -------------------------------------------------------------------- |
+| Argument parsing    | Manual `sys.argv` processing (no argparse)                           |
+| Source input        | `sys.stdin.read()`                                                   |
+| Target selection    | `--target` flag: `go`, `rust`, `c`, `java`, `py`                     |
+| Output              | `print()` to stdout                                                  |
+| Error reporting     | `print(..., file=sys.stderr)` with exit code                         |
+| Pipeline invocation | Call `frontend.compile()` → `middleend.analyze()` → `backend.emit()` |
 
 **Usage:**
 
@@ -120,14 +120,14 @@ The tokenizer uses explicit `while i < len(...)` loops (no generators). Grammar 
 
 The restricted subset eliminates major parsing pain points:
 
-| Constraint             | Simplification                                     |
-| ---------------------- | -------------------------------------------------- |
-| f-strings: `{expr}` only | No `!conversion`, no `:format_spec`              |
-| No generators          | Tokenizer returns `list[Token]`, not lazy iterator |
-| No nested functions    | No closure/scope tracking during parse             |
-| Walrus operator        | `x := expr` allowed; scopes to enclosing function  |
-| No async/await         | No context-dependent keyword handling              |
-| Single grammar version | No version switching; one static grammar           |
+| Constraint               | Simplification                                     |
+| ------------------------ | -------------------------------------------------- |
+| f-strings: `{expr}` only | No `!conversion`, no `:format_spec`                |
+| No generators            | Tokenizer returns `list[Token]`, not lazy iterator |
+| No nested functions      | No closure/scope tracking during parse             |
+| Walrus operator          | `x := expr` allowed; scopes to enclosing function  |
+| No async/await           | No context-dependent keyword handling              |
+| Single grammar version   | No version switching; one static grammar           |
 
 **Postconditions:** Source code parsed to dict-based AST; structure matches `ast.parse()` output; all tokens consumed; syntax errors reported with line/column.
 
@@ -137,21 +137,21 @@ The restricted subset eliminates major parsing pain points:
 
 Reject unsupported Python features early. If verification passes, downstream phases can assume:
 
-| Invariant                | What it enables                                              |
-| ------------------------ | ------------------------------------------------------------ |
-| No dynamic dispatch      | Call graph is static; all calls resolve at compile time      |
-| No runtime introspection | No `getattr`/`setattr`/`__dict__` — field access is static   |
-| No closures              | No nested functions — all functions are top-level or methods |
-| Eager iteration only     | Comprehensions and generators must be statically eager       |
-| All types annotated      | Signatures have types; inference only needed for locals      |
-| No bare collections      | `list[T]` not `list` — element types always known            |
-| Single inheritance       | Class hierarchy is a tree, not a DAG                         |
-| `@dataclass` only        | No arbitrary decorators; `@dataclass` (no args) allowed      |
-| No mutable defaults      | Default args are immutable; no shared-state bugs             |
-| Static imports           | Only `typing`, `__future__`, `collections.abc`, `dataclasses`|
-| No back-references       | Fields cannot reference their container (no cycles)          |
-| No borrowed field storage| Parameters cannot be stored in fields without copy           |
-| Immutable string params  | String parameters are borrowed; copy if storing              |
+| Invariant                 | What it enables                                               |
+| ------------------------- | ------------------------------------------------------------- |
+| No dynamic dispatch       | Call graph is static; all calls resolve at compile time       |
+| No runtime introspection  | No `getattr`/`setattr`/`__dict__` — field access is static    |
+| No closures               | No nested functions — all functions are top-level or methods  |
+| Eager iteration only      | Comprehensions and generators must be statically eager        |
+| All types annotated       | Signatures have types; inference only needed for locals       |
+| No bare collections       | `list[T]` not `list` — element types always known             |
+| Single inheritance        | Class hierarchy is a tree, not a DAG                          |
+| `@dataclass` only         | No arbitrary decorators; `@dataclass` (no args) allowed       |
+| No mutable defaults       | Default args are immutable; no shared-state bugs              |
+| Static imports            | Only `typing`, `__future__`, `collections.abc`, `dataclasses` |
+| No back-references        | Fields cannot reference their container (no cycles)           |
+| No borrowed field storage | Parameters cannot be stored in fields without copy            |
+| Immutable string params   | String parameters are borrowed; copy if storing               |
 
 **Allowed built-in functions:**
 
@@ -168,65 +168,74 @@ Reject unsupported Python features early. If verification passes, downstream pha
 
 **Allowed methods:**
 
-| Type   | Methods                                                                              |
-| ------ | ------------------------------------------------------------------------------------ |
+| Type   | Methods                                                                                                                                                                                         |
+| ------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `str`  | `join`, `split`, `strip`, `lstrip`, `rstrip`, `lower`, `upper`, `startswith`, `endswith`, `replace`, `find`, `rfind`, `count`, `isalnum`, `isalpha`, `isdigit`, `isspace`, `isupper`, `islower` |
-| `list` | `append`, `extend`, `pop`, `insert`, `remove`, `copy`, `clear`, `index`, `count`, `reverse`, `sort` |
-| `dict` | `get`, `keys`, `values`, `items`, `pop`, `setdefault`, `update`, `clear`, `copy`     |
-| `set`  | `add`, `remove`, `discard`, `pop`, `clear`, `copy`, `union`, `intersection`, `difference`, `issubset`, `issuperset` |
+| `list` | `append`, `extend`, `pop`, `insert`, `remove`, `copy`, `clear`, `index`, `count`, `reverse`, `sort`                                                                                             |
+| `dict` | `get`, `keys`, `values`, `items`, `pop`, `setdefault`, `update`, `clear`, `copy`                                                                                                                |
+| `set`  | `add`, `remove`, `discard`, `pop`, `clear`, `copy`, `union`, `intersection`, `difference`, `issubset`, `issuperset`                                                                             |
 
 **Allowed I/O:**
 
-| Category    | Constructs                                                          |
-| ----------- | ------------------------------------------------------------------- |
-| Output      | `print(x)`, `print(x, end='')`, `print(x, file=sys.stderr)`         |
-| Input text  | `sys.stdin.readline()`, `sys.stdin.read()`                          |
-| Input binary| `sys.stdin.buffer.read()`, `sys.stdin.buffer.read(n)`, `sys.stdin.buffer.readline()` |
-| Output binary| `sys.stdout.buffer.write(b)`, `sys.stderr.buffer.write(b)`         |
-| Arguments   | `sys.argv`                                                          |
-| Environment | `os.getenv(name)`, `os.getenv(name, default)`                       |
+| Category      | Constructs                                                                           |
+| ------------- | ------------------------------------------------------------------------------------ |
+| Output        | `print(x)`, `print(x, end='')`, `print(x, file=sys.stderr)`                          |
+| Input text    | `sys.stdin.readline()`, `sys.stdin.read()`                                           |
+| Input binary  | `sys.stdin.buffer.read()`, `sys.stdin.buffer.read(n)`, `sys.stdin.buffer.readline()` |
+| Output binary | `sys.stdout.buffer.write(b)`, `sys.stderr.buffer.write(b)`                           |
+| Arguments     | `sys.argv`                                                                           |
+| Environment   | `os.getenv(name)`, `os.getenv(name, default)`                                        |
 
 **Eager iteration constructs:**
 
 Iteration constructs are allowed when statically analyzable as eager (non-lazy). No generator functions, no lazy pipelines, no infinite sequences.
 
-| Construct | Allowed | Notes |
-|-----------|---------|-------|
-| List comprehension | `[expr for x in iter]` | Always eager |
-| Set comprehension | `{expr for x in iter}` | Always eager |
-| Dict comprehension | `{k: v for x in iter}` | Always eager |
-| Generator function | `yield`, `yield from` | Never allowed |
+| Construct          | Allowed                | Notes                    |
+| ------------------ | ---------------------- | ------------------------ |
+| List comprehension | `[expr for x in iter]` | Always eager             |
+| Set comprehension  | `{expr for x in iter}` | Always eager             |
+| Dict comprehension | `{k: v for x in iter}` | Always eager             |
+| Generator function | `yield`, `yield from`  | Structural recursion only |
 
 **Generator expressions** — allowed only as immediate argument to eager consumers:
 
-| Consumer | Example |
-|----------|---------|
-| `tuple()` | `tuple(x for x in iter)` |
-| `list()` | `list(x for x in iter)` |
-| `set()` | `set(x for x in iter)` |
-| `any()` | `any(p(x) for x in iter)` |
-| `all()` | `all(p(x) for x in iter)` |
-| `sum()` | `sum(x for x in iter)` |
-| `min()` | `min(x for x in iter)` |
-| `max()` | `max(x for x in iter)` |
-| `sorted()` | `sorted(x for x in iter)` |
+| Consumer     | Example                     |
+| ------------ | --------------------------- |
+| `tuple()`    | `tuple(x for x in iter)`    |
+| `list()`     | `list(x for x in iter)`     |
+| `set()`      | `set(x for x in iter)`      |
+| `any()`      | `any(p(x) for x in iter)`   |
+| `all()`      | `all(p(x) for x in iter)`   |
+| `sum()`      | `sum(x for x in iter)`      |
+| `min()`      | `min(x for x in iter)`      |
+| `max()`      | `max(x for x in iter)`      |
+| `sorted()`   | `sorted(x for x in iter)`   |
 | `str.join()` | `",".join(s for s in iter)` |
 
 Not allowed: `g = (x for x in iter)` (assigned), `foo(x for x in iter)` (unknown consumer), `return (x for x in iter)` (returned).
 
 **enumerate / zip** — allowed only in for-loop headers or eager consumers:
 
+| Allowed                        | Not allowed              |
+| ------------------------------ | ------------------------ |
+| `for i, x in enumerate(iter):` | `e = enumerate(iter)`    |
+| `for a, b in zip(xs, ys):`     | `foo(zip(xs, ys))`       |
+| `list(enumerate(iter))`        | `return enumerate(iter)` |
+
+**Structural recursion** — `yield`/`yield from` allowed for tree traversal:
+
 | Allowed | Not allowed |
 |---------|-------------|
-| `for i, x in enumerate(iter):` | `e = enumerate(iter)` |
-| `for a, b in zip(xs, ys):` | `foo(zip(xs, ys))` |
-| `list(enumerate(iter))` | `return enumerate(iter)` |
+| `for x in items: yield x` | `while True: yield next()` |
+| `yield from traverse(node.children)` | `yield from infinite_stream()` |
+
+Structural recursion over acyclic data is statically provable as finite. The subset guarantees no back-references, so recursion depth is bounded by tree depth.
 
 **Tuple unpacking** — from call result or guarded variable:
 
-| Allowed | Not allowed |
-|---------|-------------|
-| `a, b = func()` | `a, b = some_var` |
+| Allowed                      | Not allowed            |
+| ---------------------------- | ---------------------- |
+| `a, b = func()`              | `a, b = some_var`      |
 | `x = func(); if x: a, b = x` | `x = func(); a, b = x` |
 
 Unpacking from a variable is allowed only when the variable is the condition of an enclosing `if` statement and the unpack occurs in the then-branch. This proves the variable is non-None when the tuple contains an optional result.
@@ -235,9 +244,9 @@ Unpacking from a variable is allowed only when the variable is the condition of 
 
 The `@dataclass` decorator is allowed with no arguments. Dataclass arguments (`frozen`, `order`, etc.) and `field()` options are not supported.
 
-| Allowed | Not allowed |
-|---------|-------------|
-| `@dataclass` | `@dataclass(frozen=True)` |
+| Allowed      | Not allowed                             |
+| ------------ | --------------------------------------- |
+| `@dataclass` | `@dataclass(frozen=True)`               |
 | `x: int = 0` | `x: list = field(default_factory=list)` |
 
 **Postconditions:** AST conforms to Tongues subset; all invariants above hold; rejected programs produce clear error messages with source locations.
@@ -395,13 +404,13 @@ Translate TypedAST to IR. Lowering only reads types, never computes them—if ph
 
 Read-only analysis passes that annotate IR nodes in place. No transformations—just computing properties needed for code generation.
 
-| Module         | Depends on     | Annotations added                                         |
-| -------------- | -------------- | --------------------------------------------------------- |
+| Module         | Depends on     | Annotations added                                                                              |
+| -------------- | -------------- | ---------------------------------------------------------------------------------------------- |
 | `scope.py`     | —              | `is_reassigned`, `is_modified`, `is_unused`, `is_declaration`, `is_interface`, `narrowed_type` |
-| `returns.py`   | —              | `needs_named_returns`                                     |
-| `liveness.py`  | scope, returns | `initial_value_unused`, `catch_var_unused`, `binding_unused` |
-| `hoisting.py`  | scope, returns | `hoisted_vars`, `rune_vars`                               |
-| `ownership.py` | scope          | `ownership`, `region`, `escapes`                          |
+| `returns.py`   | —              | `needs_named_returns`                                                                          |
+| `liveness.py`  | scope, returns | `initial_value_unused`, `catch_var_unused`, `binding_unused`                                   |
+| `hoisting.py`  | scope, returns | `hoisted_vars`, `rune_vars`                                                                    |
+| `ownership.py` | scope          | `ownership`, `region`, `escapes`                                                               |
 
 #### Phase 9.5: `middleend/__init__.py`
 
@@ -411,14 +420,14 @@ Orchestrate phases 10–14. Run all analysis passes on the IR Module.
 
 Analyze variable scope: declarations, reassignments, parameter modifications. Walks each function body tracking which variables are declared vs assigned, and whether parameters are modified.
 
-| Annotation               | Meaning                                      |
-| ------------------------ | -------------------------------------------- |
-| `VarDecl.is_reassigned`  | Variable assigned after declaration          |
-| `Param.is_modified`      | Parameter assigned/mutated in function body  |
-| `Param.is_unused`        | Parameter never referenced                   |
-| `Assign.is_declaration`  | First assignment to a new variable           |
-| `Expr.is_interface`      | Expression statically typed as interface     |
-| `Name.narrowed_type`     | Precise type at use site after type guards   |
+| Annotation              | Meaning                                     |
+| ----------------------- | ------------------------------------------- |
+| `VarDecl.is_reassigned` | Variable assigned after declaration         |
+| `Param.is_modified`     | Parameter assigned/mutated in function body |
+| `Param.is_unused`       | Parameter never referenced                  |
+| `Assign.is_declaration` | First assignment to a new variable          |
+| `Expr.is_interface`     | Expression statically typed as interface    |
+| `Name.narrowed_type`    | Precise type at use site after type guards  |
 
 **Postconditions:**
 - Every VarDecl, Param, and Assign annotated; reassignment counts accurate
@@ -430,10 +439,10 @@ Analyze variable scope: declarations, reassignments, parameter modifications. Wa
 
 Analyze return patterns: which statements contain returns, which always return, which functions need named returns for Go emission.
 
-| Function           | Purpose                                          |
-| ------------------ | ------------------------------------------------ |
-| `contains_return`  | Does statement list contain any Return?          |
-| `always_returns`   | Does statement list return on all paths?         |
+| Function          | Purpose                                  |
+| ----------------- | ---------------------------------------- |
+| `contains_return` | Does statement list contain any Return?  |
+| `always_returns`  | Does statement list return on all paths? |
 
 **Postconditions:** `Function.needs_named_returns` set for functions with TryCatch containing catch-body returns.
 
@@ -441,12 +450,12 @@ Analyze return patterns: which statements contain returns, which always return, 
 
 Analyze liveness: unused initial values, unused catch variables, unused bindings. Determines whether the initial value of a VarDecl is ever read before being overwritten.
 
-| Annotation                   | Meaning                                    |
-| ---------------------------- | ------------------------------------------ |
-| `VarDecl.initial_value_unused` | Initial value overwritten before read    |
-| `TryCatch.catch_var_unused`  | Catch variable never referenced            |
-| `TypeSwitch.binding_unused`  | Binding variable never referenced          |
-| `TupleAssign.unused_indices` | Which tuple targets are never used         |
+| Annotation                     | Meaning                               |
+| ------------------------------ | ------------------------------------- |
+| `VarDecl.initial_value_unused` | Initial value overwritten before read |
+| `TryCatch.catch_var_unused`    | Catch variable never referenced       |
+| `TypeSwitch.binding_unused`    | Binding variable never referenced     |
+| `TupleAssign.unused_indices`   | Which tuple targets are never used    |
 
 **Postconditions:** All liveness annotations set; enables dead store elimination in codegen.
 
@@ -472,23 +481,23 @@ Infer ownership and region annotations for memory-safe code generation. Since ph
 no back-references, no borrowed field storage, and strict tree structures, ownership analysis
 reduces to simple patterns:
 
-| Pattern | Ownership | Region |
-|---------|-----------|--------|
-| Constructor call (`Foo()`) | owned | caller's region |
-| Factory function return | owned | caller's region |
-| Parameter | borrowed | caller's region |
-| Field access | borrowed | object's region |
-| Return value | owned (transfer) | caller's region |
-| Collection element | owned | collection's region |
-| Explicit `.copy()` call | owned (new) | caller's region |
+| Pattern                    | Ownership        | Region              |
+| -------------------------- | ---------------- | ------------------- |
+| Constructor call (`Foo()`) | owned            | caller's region     |
+| Factory function return    | owned            | caller's region     |
+| Parameter                  | borrowed         | caller's region     |
+| Field access               | borrowed         | object's region     |
+| Return value               | owned (transfer) | caller's region     |
+| Collection element         | owned            | collection's region |
+| Explicit `.copy()` call    | owned (new)      | caller's region     |
 
 **Escape analysis** detects when borrowed references outlive their region:
 
-| Violation | Diagnostic |
-|-----------|------------|
+| Violation                    | Diagnostic                                                                   |
+| ---------------------------- | ---------------------------------------------------------------------------- |
 | Borrowed ref stored in field | Error: "cannot store borrowed `x` in field; use `.copy()` or take ownership" |
-| Borrowed ref returned | Error: "reference to `x` escapes function scope" |
-| Borrowed ref in collection | Error: "cannot add borrowed `x` to collection; transfer ownership or copy" |
+| Borrowed ref returned        | Error: "reference to `x` escapes function scope"                             |
+| Borrowed ref in collection   | Error: "cannot add borrowed `x` to collection; transfer ownership or copy"   |
 
 **Ambiguous ownership** (Lobster-style fallback): When inference cannot determine ownership
 statically, mark as `shared`. Backends emit:
@@ -496,12 +505,12 @@ statically, mark as `shared`. Backends emit:
 - Rust: `Rc<T>` or `Arc<T>`
 - C: reference-counted wrapper
 
-| Annotation         | Meaning                                           |
-| ------------------ | ------------------------------------------------- |
-| `VarDecl.ownership`| `owned`, `borrowed`, or `shared`                  |
-| `Param.ownership`  | `owned` (takes ownership) or `borrowed` (default) |
-| `Field.ownership`  | `owned` (default) or `weak` (back-reference)      |
-| `Expr.escapes`     | Expression's value escapes current scope          |
+| Annotation          | Meaning                                           |
+| ------------------- | ------------------------------------------------- |
+| `VarDecl.ownership` | `owned`, `borrowed`, or `shared`                  |
+| `Param.ownership`   | `owned` (takes ownership) or `borrowed` (default) |
+| `Field.ownership`   | `owned` (default) or `weak` (back-reference)      |
+| `Expr.escapes`      | Expression's value escapes current scope          |
 
 **Postconditions:**
 - Every VarDecl, Param, Field annotated with ownership
@@ -525,17 +534,17 @@ Emit target language source from annotated IR. Each backend is a single module t
 
 Walk the annotated IR and emit target language source. The backend reads all annotations from phases 1–14 but adds none—pure output generation.
 
-| IR Node       | Go Output                | C Output                  | Rust Output              |
-| ------------- | ------------------------ | ------------------------- | ------------------------ |
-| `Function`    | `func name(...) { ... }` | `type name(...) { ... }`  | `fn name(...) { ... }`   |
-| `Struct`      | `type Name struct { }`   | `typedef struct { } Name` | `struct Name { }`        |
-| `VarDecl`     | `var x T` or `x := ...`  | `T x = ...`               | `let mut x = ...`        |
-| `MethodCall`  | `obj.Method(args)`       | `Method(obj, args)`       | `obj.method(args)`       |
-| `Print`       | `fmt.Println(x)`         | `printf("%s\n", x)`       | `println!("{}", x)`      |
-| `ReadLine`    | `bufio.Scanner`          | `fgets()`                 | `stdin().read_line()`    |
-| `ReadAll`     | `io.ReadAll(os.Stdin)`   | `read()` loop             | `read_to_string(stdin)`  |
-| `Args`        | `os.Args`                | `argv[0..argc]`           | `env::args().collect()`  |
-| `GetEnv`      | `os.Getenv()`            | `getenv()`                | `env::var().ok()`        |
+| IR Node      | Go Output                | C Output                  | Rust Output             |
+| ------------ | ------------------------ | ------------------------- | ----------------------- |
+| `Function`   | `func name(...) { ... }` | `type name(...) { ... }`  | `fn name(...) { ... }`  |
+| `Struct`     | `type Name struct { }`   | `typedef struct { } Name` | `struct Name { }`       |
+| `VarDecl`    | `var x T` or `x := ...`  | `T x = ...`               | `let mut x = ...`       |
+| `MethodCall` | `obj.Method(args)`       | `Method(obj, args)`       | `obj.method(args)`      |
+| `Print`      | `fmt.Println(x)`         | `printf("%s\n", x)`       | `println!("{}", x)`     |
+| `ReadLine`   | `bufio.Scanner`          | `fgets()`                 | `stdin().read_line()`   |
+| `ReadAll`    | `io.ReadAll(os.Stdin)`   | `read()` loop             | `read_to_string(stdin)` |
+| `Args`       | `os.Args`                | `argv[0..argc]`           | `env::args().collect()` |
+| `GetEnv`     | `os.Getenv()`            | `getenv()`                | `env::var().ok()`       |
 
 The backend consumes middleend annotations:
 - `is_reassigned` → Go: `var` vs `:=`; Rust: `let mut` vs `let`; TS: `let` vs `const`

@@ -115,7 +115,6 @@ BANNED_BUILTINS: set[str] = {
 # Node types that are completely banned
 BANNED_NODES: set[str] = {
     "AsyncFunctionDef", "AsyncFor", "AsyncWith", "Await",
-    "Yield", "YieldFrom",
     "With",
     "Lambda",
     "Global", "Nonlocal",
@@ -265,6 +264,7 @@ class Verifier:
         # Context flags for eager iteration
         self.in_eager_consumer: bool = False
         self.in_for_iter: bool = False
+        self.in_for_body: bool = False  # For structural recursion (yield allowed)
         # Variables guarded by `if var:` condition (for tuple unpacking)
         self.guarded_vars: set[str] = set()
 
@@ -335,6 +335,10 @@ class Verifier:
             self.visit_SetComp(node)
         elif node_type == "DictComp":
             self.visit_DictComp(node)
+        elif node_type == "Yield":
+            self.visit_Yield(node)
+        elif node_type == "YieldFrom":
+            self.visit_YieldFrom(node)
         elif node_type == "Match":
             pass
         else:
@@ -364,6 +368,7 @@ class Verifier:
             "arg", "arguments", "keyword", "alias", "Match", "match_case",
             "MatchValue", "MatchSingleton", "MatchSequence", "MatchMapping",
             "MatchClass", "MatchStar", "MatchAs", "MatchOr", "Assert",
+            "Yield", "YieldFrom",
         }
         return node_type in known
 
@@ -374,9 +379,9 @@ class Verifier:
         if node_type in ("AsyncFunctionDef", "AsyncFor", "AsyncWith", "Await"):
             category = "async"
             message = "async/await is not allowed"
-        elif node_type in ("Yield", "YieldFrom", "GeneratorExp"):
+        elif node_type == "GeneratorExp":
             category = "generator"
-            message = "generators are not allowed"
+            message = "generator expression only allowed in eager consumer"
         elif node_type == "With":
             category = "control"
             message = "with statement: use try/finally instead"
@@ -744,10 +749,13 @@ class Verifier:
             self.visit(iter_node)
             self.in_for_iter = old_in_for_iter
         body = node.get("body", [])
+        old_in_for_body = self.in_for_body
+        self.in_for_body = True
         i = 0
         while i < len(body):
             self.visit(body[i])
             i += 1
+        self.in_for_body = old_in_for_body
         j = 0
         while j < len(orelse):
             self.visit(orelse[j])
@@ -772,6 +780,24 @@ class Verifier:
         while j < len(orelse):
             self.visit(orelse[j])
             j += 1
+
+    def visit_Yield(self, node: ASTNode) -> None:
+        """Check yield - allowed only in for-loop body (structural recursion)."""
+        if not self.in_for_body:
+            self.error(node, "generator", "yield only allowed in for-loop body (structural recursion)")
+        # Visit the yielded value
+        value = node.get("value")
+        if value is not None:
+            self.visit(value)
+
+    def visit_YieldFrom(self, node: ASTNode) -> None:
+        """Check yield from - allowed only in for-loop body (structural recursion)."""
+        if not self.in_for_body:
+            self.error(node, "generator", "yield from only allowed in for-loop body (structural recursion)")
+        # Visit the yielded value
+        value = node.get("value")
+        if value is not None:
+            self.visit(value)
 
     def visit_If(self, node: ASTNode) -> None:
         """Check if statement and track guarded variables for tuple unpacking."""

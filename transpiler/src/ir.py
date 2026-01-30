@@ -671,12 +671,14 @@ class Assign(Stmt):
 
     Middleend annotations:
     - is_declaration: This is the first assignment (Python-style declaration)
+    - decl_typ: Declared type (when different from value.typ, e.g. unified from branches)
     """
 
     target: LValue
     value: Expr
     # Middleend annotations
     is_declaration: bool = False
+    decl_typ: "Type | None" = None
 
 
 @dataclass
@@ -689,12 +691,14 @@ class TupleAssign(Stmt):
     - len(targets) matches arity of value.typ (Tuple or multi-return)
 
     Middleend annotations:
+    - is_declaration: This is the first assignment (Python-style declaration)
     - unused_indices: Which targets are never used (for _ placeholders)
     """
 
     targets: list[LValue]
     value: Expr
     # Middleend annotations
+    is_declaration: bool = False
     unused_indices: list[int] = field(default_factory=list)
 
 

@@ -87,7 +87,7 @@ def _function_needs_named_returns(stmts: list[Stmt]) -> bool:
     """Check if any TryCatch in the statements has returns in its catch body."""
     for stmt in stmts:
         if isinstance(stmt, TryCatch):
-            if getattr(stmt, "has_catch_returns", False):
+            if contains_return(stmt.catch_body):
                 return True
             if _function_needs_named_returns(stmt.body) or _function_needs_named_returns(
                 stmt.catch_body

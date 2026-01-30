@@ -198,6 +198,7 @@ from src.ir import (
     Index,
     IndexLV,
     IntLit,
+    IntToStr,
     InterfaceDef,
     InterfaceRef,
     IsNil,
@@ -217,6 +218,7 @@ from src.ir import (
     OpAssign,
     Optional,
     Param,
+    ParseInt,
     Pointer,
     Primitive,
     Raise,
@@ -1209,15 +1211,15 @@ class JavaBackend:
                 return f"{obj_str}[{idx_str}]"
             case SliceExpr(obj=obj, low=low, high=high):
                 return self._slice_expr(obj, low, high)
+            case ParseInt(string=s, base=b):
+                return f"(int) Long.parseLong({self._expr(s)}, {self._expr(b)})"
+            case IntToStr(value=v):
+                return f"String.valueOf({self._expr(v)})"
             case Call(func=func, args=args):
                 args_str = ", ".join(self._expr(a) for a in args)
                 # Handle built-in functions
                 if func == "int" and len(args) == 2:
                     # int(s, base) -> Long.parseLong then cast to int (handles overflow)
-                    return f"(int) Long.parseLong({args_str})"
-                if func == "_parseInt":
-                    # Frontend generates _parseInt for int(s, base)
-                    # Use Long.parseLong to handle numbers larger than Integer.MAX_VALUE
                     return f"(int) Long.parseLong({args_str})"
                 if func == "str":
                     # Check if converting bytes to string (List<Byte>)
@@ -1317,16 +1319,16 @@ class JavaBackend:
                         return f"{inner_str}.isEmpty()"
                     if java_op == "<=":
                         return f"{inner_str}.isEmpty()"
-                # Compare _parseInt result as long to avoid int overflow before comparison
+                # Compare ParseInt result as long to avoid int overflow before comparison
                 # e.g., int(s) <= 2147483647 -> Long.parseLong(s, 10) <= 2147483647L
                 if (
-                    isinstance(left, Call)
-                    and left.func == "_parseInt"
+                    isinstance(left, ParseInt)
                     and java_op in ("<=", "<", ">", ">=")
                     and isinstance(right, IntLit)
                 ):
-                    args_str = ", ".join(self._expr(a) for a in left.args)
-                    return f"Long.parseLong({args_str}) {java_op} {right.value}L"
+                    s = self._expr(left.string)
+                    b = self._expr(left.base)
+                    return f"Long.parseLong({s}, {b}) {java_op} {right.value}L"
                 # Char comparison: s.charAt(i) == 'c' instead of String.valueOf(...).equals(...)
                 # Pattern: Index(string, i) == StringLit(single_char) or Cast(Index(...)) == StringLit
                 if (

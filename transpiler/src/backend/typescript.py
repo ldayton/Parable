@@ -93,6 +93,7 @@ from src.ir import (
     Index,
     IndexLV,
     IntLit,
+    IntToStr,
     InterfaceDef,
     InterfaceRef,
     IsNil,
@@ -112,6 +113,7 @@ from src.ir import (
     OpAssign,
     Optional,
     Param,
+    ParseInt,
     Pointer,
     Primitive,
     Raise,
@@ -793,13 +795,10 @@ class TsBackend:
                 return f"{obj_str}[{idx_str}]"
             case SliceExpr(obj=obj, low=low, high=high):
                 return self._slice_expr(obj, low, high)
-            case Call(func="_parseInt", args=args):
-                # _parseInt(s, base) → parseInt(s, base)
-                args_str = ", ".join(self._expr(a) for a in args)
-                return f"parseInt({args_str})"
-            case Call(func="_intToStr", args=[arg]):
-                # _intToStr(n) → String(n)
-                return f"String({self._expr(arg)})"
+            case ParseInt(string=s, base=b):
+                return f"parseInt({self._expr(s)}, {self._expr(b)})"
+            case IntToStr(value=v):
+                return f"String({self._expr(v)})"
             case Call(func="_intPtr", args=[arg]):
                 # _intPtr is a Python type hint, just return the argument
                 return self._expr(arg)

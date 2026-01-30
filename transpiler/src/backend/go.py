@@ -40,9 +40,9 @@ Downstream consequences of this missing analysis:
     should be `isHexDigit(rune)` with direct comparisons like `c >= '0'`
 
 Frontend deficiencies (should be fixed in frontend.py):
-- Helper function indirection: `_parseInt(x, 10)` instead of `strconv.Atoi(x)`,
-  `_intToStr(n)` instead of `strconv.Itoa(n)`, `_intPtr(fd)` instead of inline
-  pointer creation. (~20 call sites)
+- Helper function indirection: `_parseInt(x, 10)` helper instead of inline
+  error-ignoring pattern, `_intPtr(fd)` instead of inline pointer creation.
+  (~15 call sites)
 - Range() helper allocates slices: `for _, i := range Range(n)` instead of
   `for i := 0; i < n; i++`. Frontend should emit ForClassic IR. (~11 sites)
 - IIFE for ternary: `func() T { if c { return a } else { return b } }()`.
@@ -97,6 +97,7 @@ from src.ir import (
     Index,
     IndexLV,
     IntLit,
+    IntToStr,
     InterfaceDef,
     InterfaceRef,
     IsNil,
@@ -117,6 +118,7 @@ from src.ir import (
     OpAssign,
     Optional,
     Param,
+    ParseInt,
     Pointer,
     Primitive,
     Raise,
@@ -448,11 +450,6 @@ func _mapGet[K comparable, V any](m map[K]V, key K, defaultVal V) V {
 func _mapHas[K comparable, V any](m map[K]V, key K) bool {
 	_, ok := m[key]
 	return ok
-}
-
-// _intToStr converts an integer to its string representation
-func _intToStr(n int) string {
-	return strconv.Itoa(n)
 }
 
 // _isNilInterface checks if an interface value is nil.
@@ -1400,6 +1397,10 @@ func _Substring(s string, start int, end int) string {
             return self._emit_expr_StringConcat(expr)
         if isinstance(expr, StringFormat):
             return self._emit_expr_StringFormat(expr)
+        if isinstance(expr, ParseInt):
+            return self._emit_expr_ParseInt(expr)
+        if isinstance(expr, IntToStr):
+            return self._emit_expr_IntToStr(expr)
         return "/* TODO: unknown expression */"
 
     def _emit_expr_IntLit(self, expr: IntLit) -> str:
@@ -1505,8 +1506,6 @@ func _Substring(s string, start int, end int) string {
             "recover",
             "print",
             "println",
-            "_parseInt",
-            "_intToStr",
             "_intPtr",
         ):
             func = expr.func
@@ -1916,6 +1915,13 @@ func _Substring(s string, start int, end int) string {
         if args:
             return f'fmt.Sprintf("{escaped}", {args})'
         return f'"{escaped}"'
+
+    def _emit_expr_ParseInt(self, expr: ParseInt) -> str:
+        # Go's strconv.ParseInt returns (int64, error), so use helper to handle error
+        return f"_parseInt({self._emit_expr(expr.string)}, {self._emit_expr(expr.base)})"
+
+    def _emit_expr_IntToStr(self, expr: IntToStr) -> str:
+        return f"strconv.Itoa({self._emit_expr(expr.value)})"
 
     # ============================================================
     # LVALUE EMISSION

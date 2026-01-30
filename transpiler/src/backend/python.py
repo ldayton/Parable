@@ -62,6 +62,7 @@ from src.ir import (
     Index,
     IndexLV,
     IntLit,
+    IntToStr,
     InterfaceDef,
     InterfaceRef,
     IsNil,
@@ -81,6 +82,7 @@ from src.ir import (
     OpAssign,
     Optional,
     Param,
+    ParseInt,
     Pointer,
     Primitive,
     Raise,
@@ -614,6 +616,10 @@ class PythonBackend:
                 return f"{self._expr(obj)}[{self._expr(index)}]"
             case SliceExpr(obj=obj, low=low, high=high):
                 return self._slice_expr(obj, low, high)
+            case ParseInt(string=s, base=b):
+                return f"int({self._expr(s)}, {self._expr(b)})"
+            case IntToStr(value=v):
+                return f"str({self._expr(v)})"
             case Call(func=func, args=args):
                 # Map helper functions to Python builtins
                 if func == "_parseInt":

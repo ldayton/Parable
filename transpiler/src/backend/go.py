@@ -44,8 +44,6 @@ Frontend deficiencies (should be fixed in frontend.py):
 - Helper function indirection: `_parseInt(x, 10)` helper instead of inline
   error-ignoring pattern, `_intPtr(fd)` instead of inline pointer creation.
   (~15 call sites)
-- Range() helper allocates slices: `for _, i := range Range(n)` instead of
-  `for i := 0; i < n; i++`. Frontend should emit ForClassic IR. (~11 sites)
 - IIFE for ternary: `func() T { if c { return a } else { return b } }()`.
   Frontend could emit Ternary with a flag indicating if/else expansion is
   acceptable, or middleend could lift to variable assignment. (~30 sites)

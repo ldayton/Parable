@@ -2466,6 +2466,28 @@ def lower_stmt_If(
     return ir.If(cond=cond, then_body=then_body, else_body=else_body, loc=loc_from_node(node))
 
 
+def _is_range_call(
+    node: ASTNode, lower_expr: Callable
+) -> "tuple[ir.Expr, ir.Expr, ir.Expr] | None":
+    """Check if node is range(n), range(start, end), or range(start, end, step).
+    Returns (start, end, step) or None."""
+    from .. import ir
+
+    if not is_type(node, ["Call"]):
+        return None
+    func = node.get("func")
+    if not (is_type(func, ["Name"]) and func.get("id") == "range"):
+        return None
+    args = node.get("args", [])
+    if len(args) == 1:
+        return (ir.IntLit(value=0, typ=INT), lower_expr(args[0]), ir.IntLit(value=1, typ=INT))
+    elif len(args) == 2:
+        return (lower_expr(args[0]), lower_expr(args[1]), ir.IntLit(value=1, typ=INT))
+    elif len(args) == 3:
+        return (lower_expr(args[0]), lower_expr(args[1]), lower_expr(args[2]))
+    return None
+
+
 def lower_stmt_For(
     node: ASTNode,
     ctx: "FrontendContext",
@@ -2478,6 +2500,29 @@ def lower_stmt_For(
     node_iter = node.get("iter")
     node_target = node.get("target")
     node_body = node.get("body", [])
+    loc = loc_from_node(node)
+
+    # Check for range() pattern - emit ForClassic instead of ForRange
+    if is_type(node_target, ["Name"]):
+        range_args = _is_range_call(node_iter, dispatch.lower_expr)
+        if range_args:
+            start, end, step = range_args
+            var_name = node_target.get("id")
+            # Determine comparison operator based on step direction
+            is_negative_step = (isinstance(step, ir.IntLit) and step.value < 0) or (
+                isinstance(step, ir.UnaryOp) and step.op == "-"
+            )
+            cmp_op = ">" if is_negative_step else "<"
+            # Set loop variable type for body lowering
+            type_ctx.var_types[var_name] = INT
+            init = ir.VarDecl(name=var_name, typ=INT, value=start, loc=loc)
+            cond = ir.BinaryOp(
+                op=cmp_op, left=ir.Var(name=var_name, typ=INT), right=end, typ=BOOL
+            )
+            post = ir.OpAssign(target=ir.VarLV(name=var_name), op="+", value=step)
+            body = dispatch.lower_stmts(node_body)
+            return ir.ForClassic(init=init, cond=cond, post=post, body=body, loc=loc)
+
     iterable = dispatch.lower_expr(node_iter)
     # Determine loop variable types based on iterable type
     iterable_type = get_expr_type(node_iter)
@@ -2541,16 +2586,14 @@ def lower_stmt_For(
                         elem_type.elements[i] if i < len(elem_type.elements) else InterfaceRef("any")
                     )
                     field_access = ir.FieldAccess(
-                        obj=ir.Var(name=item_var, typ=elem_type, loc=loc_from_node(node)),
+                        obj=ir.Var(name=item_var, typ=elem_type, loc=loc),
                         field=f"F{i}",
                         typ=field_type,
-                        loc=loc_from_node(node),
+                        loc=loc,
                     )
                     unpack_stmts.append(
                         ir.Assign(
-                            target=ir.VarLV(name=var_name),
-                            value=field_access,
-                            loc=loc_from_node(node),
+                            target=ir.VarLV(name=var_name), value=field_access, loc=loc
                         )
                     )
                 return ir.ForRange(
@@ -2558,7 +2601,7 @@ def lower_stmt_For(
                     value=item_var,
                     iterable=iterable,
                     body=unpack_stmts + body,
-                    loc=loc_from_node(node),
+                    loc=loc,
                 )
             # Otherwise treat as (index, value) iteration
             if is_type(target_elts[0], ["Name"]):
@@ -2571,9 +2614,7 @@ def lower_stmt_For(
                     type_ctx.var_types[value] = elem_type
     # Lower body after setting up loop variable types
     body = dispatch.lower_stmts(node_body)
-    return ir.ForRange(
-        index=index, value=value, iterable=iterable, body=body, loc=loc_from_node(node)
-    )
+    return ir.ForRange(index=index, value=value, iterable=iterable, body=body, loc=loc)
 
 
 def lower_stmt_Try(

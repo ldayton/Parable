@@ -1960,8 +1960,7 @@ var Word = /** @class */ (function () {
             if (c === "") {
                 if (quote.double) {
                     var bsCount = 0;
-                    for (var _a = 0, _b = range(result.length - 2, -1, -1); _a < _b.length; _a++) {
-                        var j = _b[_a];
+                    for (var j = result.length - 2; j > -1; j += -1) {
                         if (result[j] === "\\") {
                             bsCount += 1;
                         }
@@ -3744,8 +3743,7 @@ var List = /** @class */ (function () {
             return parts[0].toSexp();
         }
         if (parts[parts.length - 1].kind === "operator" && parts[parts.length - 1].op === "&") {
-            for (var _i = 0, _a = range(parts.length - 3, 0, -2); _i < _a.length; _i++) {
-                var i = _a[_i];
+            for (var i = parts.length - 3; i > 0; i += -2) {
                 if (parts[i].kind === "operator" && (parts[i].op === ";" || parts[i].op === "\n")) {
                     var left = Sublist(parts, 0, i);
                     var right = Sublist(parts, i + 1, parts.length - 1);
@@ -3775,8 +3773,7 @@ var List = /** @class */ (function () {
     };
     List.prototype.ToSexpWithPrecedence = function (parts, opNames) {
         var semiPositions = [];
-        for (var _i = 0, _a = range(parts.length); _i < _a.length; _i++) {
-            var i = _a[_i];
+        for (var i = 0; i < parts.length; i += 1) {
             if (parts[i].kind === "operator" && (parts[i].op === ";" || parts[i].op === "\n")) {
                 semiPositions.push(i);
             }
@@ -3784,8 +3781,8 @@ var List = /** @class */ (function () {
         if ((semiPositions.length > 0)) {
             var segments = [];
             var start = 0;
-            for (var _b = 0, _c = semiPositions; _b < _c.length; _b++) {
-                var pos = _c[_b];
+            for (var _i = 0, _a = semiPositions; _i < _a.length; _i++) {
+                var pos = _a[_i];
                 var seg = Sublist(parts, start, pos);
                 if ((seg.length > 0) && seg[0].kind !== "operator") {
                     segments.push(seg);
@@ -3800,8 +3797,7 @@ var List = /** @class */ (function () {
                 return "()";
             }
             var result = this.ToSexpAmpAndHigher(segments[0], opNames);
-            for (var _d = 0, _f = range(1, segments.length); _d < _f.length; _d++) {
-                var i = _f[_d];
+            for (var i = 1; i < segments.length; i += 1) {
                 result = "(semi " + result + " " + this.ToSexpAmpAndHigher(segments[i], opNames) + ")";
             }
             return result;
@@ -3813,8 +3809,7 @@ var List = /** @class */ (function () {
             return parts[0].toSexp();
         }
         var ampPositions = [];
-        for (var _i = 0, _a = range(1, parts.length - 1, 2); _i < _a.length; _i++) {
-            var i = _a[_i];
+        for (var i = 1; i < parts.length - 1; i += 2) {
             if (parts[i].kind === "operator" && parts[i].op === "&") {
                 ampPositions.push(i);
             }
@@ -3822,15 +3817,14 @@ var List = /** @class */ (function () {
         if ((ampPositions.length > 0)) {
             var segments = [];
             var start = 0;
-            for (var _b = 0, _c = ampPositions; _b < _c.length; _b++) {
-                var pos = _c[_b];
+            for (var _i = 0, _a = ampPositions; _i < _a.length; _i++) {
+                var pos = _a[_i];
                 segments.push(Sublist(parts, start, pos));
                 start = pos + 1;
             }
             segments.push(Sublist(parts, start, parts.length));
             var result = this.ToSexpAndOr(segments[0], opNames);
-            for (var _d = 0, _f = range(1, segments.length); _d < _f.length; _d++) {
-                var i = _f[_d];
+            for (var i = 1; i < segments.length; i += 1) {
                 result = "(background " + result + " " + this.ToSexpAndOr(segments[i], opNames) + ")";
             }
             return result;
@@ -3843,8 +3837,7 @@ var List = /** @class */ (function () {
             return parts[0].toSexp();
         }
         var result = parts[0].toSexp();
-        for (var _i = 0, _b = range(1, parts.length - 1, 2); _i < _b.length; _i++) {
-            var i = _b[_i];
+        for (var i = 1; i < parts.length - 1; i += 2) {
             var op = parts[i];
             var cmd = parts[i + 1];
             var opName = (_a = opNames.get(op.op)) !== null && _a !== void 0 ? _a : op.op;
@@ -5707,8 +5700,7 @@ var Parser = /** @class */ (function () {
                     if (checkLine.startsWith(currentHeredocDelim) && checkLine.length > currentHeredocDelim.length) {
                         var tabsStripped = line.length - checkLine.length;
                         var endPos = tabsStripped + currentHeredocDelim.length;
-                        for (var _d = 0, _f = range(endPos); _d < _f.length; _d++) {
-                            var i = _f[_d];
+                        for (var i = 0; i < endPos; i += 1) {
                             contentChars.push(line[i]);
                             textChars.push(line[i]);
                         }
@@ -5720,8 +5712,8 @@ var Parser = /** @class */ (function () {
                         }
                     }
                     else {
-                        for (var _g = 0, line_2 = line; _g < line_2.length; _g++) {
-                            var ch_2 = line_2[_g];
+                        for (var _d = 0, line_2 = line; _d < line_2.length; _d++) {
+                            var ch_2 = line_2[_d];
                             contentChars.push(ch_2);
                             textChars.push(ch_2);
                         }
@@ -5933,7 +5925,7 @@ var Parser = /** @class */ (function () {
         var text = textChars.join("");
         var content = contentChars.join("");
         if (pendingHeredocs.length > 0) {
-            var _h = FindHeredocContentEnd(this.source, this.pos, pendingHeredocs), heredocStart = _h[0], heredocEnd = _h[1];
+            var _f = FindHeredocContentEnd(this.source, this.pos, pendingHeredocs), heredocStart = _f[0], heredocEnd = _f[1];
             if (heredocEnd > heredocStart) {
                 content = content + Substring(this.source, heredocStart, heredocEnd);
                 if (this.CmdsubHeredocEnd === -1) {
@@ -10450,8 +10442,7 @@ function SkipHeredoc(value, start) {
         var line = Substring(value, lineStart, lineEnd);
         while (lineEnd < value.length) {
             var trailingBs = 0;
-            for (var _i = 0, _a = range(line.length - 1, -1, -1); _i < _a.length; _i++) {
-                var j = _a[_i];
+            for (var j = line.length - 1; j > -1; j += -1) {
                 if (line[j] === "\\") {
                     trailingBs += 1;
                 }
@@ -10523,8 +10514,7 @@ function FindHeredocContentEnd(source, start, delimiters) {
             var line = Substring(source, lineStart, lineEnd);
             while (lineEnd < source.length) {
                 var trailingBs = 0;
-                for (var _b = 0, _c = range(line.length - 1, -1, -1); _b < _c.length; _b++) {
-                    var j = _c[_b];
+                for (var j = line.length - 1; j > -1; j += -1) {
                     if (line[j] === "\\") {
                         trailingBs += 1;
                     }
@@ -10603,8 +10593,7 @@ function CollapseWhitespace(s) {
 }
 function CountTrailingBackslashes(s) {
     var count = 0;
-    for (var _i = 0, _a = range(s.length - 1, -1, -1); _i < _a.length; _i++) {
-        var i = _a[_i];
+    for (var i = s.length - 1; i > -1; i += -1) {
         if (s[i] === "\\") {
             count += 1;
         }

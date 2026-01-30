@@ -1917,7 +1917,7 @@ class Word implements Node {
       if (c === "") {
         if (quote.double) {
           var bsCount: any = 0;
-          for (const j of range(result.length - 2, -1, -1)) {
+          for (var j: any = result.length - 2; j > -1; j += -1) {
             if (result[j] === "\\") {
               bsCount += 1;
             } else {
@@ -3565,7 +3565,7 @@ class List implements Node {
       return parts[0].toSexp();
     }
     if (parts[parts.length - 1].kind === "operator" && (parts[parts.length - 1] as unknown as Operator).op === "&") {
-      for (const i of range(parts.length - 3, 0, -2)) {
+      for (var i: any = parts.length - 3; i > 0; i += -2) {
         if (parts[i].kind === "operator" && ((parts[i] as unknown as Operator).op === ";" || (parts[i] as unknown as Operator).op === "\n")) {
           var left: any = Sublist(parts, 0, i);
           var right: any = Sublist(parts, i + 1, parts.length - 1);
@@ -3594,7 +3594,7 @@ class List implements Node {
 
   ToSexpWithPrecedence(parts: Node[], opNames: Map<string, string>): string {
     var semiPositions: any = [];
-    for (const i of range(parts.length)) {
+    for (var i: any = 0; i < parts.length; i += 1) {
       if (parts[i].kind === "operator" && ((parts[i] as unknown as Operator).op === ";" || (parts[i] as unknown as Operator).op === "\n")) {
         semiPositions.push(i);
       }
@@ -3617,7 +3617,7 @@ class List implements Node {
         return "()";
       }
       var result: any = this.ToSexpAmpAndHigher(segments[0], opNames);
-      for (const i of range(1, segments.length)) {
+      for (var i: any = 1; i < segments.length; i += 1) {
         result = "(semi " + result + " " + this.ToSexpAmpAndHigher(segments[i], opNames) + ")";
       }
       return result;
@@ -3630,7 +3630,7 @@ class List implements Node {
       return parts[0].toSexp();
     }
     var ampPositions: any = [];
-    for (const i of range(1, parts.length - 1, 2)) {
+    for (var i: any = 1; i < parts.length - 1; i += 2) {
       if (parts[i].kind === "operator" && (parts[i] as unknown as Operator).op === "&") {
         ampPositions.push(i);
       }
@@ -3644,7 +3644,7 @@ class List implements Node {
       }
       segments.push(Sublist(parts, start, parts.length));
       var result: any = this.ToSexpAndOr(segments[0], opNames);
-      for (const i of range(1, segments.length)) {
+      for (var i: any = 1; i < segments.length; i += 1) {
         result = "(background " + result + " " + this.ToSexpAndOr(segments[i], opNames) + ")";
       }
       return result;
@@ -3657,7 +3657,7 @@ class List implements Node {
       return parts[0].toSexp();
     }
     var result: any = parts[0].toSexp();
-    for (const i of range(1, parts.length - 1, 2)) {
+    for (var i: any = 1; i < parts.length - 1; i += 2) {
       var op: any = parts[i];
       var cmd: any = parts[i + 1];
       var opName: any = opNames.get((op as unknown as Operator).op) ?? (op as unknown as Operator).op;
@@ -5685,7 +5685,7 @@ class Parser {
           if (checkLine.startsWith(currentHeredocDelim) && checkLine.length > currentHeredocDelim.length) {
             var tabsStripped: any = line.length - checkLine.length;
             var endPos: any = tabsStripped + currentHeredocDelim.length;
-            for (const i of range(endPos)) {
+            for (var i: any = 0; i < endPos; i += 1) {
               contentChars.push(line[i]);
               textChars.push(line[i]);
             }
@@ -10300,7 +10300,7 @@ function SkipHeredoc(value: string, start: number): number {
     var line: any = Substring(value, lineStart, lineEnd);
     while (lineEnd < value.length) {
       var trailingBs: any = 0;
-      for (const j of range(line.length - 1, -1, -1)) {
+      for (var j: any = line.length - 1; j > -1; j += -1) {
         if (line[j] === "\\") {
           trailingBs += 1;
         } else {
@@ -10368,7 +10368,7 @@ function FindHeredocContentEnd(source: string, start: number, delimiters: [strin
       var line: any = Substring(source, lineStart, lineEnd);
       while (lineEnd < source.length) {
         var trailingBs: any = 0;
-        for (const j of range(line.length - 1, -1, -1)) {
+        for (var j: any = line.length - 1; j > -1; j += -1) {
           if (line[j] === "\\") {
             trailingBs += 1;
           } else {
@@ -10447,7 +10447,7 @@ function CollapseWhitespace(s: string): string {
 
 function CountTrailingBackslashes(s: string): number {
   var count: any = 0;
-  for (const i of range(s.length - 1, -1, -1)) {
+  for (var i: any = s.length - 1; i > -1; i += -1) {
     if (s[i] === "\\") {
       count += 1;
     } else {

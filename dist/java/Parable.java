@@ -1999,7 +1999,7 @@ class Word implements Node {
             if (c.equals("")) {
                 if (quote.double_) {
                     int bsCount = 0;
-                    for (Integer j : java.util.stream.IntStream.iterate(result.size() - 2, _x -> _x > -1, _x -> _x + -1).boxed().toList()) {
+                    for (int j = result.size() - 2; j > -1; j += -1) {
                         if (result.get(j).equals("\\")) {
                             bsCount += 1;
                         } else {
@@ -3673,7 +3673,7 @@ class ListNode implements Node {
             return ((Node) parts.get(0)).toSexp();
         }
         if (parts.get(parts.size() - 1).getKind() == "operator" && ((Operator) parts.get(parts.size() - 1)).op.equals("&")) {
-            for (Integer i : java.util.stream.IntStream.iterate(parts.size() - 3, _x -> _x > 0, _x -> _x + -2).boxed().toList()) {
+            for (int i = parts.size() - 3; i > 0; i += -2) {
                 if (parts.get(i).getKind() == "operator" && (((Operator) parts.get(i)).op.equals(";") || ((Operator) parts.get(i)).op.equals("\n"))) {
                     List<Node> left = ParableFunctions._sublist(parts, 0, i);
                     List<Node> right = ParableFunctions._sublist(parts, i + 1, parts.size() - 1);
@@ -3704,7 +3704,7 @@ class ListNode implements Node {
 
     public String _toSexpWithPrecedence(List<Node> parts, Map<String, String> opNames) {
         List<Integer> semiPositions = new ArrayList<>();
-        for (Integer i : java.util.stream.IntStream.range(0, parts.size()).boxed().toList()) {
+        for (int i = 0; i < parts.size(); i += 1) {
             if (parts.get(i).getKind() == "operator" && (((Operator) parts.get(i)).op.equals(";") || ((Operator) parts.get(i)).op.equals("\n"))) {
                 semiPositions.add(i);
             }
@@ -3728,7 +3728,7 @@ class ListNode implements Node {
                 return "()";
             }
             String result = this._toSexpAmpAndHigher(segments.get(0), opNames);
-            for (Integer i : java.util.stream.IntStream.range(1, segments.size()).boxed().toList()) {
+            for (int i = 1; i < segments.size(); i += 1) {
                 result = "(semi " + result + " " + this._toSexpAmpAndHigher(segments.get(i), opNames) + ")";
             }
             return result;
@@ -3741,7 +3741,7 @@ class ListNode implements Node {
             return ((Node) parts.get(0)).toSexp();
         }
         List<Integer> ampPositions = new ArrayList<>();
-        for (Integer i : java.util.stream.IntStream.iterate(1, _x -> _x < parts.size() - 1, _x -> _x + 2).boxed().toList()) {
+        for (int i = 1; i < parts.size() - 1; i += 2) {
             if (parts.get(i).getKind() == "operator" && ((Operator) parts.get(i)).op.equals("&")) {
                 ampPositions.add(i);
             }
@@ -3755,7 +3755,7 @@ class ListNode implements Node {
             }
             segments.add(ParableFunctions._sublist(parts, start, parts.size()));
             String result = this._toSexpAndOr(segments.get(0), opNames);
-            for (Integer i : java.util.stream.IntStream.range(1, segments.size()).boxed().toList()) {
+            for (int i = 1; i < segments.size(); i += 1) {
                 result = "(background " + result + " " + this._toSexpAndOr(segments.get(i), opNames) + ")";
             }
             return result;
@@ -3768,7 +3768,7 @@ class ListNode implements Node {
             return ((Node) parts.get(0)).toSexp();
         }
         String result = ((Node) parts.get(0)).toSexp();
-        for (Integer i : java.util.stream.IntStream.iterate(1, _x -> _x < parts.size() - 1, _x -> _x + 2).boxed().toList()) {
+        for (int i = 1; i < parts.size() - 1; i += 2) {
             Node op = parts.get(i);
             Node cmd = parts.get(i + 1);
             String opName = opNames.getOrDefault(((Operator) op).op, ((Operator) op).op);
@@ -5743,7 +5743,7 @@ class Parser {
                     if (checkLine.startsWith(currentHeredocDelim) && checkLine.length() > currentHeredocDelim.length()) {
                         int tabsStripped = line.length() - checkLine.length();
                         int endPos = tabsStripped + currentHeredocDelim.length();
-                        for (Integer i : java.util.stream.IntStream.range(0, endPos).boxed().toList()) {
+                        for (int i = 0; i < endPos; i += 1) {
                             contentChars.add(String.valueOf(line.charAt(i)));
                             textChars.add(String.valueOf(line.charAt(i)));
                         }
@@ -10445,7 +10445,7 @@ final class ParableFunctions {
             String line = ParableFunctions._substring(value, lineStart, lineEnd);
             while (lineEnd < value.length()) {
                 int trailingBs = 0;
-                for (Integer j : java.util.stream.IntStream.iterate(line.length() - 1, _x -> _x > -1, _x -> _x + -1).boxed().toList()) {
+                for (int j = line.length() - 1; j > -1; j += -1) {
                     if (line.charAt(j) == '\\') {
                         trailingBs += 1;
                     } else {
@@ -10514,7 +10514,7 @@ final class ParableFunctions {
                 String line = ParableFunctions._substring(source, lineStart, lineEnd);
                 while (lineEnd < source.length()) {
                     int trailingBs = 0;
-                    for (Integer j : java.util.stream.IntStream.iterate(line.length() - 1, _x -> _x > -1, _x -> _x + -1).boxed().toList()) {
+                    for (int j = line.length() - 1; j > -1; j += -1) {
                         if (line.charAt(j) == '\\') {
                             trailingBs += 1;
                         } else {
@@ -10595,7 +10595,7 @@ final class ParableFunctions {
 
     static int _countTrailingBackslashes(String s) {
         int count = 0;
-        for (Integer i : java.util.stream.IntStream.iterate(s.length() - 1, _x -> _x > -1, _x -> _x + -1).boxed().toList()) {
+        for (int i = s.length() - 1; i > -1; i += -1) {
             if (s.charAt(i) == '\\') {
                 count += 1;
             } else {

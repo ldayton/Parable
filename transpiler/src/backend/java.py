@@ -53,8 +53,6 @@ Frontend deficiencies (should be fixed in frontend.py):
   assigns each field. Frontend should emit constructor calls or StructLit. (~7 factories)
 - Nullable fields without Optional: fields used with null but declared as bare
   types. Frontend should emit Optional wrapper for nullable fields. (~47 fields)
-- Complex iteration patterns: `IntStream.iterate(n-1, _x -> _x < -1, _x -> _x + -1)`
-  instead of `for (int i = n-1; i >= 0; i--)`. Frontend should emit ForClassic. (~7 sites)
 - Last-element access: `list.get(list.size() - 1)` instead of `list.getLast()`.
   Frontend could emit Index with -1 sentinel that backend maps to getLast(). (~19 sites)
 

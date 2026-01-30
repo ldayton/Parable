@@ -1011,7 +1011,7 @@ class Lexer {
                 }
                 if (!chars.isEmpty() && atCommandStart && !seenEquals && ParableFunctions._isArrayAssignmentPrefix(chars)) {
                     String prevChar = chars.get(chars.size() - 1);
-                    if (prevChar.chars().allMatch(Character::isLetterOrDigit) || prevChar.equals("_")) {
+                    if ((prevChar.length() > 0 && prevChar.chars().allMatch(Character::isLetterOrDigit)) || prevChar.equals("_")) {
                         bracketStartPos = this.pos;
                         bracketDepth += 1;
                         chars.add(this.advance());
@@ -1703,18 +1703,18 @@ class Lexer {
             this.advance();
             return ch;
         }
-        if (ch.chars().allMatch(Character::isDigit)) {
+        if ((ch.length() > 0 && ch.chars().allMatch(Character::isDigit))) {
             List<String> nameChars = new ArrayList<>();
-            while (!this.atEnd() && this.peek().chars().allMatch(Character::isDigit)) {
+            while (!this.atEnd() && (this.peek().length() > 0 && this.peek().chars().allMatch(Character::isDigit))) {
                 nameChars.add(this.advance());
             }
             return String.join("", nameChars);
         }
-        if (ch.chars().allMatch(Character::isLetter) || ch.equals("_")) {
+        if ((ch.length() > 0 && ch.chars().allMatch(Character::isLetter)) || ch.equals("_")) {
             List<String> nameChars = new ArrayList<>();
             while (!this.atEnd()) {
                 String c = this.peek();
-                if (c.chars().allMatch(Character::isLetterOrDigit) || c.equals("_")) {
+                if ((c.length() > 0 && c.chars().allMatch(Character::isLetterOrDigit)) || c.equals("_")) {
                     nameChars.add(this.advance());
                 } else {
                     if (c.equals("[")) {
@@ -1761,11 +1761,11 @@ class Lexer {
             text = ParableFunctions._substring(this.source, start, this.pos);
             return new Tuple3(new ParamExpansion(ch, "", "", "param"), text);
         }
-        if (ch.chars().allMatch(Character::isLetter) || ch.equals("_")) {
+        if ((ch.length() > 0 && ch.chars().allMatch(Character::isLetter)) || ch.equals("_")) {
             int nameStart = this.pos;
             while (!this.atEnd()) {
                 String c = this.peek();
-                if (c.chars().allMatch(Character::isLetterOrDigit) || c.equals("_")) {
+                if ((c.length() > 0 && c.chars().allMatch(Character::isLetterOrDigit)) || c.equals("_")) {
                     this.advance();
                 } else {
                     break;
@@ -2143,7 +2143,7 @@ class Word implements Node {
                                 if (!(!hexStr.equals(""))) {
                                     return result;
                                 }
-                                byteVal = (Integer.parseInt(hexStr, 16) & 255);
+                                byteVal = ((int) Long.parseLong(hexStr, 16) & 255);
                                 if (byteVal == 0) {
                                     return result;
                                 }
@@ -2155,7 +2155,7 @@ class Word implements Node {
                                     j += 1;
                                 }
                                 if (j > i + 2) {
-                                    byteVal = Integer.parseInt(ParableFunctions._substring(inner, i + 2, j), 16);
+                                    byteVal = (int) Long.parseLong(ParableFunctions._substring(inner, i + 2, j), 16);
                                     if (byteVal == 0) {
                                         return result;
                                     }
@@ -2174,7 +2174,7 @@ class Word implements Node {
                                     j += 1;
                                 }
                                 if (j > i + 2) {
-                                    codepoint = Integer.parseInt(ParableFunctions._substring(inner, i + 2, j), 16);
+                                    codepoint = (int) Long.parseLong(ParableFunctions._substring(inner, i + 2, j), 16);
                                     if (codepoint == 0) {
                                         return result;
                                     }
@@ -2191,7 +2191,7 @@ class Word implements Node {
                                         j += 1;
                                     }
                                     if (j > i + 2) {
-                                        codepoint = Integer.parseInt(ParableFunctions._substring(inner, i + 2, j), 16);
+                                        codepoint = (int) Long.parseLong(ParableFunctions._substring(inner, i + 2, j), 16);
                                         if (codepoint == 0) {
                                             return result;
                                         }
@@ -2226,7 +2226,7 @@ class Word implements Node {
                                                 j += 1;
                                             }
                                             if (j > i + 2) {
-                                                byteVal = (Integer.parseInt(ParableFunctions._substring(inner, i + 1, j), 8) & 255);
+                                                byteVal = ((int) Long.parseLong(ParableFunctions._substring(inner, i + 1, j), 8) & 255);
                                                 if (byteVal == 0) {
                                                     return result;
                                                 }
@@ -2241,7 +2241,7 @@ class Word implements Node {
                                                 while (j < inner.length() && j < i + 4 && ParableFunctions._isOctalDigit(String.valueOf(inner.charAt(j)))) {
                                                     j += 1;
                                                 }
-                                                byteVal = (Integer.parseInt(ParableFunctions._substring(inner, i + 1, j), 8) & 255);
+                                                byteVal = ((int) Long.parseLong(ParableFunctions._substring(inner, i + 1, j), 8) & 255);
                                                 if (byteVal == 0) {
                                                     return result;
                                                 }
@@ -2368,10 +2368,10 @@ class Word implements Node {
                                             if ("@*#?-$!0123456789_".indexOf(String.valueOf(afterBrace.charAt(0))) != -1) {
                                                 varNameLen = 1;
                                             } else {
-                                                if (String.valueOf(afterBrace.charAt(0)).chars().allMatch(Character::isLetter) || afterBrace.charAt(0) == '_') {
+                                                if ((String.valueOf(afterBrace.charAt(0)).length() > 0 && String.valueOf(afterBrace.charAt(0)).chars().allMatch(Character::isLetter)) || afterBrace.charAt(0) == '_') {
                                                     while (varNameLen < afterBrace.length()) {
                                                         String c = String.valueOf(afterBrace.charAt(varNameLen));
-                                                        if (!(c.chars().allMatch(Character::isLetterOrDigit) || c.equals("_"))) {
+                                                        if (!((c.length() > 0 && c.chars().allMatch(Character::isLetterOrDigit)) || c.equals("_"))) {
                                                             break;
                                                         }
                                                         varNameLen += 1;
@@ -2533,11 +2533,11 @@ class Word implements Node {
 
     public String _normalizeArrayWhitespace(String value) {
         int i = 0;
-        if (!(i < value.length() && (String.valueOf(value.charAt(i)).chars().allMatch(Character::isLetter) || value.charAt(i) == '_'))) {
+        if (!(i < value.length() && ((String.valueOf(value.charAt(i)).length() > 0 && String.valueOf(value.charAt(i)).chars().allMatch(Character::isLetter)) || value.charAt(i) == '_'))) {
             return value;
         }
         i += 1;
-        while (i < value.length() && (String.valueOf(value.charAt(i)).chars().allMatch(Character::isLetterOrDigit) || value.charAt(i) == '_')) {
+        while (i < value.length() && ((String.valueOf(value.charAt(i)).length() > 0 && String.valueOf(value.charAt(i)).chars().allMatch(Character::isLetterOrDigit)) || value.charAt(i) == '_')) {
             i += 1;
         }
         while (i < value.length() && value.charAt(i) == '[') {
@@ -3038,7 +3038,7 @@ class Word implements Node {
                         break;
                     } else {
                         if ((ParableFunctions._startsWithAt(value, idx, "<(") || ParableFunctions._startsWithAt(value, idx, ">(")) && !scanQuote.double_) {
-                            if (idx == 0 || !String.valueOf(value.charAt(idx - 1)).chars().allMatch(Character::isLetterOrDigit) && "\"'".indexOf(String.valueOf(value.charAt(idx - 1))) == -1) {
+                            if (idx == 0 || !(String.valueOf(value.charAt(idx - 1)).length() > 0 && String.valueOf(value.charAt(idx - 1)).chars().allMatch(Character::isLetterOrDigit)) && "\"'".indexOf(String.valueOf(value.charAt(idx - 1))) == -1) {
                                 hasUntrackedProcsub = true;
                                 break;
                             }
@@ -3192,7 +3192,7 @@ class Word implements Node {
                             String origInner = ParableFunctions._substring(value, i + 2, j - 1);
                             boolean endsWithNewline = origInner.endsWith("\n");
                             String suffix = "";
-                            if (!(!formatted.equals("")) || formatted.chars().allMatch(Character::isWhitespace)) {
+                            if (!(!formatted.equals("")) || (formatted.length() > 0 && formatted.chars().allMatch(Character::isWhitespace))) {
                                 suffix = "}";
                             } else {
                                 if (formatted.endsWith("&") || formatted.endsWith("& ")) {
@@ -3213,7 +3213,7 @@ class Word implements Node {
                         i = j;
                     } else {
                         if ((ParableFunctions._startsWithAt(value, i, ">(") || ParableFunctions._startsWithAt(value, i, "<(")) && !mainQuote.double_ && deprecatedArithDepth == 0 && arithDepth == 0) {
-                            boolean isProcsub = i == 0 || !String.valueOf(value.charAt(i - 1)).chars().allMatch(Character::isLetterOrDigit) && "\"'".indexOf(String.valueOf(value.charAt(i - 1))) == -1;
+                            boolean isProcsub = i == 0 || !(String.valueOf(value.charAt(i - 1)).length() > 0 && String.valueOf(value.charAt(i - 1)).chars().allMatch(Character::isLetterOrDigit)) && "\"'".indexOf(String.valueOf(value.charAt(i - 1))) == -1;
                             if (extglobDepth > 0) {
                                 j = ParableFunctions._findCmdsubEnd(value, i + 2);
                                 result.add(ParableFunctions._substring(value, i, j));
@@ -3858,9 +3858,9 @@ class Redirect implements Node {
         String op = this.op.replaceFirst("^[" + "0123456789" + "]+", "");
         if (op.startsWith("{")) {
             int j = 1;
-            if (j < op.length() && (String.valueOf(op.charAt(j)).chars().allMatch(Character::isLetter) || op.charAt(j) == '_')) {
+            if (j < op.length() && ((String.valueOf(op.charAt(j)).length() > 0 && String.valueOf(op.charAt(j)).chars().allMatch(Character::isLetter)) || op.charAt(j) == '_')) {
                 j += 1;
-                while (j < op.length() && (String.valueOf(op.charAt(j)).chars().allMatch(Character::isLetterOrDigit) || op.charAt(j) == '_')) {
+                while (j < op.length() && ((String.valueOf(op.charAt(j)).length() > 0 && String.valueOf(op.charAt(j)).chars().allMatch(Character::isLetterOrDigit)) || op.charAt(j) == '_')) {
                     j += 1;
                 }
                 if (j < op.length() && op.charAt(j) == '[') {
@@ -3894,11 +3894,11 @@ class Redirect implements Node {
                 }
             }
             String raw = ParableFunctions._substring(targetVal, 1, targetVal.length());
-            if (raw.chars().allMatch(Character::isDigit) && Integer.parseInt(raw, 10) <= 2147483647) {
-                return "(redirect \"" + op + "\" " + String.valueOf(Integer.parseInt(raw, 10)) + ")";
+            if ((raw.length() > 0 && raw.chars().allMatch(Character::isDigit)) && (int) Long.parseLong(raw, 10) <= 2147483647) {
+                return "(redirect \"" + op + "\" " + String.valueOf((int) Long.parseLong(raw, 10)) + ")";
             }
-            if (raw.endsWith("-") && raw.substring(0, raw.length() - 1).chars().allMatch(Character::isDigit) && Integer.parseInt(raw.substring(0, raw.length() - 1), 10) <= 2147483647) {
-                return "(redirect \"" + op + "\" " + String.valueOf(Integer.parseInt(raw.substring(0, raw.length() - 1), 10)) + ")";
+            if (raw.endsWith("-") && (raw.substring(0, raw.length() - 1).length() > 0 && raw.substring(0, raw.length() - 1).chars().allMatch(Character::isDigit)) && (int) Long.parseLong(raw.substring(0, raw.length() - 1), 10) <= 2147483647) {
+                return "(redirect \"" + op + "\" " + String.valueOf((int) Long.parseLong(raw.substring(0, raw.length() - 1), 10)) + ")";
             }
             if (targetVal.equals("&-")) {
                 return "(redirect \">&-\" 0)";
@@ -3907,14 +3907,14 @@ class Redirect implements Node {
             return "(redirect \"" + op + "\" \"" + fdTarget + "\")";
         }
         if (op.equals(">&") || op.equals("<&")) {
-            if (targetVal.chars().allMatch(Character::isDigit) && Integer.parseInt(targetVal, 10) <= 2147483647) {
-                return "(redirect \"" + op + "\" " + String.valueOf(Integer.parseInt(targetVal, 10)) + ")";
+            if ((targetVal.length() > 0 && targetVal.chars().allMatch(Character::isDigit)) && (int) Long.parseLong(targetVal, 10) <= 2147483647) {
+                return "(redirect \"" + op + "\" " + String.valueOf((int) Long.parseLong(targetVal, 10)) + ")";
             }
             if (targetVal.equals("-")) {
                 return "(redirect \">&-\" 0)";
             }
-            if (targetVal.endsWith("-") && targetVal.substring(0, targetVal.length() - 1).chars().allMatch(Character::isDigit) && Integer.parseInt(targetVal.substring(0, targetVal.length() - 1), 10) <= 2147483647) {
-                return "(redirect \"" + op + "\" " + String.valueOf(Integer.parseInt(targetVal.substring(0, targetVal.length() - 1), 10)) + ")";
+            if (targetVal.endsWith("-") && (targetVal.substring(0, targetVal.length() - 1).length() > 0 && targetVal.substring(0, targetVal.length() - 1).chars().allMatch(Character::isDigit)) && (int) Long.parseLong(targetVal.substring(0, targetVal.length() - 1), 10) <= 2147483647) {
+                return "(redirect \"" + op + "\" " + String.valueOf((int) Long.parseLong(targetVal.substring(0, targetVal.length() - 1), 10)) + ")";
             }
             String outVal = (targetVal.endsWith("-") ? targetVal.substring(0, targetVal.length() - 1) : targetVal);
             return "(redirect \"" + op + "\" \"" + outVal + "\")";
@@ -6665,7 +6665,7 @@ class Parser {
         List<String> nameChars = new ArrayList<>();
         while (!this._arithAtEnd()) {
             String ch = this._arithPeek(0);
-            if (ch.chars().allMatch(Character::isLetterOrDigit) || ch.equals("_")) {
+            if ((ch.length() > 0 && ch.chars().allMatch(Character::isLetterOrDigit)) || ch.equals("_")) {
                 nameChars.add(this._arithAdvance());
             } else {
                 if ((ParableFunctions._isSpecialParamOrDigit(ch) || ch.equals("#")) && !(!nameChars.isEmpty())) {
@@ -6891,10 +6891,10 @@ class Parser {
         List<String> chars = new ArrayList<>();
         String c = this._arithPeek(0);
         String ch = "";
-        if (c.chars().allMatch(Character::isDigit)) {
+        if ((c.length() > 0 && c.chars().allMatch(Character::isDigit))) {
             while (!this._arithAtEnd()) {
                 ch = this._arithPeek(0);
-                if (ch.chars().allMatch(Character::isLetterOrDigit) || ch.equals("#") || ch.equals("_")) {
+                if ((ch.length() > 0 && ch.chars().allMatch(Character::isLetterOrDigit)) || ch.equals("#") || ch.equals("_")) {
                     chars.add(this._arithAdvance());
                 } else {
                     break;
@@ -6907,10 +6907,10 @@ class Parser {
             }
             return new ArithNumber(prefix, "number");
         }
-        if (c.chars().allMatch(Character::isLetter) || c.equals("_")) {
+        if ((c.length() > 0 && c.chars().allMatch(Character::isLetter)) || c.equals("_")) {
             while (!this._arithAtEnd()) {
                 ch = this._arithPeek(0);
-                if (ch.chars().allMatch(Character::isLetterOrDigit) || ch.equals("_")) {
+                if ((ch.length() > 0 && ch.chars().allMatch(Character::isLetterOrDigit)) || ch.equals("_")) {
                     chars.add(this._arithAdvance());
                 } else {
                     break;
@@ -6974,7 +6974,7 @@ class Parser {
                             inBracket = false;
                             varnameChars.add(this.advance());
                         } else {
-                            if (ch.chars().allMatch(Character::isLetterOrDigit) || ch.equals("_")) {
+                            if ((ch.length() > 0 && ch.chars().allMatch(Character::isLetterOrDigit)) || ch.equals("_")) {
                                 varnameChars.add(this.advance());
                             } else {
                                 if (inBracket && !ParableFunctions._isMetachar(ch)) {
@@ -6990,17 +6990,17 @@ class Parser {
             String varname = String.join("", varnameChars);
             boolean isValidVarfd = false;
             if (!varname.equals("")) {
-                if (String.valueOf(varname.charAt(0)).chars().allMatch(Character::isLetter) || varname.charAt(0) == '_') {
+                if ((String.valueOf(varname.charAt(0)).length() > 0 && String.valueOf(varname.charAt(0)).chars().allMatch(Character::isLetter)) || varname.charAt(0) == '_') {
                     if (varname.indexOf("[") != -1 || varname.indexOf("]") != -1) {
                         int left = varname.indexOf("[");
                         int right = varname.lastIndexOf("]");
                         if (left != -1 && right == varname.length() - 1 && right > left + 1) {
                             String base = varname.substring(0, left);
-                            if (!base.equals("") && (String.valueOf(base.charAt(0)).chars().allMatch(Character::isLetter) || base.charAt(0) == '_')) {
+                            if (!base.equals("") && ((String.valueOf(base.charAt(0)).length() > 0 && String.valueOf(base.charAt(0)).chars().allMatch(Character::isLetter)) || base.charAt(0) == '_')) {
                                 isValidVarfd = true;
                                 for (int _i = 0; _i < base.substring(1).length(); _i++) {
                                     String c = String.valueOf(base.substring(1).charAt(_i));
-                                    if (!(c.chars().allMatch(Character::isLetterOrDigit) || c.equals("_"))) {
+                                    if (!((c.length() > 0 && c.chars().allMatch(Character::isLetterOrDigit)) || c.equals("_"))) {
                                         isValidVarfd = false;
                                         break;
                                     }
@@ -7011,7 +7011,7 @@ class Parser {
                         isValidVarfd = true;
                         for (int _i = 0; _i < varname.substring(1).length(); _i++) {
                             String c = String.valueOf(varname.substring(1).charAt(_i));
-                            if (!(c.chars().allMatch(Character::isLetterOrDigit) || c.equals("_"))) {
+                            if (!((c.length() > 0 && c.chars().allMatch(Character::isLetterOrDigit)) || c.equals("_"))) {
                                 isValidVarfd = false;
                                 break;
                             }
@@ -7027,12 +7027,12 @@ class Parser {
             }
         }
         List<String> fdChars = new ArrayList<>();
-        if (varfd.equals("") && !this.peek().equals("") && this.peek().chars().allMatch(Character::isDigit)) {
+        if (varfd.equals("") && !this.peek().equals("") && (this.peek().length() > 0 && this.peek().chars().allMatch(Character::isDigit))) {
             fdChars = new ArrayList<>();
-            while (!this.atEnd() && this.peek().chars().allMatch(Character::isDigit)) {
+            while (!this.atEnd() && (this.peek().length() > 0 && this.peek().chars().allMatch(Character::isDigit))) {
                 fdChars.add(this.advance());
             }
-            fd = Integer.parseInt(String.join("", fdChars), 10);
+            fd = (int) Long.parseLong(String.join("", fdChars), 10);
         }
         ch = this.peek();
         String op = "";
@@ -7139,10 +7139,10 @@ class Parser {
             }
             if (target == null) {
                 Word innerWord = null;
-                if (!this.atEnd() && (this.peek().chars().allMatch(Character::isDigit) || this.peek().equals("-"))) {
+                if (!this.atEnd() && ((this.peek().length() > 0 && this.peek().chars().allMatch(Character::isDigit)) || this.peek().equals("-"))) {
                     int wordStart = this.pos;
                     fdChars = new ArrayList<>();
-                    while (!this.atEnd() && this.peek().chars().allMatch(Character::isDigit)) {
+                    while (!this.atEnd() && (this.peek().length() > 0 && this.peek().chars().allMatch(Character::isDigit))) {
                         fdChars.add(this.advance());
                     }
                     String fdTarget = "";
@@ -9932,7 +9932,7 @@ final class ParableFunctions {
                 op = ParableFunctions._substring(op, 0, op.length() - 1) + ">";
             }
             String afterAmp = ParableFunctions._substring(target, 1, target.length());
-            boolean isLiteralFd = afterAmp.equals("-") || !afterAmp.isEmpty() && String.valueOf(afterAmp.charAt(0)).chars().allMatch(Character::isDigit);
+            boolean isLiteralFd = afterAmp.equals("-") || !afterAmp.isEmpty() && (String.valueOf(afterAmp.charAt(0)).length() > 0 && String.valueOf(afterAmp.charAt(0)).chars().allMatch(Character::isDigit));
             if (isLiteralFd) {
                 if (op.equals(">") || op.equals(">&")) {
                     op = (wasInputClose ? "0>" : "1>");
@@ -10565,7 +10565,7 @@ final class ParableFunctions {
     static boolean _isWordBoundary(String s, int pos, int wordLen) {
         if (pos > 0) {
             String prev = String.valueOf(s.charAt(pos - 1));
-            if (prev.chars().allMatch(Character::isLetterOrDigit) || prev.equals("_")) {
+            if ((prev.length() > 0 && prev.chars().allMatch(Character::isLetterOrDigit)) || prev.equals("_")) {
                 return false;
             }
             if ("{}!".indexOf(prev) != -1) {
@@ -10573,7 +10573,7 @@ final class ParableFunctions {
             }
         }
         int end = pos + wordLen;
-        if (end < s.length() && (String.valueOf(s.charAt(end)).chars().allMatch(Character::isLetterOrDigit) || s.charAt(end) == '_')) {
+        if (end < s.length() && ((String.valueOf(s.charAt(end)).length() > 0 && String.valueOf(s.charAt(end)).chars().allMatch(Character::isLetterOrDigit)) || s.charAt(end) == '_')) {
             return false;
         }
         return true;
@@ -10823,7 +10823,7 @@ final class ParableFunctions {
         if (!(!s.equals(""))) {
             return -1;
         }
-        if (!(String.valueOf(s.charAt(0)).chars().allMatch(Character::isLetter) || s.charAt(0) == '_')) {
+        if (!((String.valueOf(s.charAt(0)).length() > 0 && String.valueOf(s.charAt(0)).chars().allMatch(Character::isLetter)) || s.charAt(0) == '_')) {
             return -1;
         }
         int i = 1;
@@ -10853,7 +10853,7 @@ final class ParableFunctions {
                 }
                 return -1;
             }
-            if (!(c.chars().allMatch(Character::isLetterOrDigit) || c.equals("_"))) {
+            if (!((c.length() > 0 && c.chars().allMatch(Character::isLetterOrDigit)) || c.equals("_"))) {
                 return -1;
             }
             i += 1;
@@ -10865,12 +10865,12 @@ final class ParableFunctions {
         if (!(!chars.isEmpty())) {
             return false;
         }
-        if (!(chars.get(0).chars().allMatch(Character::isLetter) || chars.get(0).equals("_"))) {
+        if (!((chars.get(0).length() > 0 && chars.get(0).chars().allMatch(Character::isLetter)) || chars.get(0).equals("_"))) {
             return false;
         }
         String s = String.join("", chars);
         int i = 1;
-        while (i < s.length() && (String.valueOf(s.charAt(i)).chars().allMatch(Character::isLetterOrDigit) || s.charAt(i) == '_')) {
+        while (i < s.length() && ((String.valueOf(s.charAt(i)).length() > 0 && String.valueOf(s.charAt(i)).chars().allMatch(Character::isLetterOrDigit)) || s.charAt(i) == '_')) {
             i += 1;
         }
         while (i < s.length()) {
@@ -10958,12 +10958,12 @@ final class ParableFunctions {
         if (!(!name.equals(""))) {
             return false;
         }
-        if (!(String.valueOf(name.charAt(0)).chars().allMatch(Character::isLetter) || name.charAt(0) == '_')) {
+        if (!((String.valueOf(name.charAt(0)).length() > 0 && String.valueOf(name.charAt(0)).chars().allMatch(Character::isLetter)) || name.charAt(0) == '_')) {
             return false;
         }
         for (int _i = 0; _i < name.substring(1).length(); _i++) {
             String c = String.valueOf(name.substring(1).charAt(_i));
-            if (!(c.chars().allMatch(Character::isLetterOrDigit) || c.equals("_"))) {
+            if (!((c.length() > 0 && c.chars().allMatch(Character::isLetterOrDigit)) || c.equals("_"))) {
                 return false;
             }
         }

@@ -1163,11 +1163,12 @@ class JavaBackend:
                 args_str = ", ".join(self._expr(a) for a in args)
                 # Handle built-in functions
                 if func == "int" and len(args) == 2:
-                    # int(s, base) -> Integer.parseInt(s, base)
-                    return f"Integer.parseInt({args_str})"
+                    # int(s, base) -> Long.parseLong then cast to int (handles overflow)
+                    return f"(int) Long.parseLong({args_str})"
                 if func == "_parseInt":
                     # Frontend generates _parseInt for int(s, base)
-                    return f"Integer.parseInt({args_str})"
+                    # Use Long.parseLong to handle numbers larger than Integer.MAX_VALUE
+                    return f"(int) Long.parseLong({args_str})"
                 if func == "str":
                     # Check if converting bytes to string (List<Byte>)
                     if args and isinstance(args[0].typ, Slice):
@@ -1504,13 +1505,13 @@ class JavaBackend:
             if method == "upper":
                 return f"{obj_str}.toUpperCase()"
             if method == "isalpha":
-                return f"{obj_str}.chars().allMatch(Character::isLetter)"
+                return f"({obj_str}.length() > 0 && {obj_str}.chars().allMatch(Character::isLetter))"
             if method == "isalnum":
-                return f"{obj_str}.chars().allMatch(Character::isLetterOrDigit)"
+                return f"({obj_str}.length() > 0 && {obj_str}.chars().allMatch(Character::isLetterOrDigit))"
             if method == "isdigit":
-                return f"{obj_str}.chars().allMatch(Character::isDigit)"
+                return f"({obj_str}.length() > 0 && {obj_str}.chars().allMatch(Character::isDigit))"
             if method == "isspace":
-                return f"{obj_str}.chars().allMatch(Character::isWhitespace)"
+                return f"({obj_str}.length() > 0 && {obj_str}.chars().allMatch(Character::isWhitespace))"
         # Handle Map.get with default value -> getOrDefault
         if isinstance(receiver_type, Map):
             if method == "get" and len(args) == 2:
@@ -1533,13 +1534,13 @@ class JavaBackend:
             return f"{obj_str}.add({args_str})"
         # Fallback for string methods when receiver_type is unknown
         if method == "isalnum":
-            return f"{obj_str}.chars().allMatch(Character::isLetterOrDigit)"
+            return f"({obj_str}.length() > 0 && {obj_str}.chars().allMatch(Character::isLetterOrDigit))"
         if method == "isalpha":
-            return f"{obj_str}.chars().allMatch(Character::isLetter)"
+            return f"({obj_str}.length() > 0 && {obj_str}.chars().allMatch(Character::isLetter))"
         if method == "isdigit":
-            return f"{obj_str}.chars().allMatch(Character::isDigit)"
+            return f"({obj_str}.length() > 0 && {obj_str}.chars().allMatch(Character::isDigit))"
         if method == "isspace":
-            return f"{obj_str}.chars().allMatch(Character::isWhitespace)"
+            return f"({obj_str}.length() > 0 && {obj_str}.chars().allMatch(Character::isWhitespace))"
         if method == "endswith":
             return f"{obj_str}.endsWith({args_str})"
         if method == "startswith":

@@ -642,6 +642,17 @@ class JavaBackend:
             self.indent -= 1
             self._line("}")
             return
+        # Special case: _substring needs clamping to match Python slice semantics
+        if func.name == "_substring":
+            self._line(f"static {ret} {name}({params}) {{")
+            self.indent += 1
+            self._line("int len = s.length();")
+            self._line("int clampedStart = Math.max(0, Math.min(start, len));")
+            self._line("int clampedEnd = Math.max(clampedStart, Math.min(end, len));")
+            self._line("return s.substring(clampedStart, clampedEnd);")
+            self.indent -= 1
+            self._line("}")
+            return
         self._line(f"static {ret} {name}({params}) {{")
         self.indent += 1
         if not func.body:

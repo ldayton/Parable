@@ -9225,7 +9225,10 @@ final class ParableFunctions {
     }
 
     static String _substring(String s, int start, int end) {
-        return s.substring(start, end);
+        int len = s.length();
+        int clampedStart = Math.max(0, Math.min(start, len));
+        int clampedEnd = Math.max(clampedStart, Math.min(end, len));
+        return s.substring(clampedStart, clampedEnd);
     }
 
     static boolean _startsWithAt(String s, int pos, String prefix) {

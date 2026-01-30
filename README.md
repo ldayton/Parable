@@ -167,14 +167,16 @@ transpiler/                      # Python → multi-language transpiler
 
 ## Transpiler
 
-The transpiler is under active development. It uses an intermediate representation (IR) to generate code for multiple target languages:
+The transpiler uses an intermediate representation (IR) to generate code for multiple target languages:
 
-- **Go**
-- **TypeScript**
-- **Java**
-- **Python**
+| Language   | Reference    | Homebrew      | GitHub Actions  |
+| ---------- | ------------ | ------------- | --------------- |
+| Go         | Go 1.24      | `go@1.24`     | `setup-go@v5`   |
+| Java       | Temurin 21   | `temurin@21`  | `setup-java@v4` |
+| Python     | CPython 3.12 | `python@3.12` | `setup-uv@v4`   |
+| TypeScript | Node.js 22   | `node@22`     | `setup-node@v4` |
 
-Output code quality is a work in progress. The transpiler prioritizes correctness over readability; generated code may not yet match hand-written idioms in all cases.
+Output code quality is a work in progress. The transpiler prioritizes correctness over readability; generated code may not yet match hand-written idioms.
 
 ## License
 

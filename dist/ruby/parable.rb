@@ -534,7 +534,7 @@ class Lexer
       end
       return is_whitespace(ch)
     end
-    if !!self.parser_state & PARSERSTATEFLAGS_PST_EOFTOKEN && self.eof_token != "" && ch == self.eof_token && bracket_depth == 0
+    if (self.parser_state & PARSERSTATEFLAGS_PST_EOFTOKEN) != 0 && self.eof_token != "" && ch == self.eof_token && bracket_depth == 0
       return true
     end
     if is_redirect_char(ch) && self.pos + 1 < self.length && self.source[self.pos + 1] == "("
@@ -662,7 +662,7 @@ class Lexer
         raise MatchedPairError.new(message: "unexpected EOF while looking for matching `#{close_char}'", pos: start)
       end
       ch = self.advance
-      if !!flags & MATCHEDPAIRFLAGS_DOLBRACE && self.dolbrace_state == DOLBRACESTATE_OP
+      if (flags & MATCHEDPAIRFLAGS_DOLBRACE) != 0 && self.dolbrace_state == DOLBRACESTATE_OP
         if !"#%^,~:-=?+/".include?(ch)
           self.dolbrace_state = DOLBRACESTATE_WORD
         end
@@ -681,7 +681,7 @@ class Lexer
             break
           end
         end
-        if ch == "\\" && !!flags & MATCHEDPAIRFLAGS_ALLOWESC
+        if ch == "\\" && (flags & MATCHEDPAIRFLAGS_ALLOWESC) != 0
           pass_next = true
         end
         chars.push(ch)
@@ -713,7 +713,7 @@ class Lexer
         next
       end
       if ch == open_char && open_char != close_char
-        if !(!!flags & MATCHEDPAIRFLAGS_DOLBRACE && open_char == "{")
+        if !((flags & MATCHEDPAIRFLAGS_DOLBRACE) != 0 && open_char == "{")
           count += 1
         end
         chars.push(ch)
@@ -749,7 +749,7 @@ class Lexer
           next
         end
       end
-      if ch == "$" && !self.at_end && !!!flags & MATCHEDPAIRFLAGS_EXTGLOB
+      if ch == "$" && !self.at_end && (flags & MATCHEDPAIRFLAGS_EXTGLOB) == 0
         next_ch = self.peek
         if was_dollar
           chars.push(ch)
@@ -758,7 +758,7 @@ class Lexer
           next
         end
         if next_ch == "{"
-          if !!flags & MATCHEDPAIRFLAGS_ARITH
+          if (flags & MATCHEDPAIRFLAGS_ARITH) != 0
             after_brace_pos = self.pos + 1
             if after_brace_pos >= self.length || !is_funsub_char(self.source[after_brace_pos])
               chars.push(ch)
@@ -839,7 +839,7 @@ class Lexer
           next
         end
       end
-      if ch == "(" && was_gtlt && !!flags & MATCHEDPAIRFLAGS_DOLBRACE | MATCHEDPAIRFLAGS_ARRAYSUB
+      if ch == "(" && was_gtlt && (flags & MATCHEDPAIRFLAGS_DOLBRACE | MATCHEDPAIRFLAGS_ARRAYSUB) != 0
         direction = chars[-1]
         chars = chars[0...-1]
         self.pos -= 1
@@ -1127,7 +1127,7 @@ class Lexer
         chars.push(")")
         next
       end
-      if ctx == WORD_CTX_NORMAL && !!self.parser_state & PARSERSTATEFLAGS_PST_EOFTOKEN && self.eof_token != "" && ch == self.eof_token && bracket_depth == 0
+      if ctx == WORD_CTX_NORMAL && (self.parser_state & PARSERSTATEFLAGS_PST_EOFTOKEN) != 0 && self.eof_token != "" && ch == self.eof_token && bracket_depth == 0
         if !(chars && !chars.empty?)
           chars.push(self.advance)
         end
@@ -1184,7 +1184,7 @@ class Lexer
       self.last_read_token = tok
       return tok
     end
-    if self.eof_token != "" && self.peek == self.eof_token && !!!self.parser_state & PARSERSTATEFLAGS_PST_CASEPAT && !!!self.parser_state & PARSERSTATEFLAGS_PST_EOFTOKEN
+    if self.eof_token != "" && self.peek == self.eof_token && (self.parser_state & PARSERSTATEFLAGS_PST_CASEPAT) == 0 && (self.parser_state & PARSERSTATEFLAGS_PST_EOFTOKEN) == 0
       tok = Token.new(type: TOKENTYPE_EOF, value: "", pos: self.pos)
       self.last_read_token = tok
       return tok
@@ -1196,7 +1196,7 @@ class Lexer
         self.last_read_token = tok
         return tok
       end
-      if self.eof_token != "" && self.peek == self.eof_token && !!!self.parser_state & PARSERSTATEFLAGS_PST_CASEPAT && !!!self.parser_state & PARSERSTATEFLAGS_PST_EOFTOKEN
+      if self.eof_token != "" && self.peek == self.eof_token && (self.parser_state & PARSERSTATEFLAGS_PST_CASEPAT) == 0 && (self.parser_state & PARSERSTATEFLAGS_PST_EOFTOKEN) == 0
         tok = Token.new(type: TOKENTYPE_EOF, value: "", pos: self.pos)
         self.last_read_token = tok
         return tok
@@ -2132,7 +2132,7 @@ class Word
         outer_in_dquote = quote.outer_double
         if brace_depth > 0 && outer_in_dquote && expanded.start_with?("'") && expanded.end_with?("'")
           inner = substring(expanded, 1, expanded.length - 1)
-          if inner.index("") == -1
+          if inner.index("").nil?
             result_str = result.join
             in_pattern = false
             last_brace_idx = result_str.rindex("${")
@@ -2729,7 +2729,7 @@ class Word
         procsub_parts.concat(self.collect_procsubs(p_))
       end
     end
-    has_brace_cmdsub = value.index("${ ") != -1 || value.index("${\t") != -1 || value.index("${\n") != -1 || value.index("${|") != -1
+    has_brace_cmdsub = !value.index("${ ").nil? || !value.index("${\t").nil? || !value.index("${\n").nil? || !value.index("${|").nil?
     has_untracked_cmdsub = false
     has_untracked_procsub = false
     idx = 0
@@ -2955,7 +2955,7 @@ class Word
           end
           procsub_idx += 1
           i = j
-        elsif is_procsub && !!self.parts.length
+        elsif is_procsub && self.parts.length > 0
           direction = value[i]
           j = find_cmdsub_end(value, i + 2)
           if j > value.length || j > 0 && j <= value.length && value[j - 1] != ")"
@@ -7710,7 +7710,7 @@ class Parser
             scan_pos += 1
           end
           if scan_pos < self.length && self.source[scan_pos] == "]"
-            if self.source.index("]", scan_pos + 1) != -1
+            if !self.source.index("]", scan_pos + 1).nil?
               scan_pos += 1
               has_first_bracket_literal = true
             end
@@ -10099,7 +10099,7 @@ end
 
 def skip_matched_pair(s, start, open, close, flags = 0)
   n = s.length
-  if !!flags & SMP_PAST_OPEN
+  if (flags & SMP_PAST_OPEN) != 0
     i = start
   else
     if start >= n || s[start] != open
@@ -10118,7 +10118,7 @@ def skip_matched_pair(s, start, open, close, flags = 0)
       next
     end
     literal = flags & SMP_LITERAL
-    if !!!literal && c == "\\"
+    if literal == 0 && c == "\\"
       pass_next = true
       i += 1
       next
@@ -10130,28 +10130,28 @@ def skip_matched_pair(s, start, open, close, flags = 0)
       i += 1
       next
     end
-    if !!!literal && c == "`"
+    if literal == 0 && c == "`"
       backq = true
       i += 1
       next
     end
-    if !!!literal && c == "'"
+    if literal == 0 && c == "'"
       i = skip_single_quoted(s, i + 1)
       next
     end
-    if !!!literal && c == "\""
+    if literal == 0 && c == "\""
       i = skip_double_quoted(s, i + 1)
       next
     end
-    if !!!literal && is_expansion_start(s, i, "$(")
+    if literal == 0 && is_expansion_start(s, i, "$(")
       i = find_cmdsub_end(s, i + 2)
       next
     end
-    if !!!literal && is_expansion_start(s, i, "${")
+    if literal == 0 && is_expansion_start(s, i, "${")
       i = find_braced_param_end(s, i + 2)
       next
     end
-    if !!!literal && c == open
+    if literal == 0 && c == open
       depth += 1
     elsif c == close
       depth -= 1
@@ -10179,7 +10179,7 @@ def assignment(s, flags = 0)
       return i
     end
     if c == "["
-      sub_flags = !!flags & 2 ? SMP_LITERAL : 0
+      sub_flags = (flags & 2) != 0 ? SMP_LITERAL : 0
       end_ = skip_subscript(s, i, sub_flags)
       if end_ == -1
         return -1

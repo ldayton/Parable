@@ -782,12 +782,40 @@ class RubyBackend:
                     return f"!{expr_str}.nil?"
                 if inner_type == Primitive(kind="string"):
                     return f"({expr_str} && !{expr_str}.empty?)"
+                # In Python, len(x) is falsy when 0; in Ruby, 0 is truthy
+                # So Truthy(Len(x)) needs to become x.length > 0
+                if isinstance(e, Len):
+                    return f"{expr_str} > 0"
+                # For BinaryOp with integer result (e.g., flags & X), Ruby's !! doesn't work
+                # because !!(0) is true in Ruby (0 is truthy). Use != 0 instead.
+                if isinstance(e, BinaryOp) and e.typ == Primitive(kind="int"):
+                    return f"({expr_str}) != 0"
+                # Non-int BinaryOp (e.g., comparisons) - wrap in parens for precedence
+                if isinstance(e, BinaryOp):
+                    return f"!!({expr_str})"
                 return f"!!{expr_str}"
             case BinaryOp(op=op, left=left, right=right):
                 if op == "in":
                     return f"{self._expr(right)}.include?({self._expr(left)})"
                 if op == "not in":
                     return f"!{self._expr(right)}.include?({self._expr(left)})"
+                # Python: s.find(x) == -1 -> Ruby: s.index(x).nil?
+                # Python: s.find(x) != -1 -> Ruby: !s.index(x).nil?
+                if op in ("==", "!="):
+                    find_expr, neg_one = None, None
+                    if isinstance(left, MethodCall) and left.method == "find":
+                        if isinstance(right, UnaryOp) and right.op == "-" and isinstance(right.operand, IntLit) and right.operand.value == 1:
+                            find_expr, neg_one = left, right
+                    elif isinstance(right, MethodCall) and right.method == "find":
+                        if isinstance(left, UnaryOp) and left.op == "-" and isinstance(left.operand, IntLit) and left.operand.value == 1:
+                            find_expr, neg_one = right, left
+                    if find_expr is not None:
+                        obj_str = self._expr(find_expr.obj)
+                        args_str = ", ".join(self._expr(a) for a in find_expr.args)
+                        if op == "==":
+                            return f"{obj_str}.index({args_str}).nil?"
+                        else:
+                            return f"!{obj_str}.index({args_str}).nil?"
                 rb_op = _binary_op(op)
                 left_str = self._maybe_paren(left, op, is_left=True)
                 right_str = self._maybe_paren(right, op, is_left=False)
@@ -796,6 +824,15 @@ class RubyBackend:
                 rb_op = _unary_op(op)
                 if op == "!" and isinstance(operand, BinaryOp):
                     return f"{rb_op}({self._expr(operand)})"
+                # Handle not(truthy(int_expr)) -> (expr) == 0
+                # Python's `not (x & Y)` should be true when result is 0
+                if op == "!" and isinstance(operand, Truthy):
+                    inner = operand.expr
+                    if inner.typ == Primitive(kind="int"):
+                        inner_str = self._expr(inner)
+                        if isinstance(inner, BinaryOp):
+                            return f"({inner_str}) == 0"
+                        return f"{inner_str} == 0"
                 return f"{rb_op}{self._expr(operand)}"
             case Ternary(cond=cond, then_expr=then_expr, else_expr=else_expr):
                 return f"{self._cond_expr(cond)} ? {self._expr(then_expr)} : {self._expr(else_expr)}"

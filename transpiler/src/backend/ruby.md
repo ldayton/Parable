@@ -1,10 +1,10 @@
 # Ruby Backend Bug Fixes
 
-## Status After Initial Fixes
+## Current Status
 
 **Before**: 4531/4574 passing (99.1%) - 43 failures
-**After**: 4543/4574 passing (99.3%) - 31 failures
-**Fixed**: 12 tests
+**After**: 4565/4574 passing (99.8%) - 9 failures
+**Total Fixed**: 34 tests
 
 ## Completed Fixes
 
@@ -32,107 +32,91 @@ Added `_safe_type_name()` calls in four locations to prevent conflicts with Ruby
 2. **`_emit_try_catch()` (line 595)**: Exception type in rescue clause
 3. **`_emit_struct()` (line 305)**: Base class for exception inheritance
 
----
+### Fix 3: String.find() == -1 Comparison
+**Lines 791-804** - Handle Python `str.find(x) == -1` pattern correctly in Ruby.
 
-## Remaining Failures (31 tests)
+Python's `str.find()` returns -1 when substring not found, but Ruby's `String#index` returns `nil`.
 
-### Category 1: ANSI-C Quotes in Parameter Expansion (6 failures)
-
-**Problem**: `$'...'` inside `${...}` is not being expanded.
-
-| Input | Expected | Actual |
-|-------|----------|--------|
-| `"${$''}"` | `"${}"` | `"${''}"`|
-| `"${x$''}"` | `"${x}"` | `"${x''}"` |
-| `"${%$'b'}"` | `"${%b}"` | `"${%'b'}"` |
-| `"${x~%$'b'}"` | `"${x~%b}"` | `"${x~%'b'}"` |
-
-**Root Cause**: The `expand_all_ansi_c_quotes` function in the transpiled Ruby code has a logic issue. When inside `${...}`, it should expand `$'...'` but currently doesn't.
-
-Looking at the Ruby output at line 2118:
-```ruby
-elsif starts_with_at(value, i, "$'") && !quote.single && !effective_in_dquote && ...
+```python
+# Added in BinaryOp handling for == and != operators
+if op in ("==", "!="):
+    find_expr, neg_one = None, None
+    if isinstance(left, MethodCall) and left.method == "find":
+        if isinstance(right, UnaryOp) and right.op == "-" and isinstance(right.operand, IntLit) and right.operand.value == 1:
+            find_expr, neg_one = left, right
+    # ... (also check for right-hand find)
+    if find_expr is not None:
+        # Transform x.find(y) == -1 to x.index(y).nil?
+        # Transform x.find(y) != -1 to !x.index(y).nil?
 ```
 
-The `effective_in_dquote = quote.double` on line 2103 should be false after `quote.push()` resets state, but there may be an issue with how the condition chain works or how the quote state is being tracked.
+This fixed 7 ANSI-C quote expansion tests.
 
-**Investigation needed**:
-- Trace through `expand_all_ansi_c_quotes` with input `"${$''}"` in both Python and Ruby
-- Check if `quote.push()` and `quote.double` behave identically
-- Verify `starts_with_at` function works correctly in Ruby
+### Fix 4: Truthy(Len()) Expression
+**Lines 785-788** - Handle Python `len(x)` truthiness correctly in Ruby.
 
-### Category 2: Newline Handling in Parameter Expansion (2 failures)
+In Python, `len(x)` is falsy when 0; in Ruby, 0 is truthy (only `nil` and `false` are falsy).
 
-**Problem**: Newlines inside `${...}` cause word splitting.
+```python
+# Added in Truthy case handling
+if isinstance(e, Len):
+    return f"{expr_str} > 0"
+```
 
-| Input | Expected | Actual |
-|-------|----------|--------|
-| `${a${b}\nx}` | Single word | Split at newline |
+This fixed 2 process substitution spacing tests by correctly handling the condition `len(self.parts)` as a boolean.
 
-**Root Cause**: The `normalize_param_expansion_newlines` function may not be handling all cases correctly in Ruby.
+### Fix 5: Truthy(BinaryOp) for Integer Expressions
+**Lines 789-795** - Handle Python integer truthiness in bitwise operations.
 
-### Category 3: Parse Error Detection (2 failures)
+In Python, `flags & X` is falsy when the result is 0. In Ruby, 0 is truthy so `!!(flags & X)` is always true (even when the AND result is 0). The fix checks if the BinaryOp has integer type and uses `!= 0` instead of `!!`.
 
-**Problem**: Some malformed inputs are accepted instead of rejected.
+```python
+# For BinaryOp with integer result (e.g., flags & X), Ruby's !! doesn't work
+# because !!(0) is true in Ruby (0 is truthy). Use != 0 instead.
+if isinstance(e, BinaryOp) and e.typ == Primitive(kind="int"):
+    return f"({expr_str}) != 0"
+```
 
-| Input | Expected | Actual |
-|-------|----------|--------|
-| `${${x}` | Error (unclosed) | Accepted |
-| `${x:-$(<})}` | Parse with `}` in filename | Parse error |
+This fixed 13 tests including unclosed brace detection (`${${x}`) and newline handling in nested expansions.
 
-**Root Cause**: Brace depth tracking or error detection differs between Python and Ruby.
+### Fix 6: UnaryOp("!", Truthy(int)) Expression
+**Lines 822-829** - Handle Python `not (flags & X)` correctly.
 
-### Category 4: Process Substitution Spacing (2 failures)
+When Python has `not (flags & X)`, this should be true when the AND result is 0. The fix detects `UnaryOp("!", Truthy(int_expr))` and emits `(expr) == 0`.
 
-**Problem**: Whitespace handling in `<(...)` differs.
-
-| Input | Expected | Actual |
-|-------|----------|--------|
-| `((<( a)))` | `<( a)` preserved | `<(a)` space removed |
-| `for ((<(a>b);;))` | `<(a>b)` preserved | `<(a > b)` spaces added |
-
-**Root Cause**: The formatting functions for arithmetic expressions are normalizing whitespace differently.
-
-### Category 5: Large Corpus Tests (19 failures)
-
-These are in `tests/corpus/gnu-bash/` and appear to be downstream effects of the above issues, particularly the ANSI-C quote expansion problem affecting complex scripts.
+```python
+if op == "!" and isinstance(operand, Truthy):
+    inner = operand.expr
+    if inner.typ == Primitive(kind="int"):
+        inner_str = self._expr(inner)
+        if isinstance(inner, BinaryOp):
+            return f"({inner_str}) == 0"
+        return f"{inner_str} == 0"
+```
 
 ---
 
-## Implementation Plan for Remaining Fixes
+## Remaining Failures (9 tests)
 
-### Priority 1: ANSI-C Quote Expansion (High Impact)
+### Category 1: Deeply Nested Arithmetic (1 failure)
 
-This is the highest priority as it affects the most tests.
+| Input | Expected | Actual |
+|-------|----------|--------|
+| `$(($($((#)))))` | Parse successfully | Parse error |
 
-**Approach**: Add debug tracing to compare Python vs Ruby behavior:
+**Root Cause**: Nested arithmetic with hash inside command substitution is not handled correctly.
 
-1. In Python, trace `_expand_all_ansi_c_quotes("\"${$''}\"")`:
-   - Track `brace_depth`, `quote.single`, `quote.double`, `effective_in_dquote` at each step
-   - Verify the `$'...'` branch is taken
+### Category 2: Select Statement Formatting (1 failure)
 
-2. In Ruby, add equivalent tracing and compare
+| Input | Expected | Actual |
+|-------|----------|--------|
+| `select x in ; do...` | `(in)` | `(in )` |
 
-3. The fix will likely be in one of:
-   - The `starts_with_at` function (Ruby string indexing differs from Python)
-   - The `quote.push`/`quote.pop` implementation
-   - The condition ordering in the while loop
+**Root Cause**: Minor whitespace difference in output formatting.
 
-**Files to check**:
-- `src/parable.py` lines 2380-2562: `_expand_all_ansi_c_quotes`
-- `dist/rb/parable.rb` lines 2062-2200: `expand_all_ansi_c_quotes`
+### Category 3: Binary/UTF-8 Data Handling (7 failures)
 
-### Priority 2: Newline Handling
-
-**Approach**: Compare `normalize_param_expansion_newlines` between Python and Ruby for the failing input.
-
-### Priority 3: Parse Error Detection
-
-**Approach**: These may be acceptable differences or may require adjusting brace depth tracking in the Ruby transpiled code.
-
-### Priority 4: Process Substitution Spacing
-
-**Approach**: Check arithmetic expression formatting in the transpiler output.
+Tests involving binary data, control characters, or invalid UTF-8 sequences in string literals fail due to encoding differences between Python and Ruby string handling.
 
 ---
 
@@ -157,25 +141,22 @@ module = fe.transpile(source, ast_dict, name_result=name_result)
 analyze(module)
 be = RubyBackend()
 print(be.emit(module))
-" > dist/rb/parable.rb
+" > /tmp/parable.rb && mv /tmp/parable.rb dist/ruby/parable.rb
 
 # Run all tests
-ruby -r ./dist/rb/parable.rb tests/bin/run-tests.rb tests/
+ruby -r ./dist/ruby/parable.rb tests/bin/run-tests.rb tests/
 
 # Run just character-fuzzer tests
-ruby -r ./dist/rb/parable.rb tests/bin/run-tests.rb tests/parable/character-fuzzer/
-
-# Test specific input
-echo '${$'"'"''"'"'}' | ruby -r ./dist/rb/parable.rb -e 'puts parse(STDIN.read.chomp).to_sexp'
+ruby -r ./dist/ruby/parable.rb tests/bin/run-tests.rb tests/parable/character-fuzzer/
 ```
 
 ---
 
 ## Notes
 
-The remaining failures are NOT in the Ruby backend code generator (`transpiler/src/backend/ruby.py`). They are in the **transpiled parser** (`dist/rb/parable.rb`) - specifically in how the parsing/normalization functions behave differently in Ruby vs Python.
+The remaining 9 failures are edge cases that are likely acceptable limitations:
+1. One deeply nested arithmetic expression
+2. One minor whitespace formatting difference
+3. Seven binary/UTF-8 encoding edge cases
 
-This means the fixes need to either:
-1. Adjust the Python source (`src/parable.py`) to work correctly when transpiled to Ruby
-2. Add Ruby-specific handling in the backend for these edge cases
-3. Accept some behavioral differences as limitations
+The core parsing functionality is now at 99.8% pass rate (4565/4574 tests).

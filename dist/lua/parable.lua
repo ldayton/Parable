@@ -1033,7 +1033,7 @@ function Lexer:read_word_internal(ctx, at_command_start, in_array_literal, in_as
       end
       if (#(chars) > 0) and at_command_start and not seen_equals and is_array_assignment_prefix(chars) then
         local prev_char = chars[#chars - 1 + 1]
-        if (string.match(prev_char, '^[%w]$') ~= nil) or prev_char == "_" then
+        if (string.match(prev_char, '^%w+$') ~= nil) or prev_char == "_" then
           bracket_start_pos = self.pos
           bracket_depth = bracket_depth + 1
           ;(function() table.insert(chars, self:advance()); return chars end)()
@@ -1676,18 +1676,18 @@ function Lexer:consume_param_name()
     self:advance()
     return ch
   end
-  if (string.match(ch, '^[%d]$') ~= nil) then
+  if (string.match(ch, '^%d+$') ~= nil) then
     local name_chars = {}
-    while not self:at_end() and (string.match(self:peek(), '^[%d]$') ~= nil) do
+    while not self:at_end() and (string.match(self:peek(), '^%d+$') ~= nil) do
       ;(function() table.insert(name_chars, self:advance()); return name_chars end)()
     end
     return table.concat(name_chars, "")
   end
-  if (string.match(ch, '^[%a]$') ~= nil) or ch == "_" then
+  if (string.match(ch, '^%a+$') ~= nil) or ch == "_" then
     name_chars = {}
     while not self:at_end() do
       local c = self:peek()
-      if (string.match(c, '^[%w]$') ~= nil) or c == "_" then
+      if (string.match(c, '^%w+$') ~= nil) or c == "_" then
         ;(function() table.insert(name_chars, self:advance()); return name_chars end)()
       elseif c == "[" then
         if not self:param_subscript_has_close(self.pos) then
@@ -1732,11 +1732,11 @@ function Lexer:read_param_expansion(in_dquote)
     text = substring(self.source, start, self.pos)
     return {ParamExpansion:new(ch, nil, nil, "param"), text}
   end
-  if (string.match(ch, '^[%a]$') ~= nil) or ch == "_" then
+  if (string.match(ch, '^%a+$') ~= nil) or ch == "_" then
     local name_start = self.pos
     while not self:at_end() do
       local c = self:peek()
-      if (string.match(c, '^[%w]$') ~= nil) or c == "_" then
+      if (string.match(c, '^%w+$') ~= nil) or c == "_" then
         self:advance()
       else
         break
@@ -2301,10 +2301,10 @@ function Word:expand_all_ansi_c_quotes(value)
             if (after_brace ~= nil and #(after_brace) > 0) then
               if ((string.find("@*#?-$!0123456789_", string.sub(after_brace, 0 + 1, 0 + 1), 1, true) ~= nil)) then
                 var_name_len = 1
-              elseif (string.match(string.sub(after_brace, 0 + 1, 0 + 1), '^[%a]$') ~= nil) or string.sub(after_brace, 0 + 1, 0 + 1) == "_" then
+              elseif (string.match(string.sub(after_brace, 0 + 1, 0 + 1), '^%a+$') ~= nil) or string.sub(after_brace, 0 + 1, 0 + 1) == "_" then
                 while var_name_len < #after_brace do
                   local c = string.sub(after_brace, var_name_len + 1, var_name_len + 1)
-                  if not ((string.match(c, '^[%w]$') ~= nil) or c == "_") then
+                  if not ((string.match(c, '^%w+$') ~= nil) or c == "_") then
                     break
                   end
                   var_name_len = var_name_len + 1
@@ -2439,11 +2439,11 @@ end
 
 function Word:normalize_array_whitespace(value)
   local i = 0
-  if not (i < #value and ((string.match(string.sub(value, i + 1, i + 1), '^[%a]$') ~= nil) or string.sub(value, i + 1, i + 1) == "_")) then
+  if not (i < #value and ((string.match(string.sub(value, i + 1, i + 1), '^%a+$') ~= nil) or string.sub(value, i + 1, i + 1) == "_")) then
     return value
   end
   i = i + 1
-  while i < #value and ((string.match(string.sub(value, i + 1, i + 1), '^[%w]$') ~= nil) or string.sub(value, i + 1, i + 1) == "_") do
+  while i < #value and ((string.match(string.sub(value, i + 1, i + 1), '^%w+$') ~= nil) or string.sub(value, i + 1, i + 1) == "_") do
     i = i + 1
   end
   while i < #value and string.sub(value, i + 1, i + 1) == "[" do
@@ -2909,7 +2909,7 @@ function Word:format_command_substitutions(value, in_arith)
       has_untracked_cmdsub = true
       break
     elseif (starts_with_at(value, idx, "<(") or starts_with_at(value, idx, ">(")) and not scan_quote.double then
-      if idx == 0 or not (string.match(string.sub(value, idx - 1 + 1, idx - 1 + 1), '^[%w]$') ~= nil) and ((not (string.find("\"'", string.sub(value, idx - 1 + 1, idx - 1 + 1), 1, true) ~= nil))) then
+      if idx == 0 or not (string.match(string.sub(value, idx - 1 + 1, idx - 1 + 1), '^%w+$') ~= nil) and ((not (string.find("\"'", string.sub(value, idx - 1 + 1, idx - 1 + 1), 1, true) ~= nil))) then
         has_untracked_procsub = true
         break
       end
@@ -3057,7 +3057,7 @@ function Word:format_command_substitutions(value, in_arith)
         local orig_inner = substring(value, i + 2, j - 1)
         local ends_with_newline = (string.sub(orig_inner, -#"\n") == "\n")
         local suffix
-        if not (formatted ~= nil and #(formatted) > 0) or (string.match(formatted, '^[%s]$') ~= nil) then
+        if not (formatted ~= nil and #(formatted) > 0) or (string.match(formatted, '^%s+$') ~= nil) then
           suffix = "}"
         elseif (string.sub(formatted, -#"&") == "&") or (string.sub(formatted, -#"& ") == "& ") then
           suffix = ((string.sub(formatted, -#"&") == "&") and " }" or "}")
@@ -3073,7 +3073,7 @@ function Word:format_command_substitutions(value, in_arith)
       end
       i = j
     elseif (starts_with_at(value, i, ">(") or starts_with_at(value, i, "<(")) and not main_quote.double and deprecated_arith_depth == 0 and arith_depth == 0 then
-      local is_procsub = i == 0 or not (string.match(string.sub(value, i - 1 + 1, i - 1 + 1), '^[%w]$') ~= nil) and ((not (string.find("\"'", string.sub(value, i - 1 + 1, i - 1 + 1), 1, true) ~= nil)))
+      local is_procsub = i == 0 or not (string.match(string.sub(value, i - 1 + 1, i - 1 + 1), '^%w+$') ~= nil) and ((not (string.find("\"'", string.sub(value, i - 1 + 1, i - 1 + 1), 1, true) ~= nil)))
       if extglob_depth > 0 then
         j = find_cmdsub_end(value, i + 2)
         ;(function() table.insert(result, substring(value, i, j)); return result end)()
@@ -3732,9 +3732,9 @@ function Redirect:to_sexp()
   local op = (string.gsub(self.op, '^[' .. "0123456789" .. ']+', ''))
   if (string.sub(op, 1, #"{") == "{") then
     local j = 1
-    if j < #op and ((string.match(string.sub(op, j + 1, j + 1), '^[%a]$') ~= nil) or string.sub(op, j + 1, j + 1) == "_") then
+    if j < #op and ((string.match(string.sub(op, j + 1, j + 1), '^%a+$') ~= nil) or string.sub(op, j + 1, j + 1) == "_") then
       j = j + 1
-      while j < #op and ((string.match(string.sub(op, j + 1, j + 1), '^[%w]$') ~= nil) or string.sub(op, j + 1, j + 1) == "_") do
+      while j < #op and ((string.match(string.sub(op, j + 1, j + 1), '^%w+$') ~= nil) or string.sub(op, j + 1, j + 1) == "_") do
         j = j + 1
       end
       if j < #op and string.sub(op, j + 1, j + 1) == "[" then
@@ -3766,10 +3766,10 @@ function Redirect:to_sexp()
       op = "<&"
     end
     local raw = substring(target_val, 1, #target_val)
-    if (string.match(raw, '^[%d]$') ~= nil) and tonumber(raw) <= 2147483647 then
+    if (string.match(raw, '^%d+$') ~= nil) and tonumber(raw) <= 2147483647 then
       return "(redirect \"" .. op .. "\" " .. tostring(tonumber(raw)) .. ")"
     end
-    if (string.sub(raw, -#"-") == "-") and (string.match(string.sub(raw, 1, #raw - 1), '^[%d]$') ~= nil) and tonumber(string.sub(raw, 1, #raw - 1)) <= 2147483647 then
+    if (string.sub(raw, -#"-") == "-") and (string.match(string.sub(raw, 1, #raw - 1), '^%d+$') ~= nil) and tonumber(string.sub(raw, 1, #raw - 1)) <= 2147483647 then
       return "(redirect \"" .. op .. "\" " .. tostring(tonumber(string.sub(raw, 1, #raw - 1))) .. ")"
     end
     if target_val == "&-" then
@@ -3779,13 +3779,13 @@ function Redirect:to_sexp()
     return "(redirect \"" .. op .. "\" \"" .. fd_target .. "\")"
   end
   if op == ">&" or op == "<&" then
-    if (string.match(target_val, '^[%d]$') ~= nil) and tonumber(target_val) <= 2147483647 then
+    if (string.match(target_val, '^%d+$') ~= nil) and tonumber(target_val) <= 2147483647 then
       return "(redirect \"" .. op .. "\" " .. tostring(tonumber(target_val)) .. ")"
     end
     if target_val == "-" then
       return "(redirect \">&-\" 0)"
     end
-    if (string.sub(target_val, -#"-") == "-") and (string.match(string.sub(target_val, 1, #target_val - 1), '^[%d]$') ~= nil) and tonumber(string.sub(target_val, 1, #target_val - 1)) <= 2147483647 then
+    if (string.sub(target_val, -#"-") == "-") and (string.match(string.sub(target_val, 1, #target_val - 1), '^%d+$') ~= nil) and tonumber(string.sub(target_val, 1, #target_val - 1)) <= 2147483647 then
       return "(redirect \"" .. op .. "\" " .. tostring(tonumber(string.sub(target_val, 1, #target_val - 1))) .. ")"
     end
     local out_val = ((string.sub(target_val, -#"-") == "-") and string.sub(target_val, 1, #target_val - 1) or target_val)
@@ -6640,7 +6640,7 @@ function Parser:arith_parse_expansion()
   local name_chars = {}
   while not self:arith_at_end() do
     local ch = self:arith_peek(0)
-    if (string.match(ch, '^[%w]$') ~= nil) or ch == "_" then
+    if (string.match(ch, '^%w+$') ~= nil) or ch == "_" then
       ;(function() table.insert(name_chars, self:arith_advance()); return name_chars end)()
     elseif (is_special_param_or_digit(ch) or ch == "#") and not (#(name_chars) > 0) then
       ;(function() table.insert(name_chars, self:arith_advance()); return name_chars end)()
@@ -6858,10 +6858,10 @@ function Parser:arith_parse_number_or_var()
   local chars = {}
   local c = self:arith_peek(0)
   local ch
-  if (string.match(c, '^[%d]$') ~= nil) then
+  if (string.match(c, '^%d+$') ~= nil) then
     while not self:arith_at_end() do
       ch = self:arith_peek(0)
-      if (string.match(ch, '^[%w]$') ~= nil) or ch == "#" or ch == "_" then
+      if (string.match(ch, '^%w+$') ~= nil) or ch == "#" or ch == "_" then
         ;(function() table.insert(chars, self:arith_advance()); return chars end)()
       else
         break
@@ -6874,10 +6874,10 @@ function Parser:arith_parse_number_or_var()
     end
     return ArithNumber:new(prefix, "number")
   end
-  if (string.match(c, '^[%a]$') ~= nil) or c == "_" then
+  if (string.match(c, '^%a+$') ~= nil) or c == "_" then
     while not self:arith_at_end() do
       ch = self:arith_peek(0)
-      if (string.match(ch, '^[%w]$') ~= nil) or ch == "_" then
+      if (string.match(ch, '^%w+$') ~= nil) or ch == "_" then
         ;(function() table.insert(chars, self:arith_advance()); return chars end)()
       else
         break
@@ -6936,7 +6936,7 @@ function Parser:parse_redirect()
       elseif ch == "]" then
         in_bracket = false
         ;(function() table.insert(varname_chars, self:advance()); return varname_chars end)()
-      elseif (string.match(ch, '^[%w]$') ~= nil) or ch == "_" then
+      elseif (string.match(ch, '^%w+$') ~= nil) or ch == "_" then
         ;(function() table.insert(varname_chars, self:advance()); return varname_chars end)()
       elseif in_bracket and not is_metachar(ch) then
         ;(function() table.insert(varname_chars, self:advance()); return varname_chars end)()
@@ -6947,17 +6947,17 @@ function Parser:parse_redirect()
     local varname = table.concat(varname_chars, "")
     local is_valid_varfd = false
     if (varname ~= nil and #(varname) > 0) then
-      if (string.match(string.sub(varname, 0 + 1, 0 + 1), '^[%a]$') ~= nil) or string.sub(varname, 0 + 1, 0 + 1) == "_" then
+      if (string.match(string.sub(varname, 0 + 1, 0 + 1), '^%a+$') ~= nil) or string.sub(varname, 0 + 1, 0 + 1) == "_" then
         if (((string.find(varname, "[", 1, true) ~= nil))) or (((string.find(varname, "]", 1, true) ~= nil))) then
           local left = _string_find(varname, "[")
           local right = _string_rfind(varname, "]")
           if left ~= -1 and right == #varname - 1 and right > left + 1 then
             local base = string.sub(varname, 1, left)
-            if (base ~= nil and #(base) > 0) and ((string.match(string.sub(base, 0 + 1, 0 + 1), '^[%a]$') ~= nil) or string.sub(base, 0 + 1, 0 + 1) == "_") then
+            if (base ~= nil and #(base) > 0) and ((string.match(string.sub(base, 0 + 1, 0 + 1), '^%a+$') ~= nil) or string.sub(base, 0 + 1, 0 + 1) == "_") then
               is_valid_varfd = true
               for _ = 1, #string.sub(base, (1) + 1, #base) do
                 local c = string.sub(string.sub(base, (1) + 1, #base), _, _)
-                if not ((string.match(c, '^[%w]$') ~= nil) or c == "_") then
+                if not ((string.match(c, '^%w+$') ~= nil) or c == "_") then
                   is_valid_varfd = false
                   break
                 end
@@ -6968,7 +6968,7 @@ function Parser:parse_redirect()
           is_valid_varfd = true
           for _ = 1, #string.sub(varname, (1) + 1, #varname) do
             local c = string.sub(string.sub(varname, (1) + 1, #varname), _, _)
-            if not ((string.match(c, '^[%w]$') ~= nil) or c == "_") then
+            if not ((string.match(c, '^%w+$') ~= nil) or c == "_") then
               is_valid_varfd = false
               break
             end
@@ -6984,9 +6984,9 @@ function Parser:parse_redirect()
     end
   end
   local fd_chars
-  if varfd == "" and (self:peek() ~= nil and #(self:peek()) > 0) and (string.match(self:peek(), '^[%d]$') ~= nil) then
+  if varfd == "" and (self:peek() ~= nil and #(self:peek()) > 0) and (string.match(self:peek(), '^%d+$') ~= nil) then
     fd_chars = {}
-    while not self:at_end() and (string.match(self:peek(), '^[%d]$') ~= nil) do
+    while not self:at_end() and (string.match(self:peek(), '^%d+$') ~= nil) do
       ;(function() table.insert(fd_chars, self:advance()); return fd_chars end)()
     end
     fd = tonumber(table.concat(fd_chars, ""))
@@ -7082,10 +7082,10 @@ function Parser:parse_redirect()
     end
     if (target == nil) then
       local inner_word
-      if not self:at_end() and ((string.match(self:peek(), '^[%d]$') ~= nil) or self:peek() == "-") then
+      if not self:at_end() and ((string.match(self:peek(), '^%d+$') ~= nil) or self:peek() == "-") then
         local word_start = self.pos
         fd_chars = {}
-        while not self:at_end() and (string.match(self:peek(), '^[%d]$') ~= nil) do
+        while not self:at_end() and (string.match(self:peek(), '^%d+$') ~= nil) do
           ;(function() table.insert(fd_chars, self:advance()); return fd_chars end)()
         end
         local fd_target
@@ -9772,7 +9772,7 @@ function format_redirect(r, compact, heredoc_op_only)
       op = substring(op, 0, #op - 1) .. ">"
     end
     local after_amp = substring(target, 1, #target)
-    local is_literal_fd = after_amp == "-" or #after_amp > 0 and (string.match(string.sub(after_amp, 0 + 1, 0 + 1), '^[%d]$') ~= nil)
+    local is_literal_fd = after_amp == "-" or #after_amp > 0 and (string.match(string.sub(after_amp, 0 + 1, 0 + 1), '^%d+$') ~= nil)
     if is_literal_fd then
       if op == ">" or op == ">&" then
         op = (was_input_close and "0>" or "1>")
@@ -10384,7 +10384,7 @@ end
 function is_word_boundary(s, pos, word_len)
   if pos > 0 then
     local prev = string.sub(s, pos - 1 + 1, pos - 1 + 1)
-    if (string.match(prev, '^[%w]$') ~= nil) or prev == "_" then
+    if (string.match(prev, '^%w+$') ~= nil) or prev == "_" then
       return false
     end
     if ((string.find("{}!", prev, 1, true) ~= nil)) then
@@ -10392,7 +10392,7 @@ function is_word_boundary(s, pos, word_len)
     end
   end
   local end_ = pos + word_len
-  if end_ < #s and ((string.match(string.sub(s, end_ + 1, end_ + 1), '^[%w]$') ~= nil) or string.sub(s, end_ + 1, end_ + 1) == "_") then
+  if end_ < #s and ((string.match(string.sub(s, end_ + 1, end_ + 1), '^%w+$') ~= nil) or string.sub(s, end_ + 1, end_ + 1) == "_") then
     return false
   end
   return true
@@ -10633,7 +10633,7 @@ function assignment(s, flags)
   if not (s ~= nil and #(s) > 0) then
     return -1
   end
-  if not ((string.match(string.sub(s, 0 + 1, 0 + 1), '^[%a]$') ~= nil) or string.sub(s, 0 + 1, 0 + 1) == "_") then
+  if not ((string.match(string.sub(s, 0 + 1, 0 + 1), '^%a+$') ~= nil) or string.sub(s, 0 + 1, 0 + 1) == "_") then
     return -1
   end
   local i = 1
@@ -10663,7 +10663,7 @@ function assignment(s, flags)
       end
       return -1
     end
-    if not ((string.match(c, '^[%w]$') ~= nil) or c == "_") then
+    if not ((string.match(c, '^%w+$') ~= nil) or c == "_") then
       return -1
     end
     i = i + 1
@@ -10675,12 +10675,12 @@ function is_array_assignment_prefix(chars)
   if not (#(chars) > 0) then
     return false
   end
-  if not ((string.match(chars[0 + 1], '^[%a]$') ~= nil) or chars[0 + 1] == "_") then
+  if not ((string.match(chars[0 + 1], '^%a+$') ~= nil) or chars[0 + 1] == "_") then
     return false
   end
   local s = table.concat(chars, "")
   local i = 1
-  while i < #s and ((string.match(string.sub(s, i + 1, i + 1), '^[%w]$') ~= nil) or string.sub(s, i + 1, i + 1) == "_") do
+  while i < #s and ((string.match(string.sub(s, i + 1, i + 1), '^%w+$') ~= nil) or string.sub(s, i + 1, i + 1) == "_") do
     i = i + 1
   end
   while i < #s do
@@ -10768,12 +10768,12 @@ function is_valid_identifier(name)
   if not (name ~= nil and #(name) > 0) then
     return false
   end
-  if not ((string.match(string.sub(name, 0 + 1, 0 + 1), '^[%a]$') ~= nil) or string.sub(name, 0 + 1, 0 + 1) == "_") then
+  if not ((string.match(string.sub(name, 0 + 1, 0 + 1), '^%a+$') ~= nil) or string.sub(name, 0 + 1, 0 + 1) == "_") then
     return false
   end
   for _ = 1, #string.sub(name, (1) + 1, #name) do
     local c = string.sub(string.sub(name, (1) + 1, #name), _, _)
-    if not ((string.match(c, '^[%w]$') ~= nil) or c == "_") then
+    if not ((string.match(c, '^%w+$') ~= nil) or c == "_") then
       return false
     end
   end

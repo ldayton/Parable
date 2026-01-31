@@ -1084,7 +1084,8 @@ class LuaBackend:
                     "lower": "%l",
                 }
                 pattern = pattern_map[kind]
-                return f"(string.match({char_expr}, '^[{pattern}]$') ~= nil)"
+                # Python's isdigit/isalpha/etc check ALL chars, so use + not single char
+                return f"(string.match({char_expr}, '^{pattern}+$') ~= nil)"
             case TrimChars(string=s, chars=chars, mode=mode):
                 s_str = self._expr(s)
                 chars_str = self._expr(chars)

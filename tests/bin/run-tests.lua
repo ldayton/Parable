@@ -96,6 +96,23 @@ local function normalize(s)
   return table.concat(parts, " ")
 end
 
+-- Timeout via instruction counting (100k hook calls ~ plenty of time)
+local HOOK_LIMIT = 100000
+
+local function run_with_timeout(func)
+  local count = 0
+  local function hook()
+    count = count + 1
+    if count > HOOK_LIMIT then
+      error("timeout")
+    end
+  end
+  debug.sethook(hook, "", 100)  -- Hook every 100 VM instructions
+  local ok, result = pcall(func)
+  debug.sethook()  -- Clear the hook
+  return ok, result
+end
+
 -- Run a single test. Returns passed, actual, error_msg
 local function run_test(test_input, test_expected)
   -- Check for @extglob directive
@@ -105,7 +122,7 @@ local function run_test(test_input, test_expected)
     test_input = test_input:sub(#"# @extglob\n" + 1)
   end
 
-  local ok, result = pcall(function()
+  local ok, result = run_with_timeout(function()
     local nodes = parse(test_input, extglob)
     local sexps = {}
     for _, node in ipairs(nodes) do
@@ -115,7 +132,13 @@ local function run_test(test_input, test_expected)
   end)
 
   if not ok then
-    -- Parse error or exception
+    -- Parse error, timeout, or exception
+    if result == "timeout" then
+      if normalize(test_expected) == "<infinite>" then
+        return true, "<infinite>", nil
+      end
+      return false, "<timeout>", "Test exceeded instruction limit"
+    end
     if normalize(test_expected) == "<error>" then
       return true, "<error>", nil
     end
@@ -221,6 +244,10 @@ local function main()
         effective_expected = "<error>"
       end
 
+      -- Show which test is running (for debugging hangs)
+      io.stderr:write(string.format("\r[%d] %s:%d %s                    ", total_passed + total_failed + 1, rel_path, line_num, name:sub(1,30)))
+      io.stderr:flush()
+
       local passed, actual, error_msg = run_test(test_input, effective_expected)
 
       if passed then
@@ -249,6 +276,7 @@ local function main()
   end
 
   local elapsed = os.clock() - start_time
+  io.stderr:write("\r" .. string.rep(" ", 40) .. "\r")  -- Clear progress line
 
   -- Print summary
   print("")

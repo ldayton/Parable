@@ -192,6 +192,7 @@ class LuaBackend:
         self._needs_set_contains = False
         self._needs_string_find = False
         self._hoisted_vars: set[str] = set()  # Variables already declared via hoisting
+        self._in_conditional = 0  # Track nesting level inside conditionals
 
     def emit(self, module: Module) -> str:
         """Emit Lua code from IR Module."""
@@ -204,6 +205,7 @@ class LuaBackend:
         self._needs_set_contains = False
         self._needs_string_find = False
         self._hoisted_vars = set()
+        self._in_conditional = 0
         # First pass to collect struct field info
         for struct in module.structs:
             self.struct_fields[struct.name] = [f.name for f in struct.fields]
@@ -303,6 +305,44 @@ class LuaBackend:
                     if self._body_has_continue(case.body):
                         return True
                 if self._body_has_continue(stmt.default):
+                    return True
+        return False
+
+    def _body_has_return(self, body: list[Stmt]) -> bool:
+        """Check if body contains any return statements."""
+        for stmt in body:
+            if isinstance(stmt, Return) and stmt.value is not None:
+                return True
+            if isinstance(stmt, If):
+                if self._body_has_return(stmt.then_body) or self._body_has_return(
+                    stmt.else_body
+                ):
+                    return True
+            elif isinstance(stmt, (While, ForRange)):
+                if self._body_has_return(stmt.body):
+                    return True
+            elif isinstance(stmt, ForClassic):
+                if self._body_has_return(stmt.body):
+                    return True
+            elif isinstance(stmt, Block):
+                if self._body_has_return(stmt.body):
+                    return True
+            elif isinstance(stmt, TryCatch):
+                if self._body_has_return(stmt.body) or self._body_has_return(
+                    stmt.catch_body
+                ):
+                    return True
+            elif isinstance(stmt, Match):
+                for case in stmt.cases:
+                    if self._body_has_return(case.body):
+                        return True
+                if self._body_has_return(stmt.default):
+                    return True
+            elif isinstance(stmt, TypeSwitch):
+                for case in stmt.cases:
+                    if self._body_has_return(case.body):
+                        return True
+                if self._body_has_return(stmt.default):
                     return True
         return False
 
@@ -568,7 +608,9 @@ class LuaBackend:
                 var_name = None
                 if isinstance(target, VarLV):
                     var_name = target.name
-                if stmt.is_declaration and var_name and var_name not in self._hoisted_vars:
+                # In Python, first assignment creates a local variable
+                # Emit `local` if variable hasn't been declared yet
+                if var_name and var_name not in self._hoisted_vars:
                     self._line(f"local {lv} = {val}")
                     self._hoisted_vars.add(var_name)
                 else:
@@ -598,8 +640,12 @@ class LuaBackend:
             case OpAssign(target=target, op=op, value=value):
                 lv = self._lvalue(target)
                 val = self._expr(value)
-                lua_op = _op_assign_op(op)
-                self._line(f"{lv} = {lv} {lua_op} {val}")
+                # String concatenation: += on strings becomes .. in Lua
+                if op == "+" and self._is_string_type(value.typ):
+                    self._line(f"{lv} = {lv} .. {val}")
+                else:
+                    lua_op = _op_assign_op(op)
+                    self._line(f"{lv} = {lv} {lua_op} {val}")
             case NoOp():
                 pass
             case ExprStmt(expr=expr):
@@ -679,12 +725,10 @@ class LuaBackend:
                 # We use goto for simplicity (requires Lua 5.2+)
                 self._line("goto continue")
             case Block(body=body):
-                self._line("do")
-                self.indent += 1
+                # Don't emit do/end - Lua's do/end creates a scope boundary
+                # but IR Block is just grouping, not a scope boundary
                 for s in body:
                     self._emit_stmt(s)
-                self.indent -= 1
-                self._line("end")
             case TryCatch(
                 body=body,
                 catch_var=catch_var,
@@ -898,16 +942,20 @@ class LuaBackend:
         reraise: bool,
     ) -> None:
         var = _safe_name(catch_var) if catch_var else "_err"
+        has_return = self._body_has_return(body)
         self._line("local _ok, _err = pcall(function()")
         self.indent += 1
+        self._in_conditional += 1  # pcall creates closure scope
         if _is_empty_body(body):
             self._line("-- empty try")
         for s in body:
             self._emit_stmt(s)
+        self._in_conditional -= 1
         self.indent -= 1
         self._line("end)")
         self._line("if not _ok then")
         self.indent += 1
+        self._in_conditional += 1
         if catch_var:
             self._line(f"local {var} = _err")
         if _is_empty_body(catch_body) and not reraise:
@@ -916,8 +964,12 @@ class LuaBackend:
             self._emit_stmt(s)
         if reraise:
             self._line("error(_err)")
+        self._in_conditional -= 1
         self.indent -= 1
         self._line("end")
+        # If try body has return statements, propagate the return value on success
+        if has_return:
+            self._line("if _ok then return _err end")
 
     def _emit_else_body(self, else_body: list[Stmt]) -> None:
         """Emit else body, converting single-If else to elseif chains."""
@@ -1024,11 +1076,11 @@ class LuaBackend:
                 s_str = self._expr(s)
                 chars_str = self._expr(chars)
                 if mode == "left":
-                    return f"string.gsub({s_str}, '^[' .. {chars_str} .. ']+', '')"
+                    return f"(string.gsub({s_str}, '^[' .. {chars_str} .. ']+', ''))"
                 elif mode == "right":
-                    return f"string.gsub({s_str}, '[' .. {chars_str} .. ']+$', '')"
+                    return f"(string.gsub({s_str}, '[' .. {chars_str} .. ']+$', ''))"
                 else:
-                    return f"string.gsub(string.gsub({s_str}, '^[' .. {chars_str} .. ']+', ''), '[' .. {chars_str} .. ']+$', '')"
+                    return f"(string.gsub((string.gsub({s_str}, '^[' .. {chars_str} .. ']+', '')), '[' .. {chars_str} .. ']+$', ''))"
             case Call(func="_intPtr", args=[arg]):
                 val = self._expr(arg)
                 return f"(({val}) == -1 and nil or ({val}))"
@@ -1078,7 +1130,9 @@ class LuaBackend:
                 if op == "not in":
                     return self._containment_check(left, right, negated=True)
                 # String concatenation: + on strings becomes .. in Lua
-                if op == "+" and self._is_string_type(left.typ):
+                if op == "+" and (
+                    self._is_string_type(left.typ) or self._is_string_type(right.typ)
+                ):
                     left_str = self._maybe_paren(left, "..", is_left=True)
                     right_str = self._maybe_paren(right, "..", is_left=False)
                     return f"{left_str} .. {right_str}"
@@ -1115,7 +1169,8 @@ class LuaBackend:
                 if to_type == Primitive(kind="string") and inner.typ == Primitive(
                     kind="rune"
                 ):
-                    return f"string.char({self._expr(inner)})"
+                    # Use utf8.char for Unicode codepoints (Lua 5.3+)
+                    return f"utf8.char({self._expr(inner)})"
                 if isinstance(to_type, Slice) and to_type.element == Primitive(
                     kind="byte"
                 ):
@@ -1226,10 +1281,12 @@ class LuaBackend:
         """Handle method calls with proper Lua idioms."""
         obj_str = self._expr(obj)
         args_str = ", ".join(self._expr(a) for a in args)
-        # Unwrap Pointer types
+        # Unwrap Pointer and Optional types
         inner_type = receiver_type
         if isinstance(inner_type, Pointer):
             inner_type = inner_type.target
+        if isinstance(inner_type, Optional):
+            inner_type = inner_type.inner
         # String methods
         if isinstance(inner_type, Primitive) and inner_type.kind == "string":
             if method == "join" and len(args) == 1:
@@ -1254,7 +1311,15 @@ class LuaBackend:
                     return f"(string.sub({obj_str}, {pos} + 1, {pos} + #{prefix}) == {prefix})"
                 return f"(string.sub({obj_str}, 1, #{prefix}) == {prefix})"
             if method == "endswith":
-                suffix = self._expr(args[0])
+                arg = args[0]
+                # Handle tuple argument: s.endswith(("a", "b")) -> s ends with a or b
+                if isinstance(arg, TupleLit):
+                    checks = []
+                    for elem in arg.elements:
+                        suffix = self._expr(elem)
+                        checks.append(f"string.sub({obj_str}, -#{suffix}) == {suffix}")
+                    return f"({' or '.join(checks)})"
+                suffix = self._expr(arg)
                 return f"(string.sub({obj_str}, -#{suffix}) == {suffix})"
             if method == "replace":
                 old = self._expr(args[0])
@@ -1289,6 +1354,66 @@ class LuaBackend:
                 return f"_set_add({obj_str}, {args_str})"
             if method == "contains":
                 return f"_set_contains({obj_str}, {args_str})"
+        # Fallback for string methods when type isn't known
+        if method == "endswith" and len(args) == 1:
+            arg = args[0]
+            # Handle tuple argument: s.endswith(("a", "b")) -> s ends with a or b
+            if isinstance(arg, TupleLit):
+                checks = []
+                for elem in arg.elements:
+                    suffix = self._expr(elem)
+                    checks.append(f"string.sub({obj_str}, -#{suffix}) == {suffix}")
+                return f"({' or '.join(checks)})"
+            suffix = self._expr(arg)
+            return f"(string.sub({obj_str}, -#{suffix}) == {suffix})"
+        if method == "startswith" and len(args) >= 1:
+            prefix = self._expr(args[0])
+            if len(args) == 2:
+                pos = self._expr(args[1])
+                return f"(string.sub({obj_str}, {pos} + 1, {pos} + #{prefix}) == {prefix})"
+            return f"(string.sub({obj_str}, 1, #{prefix}) == {prefix})"
+        if method == "lower":
+            return f"string.lower({obj_str})"
+        if method == "upper":
+            return f"string.upper({obj_str})"
+        if method == "split" and len(args) == 1:
+            return f"_string_split({obj_str}, {self._expr(args[0])})"
+        if method == "isdigit":
+            return f"(string.match({obj_str}, '^%d+$') ~= nil)"
+        if method == "isspace":
+            return f"(string.match({obj_str}, '^%s+$') ~= nil)"
+        if method == "isalnum":
+            return f"(string.match({obj_str}, '^%w+$') ~= nil)"
+        if method == "rstrip":
+            if len(args) == 0:
+                return f"(string.gsub({obj_str}, '%s+$', ''))"
+            chars = self._expr(args[0])
+            return f"(string.gsub({obj_str}, '[' .. {chars} .. ']+$', ''))"
+        if method == "lstrip":
+            if len(args) == 0:
+                return f"(string.gsub({obj_str}, '^%s+', ''))"
+            chars = self._expr(args[0])
+            return f"(string.gsub({obj_str}, '^[' .. {chars} .. ']+', ''))"
+        if method == "strip":
+            if len(args) == 0:
+                return f"(string.gsub((string.gsub({obj_str}, '^%s+', '')), '%s+$', ''))"
+            chars = self._expr(args[0])
+            return f"(string.gsub((string.gsub({obj_str}, '^[' .. {chars} .. ']+', '')), '[' .. {chars} .. ']+$', ''))"
+        if method == "replace" and len(args) == 2:
+            old = self._expr(args[0])
+            new = self._expr(args[1])
+            return f"(string.gsub({obj_str}, {old}, {new}))"
+        if method == "find" and len(args) >= 1:
+            if len(args) == 1:
+                return f"_string_find({obj_str}, {self._expr(args[0])})"
+            return f"_string_find({obj_str}, {self._expr(args[0])}, {self._expr(args[1])})"
+        if method == "rfind" and len(args) >= 1:
+            return f"_string_rfind({obj_str}, {self._expr(args[0])})"
+        if method == "append" and len(args) == 1:
+            return f"(function() table.insert({obj_str}, {args_str}); return {obj_str} end)()"
+        if method == "join" and len(args) == 1:
+            # "sep".join(arr) -> table.concat(arr, sep)
+            return f"table.concat({self._expr(args[0])}, {obj_str})"
         # Default: method call syntax
         if isinstance(obj, (BinaryOp, UnaryOp, Ternary)):
             obj_str = f"({obj_str})"
@@ -1317,13 +1442,20 @@ class LuaBackend:
         # Use string.format with %s placeholders
         result = template
         format_parts = []
+        arg_idx = 0
+        # Handle {i} placeholders
         for i in range(len(args)):
             placeholder = f"{{{i}}}"
             if placeholder in result:
                 result = result.replace(placeholder, "%s", 1)
                 format_parts.append(self._expr(args[i]))
+                arg_idx = i + 1
+        # Handle %v placeholders
         while "%v" in result:
             result = result.replace("%v", "%s", 1)
+            if arg_idx < len(args):
+                format_parts.append(self._expr(args[arg_idx]))
+                arg_idx += 1
         # Escape any remaining % signs
         result = result.replace("%", "%%").replace("%%s", "%s")
         # Escape special characters for Lua string

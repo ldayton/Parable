@@ -188,11 +188,11 @@ end
 
 function ParseError:format_message()
   if self.line ~= 0 and self.pos ~= 0 then
-    return "Parse error at line %s, position %s: %s"
+    return string.format("Parse error at line %s, position %s: %s", self.line, self.pos, self.message)
   elseif self.pos ~= 0 then
-    return "Parse error at position %s: %s"
+    return string.format("Parse error at position %s: %s", self.pos, self.message)
   end
-  return "Parse error: %s"
+  return string.format("Parse error: %s", self.message)
 end
 
 MatchedPairError = {}
@@ -224,12 +224,12 @@ end
 
 function Token:_repr__()
   if (self.word ~= nil) then
-    return "Token(%s, %s, %s, word=%s)"
+    return string.format("Token(%s, %s, %s, word=%s)", self.type_, self.value, self.pos, self.word)
   end
   if (#(self.parts) > 0) then
-    return "Token(%s, %s, %s, parts=%s)"
+    return string.format("Token(%s, %s, %s, parts=%s)", self.type_, self.value, self.pos, #self.parts)
   end
-  return "Token(%s, %s, %s)"
+  return string.format("Token(%s, %s, %s)", self.type_, self.value, self.pos)
 end
 
 
@@ -783,7 +783,7 @@ function Lexer:parse_matched_pair(open_char, close_char, flags, initial_was_doll
   local was_gtlt = false
   while count > 0 do
     if self:at_end() then
-      error({MatchedPairError = true, message = "unexpected EOF while looking for matching `%s'", pos = start})
+      error({MatchedPairError = true, message = string.format("unexpected EOF while looking for matching `%s'", close_char), pos = start})
     end
     local ch = self:advance()
     if (flags & MATCHEDPAIRFLAGS_DOLBRACE ~= 0) and self.dolbrace_state == DOLBRACESTATE_OP then
@@ -967,10 +967,8 @@ function Lexer:parse_matched_pair(open_char, close_char, flags, initial_was_doll
       end
     end
     if ch == "(" and was_gtlt and (flags & (MATCHEDPAIRFLAGS_DOLBRACE | MATCHEDPAIRFLAGS_ARRAYSUB) ~= 0) then
-      do
-        local direction = chars[#chars - 1 + 1]
-        chars = _table_slice(chars, 1, #chars - 1)
-      end
+      local direction = chars[#chars - 1 + 1]
+      chars = _table_slice(chars, 1, #chars - 1)
       self.pos = self.pos - 1
       self:sync_to_parser()
       local procsub_node, procsub_text = table.unpack(self.parser:parse_process_substitution())
@@ -1868,7 +1866,7 @@ function Lexer:read_braced_param(start, in_dquote)
     elseif not self:at_end() and self:peek() == "\\" then
       op = self:advance()
       if not self:at_end() then
-        op = op + self:advance()
+        op = op .. self:advance()
       end
     else
       op = self:advance()
@@ -2124,7 +2122,7 @@ function Word:ansi_c_to_bytes(inner)
           if codepoint == 0 then
             return result
           end
-          ;(function() for _, v in ipairs(({string.byte(string.char(codepoint), 1, -1)})) do table.insert(result, v) end; return result end)()
+          ;(function() for _, v in ipairs(({string.byte(utf8.char(codepoint), 1, -1)})) do table.insert(result, v) end; return result end)()
           i = j
         else
           ;(function() table.insert(result, string.byte(string.sub(string.sub(inner, i + 1, i + 1), 0 + 1, 0 + 1))); return result end)()
@@ -2140,7 +2138,7 @@ function Word:ansi_c_to_bytes(inner)
           if codepoint == 0 then
             return result
           end
-          ;(function() for _, v in ipairs(({string.byte(string.char(codepoint), 1, -1)})) do table.insert(result, v) end; return result end)()
+          ;(function() for _, v in ipairs(({string.byte(utf8.char(codepoint), 1, -1)})) do table.insert(result, v) end; return result end)()
           i = j
         else
           ;(function() table.insert(result, string.byte(string.sub(string.sub(inner, i + 1, i + 1), 0 + 1, 0 + 1))); return result end)()
@@ -2706,7 +2704,7 @@ function Word:normalize_array_inner(inner)
       i = i + 1
     end
   end
-  return string.gsub(table.concat(normalized, ""), '[' .. " \t\n\r" .. ']+$', '')
+  return (string.gsub(table.concat(normalized, ""), '[' .. " \t\n\r" .. ']+$', ''))
 end
 
 function Word:strip_arith_line_continuations(value)
@@ -3153,8 +3151,8 @@ function Word:format_command_substitutions(value, in_arith)
         inner = substring(value, i + 2, j - 1)
         if in_arith then
           ;(function() table.insert(result, direction .. "(" .. inner .. ")"); return result end)()
-        elseif (string.gsub(string.gsub(inner, '^[' .. " \t\n\r" .. ']+', ''), '[' .. " \t\n\r" .. ']+$', '') ~= nil and #(string.gsub(string.gsub(inner, '^[' .. " \t\n\r" .. ']+', ''), '[' .. " \t\n\r" .. ']+$', '')) > 0) then
-          stripped = string.gsub(inner, '^[' .. " \t" .. ']+', '')
+        elseif ((string.gsub((string.gsub(inner, '^[' .. " \t\n\r" .. ']+', '')), '[' .. " \t\n\r" .. ']+$', '')) ~= nil and #((string.gsub((string.gsub(inner, '^[' .. " \t\n\r" .. ']+', '')), '[' .. " \t\n\r" .. ']+$', ''))) > 0) then
+          stripped = (string.gsub(inner, '^[' .. " \t" .. ']+', ''))
           ;(function() table.insert(result, direction .. "(" .. stripped .. ")"); return result end)()
         else
           ;(function() table.insert(result, direction .. "(" .. inner .. ")"); return result end)()
@@ -3177,17 +3175,17 @@ function Word:format_command_substitutions(value, in_arith)
         j = j + 1
       end
       inner = substring(value, i + 2, j - 1)
-      if string.gsub(string.gsub(inner, '^[' .. " \t\n\r" .. ']+', ''), '[' .. " \t\n\r" .. ']+$', '') == "" then
+      if (string.gsub((string.gsub(inner, '^[' .. " \t\n\r" .. ']+', '')), '[' .. " \t\n\r" .. ']+$', '')) == "" then
         ;(function() table.insert(result, "${ }"); return result end)()
       else
         local _ok, _err = pcall(function()
-          parser = new_parser(string.gsub(inner, '^[' .. " \t\n|" .. ']+', ''), false, false)
+          parser = new_parser((string.gsub(inner, '^[' .. " \t\n|" .. ']+', '')), false, false)
           parsed = parser:parse_list(true)
           if (parsed ~= nil) then
             formatted = format_cmdsub_node(parsed, 0, false, false, false)
-            formatted = string.gsub(formatted, '[' .. ";" .. ']+$', '')
+            formatted = (string.gsub(formatted, '[' .. ";" .. ']+$', ''))
             local terminator
-            if (string.sub(string.gsub(inner, '[' .. " \t" .. ']+$', ''), -#"\n") == "\n") then
+            if (string.sub((string.gsub(inner, '[' .. " \t" .. ']+$', '')), -#"\n") == "\n") then
               terminator = "\n }"
             elseif (string.sub(formatted, -#" &") == " &") then
               terminator = " }"
@@ -3318,7 +3316,7 @@ function Word:normalize_extglob_whitespace(value)
               if ((string.find(part_content, "<<", 1, true) ~= nil)) then
                 ;(function() table.insert(pattern_parts, part_content); return pattern_parts end)()
               elseif has_pipe then
-                ;(function() table.insert(pattern_parts, string.gsub(string.gsub(part_content, '^[' .. " \t\n\r" .. ']+', ''), '[' .. " \t\n\r" .. ']+$', '')); return pattern_parts end)()
+                ;(function() table.insert(pattern_parts, (string.gsub((string.gsub(part_content, '^[' .. " \t\n\r" .. ']+', '')), '[' .. " \t\n\r" .. ']+$', ''))); return pattern_parts end)()
               else
                 ;(function() table.insert(pattern_parts, part_content); return pattern_parts end)()
               end
@@ -3336,7 +3334,7 @@ function Word:normalize_extglob_whitespace(value)
               if ((string.find(part_content, "<<", 1, true) ~= nil)) then
                 ;(function() table.insert(pattern_parts, part_content); return pattern_parts end)()
               else
-                ;(function() table.insert(pattern_parts, string.gsub(string.gsub(part_content, '^[' .. " \t\n\r" .. ']+', ''), '[' .. " \t\n\r" .. ']+$', '')); return pattern_parts end)()
+                ;(function() table.insert(pattern_parts, (string.gsub((string.gsub(part_content, '^[' .. " \t\n\r" .. ']+', '')), '[' .. " \t\n\r" .. ']+$', ''))); return pattern_parts end)()
               end
               current_part = {}
               i = i + 1
@@ -3368,7 +3366,7 @@ function Word:get_cond_formatted_value()
   value = self:format_command_substitutions(value, false)
   value = self:normalize_extglob_whitespace(value)
   value = (string.gsub(value, "", ""))
-  return string.gsub(value, '[' .. "\n" .. ']+$', '')
+  return (string.gsub(value, '[' .. "\n" .. ']+$', ''))
 end
 
 function Word:get_kind()
@@ -3619,7 +3617,7 @@ function List:to_sexp_and_or(parts, op_names)
     local op = parts[i + 1]
     local cmd = parts[i + 1 + 1]
     local op_name = _map_get(op_names, op.op, op.op)
-    result = "(" .. op_name .. " " .. result + " " .. cmd:to_sexp() + ")"
+    result = "(" .. op_name .. " " .. result .. " " .. cmd:to_sexp() .. ")"
     i = i + 2
   end
   return result
@@ -3723,7 +3721,7 @@ function Redirect:new(op, target, fd, kind)
 end
 
 function Redirect:to_sexp()
-  local op = string.gsub(self.op, '^[' .. "0123456789" .. ']+', '')
+  local op = (string.gsub(self.op, '^[' .. "0123456789" .. ']+', ''))
   if (string.sub(op, 1, #"{") == "{") then
     local j = 1
     if j < #op and ((string.match(string.sub(op, j + 1, j + 1), '^[%a]$') ~= nil) or string.sub(op, j + 1, j + 1) == "_") then
@@ -3770,7 +3768,7 @@ function Redirect:to_sexp()
       return "(redirect \">&-\" 0)"
     end
     local fd_target = ((string.sub(raw, -#"-") == "-") and string.sub(raw, 1, #raw - 1) or raw)
-    return "(redirect \"" .. op .. "\" \"" .. fd_target + "\")"
+    return "(redirect \"" .. op .. "\" \"" .. fd_target .. "\")"
   end
   if op == ">&" or op == "<&" then
     if (string.match(target_val, '^[%d]$') ~= nil) and tonumber(target_val) <= 2147483647 then
@@ -3783,7 +3781,7 @@ function Redirect:to_sexp()
       return "(redirect \"" .. op .. "\" " .. tostring(tonumber(string.sub(target_val, 1, #target_val - 1))) .. ")"
     end
     local out_val = ((string.sub(target_val, -#"-") == "-") and string.sub(target_val, 1, #target_val - 1) or target_val)
-    return "(redirect \"" .. op .. "\" \"" .. out_val + "\")"
+    return "(redirect \"" .. op .. "\" \"" .. out_val .. "\")"
   end
   return "(redirect \"" .. op .. "\" \"" .. target_val .. "\")"
 end
@@ -3822,7 +3820,7 @@ function HereDoc:to_sexp()
   if (string.sub(content, -#"\\") == "\\") and not (string.sub(content, -#"\\\\") == "\\\\") then
     content = content .. "\\"
   end
-  return "(redirect \"%s\" \"%s\")"
+  return string.format("(redirect \"%s\" \"%s\")", op, content)
 end
 
 function HereDoc:get_kind()
@@ -4043,7 +4041,7 @@ function ForArith:to_sexp()
   local cond_str = format_arith_val(cond_val)
   local incr_str = format_arith_val(incr_val)
   local body_str = self.body:to_sexp()
-  return "(arith-for (init (word \"%s\")) (test (word \"%s\")) (step (word \"%s\")) %s)%s"
+  return string.format("(arith-for (init (word \"%s\")) (test (word \"%s\")) (step (word \"%s\")) %s)%s", init_str, cond_str, incr_str, body_str, suffix)
 end
 
 function ForArith:get_kind()
@@ -4264,7 +4262,7 @@ function ParamExpansion:to_sexp()
       arg_val = ""
     end
     local escaped_arg = (string.gsub((string.gsub(arg_val, "\\", "\\\\")), "\"", "\\\""))
-    return "(param \"" .. escaped_param .. "\" \"" .. escaped_op + "\" \"" .. escaped_arg + "\")"
+    return "(param \"" .. escaped_param .. "\" \"" .. escaped_op .. "\" \"" .. escaped_arg .. "\")"
   end
   return "(param \"" .. escaped_param .. "\")"
 end
@@ -4321,7 +4319,7 @@ function ParamIndirect:to_sexp()
       arg_val = ""
     end
     local escaped_arg = (string.gsub((string.gsub(arg_val, "\\", "\\\\")), "\"", "\\\""))
-    return "(param-indirect \"" .. escaped .. "\" \"" .. escaped_op + "\" \"" .. escaped_arg + "\")"
+    return "(param-indirect \"" .. escaped .. "\" \"" .. escaped_op .. "\" \"" .. escaped_arg .. "\")"
   end
   return "(param-indirect \"" .. escaped .. "\")"
 end
@@ -4928,7 +4926,7 @@ end
 
 function UnaryTest:to_sexp()
   local operand_val = self.operand:get_cond_formatted_value()
-  return "(cond-unary \"" .. self.op .. "\" (cond-term \"" .. operand_val + "\"))"
+  return "(cond-unary \"" .. self.op .. "\" (cond-term \"" .. operand_val .. "\"))"
 end
 
 function UnaryTest:get_kind()
@@ -4954,7 +4952,7 @@ end
 function BinaryTest:to_sexp()
   local left_val = self.left:get_cond_formatted_value()
   local right_val = self.right:get_cond_formatted_value()
-  return "(cond-binary \"" .. self.op .. "\" (cond-term \"" .. left_val + "\") (cond-term \"" .. right_val + "\"))"
+  return "(cond-binary \"" .. self.op .. "\" (cond-term \"" .. left_val .. "\") (cond-term \"" .. right_val .. "\"))"
 end
 
 function BinaryTest:get_kind()
@@ -5477,7 +5475,7 @@ function Parser:parse_loop_body(context)
   if self:peek() == "{" then
     local brace = self:parse_brace_group()
     if (brace == nil) then
-      error({ParseError = true, message = "Expected brace group body in %s", pos = self:lex_peek_token().pos})
+      error({ParseError = true, message = string.format("Expected brace group body in %s", context), pos = self:lex_peek_token().pos})
     end
     return brace.body
   end
@@ -5488,11 +5486,11 @@ function Parser:parse_loop_body(context)
     end
     self:skip_whitespace_and_newlines()
     if not self:lex_consume_word("done") then
-      error({ParseError = true, message = "Expected 'done' to close %s", pos = self:lex_peek_token().pos})
+      error({ParseError = true, message = string.format("Expected 'done' to close %s", context), pos = self:lex_peek_token().pos})
     end
     return body
   end
-  error({ParseError = true, message = "Expected 'do' or '{' in %s", pos = self:lex_peek_token().pos})
+  error({ParseError = true, message = string.format("Expected 'do' or '{' in %s", context), pos = self:lex_peek_token().pos})
 end
 
 function Parser:peek_word()
@@ -5741,7 +5739,7 @@ function Parser:parse_backtick_substitution()
         line_end = line_end + 1
       end
       local line = substring(self.source, line_start, line_end)
-      local check_line = (current_heredoc_strip and string.gsub(line, '^[' .. "\t" .. ']+', '') or line)
+      local check_line = (current_heredoc_strip and (string.gsub(line, '^[' .. "\t" .. ']+', '')) or line)
       if check_line == current_heredoc_delim then
         for _ = 1, #line do
           local ch = string.sub(line, _, _)
@@ -6040,6 +6038,7 @@ function Parser:parse_process_substitution()
     text = strip_line_continuations_comment_aware(text)
     return {nil, text}
   end
+  if _ok then return _err end
 end
 
 function Parser:parse_array_literal()
@@ -7088,7 +7087,7 @@ function Parser:parse_redirect()
           fd_target = ""
         end
         if not self:at_end() and self:peek() == "-" then
-          fd_target = fd_target + self:advance()
+          fd_target = fd_target .. self:advance()
         end
         if fd_target ~= "-" and not self:at_end() and not is_metachar(self:peek()) then
           self.pos = word_start
@@ -7184,7 +7183,7 @@ function Parser:parse_heredoc_delimiter()
             local esc = self:peek()
             local esc_val = get_ansi_escape(esc)
             if esc_val >= 0 then
-              ;(function() table.insert(delimiter_chars, string.char(esc_val)); return delimiter_chars end)()
+              ;(function() table.insert(delimiter_chars, utf8.char(esc_val)); return delimiter_chars end)()
               self:advance()
             elseif esc == "'" then
               ;(function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
@@ -7356,7 +7355,7 @@ function Parser:read_heredoc_line(quoted)
 end
 
 function Parser:line_matches_delimiter(line, delimiter, strip_tabs)
-  local check_line = (strip_tabs and string.gsub(line, '^[' .. "\t" .. ']+', '') or line)
+  local check_line = (strip_tabs and (string.gsub(line, '^[' .. "\t" .. ']+', '')) or line)
   local normalized_check = normalize_heredoc_delimiter(check_line)
   local normalized_delim = normalize_heredoc_delimiter(delimiter)
   return {normalized_check == normalized_delim, check_line}
@@ -7388,7 +7387,7 @@ function Parser:gather_heredoc_bodies()
         break
       end
       if heredoc.strip_tabs then
-        line = string.gsub(line, '^[' .. "\t" .. ']+', '')
+        line = (string.gsub(line, '^[' .. "\t" .. ']+', ''))
       end
       if line_end < self.length then
         ;(function() table.insert(content_lines, line .. "\n"); return content_lines end)()
@@ -7979,7 +7978,7 @@ function Parser:parse_for_arith()
         paren_depth = paren_depth - 1
         ;(function() table.insert(current, self:advance()); return current end)()
       elseif self.pos + 1 < self.length and string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) == ")" then
-        ;(function() table.insert(parts, string.gsub(table.concat(current, ""), '^[' .. " \t" .. ']+', '')); return parts end)()
+        ;(function() table.insert(parts, (string.gsub(table.concat(current, ""), '^[' .. " \t" .. ']+', ''))); return parts end)()
         self:advance()
         self:advance()
         break
@@ -7987,7 +7986,7 @@ function Parser:parse_for_arith()
         ;(function() table.insert(current, self:advance()); return current end)()
       end
     elseif ch == ";" and paren_depth == 0 then
-      ;(function() table.insert(parts, string.gsub(table.concat(current, ""), '^[' .. " \t" .. ']+', '')); return parts end)()
+      ;(function() table.insert(parts, (string.gsub(table.concat(current, ""), '^[' .. " \t" .. ']+', ''))); return parts end)()
       current = {}
       self:advance()
     else
@@ -8624,7 +8623,7 @@ function Parser:parse_compound_command()
     end
   end
   if reserved == "fi" or reserved == "then" or reserved == "elif" or reserved == "else" or reserved == "done" or reserved == "esac" or reserved == "do" or reserved == "in" then
-    error({ParseError = true, message = "Unexpected reserved word '%s'", pos = self:lex_peek_token().pos})
+    error({ParseError = true, message = string.format("Unexpected reserved word '%s'", reserved), pos = self:lex_peek_token().pos})
   end
   if reserved == "if" then
     return self:parse_if()
@@ -8918,7 +8917,7 @@ function Parser:parse_comment()
 end
 
 function Parser:parse()
-  local source = string.gsub(string.gsub(self.source, '^[' .. " \t\n\r" .. ']+', ''), '[' .. " \t\n\r" .. ']+$', '')
+  local source = (string.gsub((string.gsub(self.source, '^[' .. " \t\n\r" .. ']+', '')), '[' .. " \t\n\r" .. ']+$', ''))
   if not (source ~= nil and #(source) > 0) then
     return {Empty:new("empty")}
   end
@@ -9346,7 +9345,7 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
       result = table.concat(parts, " ")
     end
     for _, h in ipairs(heredocs) do
-      result = result + format_heredoc_body(h)
+      result = result .. format_heredoc_body(h)
     end
     return result
   end
@@ -9371,11 +9370,9 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
     local result_parts = {}
     local idx = 0
     while idx < #cmds do
-      do
-        local entry = cmds[idx + 1]
-        cmd = entry[1]
-        needs_redirect = entry[2]
-      end
+      local entry = cmds[idx + 1]
+      cmd = entry[1]
+      needs_redirect = entry[2]
       local formatted = format_cmdsub_node(cmd, indent, in_procsub, false, procsub_first and idx == 0)
       local is_last = idx == #cmds - 1
       local has_heredoc = false
@@ -9418,12 +9415,12 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
     while idx < #result_parts do
       local part = result_parts[idx + 1]
       if idx > 0 then
-        if result:endswith("\n") then
-          result = result + "  " .. part
+        if (string.sub(result, -#"\n") == "\n") then
+          result = result .. "  " .. part
         elseif compact_pipe then
-          result = result + "|" .. part
+          result = result .. "|" .. part
         else
-          result = result + " | " .. part
+          result = result .. " | " .. part
         end
       else
         result = part
@@ -9513,7 +9510,7 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
           ;(function() table.insert(result, " " .. p.op); return result end)()
         end
       else
-        if (#(result) > 0) and not (string.sub(result[#result - 1 + 1], -#{" ", "\n"}) == {" ", "\n"}) then
+        if (#(result) > 0) and not (string.sub(result[#result - 1 + 1], -#" ") == " " or string.sub(result[#result - 1 + 1], -#"\n") == "\n") then
           ;(function() table.insert(result, " "); return result end)()
         end
         local formatted_cmd = format_cmdsub_node(p, indent, in_procsub, compact_redirects, procsub_first and cmd_count == 0)
@@ -9553,9 +9550,9 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
     result = "if " .. cond .. "; then\n" .. inner_sp .. then_body .. ";"
     if (node.else_body ~= nil) then
       local else_body = format_cmdsub_node(node.else_body, indent + 4, false, false, false)
-      result = result + "\n" .. sp .. "else\n" .. inner_sp .. else_body .. ";"
+      result = result .. "\n" .. sp .. "else\n" .. inner_sp .. else_body .. ";"
     end
-    result = result + "\n" .. sp .. "fi"
+    result = result .. "\n" .. sp .. "fi"
     return result
   end
   if (type(node) == 'table' and getmetatable(node) == While) then
@@ -9565,7 +9562,7 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
     result = "while " .. cond .. "; do\n" .. inner_sp .. body .. ";\n" .. sp .. "done"
     if (#(node.redirects) > 0) then
       for _, r in ipairs(node.redirects) do
-        result = result + " " .. format_redirect(r, false, false)
+        result = result .. " " .. format_redirect(r, false, false)
       end
     end
     return result
@@ -9577,7 +9574,7 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
     result = "until " .. cond .. "; do\n" .. inner_sp .. body .. ";\n" .. sp .. "done"
     if (#(node.redirects) > 0) then
       for _, r in ipairs(node.redirects) do
-        result = result + " " .. format_redirect(r, false, false)
+        result = result .. " " .. format_redirect(r, false, false)
       end
     end
     return result
@@ -9602,7 +9599,7 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
     end
     if (#(node.redirects) > 0) then
       for _, r in ipairs(node.redirects) do
-        result = result + " " .. format_redirect(r, false, false)
+        result = result .. " " .. format_redirect(r, false, false)
       end
     end
     return result
@@ -9613,7 +9610,7 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
     result = "for ((" .. node.init .. "; " .. node.cond .. "; " .. node.incr .. "))\ndo\n" .. inner_sp .. body .. ";\n" .. sp .. "done"
     if (#(node.redirects) > 0) then
       for _, r in ipairs(node.redirects) do
-        result = result + " " .. format_redirect(r, false, false)
+        result = result .. " " .. format_redirect(r, false, false)
       end
     end
     return result
@@ -9625,7 +9622,7 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
     i = 0
     while i < #node.patterns do
       local p = node.patterns[i + 1]
-      local pat = p.pattern:replace("|", " | ")
+      local pat = (string.gsub(p.pattern, "|", " | "))
       if (p.body ~= nil) then
         body = format_cmdsub_node(p.body, indent + 8, false, false, false)
       else
@@ -9636,29 +9633,29 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
       local term_indent = repeat_str(" ", indent + 4)
       local body_part = ((body ~= nil and #(body) > 0) and pat_indent .. body .. "\n" or "\n")
       if i == 0 then
-        ;(function() table.insert(patterns, " " .. pat .. ")\n" .. body_part + term_indent .. term); return patterns end)()
+        ;(function() table.insert(patterns, " " .. pat .. ")\n" .. body_part .. term_indent .. term); return patterns end)()
       else
-        ;(function() table.insert(patterns, pat .. ")\n" .. body_part + term_indent .. term); return patterns end)()
+        ;(function() table.insert(patterns, pat .. ")\n" .. body_part .. term_indent .. term); return patterns end)()
       end
       i = i + 1
     end
-    local pattern_str = ("\n" .. repeat_str(" ", indent + 4)):join(patterns)
+    local pattern_str = table.concat(patterns, "\n" .. repeat_str(" ", indent + 4))
     local redirects = ""
     if (#(node.redirects) > 0) then
       redirect_parts = {}
       for _, r in ipairs(node.redirects) do
-        redirect_parts:append(format_redirect(r, false, false))
+        ;(function() table.insert(redirect_parts, format_redirect(r, false, false)); return redirect_parts end)()
       end
       redirects = " " .. table.concat(redirect_parts, " ")
     end
-    return "case " .. word .. " in" .. pattern_str + "\n" .. sp .. "esac" .. redirects
+    return "case " .. word .. " in" .. pattern_str .. "\n" .. sp .. "esac" .. redirects
   end
   if (type(node) == 'table' and getmetatable(node) == Function) then
     local node = node
     local name = node.name
     local inner_body = (node.body.kind == "brace-group" and node.body.body or node.body)
-    body = string.gsub(format_cmdsub_node(inner_body, indent + 4, false, false, false), '[' .. ";" .. ']+$', '')
-    return "function %s () \n{ \n%s%s\n}"
+    body = (string.gsub(format_cmdsub_node(inner_body, indent + 4, false, false, false), '[' .. ";" .. ']+$', ''))
+    return string.format("function %s () \n{ \n%s%s\n}", name, inner_sp, body)
   end
   if (type(node) == 'table' and getmetatable(node) == Subshell) then
     local node = node
@@ -9667,7 +9664,7 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
     if (#(node.redirects) > 0) then
       redirect_parts = {}
       for _, r in ipairs(node.redirects) do
-        redirect_parts:append(format_redirect(r, false, false))
+        ;(function() table.insert(redirect_parts, format_redirect(r, false, false)); return redirect_parts end)()
       end
       redirects = table.concat(redirect_parts, " ")
     end
@@ -9685,18 +9682,18 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
   if (type(node) == 'table' and getmetatable(node) == BraceGroup) then
     local node = node
     body = format_cmdsub_node(node.body, indent, false, false, false)
-    body = string.gsub(body, '[' .. ";" .. ']+$', '')
+    body = (string.gsub(body, '[' .. ";" .. ']+$', ''))
     local terminator = ((string.sub(body, -#" &") == " &") and " }" or "; }")
     redirects = ""
     if (#(node.redirects) > 0) then
       redirect_parts = {}
       for _, r in ipairs(node.redirects) do
-        redirect_parts:append(format_redirect(r, false, false))
+        ;(function() table.insert(redirect_parts, format_redirect(r, false, false)); return redirect_parts end)()
       end
       redirects = table.concat(redirect_parts, " ")
     end
     if (redirects ~= nil and #(redirects) > 0) then
-      return "{ " .. body .. terminator + " " .. redirects
+      return "{ " .. body .. terminator .. " " .. redirects
     end
     return "{ " .. body .. terminator
   end
@@ -9791,7 +9788,7 @@ function format_redirect(r, compact, heredoc_op_only)
 end
 
 function format_heredoc_body(r)
-  return "\n" .. r.content .. r.delimiter + "\n"
+  return "\n" .. r.content .. r.delimiter .. "\n"
 end
 
 function lookahead_for_esac(value, start, case_depth)
@@ -9867,14 +9864,10 @@ function skip_single_quoted(s, start)
 end
 
 function skip_double_quoted(s, start)
-  do
-    local i = start
-    local n = #s
-  end
-  do
-    local pass_next = false
-    local backq = false
-  end
+  local i = start
+  local n = #s
+  local pass_next = false
+  local backq = false
   while i < n do
     local c = string.sub(s, i + 1, i + 1)
     if pass_next then
@@ -10290,7 +10283,7 @@ function skip_heredoc(value, start)
     end
     local stripped
     if start + 2 < #value and string.sub(value, start + 2 + 1, start + 2 + 1) == "-" then
-      stripped = string.gsub(line, '^[' .. "\t" .. ']+', '')
+      stripped = (string.gsub(line, '^[' .. "\t" .. ']+', ''))
     else
       stripped = line
     end
@@ -10361,7 +10354,7 @@ function find_heredoc_content_end(source, start, delimiters)
       end
       local line_stripped
       if strip_tabs then
-        line_stripped = string.gsub(line, '^[' .. "\t" .. ']+', '')
+        line_stripped = (string.gsub(line, '^[' .. "\t" .. ']+', ''))
       else
         line_stripped = line
       end
@@ -10417,7 +10410,7 @@ function collapse_whitespace(s)
     end
   end
   local joined = table.concat(result, "")
-  return string.gsub(string.gsub(joined, '^[' .. " \t" .. ']+', ''), '[' .. " \t" .. ']+$', '')
+  return (string.gsub((string.gsub(joined, '^[' .. " \t" .. ']+', '')), '[' .. " \t" .. ']+$', ''))
 end
 
 function count_trailing_backslashes(s)

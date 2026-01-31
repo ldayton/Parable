@@ -1920,9 +1920,6 @@ var Word = /** @class */ (function () {
         this.parts = parts !== null && parts !== void 0 ? parts : [];
         this.kind = kind;
     }
-    Word.prototype.getKind = function () {
-        return this.kind;
-    };
     Word.prototype.toSexp = function () {
         var value = this.value;
         value = this.ExpandAllAnsiCQuotes(value);
@@ -3631,6 +3628,9 @@ var Word = /** @class */ (function () {
         value = value.replace(//g, "");
         return value.replace(/[\n]+$/, '');
     };
+    Word.prototype.getKind = function () {
+        return this.kind;
+    };
     return Word;
 }());
 var Command = /** @class */ (function () {
@@ -3642,9 +3642,6 @@ var Command = /** @class */ (function () {
         this.redirects = redirects !== null && redirects !== void 0 ? redirects : [];
         this.kind = kind;
     }
-    Command.prototype.getKind = function () {
-        return this.kind;
-    };
     Command.prototype.toSexp = function () {
         var parts = [];
         parts.push.apply(parts, this.words.map(function (w) { return w.toSexp(); }));
@@ -3655,6 +3652,9 @@ var Command = /** @class */ (function () {
         }
         return "(command " + inner + ")";
     };
+    Command.prototype.getKind = function () {
+        return this.kind;
+    };
     return Command;
 }());
 var Pipeline = /** @class */ (function () {
@@ -3664,9 +3664,6 @@ var Pipeline = /** @class */ (function () {
         this.commands = commands !== null && commands !== void 0 ? commands : [];
         this.kind = kind;
     }
-    Pipeline.prototype.getKind = function () {
-        return this.kind;
-    };
     Pipeline.prototype.toSexp = function () {
         if (this.commands.length === 1) {
             return this.commands[0].toSexp();
@@ -3721,6 +3718,9 @@ var Pipeline = /** @class */ (function () {
         }
         return cmd.toSexp();
     };
+    Pipeline.prototype.getKind = function () {
+        return this.kind;
+    };
     return Pipeline;
 }());
 var List = /** @class */ (function () {
@@ -3730,9 +3730,6 @@ var List = /** @class */ (function () {
         this.parts = parts !== null && parts !== void 0 ? parts : [];
         this.kind = kind;
     }
-    List.prototype.getKind = function () {
-        return this.kind;
-    };
     List.prototype.toSexp = function () {
         var parts = this.parts.slice();
         var opNames = new Map([["&&", "and"], ["||", "or"], [";", "semi"], ["\n", "semi"], ["&", "background"]]);
@@ -3845,6 +3842,9 @@ var List = /** @class */ (function () {
         }
         return result;
     };
+    List.prototype.getKind = function () {
+        return this.kind;
+    };
     return List;
 }());
 var Operator = /** @class */ (function () {
@@ -3854,13 +3854,13 @@ var Operator = /** @class */ (function () {
         this.op = op;
         this.kind = kind;
     }
-    Operator.prototype.getKind = function () {
-        return this.kind;
-    };
     Operator.prototype.toSexp = function () {
         var _a;
         var names = new Map([["&&", "and"], ["||", "or"], [";", "semi"], ["&", "bg"], ["|", "pipe"]]);
         return ("(" + ((_a = names.get(this.op)) !== null && _a !== void 0 ? _a : this.op)) + ")";
+    };
+    Operator.prototype.getKind = function () {
+        return this.kind;
     };
     return Operator;
 }());
@@ -3869,11 +3869,11 @@ var PipeBoth = /** @class */ (function () {
         if (kind === void 0) { kind = ""; }
         this.kind = kind;
     }
-    PipeBoth.prototype.getKind = function () {
-        return this.kind;
-    };
     PipeBoth.prototype.toSexp = function () {
         return "(pipe-both)";
+    };
+    PipeBoth.prototype.getKind = function () {
+        return this.kind;
     };
     return PipeBoth;
 }());
@@ -3882,11 +3882,11 @@ var Empty = /** @class */ (function () {
         if (kind === void 0) { kind = ""; }
         this.kind = kind;
     }
-    Empty.prototype.getKind = function () {
-        return this.kind;
-    };
     Empty.prototype.toSexp = function () {
         return "";
+    };
+    Empty.prototype.getKind = function () {
+        return this.kind;
     };
     return Empty;
 }());
@@ -3897,11 +3897,11 @@ var Comment = /** @class */ (function () {
         this.text = text;
         this.kind = kind;
     }
-    Comment.prototype.getKind = function () {
-        return this.kind;
-    };
     Comment.prototype.toSexp = function () {
         return "";
+    };
+    Comment.prototype.getKind = function () {
+        return this.kind;
     };
     return Comment;
 }());
@@ -3916,9 +3916,6 @@ var Redirect = /** @class */ (function () {
         this.fd = fd;
         this.kind = kind;
     }
-    Redirect.prototype.getKind = function () {
-        return this.kind;
-    };
     Redirect.prototype.toSexp = function () {
         var op = this.op.replace(/^[0123456789]+/, '');
         if (op.startsWith("{")) {
@@ -3987,6 +3984,9 @@ var Redirect = /** @class */ (function () {
         }
         return "(redirect \"" + op + "\" \"" + targetVal + "\")";
     };
+    Redirect.prototype.getKind = function () {
+        return this.kind;
+    };
     return Redirect;
 }());
 var HereDoc = /** @class */ (function () {
@@ -4008,9 +4008,6 @@ var HereDoc = /** @class */ (function () {
         this.StartPos = StartPos;
         this.kind = kind;
     }
-    HereDoc.prototype.getKind = function () {
-        return this.kind;
-    };
     HereDoc.prototype.toSexp = function () {
         var op = (this.stripTabs ? "<<-" : "<<");
         var content = this.content;
@@ -4018,6 +4015,9 @@ var HereDoc = /** @class */ (function () {
             content = content + "\\";
         }
         return "(redirect \"".concat(op, "\" \"").concat(content, "\")");
+    };
+    HereDoc.prototype.getKind = function () {
+        return this.kind;
     };
     return HereDoc;
 }());
@@ -4030,12 +4030,12 @@ var Subshell = /** @class */ (function () {
         this.redirects = redirects !== null && redirects !== void 0 ? redirects : [];
         this.kind = kind;
     }
-    Subshell.prototype.getKind = function () {
-        return this.kind;
-    };
     Subshell.prototype.toSexp = function () {
         var base = "(subshell " + this.body.toSexp() + ")";
         return AppendRedirects(base, this.redirects);
+    };
+    Subshell.prototype.getKind = function () {
+        return this.kind;
     };
     return Subshell;
 }());
@@ -4048,12 +4048,12 @@ var BraceGroup = /** @class */ (function () {
         this.redirects = redirects !== null && redirects !== void 0 ? redirects : [];
         this.kind = kind;
     }
-    BraceGroup.prototype.getKind = function () {
-        return this.kind;
-    };
     BraceGroup.prototype.toSexp = function () {
         var base = "(brace-group " + this.body.toSexp() + ")";
         return AppendRedirects(base, this.redirects);
+    };
+    BraceGroup.prototype.getKind = function () {
+        return this.kind;
     };
     return BraceGroup;
 }());
@@ -4070,9 +4070,6 @@ var If = /** @class */ (function () {
         this.redirects = redirects !== null && redirects !== void 0 ? redirects : [];
         this.kind = kind;
     }
-    If.prototype.getKind = function () {
-        return this.kind;
-    };
     If.prototype.toSexp = function () {
         var result = "(if " + this.condition.toSexp() + " " + this.thenBody.toSexp();
         if (this.elseBody !== null) {
@@ -4084,6 +4081,9 @@ var If = /** @class */ (function () {
             result = result + " " + r.toSexp();
         }
         return result;
+    };
+    If.prototype.getKind = function () {
+        return this.kind;
     };
     return If;
 }());
@@ -4098,12 +4098,12 @@ var While = /** @class */ (function () {
         this.redirects = redirects !== null && redirects !== void 0 ? redirects : [];
         this.kind = kind;
     }
-    While.prototype.getKind = function () {
-        return this.kind;
-    };
     While.prototype.toSexp = function () {
         var base = "(while " + this.condition.toSexp() + " " + this.body.toSexp() + ")";
         return AppendRedirects(base, this.redirects);
+    };
+    While.prototype.getKind = function () {
+        return this.kind;
     };
     return While;
 }());
@@ -4118,12 +4118,12 @@ var Until = /** @class */ (function () {
         this.redirects = redirects !== null && redirects !== void 0 ? redirects : [];
         this.kind = kind;
     }
-    Until.prototype.getKind = function () {
-        return this.kind;
-    };
     Until.prototype.toSexp = function () {
         var base = "(until " + this.condition.toSexp() + " " + this.body.toSexp() + ")";
         return AppendRedirects(base, this.redirects);
+    };
+    Until.prototype.getKind = function () {
+        return this.kind;
     };
     return Until;
 }());
@@ -4140,9 +4140,6 @@ var For = /** @class */ (function () {
         this.redirects = redirects !== null && redirects !== void 0 ? redirects : [];
         this.kind = kind;
     }
-    For.prototype.getKind = function () {
-        return this.kind;
-    };
     For.prototype.toSexp = function () {
         var suffix = "";
         if ((this.redirects.length > 0)) {
@@ -4168,6 +4165,9 @@ var For = /** @class */ (function () {
             }
         }
     };
+    For.prototype.getKind = function () {
+        return this.kind;
+    };
     return For;
 }());
 var ForArith = /** @class */ (function () {
@@ -4185,9 +4185,6 @@ var ForArith = /** @class */ (function () {
         this.redirects = redirects !== null && redirects !== void 0 ? redirects : [];
         this.kind = kind;
     }
-    ForArith.prototype.getKind = function () {
-        return this.kind;
-    };
     ForArith.prototype.toSexp = function () {
         var suffix = "";
         if ((this.redirects.length > 0)) {
@@ -4204,6 +4201,9 @@ var ForArith = /** @class */ (function () {
         var bodyStr = this.body.toSexp();
         return "(arith-for (init (word \"".concat(initStr, "\")) (test (word \"").concat(condStr, "\")) (step (word \"").concat(incrStr, "\")) ").concat(bodyStr, ")").concat(suffix);
     };
+    ForArith.prototype.getKind = function () {
+        return this.kind;
+    };
     return ForArith;
 }());
 var Select = /** @class */ (function () {
@@ -4219,9 +4219,6 @@ var Select = /** @class */ (function () {
         this.redirects = redirects !== null && redirects !== void 0 ? redirects : [];
         this.kind = kind;
     }
-    Select.prototype.getKind = function () {
-        return this.kind;
-    };
     Select.prototype.toSexp = function () {
         var suffix = "";
         if ((this.redirects.length > 0)) {
@@ -4246,6 +4243,9 @@ var Select = /** @class */ (function () {
         }
         return "(select (word \"" + varEscaped + "\") " + inClause + " " + this.body.toSexp() + ")" + suffix;
     };
+    Select.prototype.getKind = function () {
+        return this.kind;
+    };
     return Select;
 }());
 var Case = /** @class */ (function () {
@@ -4259,15 +4259,15 @@ var Case = /** @class */ (function () {
         this.redirects = redirects !== null && redirects !== void 0 ? redirects : [];
         this.kind = kind;
     }
-    Case.prototype.getKind = function () {
-        return this.kind;
-    };
     Case.prototype.toSexp = function () {
         var parts = [];
         parts.push("(case " + this.word.toSexp());
         parts.push.apply(parts, this.patterns.map(function (p) { return p.toSexp(); }));
         var base = parts.join(" ") + ")";
         return AppendRedirects(base, this.redirects);
+    };
+    Case.prototype.getKind = function () {
+        return this.kind;
     };
     return Case;
 }());
@@ -4282,9 +4282,6 @@ var CasePattern = /** @class */ (function () {
         this.terminator = terminator;
         this.kind = kind;
     }
-    CasePattern.prototype.getKind = function () {
-        return this.kind;
-    };
     CasePattern.prototype.toSexp = function () {
         var alternatives = [];
         var current = [];
@@ -4373,6 +4370,9 @@ var CasePattern = /** @class */ (function () {
         parts.push(")");
         return parts.join("");
     };
+    CasePattern.prototype.getKind = function () {
+        return this.kind;
+    };
     return CasePattern;
 }());
 var FunctionName = /** @class */ (function () {
@@ -4384,11 +4384,11 @@ var FunctionName = /** @class */ (function () {
         this.body = body;
         this.kind = kind;
     }
-    FunctionName.prototype.getKind = function () {
-        return this.kind;
-    };
     FunctionName.prototype.toSexp = function () {
         return "(function \"" + this.name + "\" " + this.body.toSexp() + ")";
+    };
+    FunctionName.prototype.getKind = function () {
+        return this.kind;
     };
     return FunctionName;
 }());
@@ -4403,9 +4403,6 @@ var ParamExpansion = /** @class */ (function () {
         this.arg = arg;
         this.kind = kind;
     }
-    ParamExpansion.prototype.getKind = function () {
-        return this.kind;
-    };
     ParamExpansion.prototype.toSexp = function () {
         var escapedParam = this.param.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
         if (this.op !== "") {
@@ -4421,6 +4418,9 @@ var ParamExpansion = /** @class */ (function () {
         }
         return "(param \"" + escapedParam + "\")";
     };
+    ParamExpansion.prototype.getKind = function () {
+        return this.kind;
+    };
     return ParamExpansion;
 }());
 var ParamLength = /** @class */ (function () {
@@ -4430,12 +4430,12 @@ var ParamLength = /** @class */ (function () {
         this.param = param;
         this.kind = kind;
     }
-    ParamLength.prototype.getKind = function () {
-        return this.kind;
-    };
     ParamLength.prototype.toSexp = function () {
         var escaped = this.param.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
         return "(param-len \"" + escaped + "\")";
+    };
+    ParamLength.prototype.getKind = function () {
+        return this.kind;
     };
     return ParamLength;
 }());
@@ -4450,9 +4450,6 @@ var ParamIndirect = /** @class */ (function () {
         this.arg = arg;
         this.kind = kind;
     }
-    ParamIndirect.prototype.getKind = function () {
-        return this.kind;
-    };
     ParamIndirect.prototype.toSexp = function () {
         var escaped = this.param.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
         if (this.op !== "") {
@@ -4468,6 +4465,9 @@ var ParamIndirect = /** @class */ (function () {
         }
         return "(param-indirect \"" + escaped + "\")";
     };
+    ParamIndirect.prototype.getKind = function () {
+        return this.kind;
+    };
     return ParamIndirect;
 }());
 var CommandSubstitution = /** @class */ (function () {
@@ -4479,14 +4479,14 @@ var CommandSubstitution = /** @class */ (function () {
         this.brace = brace;
         this.kind = kind;
     }
-    CommandSubstitution.prototype.getKind = function () {
-        return this.kind;
-    };
     CommandSubstitution.prototype.toSexp = function () {
         if (this.brace) {
             return "(funsub " + this.command.toSexp() + ")";
         }
         return "(cmdsub " + this.command.toSexp() + ")";
+    };
+    CommandSubstitution.prototype.getKind = function () {
+        return this.kind;
     };
     return CommandSubstitution;
 }());
@@ -4497,14 +4497,14 @@ var ArithmeticExpansion = /** @class */ (function () {
         this.expression = expression;
         this.kind = kind;
     }
-    ArithmeticExpansion.prototype.getKind = function () {
-        return this.kind;
-    };
     ArithmeticExpansion.prototype.toSexp = function () {
         if (this.expression === null) {
             return "(arith)";
         }
         return "(arith " + this.expression.toSexp() + ")";
+    };
+    ArithmeticExpansion.prototype.getKind = function () {
+        return this.kind;
     };
     return ArithmeticExpansion;
 }());
@@ -4519,9 +4519,6 @@ var ArithmeticCommand = /** @class */ (function () {
         this.rawContent = rawContent;
         this.kind = kind;
     }
-    ArithmeticCommand.prototype.getKind = function () {
-        return this.kind;
-    };
     ArithmeticCommand.prototype.toSexp = function () {
         var formatted = new Word(this.rawContent, [], "word").FormatCommandSubstitutions(this.rawContent, true);
         var escaped = formatted.replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, "\\n").replace(/\t/g, "\\t");
@@ -4534,6 +4531,9 @@ var ArithmeticCommand = /** @class */ (function () {
         }
         return result;
     };
+    ArithmeticCommand.prototype.getKind = function () {
+        return this.kind;
+    };
     return ArithmeticCommand;
 }());
 var ArithNumber = /** @class */ (function () {
@@ -4543,11 +4543,11 @@ var ArithNumber = /** @class */ (function () {
         this.value = value;
         this.kind = kind;
     }
-    ArithNumber.prototype.getKind = function () {
-        return this.kind;
-    };
     ArithNumber.prototype.toSexp = function () {
         return "(number \"" + this.value + "\")";
+    };
+    ArithNumber.prototype.getKind = function () {
+        return this.kind;
     };
     return ArithNumber;
 }());
@@ -4556,11 +4556,11 @@ var ArithEmpty = /** @class */ (function () {
         if (kind === void 0) { kind = ""; }
         this.kind = kind;
     }
-    ArithEmpty.prototype.getKind = function () {
-        return this.kind;
-    };
     ArithEmpty.prototype.toSexp = function () {
         return "(empty)";
+    };
+    ArithEmpty.prototype.getKind = function () {
+        return this.kind;
     };
     return ArithEmpty;
 }());
@@ -4571,11 +4571,11 @@ var ArithVar = /** @class */ (function () {
         this.name = name;
         this.kind = kind;
     }
-    ArithVar.prototype.getKind = function () {
-        return this.kind;
-    };
     ArithVar.prototype.toSexp = function () {
         return "(var \"" + this.name + "\")";
+    };
+    ArithVar.prototype.getKind = function () {
+        return this.kind;
     };
     return ArithVar;
 }());
@@ -4590,11 +4590,11 @@ var ArithBinaryOp = /** @class */ (function () {
         this.right = right;
         this.kind = kind;
     }
-    ArithBinaryOp.prototype.getKind = function () {
-        return this.kind;
-    };
     ArithBinaryOp.prototype.toSexp = function () {
         return "(binary-op \"" + this.op + "\" " + this.left.toSexp() + " " + this.right.toSexp() + ")";
+    };
+    ArithBinaryOp.prototype.getKind = function () {
+        return this.kind;
     };
     return ArithBinaryOp;
 }());
@@ -4607,11 +4607,11 @@ var ArithUnaryOp = /** @class */ (function () {
         this.operand = operand;
         this.kind = kind;
     }
-    ArithUnaryOp.prototype.getKind = function () {
-        return this.kind;
-    };
     ArithUnaryOp.prototype.toSexp = function () {
         return "(unary-op \"" + this.op + "\" " + this.operand.toSexp() + ")";
+    };
+    ArithUnaryOp.prototype.getKind = function () {
+        return this.kind;
     };
     return ArithUnaryOp;
 }());
@@ -4622,11 +4622,11 @@ var ArithPreIncr = /** @class */ (function () {
         this.operand = operand;
         this.kind = kind;
     }
-    ArithPreIncr.prototype.getKind = function () {
-        return this.kind;
-    };
     ArithPreIncr.prototype.toSexp = function () {
         return "(pre-incr " + this.operand.toSexp() + ")";
+    };
+    ArithPreIncr.prototype.getKind = function () {
+        return this.kind;
     };
     return ArithPreIncr;
 }());
@@ -4637,11 +4637,11 @@ var ArithPostIncr = /** @class */ (function () {
         this.operand = operand;
         this.kind = kind;
     }
-    ArithPostIncr.prototype.getKind = function () {
-        return this.kind;
-    };
     ArithPostIncr.prototype.toSexp = function () {
         return "(post-incr " + this.operand.toSexp() + ")";
+    };
+    ArithPostIncr.prototype.getKind = function () {
+        return this.kind;
     };
     return ArithPostIncr;
 }());
@@ -4652,11 +4652,11 @@ var ArithPreDecr = /** @class */ (function () {
         this.operand = operand;
         this.kind = kind;
     }
-    ArithPreDecr.prototype.getKind = function () {
-        return this.kind;
-    };
     ArithPreDecr.prototype.toSexp = function () {
         return "(pre-decr " + this.operand.toSexp() + ")";
+    };
+    ArithPreDecr.prototype.getKind = function () {
+        return this.kind;
     };
     return ArithPreDecr;
 }());
@@ -4667,11 +4667,11 @@ var ArithPostDecr = /** @class */ (function () {
         this.operand = operand;
         this.kind = kind;
     }
-    ArithPostDecr.prototype.getKind = function () {
-        return this.kind;
-    };
     ArithPostDecr.prototype.toSexp = function () {
         return "(post-decr " + this.operand.toSexp() + ")";
+    };
+    ArithPostDecr.prototype.getKind = function () {
+        return this.kind;
     };
     return ArithPostDecr;
 }());
@@ -4686,11 +4686,11 @@ var ArithAssign = /** @class */ (function () {
         this.value = value;
         this.kind = kind;
     }
-    ArithAssign.prototype.getKind = function () {
-        return this.kind;
-    };
     ArithAssign.prototype.toSexp = function () {
         return "(assign \"" + this.op + "\" " + this.target.toSexp() + " " + this.value.toSexp() + ")";
+    };
+    ArithAssign.prototype.getKind = function () {
+        return this.kind;
     };
     return ArithAssign;
 }());
@@ -4705,11 +4705,11 @@ var ArithTernary = /** @class */ (function () {
         this.ifFalse = ifFalse;
         this.kind = kind;
     }
-    ArithTernary.prototype.getKind = function () {
-        return this.kind;
-    };
     ArithTernary.prototype.toSexp = function () {
         return "(ternary " + this.condition.toSexp() + " " + this.ifTrue.toSexp() + " " + this.ifFalse.toSexp() + ")";
+    };
+    ArithTernary.prototype.getKind = function () {
+        return this.kind;
     };
     return ArithTernary;
 }());
@@ -4722,11 +4722,11 @@ var ArithComma = /** @class */ (function () {
         this.right = right;
         this.kind = kind;
     }
-    ArithComma.prototype.getKind = function () {
-        return this.kind;
-    };
     ArithComma.prototype.toSexp = function () {
         return "(comma " + this.left.toSexp() + " " + this.right.toSexp() + ")";
+    };
+    ArithComma.prototype.getKind = function () {
+        return this.kind;
     };
     return ArithComma;
 }());
@@ -4739,11 +4739,11 @@ var ArithSubscript = /** @class */ (function () {
         this.index = index;
         this.kind = kind;
     }
-    ArithSubscript.prototype.getKind = function () {
-        return this.kind;
-    };
     ArithSubscript.prototype.toSexp = function () {
         return "(subscript \"" + this.array + "\" " + this.index.toSexp() + ")";
+    };
+    ArithSubscript.prototype.getKind = function () {
+        return this.kind;
     };
     return ArithSubscript;
 }());
@@ -4754,11 +4754,11 @@ var ArithEscape = /** @class */ (function () {
         this.char = char;
         this.kind = kind;
     }
-    ArithEscape.prototype.getKind = function () {
-        return this.kind;
-    };
     ArithEscape.prototype.toSexp = function () {
         return "(escape \"" + this.char + "\")";
+    };
+    ArithEscape.prototype.getKind = function () {
+        return this.kind;
     };
     return ArithEscape;
 }());
@@ -4769,12 +4769,12 @@ var ArithDeprecated = /** @class */ (function () {
         this.expression = expression;
         this.kind = kind;
     }
-    ArithDeprecated.prototype.getKind = function () {
-        return this.kind;
-    };
     ArithDeprecated.prototype.toSexp = function () {
         var escaped = this.expression.replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, "\\n");
         return "(arith-deprecated \"" + escaped + "\")";
+    };
+    ArithDeprecated.prototype.getKind = function () {
+        return this.kind;
     };
     return ArithDeprecated;
 }());
@@ -4785,13 +4785,13 @@ var ArithConcat = /** @class */ (function () {
         this.parts = parts !== null && parts !== void 0 ? parts : [];
         this.kind = kind;
     }
-    ArithConcat.prototype.getKind = function () {
-        return this.kind;
-    };
     ArithConcat.prototype.toSexp = function () {
         var sexps = [];
         sexps.push.apply(sexps, this.parts.map(function (p) { return p.toSexp(); }));
         return "(arith-concat " + sexps.join(" ") + ")";
+    };
+    ArithConcat.prototype.getKind = function () {
+        return this.kind;
     };
     return ArithConcat;
 }());
@@ -4802,12 +4802,12 @@ var AnsiCQuote = /** @class */ (function () {
         this.content = content;
         this.kind = kind;
     }
-    AnsiCQuote.prototype.getKind = function () {
-        return this.kind;
-    };
     AnsiCQuote.prototype.toSexp = function () {
         var escaped = this.content.replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, "\\n");
         return "(ansi-c \"" + escaped + "\")";
+    };
+    AnsiCQuote.prototype.getKind = function () {
+        return this.kind;
     };
     return AnsiCQuote;
 }());
@@ -4818,12 +4818,12 @@ var LocaleString = /** @class */ (function () {
         this.content = content;
         this.kind = kind;
     }
-    LocaleString.prototype.getKind = function () {
-        return this.kind;
-    };
     LocaleString.prototype.toSexp = function () {
         var escaped = this.content.replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, "\\n");
         return "(locale \"" + escaped + "\")";
+    };
+    LocaleString.prototype.getKind = function () {
+        return this.kind;
     };
     return LocaleString;
 }());
@@ -4836,11 +4836,11 @@ var ProcessSubstitution = /** @class */ (function () {
         this.command = command;
         this.kind = kind;
     }
-    ProcessSubstitution.prototype.getKind = function () {
-        return this.kind;
-    };
     ProcessSubstitution.prototype.toSexp = function () {
         return "(procsub \"" + this.direction + "\" " + this.command.toSexp() + ")";
+    };
+    ProcessSubstitution.prototype.getKind = function () {
+        return this.kind;
     };
     return ProcessSubstitution;
 }());
@@ -4851,14 +4851,14 @@ var Negation = /** @class */ (function () {
         this.pipeline = pipeline;
         this.kind = kind;
     }
-    Negation.prototype.getKind = function () {
-        return this.kind;
-    };
     Negation.prototype.toSexp = function () {
         if (this.pipeline === null) {
             return "(negation (command))";
         }
         return "(negation " + this.pipeline.toSexp() + ")";
+    };
+    Negation.prototype.getKind = function () {
+        return this.kind;
     };
     return Negation;
 }());
@@ -4871,9 +4871,6 @@ var Time = /** @class */ (function () {
         this.posix = posix;
         this.kind = kind;
     }
-    Time.prototype.getKind = function () {
-        return this.kind;
-    };
     Time.prototype.toSexp = function () {
         if (this.pipeline === null) {
             if (this.posix) {
@@ -4888,6 +4885,9 @@ var Time = /** @class */ (function () {
         }
         return "(time " + this.pipeline.toSexp() + ")";
     };
+    Time.prototype.getKind = function () {
+        return this.kind;
+    };
     return Time;
 }());
 var ConditionalExpr = /** @class */ (function () {
@@ -4899,9 +4899,6 @@ var ConditionalExpr = /** @class */ (function () {
         this.redirects = redirects !== null && redirects !== void 0 ? redirects : [];
         this.kind = kind;
     }
-    ConditionalExpr.prototype.getKind = function () {
-        return this.kind;
-    };
     ConditionalExpr.prototype.toSexp = function () {
         var body = this.body;
         if (typeof body === 'string') {
@@ -4919,6 +4916,9 @@ var ConditionalExpr = /** @class */ (function () {
         }
         return result;
     };
+    ConditionalExpr.prototype.getKind = function () {
+        return this.kind;
+    };
     return ConditionalExpr;
 }());
 var UnaryTest = /** @class */ (function () {
@@ -4930,12 +4930,12 @@ var UnaryTest = /** @class */ (function () {
         this.operand = operand;
         this.kind = kind;
     }
-    UnaryTest.prototype.getKind = function () {
-        return this.kind;
-    };
     UnaryTest.prototype.toSexp = function () {
         var operandVal = this.operand.getCondFormattedValue();
         return "(cond-unary \"" + this.op + "\" (cond-term \"" + operandVal + "\"))";
+    };
+    UnaryTest.prototype.getKind = function () {
+        return this.kind;
     };
     return UnaryTest;
 }());
@@ -4950,13 +4950,13 @@ var BinaryTest = /** @class */ (function () {
         this.right = right;
         this.kind = kind;
     }
-    BinaryTest.prototype.getKind = function () {
-        return this.kind;
-    };
     BinaryTest.prototype.toSexp = function () {
         var leftVal = this.left.getCondFormattedValue();
         var rightVal = this.right.getCondFormattedValue();
         return "(cond-binary \"" + this.op + "\" (cond-term \"" + leftVal + "\") (cond-term \"" + rightVal + "\"))";
+    };
+    BinaryTest.prototype.getKind = function () {
+        return this.kind;
     };
     return BinaryTest;
 }());
@@ -4969,11 +4969,11 @@ var CondAnd = /** @class */ (function () {
         this.right = right;
         this.kind = kind;
     }
-    CondAnd.prototype.getKind = function () {
-        return this.kind;
-    };
     CondAnd.prototype.toSexp = function () {
         return "(cond-and " + this.left.toSexp() + " " + this.right.toSexp() + ")";
+    };
+    CondAnd.prototype.getKind = function () {
+        return this.kind;
     };
     return CondAnd;
 }());
@@ -4986,11 +4986,11 @@ var CondOr = /** @class */ (function () {
         this.right = right;
         this.kind = kind;
     }
-    CondOr.prototype.getKind = function () {
-        return this.kind;
-    };
     CondOr.prototype.toSexp = function () {
         return "(cond-or " + this.left.toSexp() + " " + this.right.toSexp() + ")";
+    };
+    CondOr.prototype.getKind = function () {
+        return this.kind;
     };
     return CondOr;
 }());
@@ -5001,11 +5001,11 @@ var CondNot = /** @class */ (function () {
         this.operand = operand;
         this.kind = kind;
     }
-    CondNot.prototype.getKind = function () {
-        return this.kind;
-    };
     CondNot.prototype.toSexp = function () {
         return this.operand.toSexp();
+    };
+    CondNot.prototype.getKind = function () {
+        return this.kind;
     };
     return CondNot;
 }());
@@ -5016,11 +5016,11 @@ var CondParen = /** @class */ (function () {
         this.inner = inner;
         this.kind = kind;
     }
-    CondParen.prototype.getKind = function () {
-        return this.kind;
-    };
     CondParen.prototype.toSexp = function () {
         return "(cond-expr " + this.inner.toSexp() + ")";
+    };
+    CondParen.prototype.getKind = function () {
+        return this.kind;
     };
     return CondParen;
 }());
@@ -5031,9 +5031,6 @@ var ArrayName = /** @class */ (function () {
         this.elements = elements !== null && elements !== void 0 ? elements : [];
         this.kind = kind;
     }
-    ArrayName.prototype.getKind = function () {
-        return this.kind;
-    };
     ArrayName.prototype.toSexp = function () {
         if (!(this.elements.length > 0)) {
             return "(array)";
@@ -5042,6 +5039,9 @@ var ArrayName = /** @class */ (function () {
         parts.push.apply(parts, this.elements.map(function (e) { return e.toSexp(); }));
         var inner = parts.join(" ");
         return "(array " + inner + ")";
+    };
+    ArrayName.prototype.getKind = function () {
+        return this.kind;
     };
     return ArrayName;
 }());
@@ -5054,9 +5054,6 @@ var Coproc = /** @class */ (function () {
         this.name = name;
         this.kind = kind;
     }
-    Coproc.prototype.getKind = function () {
-        return this.kind;
-    };
     Coproc.prototype.toSexp = function () {
         if ((this.name.length > 0)) {
             var name = this.name;
@@ -5065,6 +5062,9 @@ var Coproc = /** @class */ (function () {
             var name = "COPROC";
         }
         return "(coproc \"" + name + "\" " + this.command.toSexp() + ")";
+    };
+    Coproc.prototype.getKind = function () {
+        return this.kind;
     };
     return Coproc;
 }());

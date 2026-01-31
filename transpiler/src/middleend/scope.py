@@ -26,6 +26,7 @@ from src.ir import (
     Function,
     Index,
     IndexLV,
+    InterfaceRef,
     IsNil,
     IsType,
     Len,
@@ -418,6 +419,149 @@ def _scope_check_stmt(ctx: _ScopeContext, stmt: Stmt, local_assigned: set[str]) 
             _scope_check_stmt(ctx, s, default_assigned)
 
 
+def _interface_visit_expr(expr: Expr | None) -> None:
+    """Set is_interface=True on expressions typed as InterfaceRef."""
+    if expr is None:
+        return
+    if isinstance(expr.typ, InterfaceRef):
+        expr.is_interface = True
+    # Recurse into child expressions
+    if isinstance(expr, FieldAccess):
+        _interface_visit_expr(expr.obj)
+    elif isinstance(expr, Index):
+        _interface_visit_expr(expr.obj)
+        _interface_visit_expr(expr.index)
+    elif isinstance(expr, SliceExpr):
+        _interface_visit_expr(expr.obj)
+        _interface_visit_expr(expr.low)
+        _interface_visit_expr(expr.high)
+    elif isinstance(expr, BinaryOp):
+        _interface_visit_expr(expr.left)
+        _interface_visit_expr(expr.right)
+    elif isinstance(expr, UnaryOp):
+        _interface_visit_expr(expr.operand)
+    elif isinstance(expr, Ternary):
+        _interface_visit_expr(expr.cond)
+        _interface_visit_expr(expr.then_expr)
+        _interface_visit_expr(expr.else_expr)
+    elif isinstance(expr, Call):
+        for arg in expr.args:
+            _interface_visit_expr(arg)
+    elif isinstance(expr, MethodCall):
+        _interface_visit_expr(expr.obj)
+        for arg in expr.args:
+            _interface_visit_expr(arg)
+    elif isinstance(expr, StaticCall):
+        for arg in expr.args:
+            _interface_visit_expr(arg)
+    elif isinstance(expr, Cast):
+        _interface_visit_expr(expr.expr)
+    elif isinstance(expr, TypeAssert):
+        _interface_visit_expr(expr.expr)
+    elif isinstance(expr, IsType):
+        _interface_visit_expr(expr.expr)
+    elif isinstance(expr, IsNil):
+        _interface_visit_expr(expr.expr)
+    elif isinstance(expr, Len):
+        _interface_visit_expr(expr.expr)
+    elif isinstance(expr, MakeSlice):
+        _interface_visit_expr(expr.length)
+        _interface_visit_expr(expr.capacity)
+    elif isinstance(expr, SliceLit):
+        for elem in expr.elements:
+            _interface_visit_expr(elem)
+    elif isinstance(expr, MapLit):
+        for k, v in expr.entries:
+            _interface_visit_expr(k)
+            _interface_visit_expr(v)
+    elif isinstance(expr, SetLit):
+        for elem in expr.elements:
+            _interface_visit_expr(elem)
+    elif isinstance(expr, StructLit):
+        for v in expr.fields.values():
+            _interface_visit_expr(v)
+    elif isinstance(expr, TupleLit):
+        for elem in expr.elements:
+            _interface_visit_expr(elem)
+    elif isinstance(expr, StringConcat):
+        for part in expr.parts:
+            _interface_visit_expr(part)
+    elif isinstance(expr, StringFormat):
+        for arg in expr.args:
+            _interface_visit_expr(arg)
+
+
+def _interface_visit_stmt(stmt: Stmt) -> None:
+    """Visit a statement and annotate interface-typed expressions."""
+    if isinstance(stmt, VarDecl):
+        if stmt.value:
+            _interface_visit_expr(stmt.value)
+    elif isinstance(stmt, Assign):
+        _interface_visit_expr(stmt.value)
+    elif isinstance(stmt, OpAssign):
+        _interface_visit_expr(stmt.value)
+    elif isinstance(stmt, TupleAssign):
+        _interface_visit_expr(stmt.value)
+    elif isinstance(stmt, ExprStmt):
+        _interface_visit_expr(stmt.expr)
+    elif isinstance(stmt, Return):
+        if stmt.value:
+            _interface_visit_expr(stmt.value)
+    elif isinstance(stmt, If):
+        _interface_visit_expr(stmt.cond)
+        if stmt.init:
+            _interface_visit_stmt(stmt.init)
+        for s in stmt.then_body:
+            _interface_visit_stmt(s)
+        for s in stmt.else_body:
+            _interface_visit_stmt(s)
+    elif isinstance(stmt, While):
+        _interface_visit_expr(stmt.cond)
+        for s in stmt.body:
+            _interface_visit_stmt(s)
+    elif isinstance(stmt, ForRange):
+        _interface_visit_expr(stmt.iterable)
+        for s in stmt.body:
+            _interface_visit_stmt(s)
+    elif isinstance(stmt, ForClassic):
+        if stmt.init:
+            _interface_visit_stmt(stmt.init)
+        if stmt.cond:
+            _interface_visit_expr(stmt.cond)
+        if stmt.post:
+            _interface_visit_stmt(stmt.post)
+        for s in stmt.body:
+            _interface_visit_stmt(s)
+    elif isinstance(stmt, Block):
+        for s in stmt.body:
+            _interface_visit_stmt(s)
+    elif isinstance(stmt, TryCatch):
+        for s in stmt.body:
+            _interface_visit_stmt(s)
+        for s in stmt.catch_body:
+            _interface_visit_stmt(s)
+    elif isinstance(stmt, Match):
+        _interface_visit_expr(stmt.expr)
+        for case in stmt.cases:
+            for s in case.body:
+                _interface_visit_stmt(s)
+        for s in stmt.default:
+            _interface_visit_stmt(s)
+    elif isinstance(stmt, TypeSwitch):
+        _interface_visit_expr(stmt.expr)
+        for case in stmt.cases:
+            for s in case.body:
+                _interface_visit_stmt(s)
+        for s in stmt.default:
+            _interface_visit_stmt(s)
+
+
+def _annotate_interface_types(stmts: list[Stmt]) -> None:
+    """Set is_interface=True on expressions typed as InterfaceRef."""
+    for stmt in stmts:
+        _interface_visit_stmt(stmt)
+
+
 def _analyze_function(func: Function) -> None:
     """Analyze a single function for reassignments."""
     params: dict[str, Param] = {}
@@ -436,6 +580,8 @@ def _analyze_function(func: Function) -> None:
     for p in func.params:
         if p.name not in used_vars:
             p.is_unused = True
+    # Annotate interface-typed expressions
+    _annotate_interface_types(func.body)
 
 
 # Import If here to avoid circular import at module level

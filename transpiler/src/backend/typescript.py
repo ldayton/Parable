@@ -246,9 +246,8 @@ class TsBackend:
     def _emit_interface(self, iface: InterfaceDef) -> None:
         self._line(f"interface {_safe_name(iface.name)} {{")
         self.indent += 1
-        # Node interface needs a kind property for type discrimination
-        if iface.name == "Node":
-            self._line("kind: string;")
+        for fld in iface.fields:
+            self._line(f"{_camel(fld.name)}: {self._type(fld.typ)};")
         for method in iface.methods:
             params = self._params(method.params)
             ret = self._type(method.ret)
@@ -272,16 +271,6 @@ class TsBackend:
         if struct.fields:
             self._line()
             self._emit_constructor(struct)
-        # Add getKind() method for Node implementations that have a kind field
-        has_kind_field = any(f.name == "kind" for f in struct.fields)
-        has_getkind_method = any(m.name in ("GetKind", "get_kind") for m in struct.methods)
-        if "Node" in struct.implements and has_kind_field and not has_getkind_method:
-            self._line()
-            self._line("getKind(): string {")
-            self.indent += 1
-            self._line("return this.kind;")
-            self.indent -= 1
-            self._line("}")
         self.current_struct = struct.name
         for i, method in enumerate(struct.methods):
             if i > 0 or struct.fields:

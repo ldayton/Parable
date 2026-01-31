@@ -557,11 +557,6 @@ func _Substring(s string, start int, end int) string {
                 self._line("}")
                 self._line("")
             # Exceptions with embedded_type inherit Error() from parent
-        # If struct implements Node interface, emit the interface methods
-        if "Node" in struct.implements:
-            # GetKind getter for the Kind field
-            self._line(f"func (self *{struct.name}) GetKind() string {{ return self.Kind }}")
-            self._line("")
         # Emit methods
         for method in struct.methods:
             self._emit_function(method)
@@ -1801,9 +1796,7 @@ func _Substring(s string, start int, end int) string {
         # Check if the expression type is an interface type
         # In Go, interface nil check requires reflection when interface might
         # contain a typed nil pointer (e.g., var x SomeInterface = (*Impl)(nil))
-        expr_type = expr.expr.typ
-        is_interface = isinstance(expr_type, InterfaceRef)
-        if is_interface:
+        if isinstance(expr.expr.typ, InterfaceRef):
             # Use helper function that handles typed nil pointers
             if expr.negated:
                 return f"!_isNilInterfaceRef({inner})"

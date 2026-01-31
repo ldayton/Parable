@@ -581,13 +581,6 @@ class JavaBackend:
         # Default constructor
         self._emit_default_constructor(struct)
         self._line("")
-        # Generate getters for interface methods that map to fields
-        # e.g., if interface requires getKind() and struct has kind field
-        field_names = {f.name for f in struct.fields}
-        method_names = {m.name for m in struct.methods}
-        if "Node" in struct.implements and "kind" in field_names and "GetKind" not in method_names:
-            self._line("public String getKind() { return this.kind; }")
-            self._line("")
         for i, method in enumerate(struct.methods):
             if i > 0:
                 self._line("")

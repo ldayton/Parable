@@ -213,6 +213,7 @@ class CSharpBackend:
         self.current_class: str = ""
         self.struct_fields: dict[str, list[tuple[str, Type]]] = {}
         self._hoisted_vars: set[str] = set()
+        self._declared_vars: set[str] = set()  # All variables declared in current function
         self._module_name: str = ""
         self._interface_names: set[str] = set()
         self.temp_counter = 0
@@ -361,6 +362,7 @@ class CSharpBackend:
 
     def _emit_function(self, func: Function) -> None:
         self._hoisted_vars = set()
+        self._declared_vars = {p.name for p in func.params}  # Track all declared vars
         self._func_params = {p.name for p in func.params if isinstance(p.typ, FuncType)}
         params = self._params(func.params)
         ret = self._type(func.ret)
@@ -377,6 +379,7 @@ class CSharpBackend:
 
     def _emit_method(self, func: Function) -> None:
         self._hoisted_vars = set()
+        self._declared_vars = {p.name for p in func.params}  # Track all declared vars
         self._func_params = {p.name for p in func.params if isinstance(p.typ, FuncType)}
         params = self._params(func.params)
         ret = self._type(func.ret)
@@ -411,12 +414,14 @@ class CSharpBackend:
             default = self._default_value(typ) if typ else "null"
             self._line(f"{cs_type} {var_name} = {default};")
             self._hoisted_vars.add(name)
+            self._declared_vars.add(name)
 
     def _emit_stmt(self, stmt: Stmt) -> None:
         match stmt:
             case VarDecl(name=name, typ=typ, value=value):
                 cs_type = self._type(typ)
                 var_name = _safe_name(name)
+                self._declared_vars.add(name)
                 if value is not None:
                     val = self._expr(value)
                     self._line(f"{cs_type} {var_name} = {val};")
@@ -434,9 +439,12 @@ class CSharpBackend:
                     target_name = target.name if isinstance(target, VarLV) else None
                     is_hoisted = target_name and target_name in self._hoisted_vars
                     if stmt.is_declaration and not is_hoisted:
-                        value_type = value.typ
-                        cs_type = self._type(value_type) if value_type else "object"
+                        # Prefer decl_typ (unified type from frontend) over value.typ
+                        decl_type = stmt.decl_typ if stmt.decl_typ is not None else value.typ
+                        cs_type = self._type(decl_type) if decl_type else "object"
                         self._line(f"{cs_type} {lv} = {val};")
+                        if target_name:
+                            self._declared_vars.add(target_name)
                     else:
                         self._line(f"{lv} = {val};")
             case OpAssign(target=target, op=op, value=value):
@@ -466,16 +474,20 @@ class CSharpBackend:
                 self._line(f"if ({self._expr(cond)})")
                 self._line("{")
                 self.indent += 1
+                saved_hoisted = self._hoisted_vars.copy()
                 for s in then_body:
                     self._emit_stmt(s)
+                self._hoisted_vars = saved_hoisted
                 self.indent -= 1
                 if else_body:
                     self._line("}")
                     self._line("else")
                     self._line("{")
                     self.indent += 1
+                    saved_hoisted = self._hoisted_vars.copy()
                     for s in else_body:
                         self._emit_stmt(s)
+                    self._hoisted_vars = saved_hoisted
                     self.indent -= 1
                 self._line("}")
             case TypeSwitch(expr=expr, binding=binding, cases=cases, default=default):
@@ -713,6 +725,9 @@ class CSharpBackend:
                     self._line(f"var {val} = {temp_var}.ToString();")
             else:
                 elem_type = self._element_type(iter_type)
+                # Use string for untyped list literals of strings
+                if elem_type == "object":
+                    elem_type = "string"
                 if is_hoisted:
                     self._loop_temp_counter += 1
                     temp_var = f"_e{self._loop_temp_counter}"
@@ -1093,6 +1108,10 @@ class CSharpBackend:
                     return f"({obj_str}.IndexOf({prefix}, {pos}) == {pos})"
                 return f"{obj_str}.StartsWith({args_str})"
             if method == "endswith":
+                # Handle tuple argument: str.endswith((" ", "\n")) -> multiple checks
+                if args and isinstance(args[0], TupleLit):
+                    checks = [f"{obj_str}.EndsWith({self._expr(e)})" for e in args[0].elements]
+                    return "(" + " || ".join(checks) + ")"
                 return f"{obj_str}.EndsWith({args_str})"
             if method == "find":
                 return f"{obj_str}.IndexOf({args_str})"
@@ -1125,9 +1144,16 @@ class CSharpBackend:
             return f"{obj_str}.Insert({args_str})"
         # Handle common methods that fall through when receiver type is unknown
         if method == "endswith":
+            # Handle tuple argument: str.endswith((" ", "\n")) -> multiple checks
+            if args and isinstance(args[0], TupleLit):
+                checks = [f"{obj_str}.EndsWith({self._expr(e)})" for e in args[0].elements]
+                return "(" + " || ".join(checks) + ")"
             return f"{obj_str}.EndsWith({args_str})"
         if method == "startswith":
             return f"{obj_str}.StartsWith({args_str})"
+        if method == "join":
+            # Python: sep.join(list) -> C#: string.Join(sep, list)
+            return f"string.Join({obj_str}, {args_str})"
         # ToSexp needs cast when receiver is object (from type switch default)
         if method == "to_sexp":
             return f"((INode){obj_str}).ToSexp()"
@@ -1210,6 +1236,12 @@ class CSharpBackend:
                 else:
                     ordered_args.append(self._default_value(field_type))
             return f"new {struct_name}({', '.join(ordered_args)})"
+        elif embedded_value is not None:
+            # Child exception class with no additional fields - forward parent args
+            if isinstance(embedded_value, StructLit):
+                parent_args = ", ".join(self._expr(v) for v in embedded_value.fields.values())
+                return f"new {struct_name}({parent_args})"
+            return f"new {struct_name}({self._expr(embedded_value)})"
         elif not fields:
             return f"new {struct_name}()"
         else:

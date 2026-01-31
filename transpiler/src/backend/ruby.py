@@ -843,7 +843,8 @@ class RubyBackend:
                 return f"{self._cond_expr(cond)} ? {self._expr(then_expr)} : {self._expr(else_expr)}"
             case Cast(expr=inner, to_type=to_type):
                 if to_type == Primitive(kind="string") and isinstance(inner.typ, Slice):
-                    return f"{self._expr(inner)}.pack('C*').force_encoding('UTF-8')"
+                    # Pack bytes, interpret as UTF-8, scrub invalid sequences
+                    return f"{self._expr(inner)}.pack('C*').force_encoding('UTF-8').scrub(\"\\uFFFD\")"
                 if to_type == Primitive(kind="string") and inner.typ == Primitive(kind="rune"):
                     return f"[{self._expr(inner)}].pack('U')"
                 if isinstance(to_type, Slice) and to_type.element == Primitive(kind="byte"):
@@ -1150,8 +1151,28 @@ def _needs_parens(child_op: str, parent_op: str, is_left: bool) -> bool:
     return False
 
 
+def _escape_ruby_string(value: str) -> str:
+    """Escape a string for Ruby double-quoted literals.
+
+    Ruby interprets #{...}, #$..., and #@... as interpolation in double-quoted
+    strings. We need to escape # when followed by { $ or @.
+    """
+    result = escape_string(value)
+    # Escape # before interpolation triggers: { $ @
+    out = []
+    i = 0
+    while i < len(result):
+        c = result[i]
+        if c == "#" and i + 1 < len(result) and result[i + 1] in "{$@":
+            out.append("\\#")
+        else:
+            out.append(c)
+        i += 1
+    return "".join(out)
+
+
 def _string_literal(value: str) -> str:
-    return f'"{escape_string(value)}"'
+    return f'"{_escape_ruby_string(value)}"'
 
 
 def _extract_range_pattern(

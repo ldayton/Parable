@@ -2055,7 +2055,7 @@ class Word
     end
     inner = substring(value, 1, value.length - 1)
     literal_bytes = self.ansi_c_to_bytes(inner)
-    literal_str = literal_bytes.pack('C*').force_encoding('UTF-8')
+    literal_str = literal_bytes.pack('C*').force_encoding('UTF-8').scrub("\uFFFD")
     return self.sh_single_quote(literal_str)
   end
 
@@ -6172,7 +6172,7 @@ class Parser
       escaped_char = self.arith_advance
       return ArithEscape.new(char: escaped_char, kind: "escape")
     end
-    if self.arith_at_end || (")]:,;?|&<>=!+-*/%^~#{}".include?(c))
+    if self.arith_at_end || (")]:,;?|&<>=!+-*/%^~\#{}".include?(c))
       return ArithEmpty.new(kind: "empty")
     end
     return self.arith_parse_number_or_var

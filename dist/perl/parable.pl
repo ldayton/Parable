@@ -463,8 +463,9 @@ sub read_operator ($self) {
 }
 
 sub skip_blanks ($self) {
+    my $c;
     while ($self->{pos_} < $self->{length_}) {
-        my $c = $self->{source}->[$self->{pos_}];
+        $c = $self->{source}->[$self->{pos_}];
         if ($c ne " " && $c ne "\t") {
             last;
         }
@@ -473,6 +474,7 @@ sub skip_blanks ($self) {
 }
 
 sub skip_comment ($self) {
+    my $prev;
     if ($self->{pos_} >= $self->{length_}) {
         return 0;
     }
@@ -483,7 +485,7 @@ sub skip_comment ($self) {
         return 0;
     }
     if ($self->{pos_} > 0) {
-        my $prev = $self->{source}->[$self->{pos_} - 1];
+        $prev = $self->{source}->[$self->{pos_} - 1];
         if ((index(" \t\n;|&(){}", $prev) == -1)) {
             return 0;
         }
@@ -495,10 +497,11 @@ sub skip_comment ($self) {
 }
 
 sub read_single_quote ($self, $start) {
+    my $c;
     my $chars = ["'"];
     my $saw_newline = 0;
     while ($self->{pos_} < $self->{length_}) {
-        my $c = $self->{source}->[$self->{pos_}];
+        $c = $self->{source}->[$self->{pos_}];
         if ($c eq "\n") {
             $saw_newline = 1;
         }
@@ -555,17 +558,22 @@ sub is_word_terminator ($self, $ctx, $ch, $bracket_depth, $paren_depth) {
 }
 
 sub read_bracket_expression ($self, $chars, $parts, $for_regex, $paren_depth) {
+    my $bracket_will_close;
+    my $c;
+    my $next_ch;
+    my $sc;
+    my $scan;
     if ($for_regex) {
-        my $scan = $self->{pos_} + 1;
+        $scan = $self->{pos_} + 1;
         if ($scan < $self->{length_} && $self->{source}->[$scan] eq "^") {
             $scan += 1;
         }
         if ($scan < $self->{length_} && $self->{source}->[$scan] eq "]") {
             $scan += 1;
         }
-        my $bracket_will_close = 0;
+        $bracket_will_close = 0;
         while ($scan < $self->{length_}) {
-            my $sc = $self->{source}->[$scan];
+            $sc = $self->{source}->[$scan];
             if ($sc eq "]" && $scan + 1 < $self->{length_} && $self->{source}->[$scan + 1] eq "]") {
                 last;
             }
@@ -598,7 +606,7 @@ sub read_bracket_expression ($self, $chars, $parts, $for_regex, $paren_depth) {
         if ($self->{pos_} + 1 >= $self->{length_}) {
             return 0;
         }
-        my $next_ch = $self->{source}->[$self->{pos_} + 1];
+        $next_ch = $self->{source}->[$self->{pos_} + 1];
         if (is_whitespace_no_newline($next_ch) || $next_ch eq "&" || $next_ch eq "|") {
             return 0;
         }
@@ -611,7 +619,7 @@ sub read_bracket_expression ($self, $chars, $parts, $for_regex, $paren_depth) {
         $chars->append($self->advance());
     }
     while (!$self->at_end()) {
-        my $c = $self->peek();
+        $c = $self->peek();
         if ($c eq "]") {
             $chars->append($self->advance());
             last;
@@ -662,6 +670,21 @@ sub read_bracket_expression ($self, $chars, $parts, $for_regex, $paren_depth) {
 }
 
 sub parse_matched_pair ($self, $open_char, $close_char, $flags, $initial_was_dollar) {
+    my $after_brace_pos;
+    my $arith_node;
+    my $arith_text;
+    my $ch;
+    my $cmd_node;
+    my $cmd_text;
+    my $direction;
+    my $in_dquote;
+    my $nested;
+    my $next_ch;
+    my $param_node;
+    my $param_text;
+    my $procsub_node;
+    my $procsub_text;
+    my $quote_flags;
     my $start = $self->{pos_};
     my $count = 1;
     my $chars = [];
@@ -672,7 +695,7 @@ sub parse_matched_pair ($self, $open_char, $close_char, $flags, $initial_was_dol
         if ($self->at_end()) {
             die sprintf("unexpected EOF while looking for matching `%s'", $close_char);
         }
-        my $ch = $self->advance();
+        $ch = $self->advance();
         if (($flags & MATCHEDPAIRFLAGS_DOLBRACE() ? 1 : 0) && $self->{dolbrace_state} == DOLBRACESTATE_OP()) {
             if ((index("#%^,~:-=?+/", $ch) == -1)) {
                 $self->{dolbrace_state} = DOLBRACESTATE_WORD();
@@ -736,7 +759,7 @@ sub parse_matched_pair ($self, $open_char, $close_char, $flags, $initial_was_dol
             my $nested = "";
             if ($ch eq "'") {
                 $chars->push($ch);
-                my $quote_flags = ($was_dollar ? $flags | MATCHEDPAIRFLAGS_ALLOWESC() : $flags);
+                $quote_flags = ($was_dollar ? $flags | MATCHEDPAIRFLAGS_ALLOWESC() : $flags);
                 $nested = $self->parse_matched_pair("'", "'", $quote_flags, 0);
                 $chars->push($nested);
                 $chars->push("'");
@@ -762,7 +785,7 @@ sub parse_matched_pair ($self, $open_char, $close_char, $flags, $initial_was_dol
             }
         }
         if ($ch eq "\$" && !$self->at_end() && !($flags & MATCHEDPAIRFLAGS_EXTGLOB() ? 1 : 0)) {
-            my $next_ch = $self->peek();
+            $next_ch = $self->peek();
             if ($was_dollar) {
                 $chars->push($ch);
                 $was_dollar = 0;
@@ -771,7 +794,7 @@ sub parse_matched_pair ($self, $open_char, $close_char, $flags, $initial_was_dol
             }
             if ($next_ch eq "{") {
                 if (($flags & MATCHEDPAIRFLAGS_ARITH() ? 1 : 0)) {
-                    my $after_brace_pos = $self->{pos_} + 1;
+                    $after_brace_pos = $self->{pos_} + 1;
                     if ($after_brace_pos >= $self->{length_} || !is_funsub_char($self->{source}->[$after_brace_pos])) {
                         $chars->push($ch);
                         $was_dollar = 1;
@@ -781,8 +804,8 @@ sub parse_matched_pair ($self, $open_char, $close_char, $flags, $initial_was_dol
                 }
                 $self->{pos_} -= 1;
                 $self->sync_to_parser();
-                my $in_dquote = ($flags & MATCHEDPAIRFLAGS_DQUOTE()) != 0;
-                my ($param_node, $param_text) = @{$self->{parser}->parse_param_expansion($in_dquote)};
+                $in_dquote = ($flags & MATCHEDPAIRFLAGS_DQUOTE()) != 0;
+                ($param_node, $param_text) = @{$self->{parser}->parse_param_expansion($in_dquote)};
                 $self->sync_from_parser();
                 if (defined($param_node)) {
                     $chars->push($param_text);
@@ -800,7 +823,7 @@ sub parse_matched_pair ($self, $open_char, $close_char, $flags, $initial_was_dol
                 my $cmd_node = undef;
                 my $cmd_text = "";
                 if ($self->{pos_} + 2 < $self->{length_} && $self->{source}->[$self->{pos_} + 2] eq "(") {
-                    my ($arith_node, $arith_text) = @{$self->{parser}->parse_arithmetic_expansion()};
+                    ($arith_node, $arith_text) = @{$self->{parser}->parse_arithmetic_expansion()};
                     $self->sync_from_parser();
                     if (defined($arith_node)) {
                         $chars->push($arith_text);
@@ -839,7 +862,7 @@ sub parse_matched_pair ($self, $open_char, $close_char, $flags, $initial_was_dol
             } elsif ($next_ch eq "[") {
                 $self->{pos_} -= 1;
                 $self->sync_to_parser();
-                my ($arith_node, $arith_text) = @{$self->{parser}->parse_deprecated_arithmetic()};
+                ($arith_node, $arith_text) = @{$self->{parser}->parse_deprecated_arithmetic()};
                 $self->sync_from_parser();
                 if (defined($arith_node)) {
                     $chars->push($arith_text);
@@ -854,11 +877,11 @@ sub parse_matched_pair ($self, $open_char, $close_char, $flags, $initial_was_dol
             }
         }
         if ($ch eq "(" && $was_gtlt && ($flags & MATCHEDPAIRFLAGS_DOLBRACE() | MATCHEDPAIRFLAGS_ARRAYSUB() ? 1 : 0)) {
-            my $direction = $chars->[-1];
+            $direction = $chars->[-1];
             $chars = [@{$chars}[0 .. scalar(@{$chars}) - 1 - 1]];
             $self->{pos_} -= 1;
             $self->sync_to_parser();
-            my ($procsub_node, $procsub_text) = @{$self->{parser}->parse_process_substitution()};
+            ($procsub_node, $procsub_text) = @{$self->{parser}->parse_process_substitution()};
             $self->sync_from_parser();
             if (defined($procsub_node)) {
                 $chars->push($procsub_text);
@@ -884,6 +907,29 @@ sub collect_param_argument ($self, $flags, $was_dollar) {
 }
 
 sub read_word_internal ($self, $ctx, $at_command_start, $in_array_literal, $in_assign_builtin) {
+    my $ansi_result0;
+    my $ansi_result1;
+    my $array_result0;
+    my $array_result1;
+    my $c;
+    my $ch;
+    my $cmdsub_result0;
+    my $cmdsub_result1;
+    my $content;
+    my $for_regex;
+    my $handle_line_continuation;
+    my $in_single_in_dquote;
+    my $is_array_assign;
+    my $locale_result0;
+    my $locale_result1;
+    my $locale_result2;
+    my $next_c;
+    my $next_ch;
+    my $prev_char;
+    my $procsub_result0;
+    my $procsub_result1;
+    my $saw_newline;
+    my $track_newline;
     my $start = $self->{pos_};
     my $chars = [];
     my $parts = [];
@@ -892,7 +938,7 @@ sub read_word_internal ($self, $ctx, $at_command_start, $in_array_literal, $in_a
     my $seen_equals = 0;
     my $paren_depth = 0;
     while (!$self->at_end()) {
-        my $ch = $self->peek();
+        $ch = $self->peek();
         if ($ctx == WORD_CTX_REGEX()) {
             if ($ch eq "\\" && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "\n") {
                 $self->advance();
@@ -910,7 +956,7 @@ sub read_word_internal ($self, $ctx, $at_command_start, $in_array_literal, $in_a
                 next;
             }
             if ((scalar(@{$chars}) > 0) && $at_command_start && !$seen_equals && is_array_assignment_prefix($chars)) {
-                my $prev_char = $chars->[-1];
+                $prev_char = $chars->[-1];
                 if (($prev_char =~ /^[a-zA-Z0-9]$/) || $prev_char eq "_") {
                     $bracket_start_pos = $self->{pos_};
                     $bracket_depth += 1;
@@ -947,7 +993,7 @@ sub read_word_internal ($self, $ctx, $at_command_start, $in_array_literal, $in_a
             last;
         }
         if (($ctx == WORD_CTX_COND() || $ctx == WORD_CTX_REGEX()) && $ch eq "[") {
-            my $for_regex = $ctx == WORD_CTX_REGEX();
+            $for_regex = $ctx == WORD_CTX_REGEX();
             if ($self->read_bracket_expression($chars, $parts, $for_regex, $paren_depth)) {
                 next;
             }
@@ -972,7 +1018,7 @@ sub read_word_internal ($self, $ctx, $at_command_start, $in_array_literal, $in_a
         }
         if ($ch eq "'") {
             $self->advance();
-            my $track_newline = $ctx == WORD_CTX_NORMAL();
+            $track_newline = $ctx == WORD_CTX_NORMAL();
             ($content, $saw_newline) = @{$self->read_single_quote($start)};
             $chars->push($content);
             if ($track_newline && $saw_newline && defined($self->{parser})) {
@@ -986,9 +1032,9 @@ sub read_word_internal ($self, $ctx, $at_command_start, $in_array_literal, $in_a
             $self->advance();
             if ($ctx == WORD_CTX_NORMAL()) {
                 $chars->push("\"");
-                my $in_single_in_dquote = 0;
+                $in_single_in_dquote = 0;
                 while (!$self->at_end() && ($in_single_in_dquote || $self->peek() ne "\"")) {
-                    my $c = $self->peek();
+                    $c = $self->peek();
                     if ($in_single_in_dquote) {
                         $chars->push($self->advance());
                         if ($c eq "'") {
@@ -997,7 +1043,7 @@ sub read_word_internal ($self, $ctx, $at_command_start, $in_array_literal, $in_a
                         next;
                     }
                     if ($c eq "\\" && $self->{pos_} + 1 < $self->{length_}) {
-                        my $next_c = $self->{source}->[$self->{pos_} + 1];
+                        $next_c = $self->{source}->[$self->{pos_} + 1];
                         if ($next_c eq "\n") {
                             $self->advance();
                             $self->advance();
@@ -1032,7 +1078,7 @@ sub read_word_internal ($self, $ctx, $at_command_start, $in_array_literal, $in_a
                 }
                 $chars->push($self->advance());
             } else {
-                my $handle_line_continuation = $ctx == WORD_CTX_COND();
+                $handle_line_continuation = $ctx == WORD_CTX_COND();
                 $self->sync_to_parser();
                 $self->{parser}->scan_double_quote($chars, $parts, $start, $handle_line_continuation);
                 $self->sync_from_parser();
@@ -1040,7 +1086,7 @@ sub read_word_internal ($self, $ctx, $at_command_start, $in_array_literal, $in_a
             next;
         }
         if ($ch eq "\\" && $self->{pos_} + 1 < $self->{length_}) {
-            my $next_ch = $self->{source}->[$self->{pos_} + 1];
+            $next_ch = $self->{source}->[$self->{pos_} + 1];
             if ($ctx != WORD_CTX_REGEX() && $next_ch eq "\n") {
                 $self->advance();
                 $self->advance();
@@ -1051,7 +1097,7 @@ sub read_word_internal ($self, $ctx, $at_command_start, $in_array_literal, $in_a
             next;
         }
         if ($ctx != WORD_CTX_REGEX() && $ch eq "\$" && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "'") {
-            my ($ansi_result0, $ansi_result1) = @{$self->read_ansi_c_quote()};
+            ($ansi_result0, $ansi_result1) = @{$self->read_ansi_c_quote()};
             if (defined($ansi_result0)) {
                 $parts->push($ansi_result0);
                 $chars->push($ansi_result1);
@@ -1061,7 +1107,7 @@ sub read_word_internal ($self, $ctx, $at_command_start, $in_array_literal, $in_a
             next;
         }
         if ($ctx != WORD_CTX_REGEX() && $ch eq "\$" && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "\"") {
-            my ($locale_result0, $locale_result1, $locale_result2) = @{$self->read_locale_string()};
+            ($locale_result0, $locale_result1, $locale_result2) = @{$self->read_locale_string()};
             if (defined($locale_result0)) {
                 $parts->push($locale_result0);
                 $parts->extend($locale_result2);
@@ -1101,7 +1147,7 @@ sub read_word_internal ($self, $ctx, $at_command_start, $in_array_literal, $in_a
         }
         if ($ctx != WORD_CTX_REGEX() && is_redirect_char($ch) && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "(") {
             $self->sync_to_parser();
-            my ($procsub_result0, $procsub_result1) = @{$self->{parser}->parse_process_substitution()};
+            ($procsub_result0, $procsub_result1) = @{$self->{parser}->parse_process_substitution()};
             $self->sync_from_parser();
             if (defined($procsub_result0)) {
                 $parts->push($procsub_result0);
@@ -1117,7 +1163,7 @@ sub read_word_internal ($self, $ctx, $at_command_start, $in_array_literal, $in_a
             next;
         }
         if ($ctx == WORD_CTX_NORMAL() && $ch eq "(" && (scalar(@{$chars}) > 0) && $bracket_depth == 0) {
-            my $is_array_assign = 0;
+            $is_array_assign = 0;
             if (scalar(@{$chars}) >= 3 && $chars->[-2] eq "+" && $chars->[-1] eq "=") {
                 $is_array_assign = is_array_assignment_prefix([@{$chars}[0 .. scalar(@{$chars}) - 2 - 1]]);
             } elsif ($chars->[-1] eq "=" && scalar(@{$chars}) >= 2) {
@@ -1125,7 +1171,7 @@ sub read_word_internal ($self, $ctx, $at_command_start, $in_array_literal, $in_a
             }
             if ($is_array_assign && ($at_command_start || $in_assign_builtin)) {
                 $self->sync_to_parser();
-                my ($array_result0, $array_result1) = @{$self->{parser}->parse_array_literal()};
+                ($array_result0, $array_result1) = @{$self->{parser}->parse_array_literal()};
                 $self->sync_from_parser();
                 if (defined($array_result0)) {
                     $parts->push($array_result0);
@@ -1189,6 +1235,7 @@ sub read_word ($self) {
 }
 
 sub next_token ($self) {
+    my $tok;
     my $tok = undef;
     if (defined($self->{token_cache})) {
         $tok = $self->{token_cache};
@@ -1236,8 +1283,9 @@ sub next_token ($self) {
 }
 
 sub peek_token ($self) {
+    my $saved_last;
     if (!defined($self->{token_cache})) {
-        my $saved_last = $self->{last_read_token};
+        $saved_last = $self->{last_read_token};
         $self->{token_cache} = $self->next_token();
         $self->{last_read_token} = $saved_last;
     }
@@ -1245,6 +1293,7 @@ sub peek_token ($self) {
 }
 
 sub read_ansi_c_quote ($self) {
+    my $ch;
     if ($self->at_end() || $self->peek() ne "\$") {
         return [undef, ""];
     }
@@ -1257,7 +1306,7 @@ sub read_ansi_c_quote ($self) {
     my $content_chars = [];
     my $found_close = 0;
     while (!$self->at_end()) {
-        my $ch = $self->peek();
+        $ch = $self->peek();
         if ($ch eq "'") {
             $self->advance();
             $found_close = 1;
@@ -1293,6 +1342,14 @@ sub sync_from_parser ($self) {
 }
 
 sub read_locale_string ($self) {
+    my $arith_node;
+    my $arith_text;
+    my $ch;
+    my $cmdsub_node;
+    my $cmdsub_text;
+    my $next_ch;
+    my $param_node;
+    my $param_text;
     if ($self->at_end() || $self->peek() ne "\$") {
         return [undef, "", []];
     }
@@ -1306,13 +1363,13 @@ sub read_locale_string ($self) {
     my $inner_parts = [];
     my $found_close = 0;
     while (!$self->at_end()) {
-        my $ch = $self->peek();
+        $ch = $self->peek();
         if ($ch eq "\"") {
             $self->advance();
             $found_close = 1;
             last;
         } elsif ($ch eq "\\" && $self->{pos_} + 1 < $self->{length_}) {
-            my $next_ch = $self->{source}->[$self->{pos_} + 1];
+            $next_ch = $self->{source}->[$self->{pos_} + 1];
             if ($next_ch eq "\n") {
                 $self->advance();
                 $self->advance();
@@ -1322,14 +1379,14 @@ sub read_locale_string ($self) {
             }
         } elsif ($ch eq "\$" && $self->{pos_} + 2 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "(" && $self->{source}->[$self->{pos_} + 2] eq "(") {
             $self->sync_to_parser();
-            my ($arith_node, $arith_text) = @{$self->{parser}->parse_arithmetic_expansion()};
+            ($arith_node, $arith_text) = @{$self->{parser}->parse_arithmetic_expansion()};
             $self->sync_from_parser();
             if (defined($arith_node)) {
                 $inner_parts->push($arith_node);
                 $content_chars->push($arith_text);
             } else {
                 $self->sync_to_parser();
-                my ($cmdsub_node, $cmdsub_text) = @{$self->{parser}->parse_command_substitution()};
+                ($cmdsub_node, $cmdsub_text) = @{$self->{parser}->parse_command_substitution()};
                 $self->sync_from_parser();
                 if (defined($cmdsub_node)) {
                     $inner_parts->push($cmdsub_node);
@@ -1340,7 +1397,7 @@ sub read_locale_string ($self) {
             }
         } elsif (is_expansion_start($self->{source}, $self->{pos_}, "\$(")) {
             $self->sync_to_parser();
-            my ($cmdsub_node, $cmdsub_text) = @{$self->{parser}->parse_command_substitution()};
+            ($cmdsub_node, $cmdsub_text) = @{$self->{parser}->parse_command_substitution()};
             $self->sync_from_parser();
             if (defined($cmdsub_node)) {
                 $inner_parts->push($cmdsub_node);
@@ -1350,7 +1407,7 @@ sub read_locale_string ($self) {
             }
         } elsif ($ch eq "\$") {
             $self->sync_to_parser();
-            my ($param_node, $param_text) = @{$self->{parser}->parse_param_expansion(0)};
+            ($param_node, $param_text) = @{$self->{parser}->parse_param_expansion(0)};
             $self->sync_from_parser();
             if (defined($param_node)) {
                 $inner_parts->push($param_node);
@@ -1360,7 +1417,7 @@ sub read_locale_string ($self) {
             }
         } elsif ($ch eq "`") {
             $self->sync_to_parser();
-            my ($cmdsub_node, $cmdsub_text) = @{$self->{parser}->parse_backtick_substitution()};
+            ($cmdsub_node, $cmdsub_text) = @{$self->{parser}->parse_backtick_substitution()};
             $self->sync_from_parser();
             if (defined($cmdsub_node)) {
                 $inner_parts->push($cmdsub_node);
@@ -1407,6 +1464,7 @@ sub update_dolbrace_for_op ($self, $op, $has_param) {
 }
 
 sub consume_param_operator ($self) {
+    my $next_ch;
     if ($self->at_end()) {
         return "";
     }
@@ -1485,11 +1543,12 @@ sub consume_param_operator ($self) {
 }
 
 sub param_subscript_has_close ($self, $start_pos) {
+    my $c;
     my $depth = 1;
     my $i = $start_pos + 1;
     my $quote = new_quote_state();
     while ($i < $self->{length_}) {
-        my $c = $self->{source}->[$i];
+        $c = $self->{source}->[$i];
         if ($quote->{single}) {
             if ($c eq "'") {
                 $quote->{single} = 0;
@@ -1539,6 +1598,9 @@ sub param_subscript_has_close ($self, $start_pos) {
 }
 
 sub consume_param_name ($self) {
+    my $c;
+    my $content;
+    my $name_chars;
     if ($self->at_end()) {
         return "";
     }
@@ -1558,9 +1620,9 @@ sub consume_param_name ($self) {
         return ""->join_($name_chars);
     }
     if (($ch =~ /^[a-zA-Z]$/) || $ch eq "_") {
-        my $name_chars = [];
+        $name_chars = [];
         while (!$self->at_end()) {
-            my $c = $self->peek();
+            $c = $self->peek();
             if (($c =~ /^[a-zA-Z0-9]$/) || $c eq "_") {
                 $name_chars->push($self->advance());
             } elsif ($c eq "[") {
@@ -1568,7 +1630,7 @@ sub consume_param_name ($self) {
                     last;
                 }
                 $name_chars->push($self->advance());
-                my $content = $self->parse_matched_pair("[", "]", MATCHEDPAIRFLAGS_ARRAYSUB(), 0);
+                $content = $self->parse_matched_pair("[", "]", MATCHEDPAIRFLAGS_ARRAYSUB(), 0);
                 $name_chars->push($content);
                 $name_chars->push("]");
                 last;
@@ -1586,6 +1648,10 @@ sub consume_param_name ($self) {
 }
 
 sub read_param_expansion ($self, $in_dquote) {
+    my $c;
+    my $name;
+    my $name_start;
+    my $text;
     if ($self->at_end() || $self->peek() ne "\$") {
         return [undef, ""];
     }
@@ -1607,16 +1673,16 @@ sub read_param_expansion ($self, $in_dquote) {
         return [ParamExpansion->new($ch, "param"), $text];
     }
     if (($ch =~ /^[a-zA-Z]$/) || $ch eq "_") {
-        my $name_start = $self->{pos_};
+        $name_start = $self->{pos_};
         while (!$self->at_end()) {
-            my $c = $self->peek();
+            $c = $self->peek();
             if (($c =~ /^[a-zA-Z0-9]$/) || $c eq "_") {
                 $self->advance();
             } else {
                 last;
             }
         }
-        my $name = substring($self->{source}, $name_start, $self->{pos_});
+        $name = substring($self->{source}, $name_start, $self->{pos_});
         $text = substring($self->{source}, $start, $self->{pos_});
         return [ParamExpansion->new($name, "param"), $text];
     }
@@ -1625,6 +1691,23 @@ sub read_param_expansion ($self, $in_dquote) {
 }
 
 sub read_braced_param ($self, $start, $in_dquote) {
+    my $arg;
+    my $backtick_pos;
+    my $bc;
+    my $content;
+    my $dollar_count;
+    my $flags;
+    my $formatted;
+    my $inner;
+    my $next_c;
+    my $op;
+    my $param;
+    my $param_ends_with_dollar;
+    my $parsed;
+    my $sub_parser;
+    my $suffix;
+    my $text;
+    my $trailing;
     if ($self->at_end()) {
         die "unexpected EOF looking for `}'";
     }
@@ -1667,8 +1750,8 @@ sub read_braced_param ($self, $start, $in_dquote) {
                 return [ParamIndirect->new($param, "param-indirect"), $text];
             }
             if (!$self->at_end() && is_at_or_star($self->peek())) {
-                my $suffix = $self->advance();
-                my $trailing = $self->parse_matched_pair("{", "}", MATCHEDPAIRFLAGS_DOLBRACE(), 0);
+                $suffix = $self->advance();
+                $trailing = $self->parse_matched_pair("{", "}", MATCHEDPAIRFLAGS_DOLBRACE(), 0);
                 $text = substring($self->{source}, $start, $self->{pos_});
                 $self->{dolbrace_state} = $saved_dolbrace;
                 return [ParamIndirect->new($param . $suffix . $trailing, "param-indirect"), $text];
@@ -1697,7 +1780,7 @@ sub read_braced_param ($self, $start, $in_dquote) {
         if (!$self->at_end() && (((index("-=+?", $self->peek()) >= 0)) || $self->peek() eq ":" && $self->{pos_} + 1 < $self->{length_} && is_simple_param_op($self->{source}->[$self->{pos_} + 1]))) {
             $param = "";
         } else {
-            my $content = $self->parse_matched_pair("{", "}", MATCHEDPAIRFLAGS_DOLBRACE(), 0);
+            $content = $self->parse_matched_pair("{", "}", MATCHEDPAIRFLAGS_DOLBRACE(), 0);
             $text = "\${" . $content . "}";
             $self->{dolbrace_state} = $saved_dolbrace;
             return [ParamExpansion->new($content, "param"), $text];
@@ -1716,19 +1799,19 @@ sub read_braced_param ($self, $start, $in_dquote) {
     $op = $self->consume_param_operator();
     if ($op eq "") {
         if (!$self->at_end() && $self->peek() eq "\$" && $self->{pos_} + 1 < $self->{length_} && ($self->{source}->[$self->{pos_} + 1] eq "\"" || $self->{source}->[$self->{pos_} + 1] eq "'")) {
-            my $dollar_count = 1 + count_consecutive_dollars_before($self->{source}, $self->{pos_});
+            $dollar_count = 1 + count_consecutive_dollars_before($self->{source}, $self->{pos_});
             if ($dollar_count % 2 == 1) {
                 $op = "";
             } else {
                 $op = $self->advance();
             }
         } elsif (!$self->at_end() && $self->peek() eq "`") {
-            my $backtick_pos = $self->{pos_};
+            $backtick_pos = $self->{pos_};
             $self->advance();
             while (!$self->at_end() && $self->peek() ne "`") {
-                my $bc = $self->peek();
+                $bc = $self->peek();
                 if ($bc eq "\\" && $self->{pos_} + 1 < $self->{length_}) {
-                    my $next_c = $self->{source}->[$self->{pos_} + 1];
+                    $next_c = $self->{source}->[$self->{pos_} + 1];
                     if (is_escape_char_in_backtick($next_c)) {
                         $self->advance();
                     }
@@ -1756,8 +1839,8 @@ sub read_braced_param ($self, $start, $in_dquote) {
     }
     $self->update_dolbrace_for_op($op, length($param) > 0);
     eval {
-        my $flags = ($in_dquote ? MATCHEDPAIRFLAGS_DQUOTE() : MATCHEDPAIRFLAGS_NONE());
-        my $param_ends_with_dollar = $param ne "" && $param->endswith("\$");
+        $flags = ($in_dquote ? MATCHEDPAIRFLAGS_DQUOTE() : MATCHEDPAIRFLAGS_NONE());
+        $param_ends_with_dollar = $param ne "" && $param->endswith("\$");
         $arg = $self->collect_param_argument($flags, $param_ends_with_dollar);
     };
     if (my $e = $@) {
@@ -1765,12 +1848,12 @@ sub read_braced_param ($self, $start, $in_dquote) {
         die $e;
     }
     if (($op eq "<" || $op eq ">") && $arg->startswith("(") && $arg->endswith(")")) {
-        my $inner = substr($arg, 1, length($arg) - 1 - 1);
+        $inner = substr($arg, 1, length($arg) - 1 - 1);
         eval {
-            my $sub_parser = new_parser($inner, 1, $self->{parser}->{extglob});
-            my $parsed = $sub_parser->parse_list(1);
+            $sub_parser = new_parser($inner, 1, $self->{parser}->{extglob});
+            $parsed = $sub_parser->parse_list(1);
             if (defined($parsed) && $sub_parser->at_end()) {
-                my $formatted = format_cmdsub_node($parsed, 0, 1, 0, 1);
+                $formatted = format_cmdsub_node($parsed, 0, 1, 0, 1);
                 $arg = "(" . $formatted . ")";
             }
         };
@@ -1821,6 +1904,7 @@ sub append_with_ctlesc ($self, $result, $byte_val) {
 }
 
 sub double_ctlesc_smart ($self, $value) {
+    my $bs_count;
     my $result = [];
     my $quote = new_quote_state();
     for my $c (@{$value}) {
@@ -1832,7 +1916,7 @@ sub double_ctlesc_smart ($self, $value) {
         $result->push($c);
         if ($c == "") {
             if ($quote->{double}) {
-                my $bs_count = 0;
+                $bs_count = 0;
                 for (my $j = scalar(@{$result}) - 2; $j > -1; $j += -1) {
                     if ($result->[$j] eq "\\") {
                         $bs_count += 1;
@@ -1852,11 +1936,15 @@ sub double_ctlesc_smart ($self, $value) {
 }
 
 sub normalize_param_expansion_newlines ($self, $value) {
+    my $c;
+    my $ch;
+    my $depth;
+    my $had_leading_newline;
     my $result = [];
     my $i = 0;
     my $quote = new_quote_state();
     while ($i < length($value)) {
-        my $c = $value->[$i];
+        $c = $value->[$i];
         if ($c eq "'" && !$quote->{double}) {
             $quote->{single} = !$quote->{single};
             $result->push($c);
@@ -1869,14 +1957,14 @@ sub normalize_param_expansion_newlines ($self, $value) {
             $result->push("\$");
             $result->push("{");
             $i += 2;
-            my $had_leading_newline = $i < length($value) && $value->[$i] eq "\n";
+            $had_leading_newline = $i < length($value) && $value->[$i] eq "\n";
             if ($had_leading_newline) {
                 $result->push(" ");
                 $i += 1;
             }
-            my $depth = 1;
+            $depth = 1;
             while ($i < length($value) && $depth > 0) {
-                my $ch = $value->[$i];
+                $ch = $value->[$i];
                 if ($ch eq "\\" && $i + 1 < length($value) && !$quote->{single}) {
                     if ($value->[$i + 1] eq "\n") {
                         $i += 2;
@@ -1937,12 +2025,21 @@ sub sh_single_quote ($self, $s_) {
 }
 
 sub ansi_c_to_bytes ($self, $inner) {
+    my $byte_val;
+    my $c;
+    my $codepoint;
+    my $ctrl_char;
+    my $ctrl_val;
+    my $hex_str;
+    my $j;
+    my $simple;
+    my $skip_extra;
     my $result = [];
     my $i = 0;
     while ($i < length($inner)) {
         if ($inner->[$i] eq "\\" && $i + 1 < length($inner)) {
-            my $c = $inner->[$i + 1];
-            my $simple = get_ansi_escape($c);
+            $c = $inner->[$i + 1];
+            $simple = get_ansi_escape($c);
             if ($simple >= 0) {
                 $result->push($simple);
                 $i += 2;
@@ -1951,30 +2048,30 @@ sub ansi_c_to_bytes ($self, $inner) {
                 $i += 2;
             } elsif ($c eq "x") {
                 if ($i + 2 < length($inner) && $inner->[$i + 2] eq "{") {
-                    my $j = $i + 3;
+                    $j = $i + 3;
                     while ($j < length($inner) && is_hex_digit($inner->[$j])) {
                         $j += 1;
                     }
-                    my $hex_str = substring($inner, $i + 3, $j);
+                    $hex_str = substring($inner, $i + 3, $j);
                     if ($j < length($inner) && $inner->[$j] eq "}") {
                         $j += 1;
                     }
                     if (!(length($hex_str) > 0)) {
                         return $result;
                     }
-                    my $byte_val = hex($hex_str) & 255;
+                    $byte_val = hex($hex_str) & 255;
                     if ($byte_val == 0) {
                         return $result;
                     }
                     $self->append_with_ctlesc($result, $byte_val);
                     $i = $j;
                 } else {
-                    my $j = $i + 2;
+                    $j = $i + 2;
                     while ($j < length($inner) && $j < $i + 4 && is_hex_digit($inner->[$j])) {
                         $j += 1;
                     }
                     if ($j > $i + 2) {
-                        my $byte_val = hex(substring($inner, $i + 2, $j));
+                        $byte_val = hex(substring($inner, $i + 2, $j));
                         if ($byte_val == 0) {
                             return $result;
                         }
@@ -1986,12 +2083,12 @@ sub ansi_c_to_bytes ($self, $inner) {
                     }
                 }
             } elsif ($c eq "u") {
-                my $j = $i + 2;
+                $j = $i + 2;
                 while ($j < length($inner) && $j < $i + 6 && is_hex_digit($inner->[$j])) {
                     $j += 1;
                 }
                 if ($j > $i + 2) {
-                    my $codepoint = hex(substring($inner, $i + 2, $j));
+                    $codepoint = hex(substring($inner, $i + 2, $j));
                     if ($codepoint == 0) {
                         return $result;
                     }
@@ -2002,12 +2099,12 @@ sub ansi_c_to_bytes ($self, $inner) {
                     $i += 1;
                 }
             } elsif ($c eq "U") {
-                my $j = $i + 2;
+                $j = $i + 2;
                 while ($j < length($inner) && $j < $i + 10 && is_hex_digit($inner->[$j])) {
                     $j += 1;
                 }
                 if ($j > $i + 2) {
-                    my $codepoint = hex(substring($inner, $i + 2, $j));
+                    $codepoint = hex(substring($inner, $i + 2, $j));
                     if ($codepoint == 0) {
                         return $result;
                     }
@@ -2019,12 +2116,12 @@ sub ansi_c_to_bytes ($self, $inner) {
                 }
             } elsif ($c eq "c") {
                 if ($i + 3 <= length($inner)) {
-                    my $ctrl_char = $inner->[$i + 2];
-                    my $skip_extra = 0;
+                    $ctrl_char = $inner->[$i + 2];
+                    $skip_extra = 0;
                     if ($ctrl_char eq "\\" && $i + 4 <= length($inner) && $inner->[$i + 3] eq "\\") {
                         $skip_extra = 1;
                     }
-                    my $ctrl_val = ord($ctrl_char->[0]) & 31;
+                    $ctrl_val = ord($ctrl_char->[0]) & 31;
                     if ($ctrl_val == 0) {
                         return $result;
                     }
@@ -2035,12 +2132,12 @@ sub ansi_c_to_bytes ($self, $inner) {
                     $i += 1;
                 }
             } elsif ($c eq "0") {
-                my $j = $i + 2;
+                $j = $i + 2;
                 while ($j < length($inner) && $j < $i + 4 && is_octal_digit($inner->[$j])) {
                     $j += 1;
                 }
                 if ($j > $i + 2) {
-                    my $byte_val = oct(substring($inner, $i + 1, $j)) & 255;
+                    $byte_val = oct(substring($inner, $i + 1, $j)) & 255;
                     if ($byte_val == 0) {
                         return $result;
                     }
@@ -2050,11 +2147,11 @@ sub ansi_c_to_bytes ($self, $inner) {
                     return $result;
                 }
             } elsif ($c ge "1" && $c le "7") {
-                my $j = $i + 1;
+                $j = $i + 1;
                 while ($j < length($inner) && $j < $i + 4 && is_octal_digit($inner->[$j])) {
                     $j += 1;
                 }
-                my $byte_val = oct(substring($inner, $i + 1, $j)) & 255;
+                $byte_val = oct(substring($inner, $i + 1, $j)) & 255;
                 if ($byte_val == 0) {
                     return $result;
                 }
@@ -2084,13 +2181,30 @@ sub expand_ansi_c_escapes ($self, $value) {
 }
 
 sub expand_all_ansi_c_quotes ($self, $value) {
+    my $after_brace;
+    my $ansi_str;
+    my $c;
+    my $ch;
+    my $effective_in_dquote;
+    my $expanded;
+    my $first_char;
+    my $in_pattern;
+    my $inner;
+    my $is_ansi_c;
+    my $j;
+    my $last_brace_idx;
+    my $op_start;
+    my $outer_in_dquote;
+    my $rest;
+    my $result_str;
+    my $var_name_len;
     my $result = [];
     my $i = 0;
     my $quote = new_quote_state();
     my $in_backtick = 0;
     my $brace_depth = 0;
     while ($i < length($value)) {
-        my $ch = $value->[$i];
+        $ch = $value->[$i];
         if ($ch eq "`" && !$quote->{single}) {
             $in_backtick = !$in_backtick;
             $result->push($ch);
@@ -2123,9 +2237,9 @@ sub expand_all_ansi_c_quotes ($self, $value) {
                 next;
             }
         }
-        my $effective_in_dquote = $quote->{double};
+        $effective_in_dquote = $quote->{double};
         if ($ch eq "'" && !$effective_in_dquote) {
-            my $is_ansi_c = !$quote->{single} && $i > 0 && $value->[$i - 1] eq "\$" && count_consecutive_dollars_before($value, $i - 1) % 2 == 0;
+            $is_ansi_c = !$quote->{single} && $i > 0 && $value->[$i - 1] eq "\$" && count_consecutive_dollars_before($value, $i - 1) % 2 == 0;
             if (!$is_ansi_c) {
                 $quote->{single} = !$quote->{single};
             }
@@ -2140,7 +2254,7 @@ sub expand_all_ansi_c_quotes ($self, $value) {
             $result->push($value->[$i + 1]);
             $i += 2;
         } elsif (starts_with_at($value, $i, "\$'") && !$quote->{single} && !$effective_in_dquote && count_consecutive_dollars_before($value, $i) % 2 == 0) {
-            my $j = $i + 2;
+            $j = $i + 2;
             while ($j < length($value)) {
                 if ($value->[$j] eq "\\" && $j + 1 < length($value)) {
                     $j += 2;
@@ -2151,24 +2265,24 @@ sub expand_all_ansi_c_quotes ($self, $value) {
                     $j += 1;
                 }
             }
-            my $ansi_str = substring($value, $i, $j);
-            my $expanded = $self->expand_ansi_c_escapes(substring($ansi_str, 1, length($ansi_str)));
-            my $outer_in_dquote = $quote->outer_double();
+            $ansi_str = substring($value, $i, $j);
+            $expanded = $self->expand_ansi_c_escapes(substring($ansi_str, 1, length($ansi_str)));
+            $outer_in_dquote = $quote->outer_double();
             if ($brace_depth > 0 && $outer_in_dquote && $expanded->startswith("'") && $expanded->endswith("'")) {
-                my $inner = substring($expanded, 1, length($expanded) - 1);
+                $inner = substring($expanded, 1, length($expanded) - 1);
                 if ($inner->find("") == -1) {
-                    my $result_str = ""->join_($result);
-                    my $in_pattern = 0;
-                    my $last_brace_idx = $result_str->rfind("\${");
+                    $result_str = ""->join_($result);
+                    $in_pattern = 0;
+                    $last_brace_idx = $result_str->rfind("\${");
                     if ($last_brace_idx >= 0) {
-                        my $after_brace = substr($result_str, $last_brace_idx + 2);
-                        my $var_name_len = 0;
+                        $after_brace = substr($result_str, $last_brace_idx + 2);
+                        $var_name_len = 0;
                         if ((length($after_brace) > 0)) {
                             if ((index("\@*#?-\$!0123456789_", $after_brace->[0]) >= 0)) {
                                 $var_name_len = 1;
                             } elsif (($after_brace->[0] =~ /^[a-zA-Z]$/) || $after_brace->[0] eq "_") {
                                 while ($var_name_len < length($after_brace)) {
-                                    my $c = $after_brace->[$var_name_len];
+                                    $c = $after_brace->[$var_name_len];
                                     if (!(($c =~ /^[a-zA-Z0-9]$/) || $c eq "_")) {
                                         last;
                                     }
@@ -2177,7 +2291,7 @@ sub expand_all_ansi_c_quotes ($self, $value) {
                             }
                         }
                         if ($var_name_len > 0 && $var_name_len < length($after_brace) && ((index("#?-", $after_brace->[0]) == -1))) {
-                            my $op_start = substr($after_brace, $var_name_len);
+                            $op_start = substr($after_brace, $var_name_len);
                             if ($op_start->startswith("\@") && length($op_start) > 1) {
                                 $op_start = substr($op_start, 1);
                             }
@@ -2196,9 +2310,9 @@ sub expand_all_ansi_c_quotes ($self, $value) {
                                 }
                             }
                         } elsif ($var_name_len == 0 && length($after_brace) > 1) {
-                            my $first_char = $after_brace->[0];
+                            $first_char = $after_brace->[0];
                             if ((index("%#/^,", $first_char) == -1)) {
-                                my $rest = substr($after_brace, 1);
+                                $rest = substr($after_brace, 1);
                                 for my $op (@{["//", "%%", "##", "/", "%", "#", "^", "^^", ",", ",,"]}) {
                                     if ((index($rest, $op) >= 0)) {
                                         $in_pattern = 1;
@@ -2224,6 +2338,8 @@ sub expand_all_ansi_c_quotes ($self, $value) {
 }
 
 sub strip_locale_string_dollars ($self, $value) {
+    my $ch;
+    my $dollar_count;
     my $result = [];
     my $i = 0;
     my $brace_depth = 0;
@@ -2232,7 +2348,7 @@ sub strip_locale_string_dollars ($self, $value) {
     my $brace_quote = new_quote_state();
     my $bracket_in_double_quote = 0;
     while ($i < length($value)) {
-        my $ch = $value->[$i];
+        $ch = $value->[$i];
         if ($ch eq "\\" && $i + 1 < length($value) && !$quote->{single} && !$brace_quote->{single}) {
             $result->push($ch);
             $result->push($value->[$i + 1]);
@@ -2278,7 +2394,7 @@ sub strip_locale_string_dollars ($self, $value) {
             $result->push($ch);
             $i += 1;
         } elsif (starts_with_at($value, $i, "\$\"") && !$quote->{single} && !$brace_quote->{single} && ($brace_depth > 0 || $bracket_depth > 0 || !$quote->{double}) && !$brace_quote->{double} && !$bracket_in_double_quote) {
-            my $dollar_count = 1 + count_consecutive_dollars_before($value, $i);
+            $dollar_count = 1 + count_consecutive_dollars_before($value, $i);
             if ($dollar_count % 2 == 1) {
                 $result->push("\"");
                 if ($bracket_depth > 0) {
@@ -2302,6 +2418,8 @@ sub strip_locale_string_dollars ($self, $value) {
 }
 
 sub normalize_array_whitespace ($self, $value) {
+    my $close_paren_pos;
+    my $depth;
     my $i = 0;
     if (!($i < length($value) && (($value->[$i] =~ /^[a-zA-Z]$/) || $value->[$i] eq "_"))) {
         return $value;
@@ -2311,7 +2429,7 @@ sub normalize_array_whitespace ($self, $value) {
         $i += 1;
     }
     while ($i < length($value) && $value->[$i] eq "[") {
-        my $depth = 1;
+        $depth = 1;
         $i += 1;
         while ($i < length($value) && $depth > 0) {
             if ($value->[$i] eq "[") {
@@ -2349,6 +2467,7 @@ sub normalize_array_whitespace ($self, $value) {
 }
 
 sub find_matching_paren ($self, $value, $open_pos) {
+    my $ch;
     if ($open_pos >= length($value) || $value->[$open_pos] ne "(") {
         return -1;
     }
@@ -2356,7 +2475,7 @@ sub find_matching_paren ($self, $value, $open_pos) {
     my $depth = 1;
     my $quote = new_quote_state();
     while ($i < length($value) && $depth > 0) {
-        my $ch = $value->[$i];
+        $ch = $value->[$i];
         if ($ch eq "\\" && $i + 1 < length($value) && !$quote->{single}) {
             $i += 2;
             next;
@@ -2395,13 +2514,18 @@ sub find_matching_paren ($self, $value, $open_pos) {
 }
 
 sub normalize_array_inner ($self, $inner) {
+    my $ch;
+    my $depth;
+    my $dq_brace_depth;
+    my $dq_content;
+    my $j;
     my $normalized = [];
     my $i = 0;
     my $in_whitespace = 1;
     my $brace_depth = 0;
     my $bracket_depth = 0;
     while ($i < length($inner)) {
-        my $ch = $inner->[$i];
+        $ch = $inner->[$i];
         if (is_whitespace($ch)) {
             if (!$in_whitespace && (scalar(@{$normalized}) > 0) && $brace_depth == 0 && $bracket_depth == 0) {
                 $normalized->push(" ");
@@ -2413,7 +2537,7 @@ sub normalize_array_inner ($self, $inner) {
             $i += 1;
         } elsif ($ch eq "'") {
             $in_whitespace = 0;
-            my $j = $i + 1;
+            $j = $i + 1;
             while ($j < length($inner) && $inner->[$j] ne "'") {
                 $j += 1;
             }
@@ -2421,9 +2545,9 @@ sub normalize_array_inner ($self, $inner) {
             $i = $j + 1;
         } elsif ($ch eq "\"") {
             $in_whitespace = 0;
-            my $j = $i + 1;
-            my $dq_content = ["\""];
-            my $dq_brace_depth = 0;
+            $j = $i + 1;
+            $dq_content = ["\""];
+            $dq_brace_depth = 0;
             while ($j < length($inner)) {
                 if ($inner->[$j] eq "\\" && $j + 1 < length($inner)) {
                     if ($inner->[$j + 1] eq "\n") {
@@ -2462,8 +2586,8 @@ sub normalize_array_inner ($self, $inner) {
             }
         } elsif (is_expansion_start($inner, $i, "\$((")) {
             $in_whitespace = 0;
-            my $j = $i + 3;
-            my $depth = 1;
+            $j = $i + 3;
+            $depth = 1;
             while ($j < length($inner) && $depth > 0) {
                 if ($j + 1 < length($inner) && $inner->[$j] eq "(" && $inner->[$j + 1] eq "(") {
                     $depth += 1;
@@ -2479,8 +2603,8 @@ sub normalize_array_inner ($self, $inner) {
             $i = $j;
         } elsif (is_expansion_start($inner, $i, "\$(")) {
             $in_whitespace = 0;
-            my $j = $i + 2;
-            my $depth = 1;
+            $j = $i + 2;
+            $depth = 1;
             while ($j < length($inner) && $depth > 0) {
                 if ($inner->[$j] eq "(" && $j > 0 && $inner->[$j - 1] eq "\$") {
                     $depth += 1;
@@ -2510,8 +2634,8 @@ sub normalize_array_inner ($self, $inner) {
             $i = $j;
         } elsif (($ch eq "<" || $ch eq ">") && $i + 1 < length($inner) && $inner->[$i + 1] eq "(") {
             $in_whitespace = 0;
-            my $j = $i + 2;
-            my $depth = 1;
+            $j = $i + 2;
+            $depth = 1;
             while ($j < length($inner) && $depth > 0) {
                 if ($inner->[$j] eq "(") {
                     $depth += 1;
@@ -2577,14 +2701,22 @@ sub normalize_array_inner ($self, $inner) {
 }
 
 sub strip_arith_line_continuations ($self, $value) {
+    my $arith_content;
+    my $closing;
+    my $content;
+    my $depth;
+    my $first_close_idx;
+    my $j;
+    my $num_backslashes;
+    my $start;
     my $result = [];
     my $i = 0;
     while ($i < length($value)) {
         if (is_expansion_start($value, $i, "\$((")) {
-            my $start = $i;
+            $start = $i;
             $i += 3;
-            my $depth = 2;
-            my $arith_content = [];
+            $depth = 2;
+            $arith_content = [];
             my $first_close_idx = -1;
             while ($i < length($value) && $depth > 0) {
                 if ($value->[$i] eq "(") {
@@ -2604,8 +2736,8 @@ sub strip_arith_line_continuations ($self, $value) {
                     }
                     $i += 1;
                 } elsif ($value->[$i] eq "\\" && $i + 1 < length($value) && $value->[$i + 1] eq "\n") {
-                    my $num_backslashes = 0;
-                    my $j = scalar(@{$arith_content}) - 1;
+                    $num_backslashes = 0;
+                    $j = scalar(@{$arith_content}) - 1;
                     while ($j >= 0 && $arith_content->[$j] eq "\n") {
                         $j -= 1;
                     }
@@ -2632,10 +2764,10 @@ sub strip_arith_line_continuations ($self, $value) {
                 }
             }
             if ($depth == 0 || $depth == 1 && $first_close_idx != -1) {
-                my $content = ""->join_($arith_content);
+                $content = ""->join_($arith_content);
                 if ($first_close_idx != -1) {
                     $content = substr($content, 0, $first_close_idx - 0);
-                    my $closing = ($depth == 0 ? "))" : ")");
+                    $closing = ($depth == 0 ? "))" : ")");
                     $result->push("\$((" . $content . $closing);
                 } else {
                     $result->push("\$((" . $content . ")");
@@ -2731,6 +2863,34 @@ sub collect_procsubs ($self, $node) {
 }
 
 sub format_command_substitutions ($self, $value, $in_arith) {
+    my $brace_quote;
+    my $c;
+    my $cmdsub_node;
+    my $compact;
+    my $depth;
+    my $direction;
+    my $ends_with_newline;
+    my $final_output;
+    my $formatted;
+    my $formatted_inner;
+    my $has_pipe;
+    my $inner;
+    my $is_procsub;
+    my $j;
+    my $leading_ws;
+    my $leading_ws_end;
+    my $node;
+    my $normalized_ws;
+    my $orig_inner;
+    my $parsed;
+    my $parser;
+    my $prefix;
+    my $raw_content;
+    my $raw_stripped;
+    my $spaced;
+    my $stripped;
+    my $suffix;
+    my $terminator;
     my $cmdsub_parts = [];
     my $procsub_parts = [];
     my $has_arith = 0;
@@ -2908,14 +3068,14 @@ sub format_command_substitutions ($self, $value, $in_arith) {
             $i = $j;
         } elsif (is_expansion_start($value, $i, "\${") && $i + 2 < length($value) && is_funsub_char($value->[$i + 2]) && !is_backslash_escaped($value, $i)) {
             $j = find_funsub_end($value, $i + 2);
-            my $cmdsub_node = ($cmdsub_idx < scalar(@{$cmdsub_parts}) ? $cmdsub_parts->[$cmdsub_idx] : undef);
+            $cmdsub_node = ($cmdsub_idx < scalar(@{$cmdsub_parts}) ? $cmdsub_parts->[$cmdsub_idx] : undef);
             if ((ref($cmdsub_node) eq 'CommandSubstitution') && $cmdsub_node->{brace}) {
                 $node = $cmdsub_node;
                 $formatted = format_cmdsub_node($node->{command}, 0, 0, 0, 0);
-                my $has_pipe = $value->[$i + 2] eq "|";
-                my $prefix = ($has_pipe ? "\${|" : "\${ ");
-                my $orig_inner = substring($value, $i + 2, $j - 1);
-                my $ends_with_newline = $orig_inner->endswith("\n");
+                $has_pipe = $value->[$i + 2] eq "|";
+                $prefix = ($has_pipe ? "\${|" : "\${ ");
+                $orig_inner = substring($value, $i + 2, $j - 1);
+                $ends_with_newline = $orig_inner->endswith("\n");
                 my $suffix = "";
                 if (!(length($formatted) > 0) || ($formatted =~ /^\s$/)) {
                     $suffix = "}";
@@ -2933,7 +3093,7 @@ sub format_command_substitutions ($self, $value, $in_arith) {
             }
             $i = $j;
         } elsif ((starts_with_at($value, $i, ">(") || starts_with_at($value, $i, "<(")) && !$main_quote->{double} && $deprecated_arith_depth == 0 && $arith_depth == 0) {
-            my $is_procsub = $i == 0 || !($value->[$i - 1] =~ /^[a-zA-Z0-9]$/) && ((index("\"'", $value->[$i - 1]) == -1));
+            $is_procsub = $i == 0 || !($value->[$i - 1] =~ /^[a-zA-Z0-9]$/) && ((index("\"'", $value->[$i - 1]) == -1));
             if ($extglob_depth > 0) {
                 $j = find_cmdsub_end($value, $i + 2);
                 $result->push(substring($value, $i, $j));
@@ -2952,18 +3112,18 @@ sub format_command_substitutions ($self, $value, $in_arith) {
                 $node = $procsub_parts->[$procsub_idx];
                 $compact = starts_with_subshell($node->{command});
                 $formatted = format_cmdsub_node($node->{command}, 0, 1, $compact, 1);
-                my $raw_content = substring($value, $i + 2, $j - 1);
+                $raw_content = substring($value, $i + 2, $j - 1);
                 if ($node->{command}->{kind} == "subshell") {
-                    my $leading_ws_end = 0;
+                    $leading_ws_end = 0;
                     while ($leading_ws_end < length($raw_content) && ((index(" \t\n", $raw_content->[$leading_ws_end]) >= 0))) {
                         $leading_ws_end += 1;
                     }
-                    my $leading_ws = substr($raw_content, 0, $leading_ws_end - 0);
+                    $leading_ws = substr($raw_content, 0, $leading_ws_end - 0);
                     $stripped = substr($raw_content, $leading_ws_end);
                     if ($stripped->startswith("(")) {
                         if ((length($leading_ws) > 0)) {
-                            my $normalized_ws = $leading_ws->replace("\n", " ")->replace("\t", " ");
-                            my $spaced = format_cmdsub_node($node->{command}, 0, 0, 0, 0);
+                            $normalized_ws = $leading_ws->replace("\n", " ")->replace("\t", " ");
+                            $spaced = format_cmdsub_node($node->{command}, 0, 0, 0, 0);
                             $result->push($direction . "(" . $normalized_ws . $spaced . ")");
                         } else {
                             $raw_content = $raw_content->replace("\\\n", "");
@@ -2975,11 +3135,11 @@ sub format_command_substitutions ($self, $value, $in_arith) {
                     }
                 }
                 $raw_content = substring($value, $i + 2, $j - 1);
-                my $raw_stripped = $raw_content->replace("\\\n", "");
+                $raw_stripped = $raw_content->replace("\\\n", "");
                 if (starts_with_subshell($node->{command}) && $formatted ne $raw_stripped) {
                     $result->push($direction . "(" . $raw_stripped . ")");
                 } else {
-                    my $final_output = $direction . "(" . $formatted . ")";
+                    $final_output = $direction . "(" . $formatted . ")";
                     $result->push($final_output);
                 }
                 $procsub_idx += 1;
@@ -3031,9 +3191,9 @@ sub format_command_substitutions ($self, $value, $in_arith) {
                 $i += 1;
             }
         } elsif ((is_expansion_start($value, $i, "\${ ") || is_expansion_start($value, $i, "\${\t") || is_expansion_start($value, $i, "\${\n") || is_expansion_start($value, $i, "\${|")) && !is_backslash_escaped($value, $i)) {
-            my $prefix = substring($value, $i, $i + 3)->replace("\t", " ")->replace("\n", " ");
+            $prefix = substring($value, $i, $i + 3)->replace("\t", " ")->replace("\n", " ");
             $j = $i + 3;
-            my $depth = 1;
+            $depth = 1;
             while ($j < length($value) && $depth > 0) {
                 if ($value->[$j] eq "{") {
                     $depth += 1;
@@ -3072,10 +3232,10 @@ sub format_command_substitutions ($self, $value, $in_arith) {
             $i = $j;
         } elsif (is_expansion_start($value, $i, "\${") && !is_backslash_escaped($value, $i)) {
             $j = $i + 2;
-            my $depth = 1;
-            my $brace_quote = new_quote_state();
+            $depth = 1;
+            $brace_quote = new_quote_state();
             while ($j < length($value) && $depth > 0) {
-                my $c = $value->[$j];
+                $c = $value->[$j];
                 if ($c eq "\\" && $j + 1 < length($value) && !$brace_quote->{single}) {
                     $j += 2;
                     next;
@@ -3102,7 +3262,7 @@ sub format_command_substitutions ($self, $value, $in_arith) {
             } else {
                 $inner = substring($value, $i + 2, $j - 1);
             }
-            my $formatted_inner = $self->format_command_substitutions($inner, 0);
+            $formatted_inner = $self->format_command_substitutions($inner, 0);
             $formatted_inner = $self->normalize_extglob_whitespace($formatted_inner);
             if ($depth == 0) {
                 $result->push("\${" . $formatted_inner . "}");
@@ -3133,6 +3293,12 @@ sub format_command_substitutions ($self, $value, $in_arith) {
 }
 
 sub normalize_extglob_whitespace ($self, $value) {
+    my $current_part;
+    my $depth;
+    my $has_pipe;
+    my $part_content;
+    my $pattern_parts;
+    my $prefix_char;
     my $result = [];
     my $i = 0;
     my $extglob_quote = new_quote_state();
@@ -3157,15 +3323,15 @@ sub normalize_extglob_whitespace ($self, $value) {
             next;
         }
         if ($i + 1 < length($value) && $value->[$i + 1] eq "(") {
-            my $prefix_char = $value->[$i];
+            $prefix_char = $value->[$i];
             if (((index("><", $prefix_char) >= 0)) && !$extglob_quote->{double} && $deprecated_arith_depth == 0) {
                 $result->push($prefix_char);
                 $result->push("(");
                 $i += 2;
-                my $depth = 1;
-                my $pattern_parts = [];
-                my $current_part = [];
-                my $has_pipe = 0;
+                $depth = 1;
+                $pattern_parts = [];
+                $current_part = [];
+                $has_pipe = 0;
                 while ($i < length($value) && $depth > 0) {
                     if ($value->[$i] eq "\\" && $i + 1 < length($value)) {
                         $current_part->push(substr($value, $i, $i + 2 - $i));
@@ -3178,7 +3344,7 @@ sub normalize_extglob_whitespace ($self, $value) {
                     } elsif ($value->[$i] eq ")") {
                         $depth -= 1;
                         if ($depth == 0) {
-                            my $part_content = ""->join_($current_part);
+                            $part_content = ""->join_($current_part);
                             if ((index($part_content, "<<") >= 0)) {
                                 $pattern_parts->push($part_content);
                             } elsif ($has_pipe) {
@@ -3196,7 +3362,7 @@ sub normalize_extglob_whitespace ($self, $value) {
                             $i += 2;
                         } else {
                             $has_pipe = 1;
-                            my $part_content = ""->join_($current_part);
+                            $part_content = ""->join_($current_part);
                             if ((index($part_content, "<<") >= 0)) {
                                 $pattern_parts->push($part_content);
                             } else {
@@ -3280,6 +3446,10 @@ sub commands ($self) { $self->{commands} }
 sub kind ($self) { $self->{kind} }
 
 sub to_sexp ($self) {
+    my $cmd;
+    my $needs;
+    my $needs_redirect;
+    my $pair;
     if (scalar(@{$self->{commands}}) == 1) {
         return $self->{commands}->[0]->to_sexp();
     }
@@ -3293,7 +3463,7 @@ sub to_sexp ($self) {
             $i += 1;
             next;
         }
-        my $needs_redirect = $i + 1 < scalar(@{$self->{commands}}) && $self->{commands}->[$i + 1]->{kind} == "pipe-both";
+        $needs_redirect = $i + 1 < scalar(@{$self->{commands}}) && $self->{commands}->[$i + 1]->{kind} == "pipe-both";
         $cmds->push([$cmd, $needs_redirect]);
         $i += 1;
     }
@@ -3325,12 +3495,13 @@ sub to_sexp ($self) {
 }
 
 sub cmd_sexp ($self, $cmd, $needs_redirect) {
+    my $parts;
     if (!$needs_redirect) {
         return $cmd->to_sexp();
     }
     if (ref($cmd) eq 'Command') {
         my $cmd = $cmd;
-        my $parts = [];
+        $parts = [];
         for my $w (@{($cmd->{words} // [])}) {
             $parts->push($w->to_sexp());
         }
@@ -3359,6 +3530,12 @@ sub parts ($self) { $self->{parts} }
 sub kind ($self) { $self->{kind} }
 
 sub to_sexp ($self) {
+    my $inner_list;
+    my $inner_parts;
+    my $left;
+    my $left_sexp;
+    my $right;
+    my $right_sexp;
     my $parts = $self->{parts}->copy();
     my $op_names = {"&&" => "and", "||" => "or", ";" => "semi", "\n" => "semi", "&" => "background"};
     while (scalar(@{$parts}) > 1 && $parts->[-1]->{kind} == "operator" && ($parts->[-1]->{op} eq ";" || $parts->[-1]->{op} eq "\n")) {
@@ -3370,8 +3547,8 @@ sub to_sexp ($self) {
     if ($parts->[-1]->{kind} == "operator" && $parts->[-1]->{op} eq "&") {
         for (my $i = scalar(@{$parts}) - 3; $i > 0; $i += -2) {
             if ($parts->[$i]->{kind} == "operator" && ($parts->[$i]->{op} eq ";" || $parts->[$i]->{op} eq "\n")) {
-                my $left = sublist($parts, 0, $i);
-                my $right = sublist($parts, $i + 1, scalar(@{$parts}) - 1);
+                $left = sublist($parts, 0, $i);
+                $right = sublist($parts, $i + 1, scalar(@{$parts}) - 1);
                 my $left_sexp = "";
                 if (scalar(@{$left}) > 1) {
                     $left_sexp = List->new($left, "list")->to_sexp();
@@ -3387,17 +3564,21 @@ sub to_sexp ($self) {
                 return "(semi " . $left_sexp . " (background " . $right_sexp . "))";
             }
         }
-        my $inner_parts = sublist($parts, 0, scalar(@{$parts}) - 1);
+        $inner_parts = sublist($parts, 0, scalar(@{$parts}) - 1);
         if (scalar(@{$inner_parts}) == 1) {
             return "(background " . $inner_parts->[0]->to_sexp() . ")";
         }
-        my $inner_list = List->new($inner_parts, "list");
+        $inner_list = List->new($inner_parts, "list");
         return "(background " . $inner_list->to_sexp() . ")";
     }
     return $self->to_sexp_with_precedence($parts, $op_names);
 }
 
 sub to_sexp_with_precedence ($self, $parts, $op_names) {
+    my $result;
+    my $seg;
+    my $segments;
+    my $start;
     my $semi_positions = [];
     for my $i (0 .. scalar(@{$parts}) - 1) {
         if ($parts->[$i]->{kind} == "operator" && ($parts->[$i]->{op} eq ";" || $parts->[$i]->{op} eq "\n")) {
@@ -3405,8 +3586,8 @@ sub to_sexp_with_precedence ($self, $parts, $op_names) {
         }
     }
     if ((scalar(@{$semi_positions}) > 0)) {
-        my $segments = [];
-        my $start = 0;
+        $segments = [];
+        $start = 0;
         my $seg = undef;
         for my $pos_ (@{$semi_positions}) {
             $seg = sublist($parts, $start, $pos_);
@@ -3422,7 +3603,7 @@ sub to_sexp_with_precedence ($self, $parts, $op_names) {
         if (!(scalar(@{$segments}) > 0)) {
             return "()";
         }
-        my $result = $self->to_sexp_amp_and_higher($segments->[0], $op_names);
+        $result = $self->to_sexp_amp_and_higher($segments->[0], $op_names);
         for (my $i = 1; $i < scalar(@{$segments}); $i += 1) {
             $result = "(semi " . $result . " " . $self->to_sexp_amp_and_higher($segments->[$i], $op_names) . ")";
         }
@@ -3432,6 +3613,9 @@ sub to_sexp_with_precedence ($self, $parts, $op_names) {
 }
 
 sub to_sexp_amp_and_higher ($self, $parts, $op_names) {
+    my $result;
+    my $segments;
+    my $start;
     if (scalar(@{$parts}) == 1) {
         return $parts->[0]->to_sexp();
     }
@@ -3442,14 +3626,14 @@ sub to_sexp_amp_and_higher ($self, $parts, $op_names) {
         }
     }
     if ((scalar(@{$amp_positions}) > 0)) {
-        my $segments = [];
-        my $start = 0;
+        $segments = [];
+        $start = 0;
         for my $pos_ (@{$amp_positions}) {
             $segments->push(sublist($parts, $start, $pos_));
             $start = $pos_ + 1;
         }
         $segments->push(sublist($parts, $start, scalar(@{$parts})));
-        my $result = $self->to_sexp_and_or($segments->[0], $op_names);
+        $result = $self->to_sexp_and_or($segments->[0], $op_names);
         for (my $i = 1; $i < scalar(@{$segments}); $i += 1) {
             $result = "(background " . $result . " " . $self->to_sexp_and_or($segments->[$i], $op_names) . ")";
         }
@@ -3459,14 +3643,17 @@ sub to_sexp_amp_and_higher ($self, $parts, $op_names) {
 }
 
 sub to_sexp_and_or ($self, $parts, $op_names) {
+    my $cmd;
+    my $op;
+    my $op_name;
     if (scalar(@{$parts}) == 1) {
         return $parts->[0]->to_sexp();
     }
     my $result = $parts->[0]->to_sexp();
     for (my $i = 1; $i < scalar(@{$parts}) - 1; $i += 2) {
-        my $op = $parts->[$i];
-        my $cmd = $parts->[$i + 1];
-        my $op_name = $op_names->get($op->{op}, $op->{op});
+        $op = $parts->[$i];
+        $cmd = $parts->[$i + 1];
+        $op_name = $op_names->get($op->{op}, $op->{op});
         $result = "(" . $op_name . " " . $result + " " . $cmd->to_sexp() + ")";
     }
     return $result;
@@ -3565,9 +3752,13 @@ sub fd ($self) { $self->{fd} }
 sub kind ($self) { $self->{kind} }
 
 sub to_sexp ($self) {
+    my $fd_target;
+    my $j;
+    my $out_val;
+    my $raw;
     my $op = ($self->{op} =~ s/^["0123456789"]+//r);
     if ($op->startswith("{")) {
-        my $j = 1;
+        $j = 1;
         if ($j < length($op) && (($op->[$j] =~ /^[a-zA-Z]$/) || $op->[$j] eq "_")) {
             $j += 1;
             while ($j < length($op) && (($op->[$j] =~ /^[a-zA-Z0-9]$/) || $op->[$j] eq "_")) {
@@ -3601,7 +3792,7 @@ sub to_sexp ($self) {
         } elsif ($op eq "<") {
             $op = "<&";
         }
-        my $raw = substring($target_val, 1, length($target_val));
+        $raw = substring($target_val, 1, length($target_val));
         if (($raw =~ /^\d$/) && int($raw) <= 2147483647) {
             return "(redirect \"" . $op . "\" " . "int($raw)" . ")";
         }
@@ -3611,7 +3802,7 @@ sub to_sexp ($self) {
         if ($target_val eq "&-") {
             return "(redirect \">&-\" 0)";
         }
-        my $fd_target = ($raw->endswith("-") ? substr($raw, 0, length($raw) - 1 - 0) : $raw);
+        $fd_target = ($raw->endswith("-") ? substr($raw, 0, length($raw) - 1 - 0) : $raw);
         return "(redirect \"" . $op . "\" \"" . $fd_target + "\")";
     }
     if ($op eq ">&" || $op eq "<&") {
@@ -3624,7 +3815,7 @@ sub to_sexp ($self) {
         if ($target_val->endswith("-") && (substr($target_val, 0, length($target_val) - 1 - 0) =~ /^\d$/) && int(substr($target_val, 0, length($target_val) - 1 - 0)) <= 2147483647) {
             return "(redirect \"" . $op . "\" " . "int(substr($target_val, 0, length($target_val) - 1 - 0))" . ")";
         }
-        my $out_val = ($target_val->endswith("-") ? substr($target_val, 0, length($target_val) - 1 - 0) : $target_val);
+        $out_val = ($target_val->endswith("-") ? substr($target_val, 0, length($target_val) - 1 - 0) : $target_val);
         return "(redirect \"" . $op . "\" \"" . $out_val + "\")";
     }
     return "(redirect \"" . $op . "\" \"" . $target_val . "\")";
@@ -3795,9 +3986,12 @@ sub redirects ($self) { $self->{redirects} }
 sub kind ($self) { $self->{kind} }
 
 sub to_sexp ($self) {
+    my $redirect_parts;
+    my $word_parts;
+    my $word_strs;
     my $suffix = "";
     if ((scalar(@{$self->{redirects}}) > 0)) {
-        my $redirect_parts = [];
+        $redirect_parts = [];
         for my $r (@{($self->{redirects} // [])}) {
             $redirect_parts->push($r->to_sexp());
         }
@@ -3811,11 +4005,11 @@ sub to_sexp ($self) {
     } elsif (scalar(@{$self->{words}}) == 0) {
         return "(for (word \"" . $var_escaped . "\") (in) " . $self->{body}->to_sexp() . ")" . $suffix;
     } else {
-        my $word_parts = [];
+        $word_parts = [];
         for my $w (@{($self->{words} // [])}) {
             $word_parts->push($w->to_sexp());
         }
-        my $word_strs = " "->join_($word_parts);
+        $word_strs = " "->join_($word_parts);
         return "(for (word \"" . $var_escaped . "\") (in " . $word_strs . ") " . $self->{body}->to_sexp() . ")" . $suffix;
     }
 }
@@ -3840,9 +4034,10 @@ sub redirects ($self) { $self->{redirects} }
 sub kind ($self) { $self->{kind} }
 
 sub to_sexp ($self) {
+    my $redirect_parts;
     my $suffix = "";
     if ((scalar(@{$self->{redirects}}) > 0)) {
-        my $redirect_parts = [];
+        $redirect_parts = [];
         for my $r (@{($self->{redirects} // [])}) {
             $redirect_parts->push($r->to_sexp());
         }
@@ -3877,9 +4072,13 @@ sub redirects ($self) { $self->{redirects} }
 sub kind ($self) { $self->{kind} }
 
 sub to_sexp ($self) {
+    my $in_clause;
+    my $redirect_parts;
+    my $word_parts;
+    my $word_strs;
     my $suffix = "";
     if ((scalar(@{$self->{redirects}}) > 0)) {
-        my $redirect_parts = [];
+        $redirect_parts = [];
         for my $r (@{($self->{redirects} // [])}) {
             $redirect_parts->push($r->to_sexp());
         }
@@ -3888,11 +4087,11 @@ sub to_sexp ($self) {
     my $var_escaped = $self->{var}->replace("\\", "\\\\")->replace("\"", "\\\"");
     my $in_clause = "";
     if (defined($self->{words})) {
-        my $word_parts = [];
+        $word_parts = [];
         for my $w (@{($self->{words} // [])}) {
             $word_parts->push($w->to_sexp());
         }
-        my $word_strs = " "->join_($word_parts);
+        $word_strs = " "->join_($word_parts);
         if (defined($self->{words})) {
             $in_clause = "(in " . $word_strs . ")";
         } else {
@@ -3949,12 +4148,16 @@ sub terminator ($self) { $self->{terminator} }
 sub kind ($self) { $self->{kind} }
 
 sub to_sexp ($self) {
+    my $ch;
+    my $result0;
+    my $result1;
+    my $result2;
     my $alternatives = [];
     my $current = [];
     my $i = 0;
     my $depth = 0;
     while ($i < length($self->{pattern})) {
-        my $ch = $self->{pattern}->[$i];
+        $ch = $self->{pattern}->[$i];
         if ($ch eq "\\" && $i + 1 < length($self->{pattern})) {
             $current->push(substring($self->{pattern}, $i, $i + 2));
             $i += 2;
@@ -3977,15 +4180,15 @@ sub to_sexp ($self) {
             $depth -= 1;
             $i += 1;
         } elsif ($ch eq "[") {
-            my ($result0, $result1, $result2) = @{consume_bracket_class($self->{pattern}, $i, $depth)};
+            ($result0, $result1, $result2) = @{consume_bracket_class($self->{pattern}, $i, $depth)};
             $i = $result0;
             $current->extend($result1);
         } elsif ($ch eq "'" && $depth == 0) {
-            my ($result0, $result1) = @{consume_single_quote($self->{pattern}, $i)};
+            ($result0, $result1) = @{consume_single_quote($self->{pattern}, $i)};
             $i = $result0;
             $current->extend($result1);
         } elsif ($ch eq "\"" && $depth == 0) {
-            my ($result0, $result1) = @{consume_double_quote($self->{pattern}, $i)};
+            ($result0, $result1) = @{consume_double_quote($self->{pattern}, $i)};
             $i = $result0;
             $current->extend($result1);
         } elsif ($ch eq "|" && $depth == 0) {
@@ -4051,16 +4254,19 @@ sub arg ($self) { $self->{arg} }
 sub kind ($self) { $self->{kind} }
 
 sub to_sexp ($self) {
+    my $arg_val;
+    my $escaped_arg;
+    my $escaped_op;
     my $escaped_param = $self->{param}->replace("\\", "\\\\")->replace("\"", "\\\"");
     if ($self->{op} ne "") {
-        my $escaped_op = $self->{op}->replace("\\", "\\\\")->replace("\"", "\\\"");
+        $escaped_op = $self->{op}->replace("\\", "\\\\")->replace("\"", "\\\"");
         my $arg_val = "";
         if ($self->{arg} ne "") {
             $arg_val = $self->{arg};
         } else {
             $arg_val = "";
         }
-        my $escaped_arg = $arg_val->replace("\\", "\\\\")->replace("\"", "\\\"");
+        $escaped_arg = $arg_val->replace("\\", "\\\\")->replace("\"", "\\\"");
         return "(param \"" . $escaped_param . "\" \"" . $escaped_op + "\" \"" . $escaped_arg + "\")";
     }
     return "(param \"" . $escaped_param . "\")";
@@ -4104,16 +4310,19 @@ sub arg ($self) { $self->{arg} }
 sub kind ($self) { $self->{kind} }
 
 sub to_sexp ($self) {
+    my $arg_val;
+    my $escaped_arg;
+    my $escaped_op;
     my $escaped = $self->{param}->replace("\\", "\\\\")->replace("\"", "\\\"");
     if ($self->{op} ne "") {
-        my $escaped_op = $self->{op}->replace("\\", "\\\\")->replace("\"", "\\\"");
+        $escaped_op = $self->{op}->replace("\\", "\\\\")->replace("\"", "\\\"");
         my $arg_val = "";
         if ($self->{arg} ne "") {
             $arg_val = $self->{arg};
         } else {
             $arg_val = "";
         }
-        my $escaped_arg = $arg_val->replace("\\", "\\\\")->replace("\"", "\\\"");
+        $escaped_arg = $arg_val->replace("\\", "\\\\")->replace("\"", "\\\"");
         return "(param-indirect \"" . $escaped . "\" \"" . $escaped_op + "\" \"" . $escaped_arg + "\")";
     }
     return "(param-indirect \"" . $escaped . "\")";
@@ -4182,15 +4391,17 @@ sub raw_content ($self) { $self->{raw_content} }
 sub kind ($self) { $self->{kind} }
 
 sub to_sexp ($self) {
+    my $redirect_parts;
+    my $redirect_sexps;
     my $formatted = Word->new($self->{raw_content}, "word")->format_command_substitutions($self->{raw_content}, 1);
     my $escaped = $formatted->replace("\\", "\\\\")->replace("\"", "\\\"")->replace("\n", "\\n")->replace("\t", "\\t");
     my $result = "(arith (word \"" . $escaped . "\"))";
     if ((scalar(@{$self->{redirects}}) > 0)) {
-        my $redirect_parts = [];
+        $redirect_parts = [];
         for my $r (@{($self->{redirects} // [])}) {
             $redirect_parts->push($r->to_sexp());
         }
-        my $redirect_sexps = " "->join_($redirect_parts);
+        $redirect_sexps = " "->join_($redirect_parts);
         return $result . " " . $redirect_sexps;
     }
     return $result;
@@ -4642,21 +4853,25 @@ sub redirects ($self) { $self->{redirects} }
 sub kind ($self) { $self->{kind} }
 
 sub to_sexp ($self) {
+    my $escaped;
+    my $redirect_parts;
+    my $redirect_sexps;
+    my $result;
     my $body = $self->{body};
     my $result = "";
     if (ref($body) eq 'string') {
         my $body = $body;
-        my $escaped = $body->replace("\\", "\\\\")->replace("\"", "\\\"")->replace("\n", "\\n");
+        $escaped = $body->replace("\\", "\\\\")->replace("\"", "\\\"")->replace("\n", "\\n");
         $result = "(cond \"" . $escaped . "\")";
     } else {
         $result = "(cond " . $body->to_sexp() . ")";
     }
     if ((scalar(@{$self->{redirects}}) > 0)) {
-        my $redirect_parts = [];
+        $redirect_parts = [];
         for my $r (@{($self->{redirects} // [])}) {
             $redirect_parts->push($r->to_sexp());
         }
-        my $redirect_sexps = " "->join_($redirect_parts);
+        $redirect_sexps = " "->join_($redirect_parts);
         return $result . " " . $redirect_sexps;
     }
     return $result;
@@ -4828,6 +5043,7 @@ sub name ($self) { $self->{name} }
 sub kind ($self) { $self->{kind} }
 
 sub to_sexp ($self) {
+    my $name;
     my $name = "";
     if ((length($self->{name}) > 0)) {
         $name = $self->{name};
@@ -4962,6 +5178,7 @@ sub lex_peek_token ($self) {
 }
 
 sub lex_next_token ($self) {
+    my $tok;
     my $tok = undef;
     if (defined($self->{lexer}->{token_cache}) && $self->{lexer}->{token_cache}->{pos_} == $self->{pos_} && $self->{lexer}->{cached_word_context} == $self->{word_context} && $self->{lexer}->{cached_at_command_start} == $self->{at_command_start} && $self->{lexer}->{cached_in_array_literal} == $self->{in_array_literal} && $self->{lexer}->{cached_in_assign_builtin} == $self->{in_assign_builtin}) {
         $tok = $self->{lexer}->next_token();
@@ -5103,12 +5320,13 @@ sub is_bang_followed_by_procsub ($self) {
 }
 
 sub skip_whitespace ($self) {
+    my $ch;
     while (!$self->at_end()) {
         $self->lex_skip_blanks();
         if ($self->at_end()) {
             last;
         }
-        my $ch = $self->peek();
+        $ch = $self->peek();
         if ($ch eq "#") {
             $self->lex_skip_comment();
         } elsif ($ch eq "\\" && $self->peek_at(1) eq "\n") {
@@ -5121,8 +5339,9 @@ sub skip_whitespace ($self) {
 }
 
 sub skip_whitespace_and_newlines ($self) {
+    my $ch;
     while (!$self->at_end()) {
-        my $ch = $self->peek();
+        $ch = $self->peek();
         if (is_whitespace($ch)) {
             $self->advance();
             if ($ch eq "\n") {
@@ -5146,6 +5365,7 @@ sub skip_whitespace_and_newlines ($self) {
 }
 
 sub at_list_terminating_bracket ($self) {
+    my $next_pos;
     if ($self->at_end()) {
         return 0;
     }
@@ -5157,7 +5377,7 @@ sub at_list_terminating_bracket ($self) {
         return 1;
     }
     if ($ch eq "}") {
-        my $next_pos = $self->{pos_} + 1;
+        $next_pos = $self->{pos_} + 1;
         if ($next_pos >= $self->{length_}) {
             return 1;
         }
@@ -5181,10 +5401,11 @@ sub at_eof_token ($self) {
 }
 
 sub collect_redirects ($self) {
+    my $redirect;
     my $redirects = [];
     while (1) {
         $self->skip_whitespace();
-        my $redirect = $self->parse_redirect();
+        $redirect = $self->parse_redirect();
         if (!defined($redirect)) {
             last;
         }
@@ -5194,15 +5415,17 @@ sub collect_redirects ($self) {
 }
 
 sub parse_loop_body ($self, $context) {
+    my $body;
+    my $brace;
     if ($self->peek() eq "{") {
-        my $brace = $self->parse_brace_group();
+        $brace = $self->parse_brace_group();
         if (!defined($brace)) {
             die sprintf("Expected brace group body in %s", $context);
         }
         return $brace->{body};
     }
     if ($self->lex_consume_word("do")) {
-        my $body = $self->parse_list_until({"done" => 1});
+        $body = $self->parse_list_until({"done" => 1});
         if (!defined($body)) {
             die "Expected commands after 'do'";
         }
@@ -5216,6 +5439,8 @@ sub parse_loop_body ($self, $context) {
 }
 
 sub peek_word ($self) {
+    my $ch;
+    my $word;
     my $saved_pos = $self->{pos_};
     $self->skip_whitespace();
     if ($self->at_end() || is_metachar($self->peek())) {
@@ -5224,7 +5449,7 @@ sub peek_word ($self) {
     }
     my $chars = [];
     while (!$self->at_end() && !is_metachar($self->peek())) {
-        my $ch = $self->peek();
+        $ch = $self->peek();
         if (is_quote($ch)) {
             last;
         }
@@ -5282,11 +5507,13 @@ sub is_word_terminator ($self, $ctx, $ch, $bracket_depth, $paren_depth) {
 }
 
 sub scan_double_quote ($self, $chars, $parts, $start, $handle_line_continuation) {
+    my $c;
+    my $next_c;
     $chars->append("\"");
     while (!$self->at_end() && $self->peek() ne "\"") {
-        my $c = $self->peek();
+        $c = $self->peek();
         if ($c eq "\\" && $self->{pos_} + 1 < $self->{length_}) {
-            my $next_c = $self->{source}->[$self->{pos_} + 1];
+            $next_c = $self->{source}->[$self->{pos_} + 1];
             if ($handle_line_continuation && $next_c eq "\n") {
                 $self->advance();
                 $self->advance();
@@ -5309,6 +5536,8 @@ sub scan_double_quote ($self, $chars, $parts, $start, $handle_line_continuation)
 }
 
 sub parse_dollar_expansion ($self, $chars, $parts, $in_dquote) {
+    my $result0;
+    my $result1;
     my $result0 = undef;
     my $result1 = "";
     if ($self->{pos_} + 2 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "(" && $self->{source}->[$self->{pos_} + 2] eq "(") {
@@ -5440,6 +5669,24 @@ sub is_assignment_word ($self, $word) {
 }
 
 sub parse_backtick_substitution ($self) {
+    my $c;
+    my $ch;
+    my $check_line;
+    my $closing;
+    my $dch;
+    my $delimiter;
+    my $end_pos;
+    my $esc;
+    my $escaped;
+    my $heredoc_end;
+    my $heredoc_start;
+    my $line;
+    my $line_end;
+    my $line_start;
+    my $next_c;
+    my $quote;
+    my $strip_tabs;
+    my $tabs_stripped;
     if ($self->at_end() || $self->peek() ne "`") {
         return [undef, ""];
     }
@@ -5453,13 +5700,13 @@ sub parse_backtick_substitution ($self) {
     my $current_heredoc_strip = 0;
     while (!$self->at_end() && ($in_heredoc_body || $self->peek() ne "`")) {
         if ($in_heredoc_body) {
-            my $line_start = $self->{pos_};
-            my $line_end = $line_start;
+            $line_start = $self->{pos_};
+            $line_end = $line_start;
             while ($line_end < $self->{length_} && $self->{source}->[$line_end] ne "\n") {
                 $line_end += 1;
             }
-            my $line = substring($self->{source}, $line_start, $line_end);
-            my $check_line = ($current_heredoc_strip ? ($line =~ s/^["\t"]+//r) : $line);
+            $line = substring($self->{source}, $line_start, $line_end);
+            $check_line = ($current_heredoc_strip ? ($line =~ s/^["\t"]+//r) : $line);
             if ($check_line eq $current_heredoc_delim) {
                 for my $ch (@{$line}) {
                     $content_chars->push($ch);
@@ -5477,8 +5724,8 @@ sub parse_backtick_substitution ($self) {
                     $in_heredoc_body = 1;
                 }
             } elsif ($check_line->startswith($current_heredoc_delim) && length($check_line) > length($current_heredoc_delim)) {
-                my $tabs_stripped = length($line) - length($check_line);
-                my $end_pos = $tabs_stripped + length($current_heredoc_delim);
+                $tabs_stripped = length($line) - length($check_line);
+                $end_pos = $tabs_stripped + length($current_heredoc_delim);
                 for (my $i = 0; $i < $end_pos; $i += 1) {
                     $content_chars->push($line->[$i]);
                     $text_chars->push($line->[$i]);
@@ -5503,16 +5750,16 @@ sub parse_backtick_substitution ($self) {
             }
             next;
         }
-        my $c = $self->peek();
+        $c = $self->peek();
         my $ch = "";
         if ($c eq "\\" && $self->{pos_} + 1 < $self->{length_}) {
-            my $next_c = $self->{source}->[$self->{pos_} + 1];
+            $next_c = $self->{source}->[$self->{pos_} + 1];
             if ($next_c eq "\n") {
                 $self->advance();
                 $self->advance();
             } elsif (is_escape_char_in_backtick($next_c)) {
                 $self->advance();
-                my $escaped = $self->advance();
+                $escaped = $self->advance();
                 $content_chars->push($escaped);
                 $text_chars->push("\\");
                 $text_chars->push($escaped);
@@ -5577,7 +5824,7 @@ sub parse_backtick_substitution ($self) {
             $text_chars->push("<");
             $content_chars->push($self->advance());
             $text_chars->push("<");
-            my $strip_tabs = 0;
+            $strip_tabs = 0;
             if (!$self->at_end() && $self->peek() eq "-") {
                 $strip_tabs = 1;
                 $content_chars->push($self->advance());
@@ -5609,7 +5856,7 @@ sub parse_backtick_substitution ($self) {
                         $text_chars->push($closing);
                     }
                 } elsif ($ch eq "\\") {
-                    my $esc = $self->advance();
+                    $esc = $self->advance();
                     $content_chars->push($esc);
                     $text_chars->push($esc);
                     if (!$self->at_end()) {
@@ -5643,7 +5890,7 @@ sub parse_backtick_substitution ($self) {
                                 $text_chars->push($closing);
                             }
                         } elsif ($ch eq "\\") {
-                            my $esc = $self->advance();
+                            $esc = $self->advance();
                             $content_chars->push($esc);
                             $text_chars->push($esc);
                             if (!$self->at_end()) {
@@ -5661,7 +5908,7 @@ sub parse_backtick_substitution ($self) {
                     }
                 }
             }
-            my $delimiter = ""->join_($delimiter_chars);
+            $delimiter = ""->join_($delimiter_chars);
             if ((length($delimiter) > 0)) {
                 $pending_heredocs->push([$delimiter, $strip_tabs]);
             }
@@ -5689,7 +5936,7 @@ sub parse_backtick_substitution ($self) {
     my $text = ""->join_($text_chars);
     my $content = ""->join_($content_chars);
     if (scalar(@{$pending_heredocs}) > 0) {
-        my ($heredoc_start, $heredoc_end) = @{find_heredoc_content_end($self->{source}, $self->{pos_}, $pending_heredocs)};
+        ($heredoc_start, $heredoc_end) = @{find_heredoc_content_end($self->{source}, $self->{pos_}, $pending_heredocs)};
         if ($heredoc_end > $heredoc_start) {
             $content = $content . substring($self->{source}, $heredoc_start, $heredoc_end);
             if ($self->{cmdsub_heredoc_end} == -1) {
@@ -5708,6 +5955,10 @@ sub parse_backtick_substitution ($self) {
 }
 
 sub parse_process_substitution ($self) {
+    my $cmd;
+    my $content_start_char;
+    my $text;
+    my $text_end;
     if ($self->at_end() || !is_redirect_char($self->peek())) {
         return [undef, ""];
     }
@@ -5724,7 +5975,7 @@ sub parse_process_substitution ($self) {
     $self->set_state(PARSERSTATEFLAGS_PST_EOFTOKEN());
     $self->{eof_token} = ")";
     eval {
-        my $cmd = $self->parse_list(1);
+        $cmd = $self->parse_list(1);
         if (!defined($cmd)) {
             $cmd = Empty->new("empty");
         }
@@ -5733,8 +5984,8 @@ sub parse_process_substitution ($self) {
             die "Invalid process substitution";
         }
         $self->advance();
-        my $text_end = $self->{pos_};
-        my $text = substring($self->{source}, $start, $text_end);
+        $text_end = $self->{pos_};
+        $text = substring($self->{source}, $start, $text_end);
         $text = strip_line_continuations_comment_aware($text);
         $self->restore_parser_state($saved);
         $self->{in_process_sub} = $old_in_process_sub;
@@ -5743,7 +5994,7 @@ sub parse_process_substitution ($self) {
     if (my $e = $@) {
         $self->restore_parser_state($saved);
         $self->{in_process_sub} = $old_in_process_sub;
-        my $content_start_char = ($start + 2 < $self->{length_} ? $self->{source}->[$start + 2] : "");
+        $content_start_char = ($start + 2 < $self->{length_} ? $self->{source}->[$start + 2] : "");
         if ((index(" \t\n", $content_start_char) >= 0)) {
             die $e;
         }
@@ -5751,13 +6002,14 @@ sub parse_process_substitution ($self) {
         $self->{lexer}->{pos_} = $self->{pos_};
         $self->{lexer}->parse_matched_pair("(", ")", 0, 0);
         $self->{pos_} = $self->{lexer}->{pos_};
-        my $text = substring($self->{source}, $start, $self->{pos_});
+        $text = substring($self->{source}, $start, $self->{pos_});
         $text = strip_line_continuations_comment_aware($text);
         return [undef, $text];
     }
 }
 
 sub parse_array_literal ($self) {
+    my $word;
     if ($self->at_end() || $self->peek() ne "(") {
         return [undef, ""];
     }
@@ -5774,7 +6026,7 @@ sub parse_array_literal ($self) {
         if ($self->peek() eq ")") {
             last;
         }
-        my $word = $self->parse_word(0, 1, 0);
+        $word = $self->parse_word(0, 1, 0);
         if (!defined($word)) {
             if ($self->peek() eq ")") {
                 last;
@@ -5795,6 +6047,9 @@ sub parse_array_literal ($self) {
 }
 
 sub parse_arithmetic_expansion ($self) {
+    my $c;
+    my $content;
+    my $expr;
     if ($self->at_end() || $self->peek() ne "\$") {
         return [undef, ""];
     }
@@ -5809,7 +6064,7 @@ sub parse_arithmetic_expansion ($self) {
     my $depth = 2;
     my $first_close_pos = -1;
     while (!$self->at_end() && $depth > 0) {
-        my $c = $self->peek();
+        $c = $self->peek();
         if ($c eq "'") {
             $self->advance();
             while (!$self->at_end() && $self->peek() ne "'") {
@@ -5880,6 +6135,7 @@ sub parse_arithmetic_expansion ($self) {
 }
 
 sub parse_arith_expr ($self, $content) {
+    my $result;
     my $saved_arith_src = $self->{arith_src};
     my $saved_arith_pos = $self->{arith_pos};
     my $saved_arith_len = $self->{arith_len};
@@ -5926,8 +6182,9 @@ sub arith_advance ($self) {
 }
 
 sub arith_skip_ws ($self) {
+    my $c;
     while (!$self->arith_at_end()) {
-        my $c = $self->{arith_src}->[$self->{arith_pos}];
+        $c = $self->{arith_src}->[$self->{arith_pos}];
         if (is_whitespace($c)) {
             $self->{arith_pos} += 1;
         } elsif ($c eq "\\" && $self->{arith_pos} + 1 < $self->{arith_len} && $self->{arith_src}->[$self->{arith_pos} + 1] eq "\n") {
@@ -5951,12 +6208,13 @@ sub arith_consume ($self, $s_) {
 }
 
 sub arith_parse_comma ($self) {
+    my $right;
     my $left = $self->arith_parse_assign();
     while (1) {
         $self->arith_skip_ws();
         if ($self->arith_consume(",")) {
             $self->arith_skip_ws();
-            my $right = $self->arith_parse_assign();
+            $right = $self->arith_parse_assign();
             $left = ArithComma->new($left, $right, "comma");
         } else {
             last;
@@ -5966,6 +6224,7 @@ sub arith_parse_comma ($self) {
 }
 
 sub arith_parse_assign ($self) {
+    my $right;
     my $left = $self->arith_parse_ternary();
     $self->arith_skip_ws();
     my $assign_ops = ["<<=", ">>=", "+=", "-=", "*=", "/=", "%=", "&=", "^=", "|=", "="];
@@ -5976,7 +6235,7 @@ sub arith_parse_assign ($self) {
             }
             $self->arith_consume($op);
             $self->arith_skip_ws();
-            my $right = $self->arith_parse_assign();
+            $right = $self->arith_parse_assign();
             return ArithAssign->new($op, $left, $right, "assign");
         }
     }
@@ -5984,6 +6243,8 @@ sub arith_parse_assign ($self) {
 }
 
 sub arith_parse_ternary ($self) {
+    my $if_false;
+    my $if_true;
     my $cond = $self->arith_parse_logical_or();
     $self->arith_skip_ws();
     if ($self->arith_consume("?")) {
@@ -6012,10 +6273,11 @@ sub arith_parse_ternary ($self) {
 }
 
 sub arith_parse_left_assoc ($self, $ops, $parsefn) {
+    my $matched;
     my $left = parsefn();
     while (1) {
         $self->arith_skip_ws();
-        my $matched = 0;
+        $matched = 0;
         for my $op (@{$ops}) {
             if ($self->arith_match($op)) {
                 $self->arith_consume($op);
@@ -6041,13 +6303,14 @@ sub arith_parse_logical_and ($self) {
 }
 
 sub arith_parse_bitwise_or ($self) {
+    my $right;
     my $left = $self->arith_parse_bitwise_xor();
     while (1) {
         $self->arith_skip_ws();
         if ($self->arith_peek(0) eq "|" && $self->arith_peek(1) ne "|" && $self->arith_peek(1) ne "=") {
             $self->arith_advance();
             $self->arith_skip_ws();
-            my $right = $self->arith_parse_bitwise_xor();
+            $right = $self->arith_parse_bitwise_xor();
             $left = ArithBinaryOp->new("|", $left, $right, "binary-op");
         } else {
             last;
@@ -6057,13 +6320,14 @@ sub arith_parse_bitwise_or ($self) {
 }
 
 sub arith_parse_bitwise_xor ($self) {
+    my $right;
     my $left = $self->arith_parse_bitwise_and();
     while (1) {
         $self->arith_skip_ws();
         if ($self->arith_peek(0) eq "^" && $self->arith_peek(1) ne "=") {
             $self->arith_advance();
             $self->arith_skip_ws();
-            my $right = $self->arith_parse_bitwise_and();
+            $right = $self->arith_parse_bitwise_and();
             $left = ArithBinaryOp->new("^", $left, $right, "binary-op");
         } else {
             last;
@@ -6073,13 +6337,14 @@ sub arith_parse_bitwise_xor ($self) {
 }
 
 sub arith_parse_bitwise_and ($self) {
+    my $right;
     my $left = $self->arith_parse_equality();
     while (1) {
         $self->arith_skip_ws();
         if ($self->arith_peek(0) eq "&" && $self->arith_peek(1) ne "&" && $self->arith_peek(1) ne "=") {
             $self->arith_advance();
             $self->arith_skip_ws();
-            my $right = $self->arith_parse_equality();
+            $right = $self->arith_parse_equality();
             $left = ArithBinaryOp->new("&", $left, $right, "binary-op");
         } else {
             last;
@@ -6093,6 +6358,7 @@ sub arith_parse_equality ($self) {
 }
 
 sub arith_parse_comparison ($self) {
+    my $right;
     my $left = $self->arith_parse_shift();
     while (1) {
         $self->arith_skip_ws();
@@ -6125,6 +6391,7 @@ sub arith_parse_comparison ($self) {
 }
 
 sub arith_parse_shift ($self) {
+    my $right;
     my $left = $self->arith_parse_additive();
     while (1) {
         $self->arith_skip_ws();
@@ -6153,11 +6420,14 @@ sub arith_parse_shift ($self) {
 }
 
 sub arith_parse_additive ($self) {
+    my $c;
+    my $c2;
+    my $right;
     my $left = $self->arith_parse_multiplicative();
     while (1) {
         $self->arith_skip_ws();
-        my $c = $self->arith_peek(0);
-        my $c2 = $self->arith_peek(1);
+        $c = $self->arith_peek(0);
+        $c2 = $self->arith_peek(1);
         my $right = undef;
         if ($c eq "+" && $c2 ne "+" && $c2 ne "=") {
             $self->arith_advance();
@@ -6177,11 +6447,14 @@ sub arith_parse_additive ($self) {
 }
 
 sub arith_parse_multiplicative ($self) {
+    my $c;
+    my $c2;
+    my $right;
     my $left = $self->arith_parse_exponentiation();
     while (1) {
         $self->arith_skip_ws();
-        my $c = $self->arith_peek(0);
-        my $c2 = $self->arith_peek(1);
+        $c = $self->arith_peek(0);
+        $c2 = $self->arith_peek(1);
         my $right = undef;
         if ($c eq "*" && $c2 ne "*" && $c2 ne "=") {
             $self->arith_advance();
@@ -6206,18 +6479,20 @@ sub arith_parse_multiplicative ($self) {
 }
 
 sub arith_parse_exponentiation ($self) {
+    my $right;
     my $left = $self->arith_parse_unary();
     $self->arith_skip_ws();
     if ($self->arith_match("**")) {
         $self->arith_consume("**");
         $self->arith_skip_ws();
-        my $right = $self->arith_parse_exponentiation();
+        $right = $self->arith_parse_exponentiation();
         return ArithBinaryOp->new("**", $left, $right, "binary-op");
     }
     return $left;
 }
 
 sub arith_parse_unary ($self) {
+    my $operand;
     $self->arith_skip_ws();
     my $operand = undef;
     if ($self->arith_match("++")) {
@@ -6261,6 +6536,7 @@ sub arith_parse_unary ($self) {
 }
 
 sub arith_parse_postfix ($self) {
+    my $index_;
     my $left = $self->arith_parse_primary();
     while (1) {
         $self->arith_skip_ws();
@@ -6275,7 +6551,7 @@ sub arith_parse_postfix ($self) {
                 my $left = $left;
                 $self->arith_advance();
                 $self->arith_skip_ws();
-                my $index_ = $self->arith_parse_comma();
+                $index_ = $self->arith_parse_comma();
                 $self->arith_skip_ws();
                 if (!$self->arith_consume("]")) {
                     die "Expected ']' in array subscript";
@@ -6292,12 +6568,14 @@ sub arith_parse_postfix ($self) {
 }
 
 sub arith_parse_primary ($self) {
+    my $escaped_char;
+    my $expr;
     $self->arith_skip_ws();
     my $c = $self->arith_peek(0);
     if ($c eq "(") {
         $self->arith_advance();
         $self->arith_skip_ws();
-        my $expr = $self->arith_parse_comma();
+        $expr = $self->arith_parse_comma();
         $self->arith_skip_ws();
         if (!$self->arith_consume(")")) {
             die "Expected ')' in arithmetic expression";
@@ -6325,7 +6603,7 @@ sub arith_parse_primary ($self) {
         if ($self->arith_at_end()) {
             die "Unexpected end after backslash in arithmetic";
         }
-        my $escaped_char = $self->arith_advance();
+        $escaped_char = $self->arith_advance();
         return ArithEscape->new($escaped_char, "escape");
     }
     if ($self->arith_at_end() || ((index(")]:,;?|&<>=!+-*/%^~#{}", $c) >= 0))) {
@@ -6335,6 +6613,7 @@ sub arith_parse_primary ($self) {
 }
 
 sub arith_parse_expansion ($self) {
+    my $ch;
     if (!$self->arith_consume("\$")) {
         die "Expected '\$'";
     }
@@ -6347,7 +6626,7 @@ sub arith_parse_expansion ($self) {
     }
     my $name_chars = [];
     while (!$self->arith_at_end()) {
-        my $ch = $self->arith_peek(0);
+        $ch = $self->arith_peek(0);
         if (($ch =~ /^[a-zA-Z0-9]$/) || $ch eq "_") {
             $name_chars->push($self->arith_advance());
         } elsif ((is_special_param_or_digit($ch) || $ch eq "#") && !(scalar(@{$name_chars}) > 0)) {
@@ -6364,6 +6643,11 @@ sub arith_parse_expansion ($self) {
 }
 
 sub arith_parse_cmdsub ($self) {
+    my $ch;
+    my $content;
+    my $content_start;
+    my $depth;
+    my $inner_expr;
     $self->arith_advance();
     my $depth = 0;
     my $content_start = 0;
@@ -6391,7 +6675,7 @@ sub arith_parse_cmdsub ($self) {
         $content = substring($self->{arith_src}, $content_start, $self->{arith_pos});
         $self->arith_advance();
         $self->arith_advance();
-        my $inner_expr = $self->parse_arith_expr($content);
+        $inner_expr = $self->parse_arith_expr($content);
         return ArithmeticExpansion->new($inner_expr, "arith");
     }
     $depth = 1;
@@ -6419,6 +6703,8 @@ sub arith_parse_cmdsub ($self) {
 }
 
 sub arith_parse_braced_param ($self) {
+    my $ch;
+    my $name_chars;
     $self->arith_advance();
     my $name_chars = undef;
     if ($self->arith_peek(0) eq "!") {
@@ -6522,10 +6808,11 @@ sub arith_parse_single_quote ($self) {
 }
 
 sub arith_parse_double_quote ($self) {
+    my $c;
     $self->arith_advance();
     my $content_start = $self->{arith_pos};
     while (!$self->arith_at_end() && $self->arith_peek(0) ne "\"") {
-        my $c = $self->arith_peek(0);
+        $c = $self->arith_peek(0);
         if ($c eq "\\" && !$self->arith_at_end()) {
             $self->arith_advance();
             $self->arith_advance();
@@ -6541,10 +6828,11 @@ sub arith_parse_double_quote ($self) {
 }
 
 sub arith_parse_backtick ($self) {
+    my $c;
     $self->arith_advance();
     my $content_start = $self->{arith_pos};
     while (!$self->arith_at_end() && $self->arith_peek(0) ne "`") {
-        my $c = $self->arith_peek(0);
+        $c = $self->arith_peek(0);
         if ($c eq "\\" && !$self->arith_at_end()) {
             $self->arith_advance();
             $self->arith_advance();
@@ -6562,6 +6850,9 @@ sub arith_parse_backtick ($self) {
 }
 
 sub arith_parse_number_or_var ($self) {
+    my $ch;
+    my $expansion;
+    my $prefix;
     $self->arith_skip_ws();
     my $chars = [];
     my $c = $self->arith_peek(0);
@@ -6575,9 +6866,9 @@ sub arith_parse_number_or_var ($self) {
                 last;
             }
         }
-        my $prefix = ""->join_($chars);
+        $prefix = ""->join_($chars);
         if (!$self->arith_at_end() && $self->arith_peek(0) eq "\$") {
-            my $expansion = $self->arith_parse_expansion();
+            $expansion = $self->arith_parse_expansion();
             return ArithConcat->new([ArithNumber->new($prefix, "number"), $expansion], "arith-concat");
         }
         return ArithNumber->new($prefix, "number");
@@ -6621,6 +6912,22 @@ sub parse_param_expansion ($self, $in_dquote) {
 }
 
 sub parse_redirect ($self) {
+    my $base;
+    my $ch;
+    my $fd_chars;
+    my $fd_target;
+    my $in_bracket;
+    my $inner_word;
+    my $is_valid_varfd;
+    my $left;
+    my $next_ch;
+    my $op;
+    my $right;
+    my $saved;
+    my $target;
+    my $varname;
+    my $varname_chars;
+    my $word_start;
     $self->skip_whitespace();
     if ($self->at_end()) {
         return undef;
@@ -6630,10 +6937,10 @@ sub parse_redirect ($self) {
     my $varfd = "";
     my $ch = "";
     if ($self->peek() eq "{") {
-        my $saved = $self->{pos_};
+        $saved = $self->{pos_};
         $self->advance();
-        my $varname_chars = [];
-        my $in_bracket = 0;
+        $varname_chars = [];
+        $in_bracket = 0;
         while (!$self->at_end() && !is_redirect_char($self->peek())) {
             $ch = $self->peek();
             if ($ch eq "}" && !$in_bracket) {
@@ -6652,15 +6959,15 @@ sub parse_redirect ($self) {
                 last;
             }
         }
-        my $varname = ""->join_($varname_chars);
-        my $is_valid_varfd = 0;
+        $varname = ""->join_($varname_chars);
+        $is_valid_varfd = 0;
         if ((length($varname) > 0)) {
             if (($varname->[0] =~ /^[a-zA-Z]$/) || $varname->[0] eq "_") {
                 if (((index($varname, "[") >= 0)) || ((index($varname, "]") >= 0))) {
-                    my $left = $varname->find("[");
-                    my $right = $varname->rfind("]");
+                    $left = $varname->find("[");
+                    $right = $varname->rfind("]");
                     if ($left != -1 && $right == length($varname) - 1 && $right > $left + 1) {
-                        my $base = substr($varname, 0, $left - 0);
+                        $base = substr($varname, 0, $left - 0);
                         if ((length($base) > 0) && (($base->[0] =~ /^[a-zA-Z]$/) || $base->[0] eq "_")) {
                             $is_valid_varfd = 1;
                             for my $c (@{substr($base, 1)}) {
@@ -6731,7 +7038,7 @@ sub parse_redirect ($self) {
     $op = $self->advance();
     my $strip_tabs = 0;
     if (!$self->at_end()) {
-        my $next_ch = $self->peek();
+        $next_ch = $self->peek();
         if ($op eq ">" && $next_ch eq ">") {
             $self->advance();
             $op = ">>";
@@ -6789,7 +7096,7 @@ sub parse_redirect ($self) {
         if (!defined($target)) {
             my $inner_word = undef;
             if (!$self->at_end() && (($self->peek() =~ /^\d$/) || $self->peek() eq "-")) {
-                my $word_start = $self->{pos_};
+                $word_start = $self->{pos_};
                 $fd_chars = [];
                 while (!$self->at_end() && ($self->peek() =~ /^\d$/)) {
                     $fd_chars->push($self->advance());
@@ -6845,6 +7152,14 @@ sub parse_redirect ($self) {
 }
 
 sub parse_heredoc_delimiter ($self) {
+    my $c;
+    my $ch;
+    my $depth;
+    my $dollar_count;
+    my $esc;
+    my $esc_val;
+    my $j;
+    my $next_ch;
     $self->skip_whitespace();
     my $quoted = 0;
     my $delimiter_chars = [];
@@ -6852,7 +7167,7 @@ sub parse_heredoc_delimiter ($self) {
         my $c = "";
         my $depth = 0;
         while (!$self->at_end() && !is_metachar($self->peek())) {
-            my $ch = $self->peek();
+            $ch = $self->peek();
             if ($ch eq "\"") {
                 $quoted = 1;
                 $self->advance();
@@ -6878,7 +7193,7 @@ sub parse_heredoc_delimiter ($self) {
             } elsif ($ch eq "\\") {
                 $self->advance();
                 if (!$self->at_end()) {
-                    my $next_ch = $self->peek();
+                    $next_ch = $self->peek();
                     if ($next_ch eq "\n") {
                         $self->advance();
                     } else {
@@ -6894,8 +7209,8 @@ sub parse_heredoc_delimiter ($self) {
                     $c = $self->peek();
                     if ($c eq "\\" && $self->{pos_} + 1 < $self->{length_}) {
                         $self->advance();
-                        my $esc = $self->peek();
-                        my $esc_val = get_ansi_escape($esc);
+                        $esc = $self->peek();
+                        $esc_val = get_ansi_escape($esc);
                         if ($esc_val >= 0) {
                             $delimiter_chars->push(chr($esc_val));
                             $self->advance();
@@ -6925,8 +7240,8 @@ sub parse_heredoc_delimiter ($self) {
                     $delimiter_chars->push($self->advance());
                 }
             } elsif ($ch eq "\$" && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "{") {
-                my $dollar_count = 0;
-                my $j = $self->{pos_} - 1;
+                $dollar_count = 0;
+                $j = $self->{pos_} - 1;
                 while ($j >= 0 && $self->{source}->[$j] eq "\$") {
                     $dollar_count += 1;
                     $j -= 1;
@@ -6959,8 +7274,8 @@ sub parse_heredoc_delimiter ($self) {
                     }
                 }
             } elsif ($ch eq "\$" && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "[") {
-                my $dollar_count = 0;
-                my $j = $self->{pos_} - 1;
+                $dollar_count = 0;
+                $j = $self->{pos_} - 1;
                 while ($j >= 0 && $self->{source}->[$j] eq "\$") {
                     $dollar_count += 1;
                     $j -= 1;
@@ -7042,6 +7357,8 @@ sub parse_heredoc_delimiter ($self) {
 }
 
 sub read_heredoc_line ($self, $quoted) {
+    my $next_line_start;
+    my $trailing_bs;
     my $line_start = $self->{pos_};
     my $line_end = $self->{pos_};
     while ($line_end < $self->{length_} && $self->{source}->[$line_end] ne "\n") {
@@ -7050,13 +7367,13 @@ sub read_heredoc_line ($self, $quoted) {
     my $line = substring($self->{source}, $line_start, $line_end);
     if (!$quoted) {
         while ($line_end < $self->{length_}) {
-            my $trailing_bs = count_trailing_backslashes($line);
+            $trailing_bs = count_trailing_backslashes($line);
             if ($trailing_bs % 2 == 0) {
                 last;
             }
             $line = substring($line, 0, length($line) - 1);
             $line_end += 1;
-            my $next_line_start = $line_end;
+            $next_line_start = $line_end;
             while ($line_end < $self->{length_} && $self->{source}->[$line_end] ne "\n") {
                 $line_end += 1;
             }
@@ -7074,19 +7391,28 @@ sub line_matches_delimiter ($self, $line, $delimiter, $strip_tabs) {
 }
 
 sub gather_heredoc_bodies ($self) {
+    my $add_newline;
+    my $check_line;
+    my $line;
+    my $line_end;
+    my $line_start;
+    my $matches;
+    my $normalized_check;
+    my $normalized_delim;
+    my $tabs_stripped;
     for my $heredoc (@{($self->{pending_heredocs} // [])}) {
         my $content_lines = [];
-        my $line_start = $self->{pos_};
+        $line_start = $self->{pos_};
         while ($self->{pos_} < $self->{length_}) {
             $line_start = $self->{pos_};
-            my ($line, $line_end) = @{$self->read_heredoc_line($heredoc->{quoted})};
-            my ($matches, $check_line) = @{$self->line_matches_delimiter($line, $heredoc->{delimiter}, $heredoc->{strip_tabs})};
+            ($line, $line_end) = @{$self->read_heredoc_line($heredoc->{quoted})};
+            ($matches, $check_line) = @{$self->line_matches_delimiter($line, $heredoc->{delimiter}, $heredoc->{strip_tabs})};
             if ($matches) {
                 $self->{pos_} = ($line_end < $self->{length_} ? $line_end + 1 : $line_end);
                 last;
             }
-            my $normalized_check = normalize_heredoc_delimiter($check_line);
-            my $normalized_delim = normalize_heredoc_delimiter($heredoc->{delimiter});
+            $normalized_check = normalize_heredoc_delimiter($check_line);
+            $normalized_delim = normalize_heredoc_delimiter($heredoc->{delimiter});
             my $tabs_stripped = 0;
             if ($self->{eof_token} eq ")" && $normalized_check->startswith($normalized_delim)) {
                 $tabs_stripped = length($line) - length($check_line);
@@ -7105,7 +7431,7 @@ sub gather_heredoc_bodies ($self) {
                 $content_lines->push($line . "\n");
                 $self->{pos_} = $line_end + 1;
             } else {
-                my $add_newline = 1;
+                $add_newline = 1;
                 if (!$heredoc->{quoted} && count_trailing_backslashes($line) % 2 == 1) {
                     $add_newline = 0;
                 }
@@ -7136,6 +7462,11 @@ sub parse_heredoc ($self, $fd, $strip_tabs) {
 }
 
 sub parse_command ($self) {
+    my $all_assignments;
+    my $in_assign_builtin;
+    my $redirect;
+    my $reserved;
+    my $word;
     my $words = [];
     my $redirects = [];
     while (1) {
@@ -7144,25 +7475,25 @@ sub parse_command ($self) {
             last;
         }
         if (scalar(@{$words}) == 0) {
-            my $reserved = $self->lex_peek_reserved_word();
+            $reserved = $self->lex_peek_reserved_word();
             if ($reserved eq "}" || $reserved eq "]]") {
                 last;
             }
         }
-        my $redirect = $self->parse_redirect();
+        $redirect = $self->parse_redirect();
         if (defined($redirect)) {
             $redirects->push($redirect);
             next;
         }
-        my $all_assignments = 1;
+        $all_assignments = 1;
         for my $w (@{$words}) {
             if (!$self->is_assignment_word($w)) {
                 $all_assignments = 0;
                 last;
             }
         }
-        my $in_assign_builtin = scalar(@{$words}) > 0 && (exists(ASSIGNMENT_BUILTINS()->{$words->[0]->{value}}));
-        my $word = $self->parse_word(!(scalar(@{$words}) > 0) || $all_assignments && scalar(@{$redirects}) == 0, 0, $in_assign_builtin);
+        $in_assign_builtin = scalar(@{$words}) > 0 && (exists(ASSIGNMENT_BUILTINS()->{$words->[0]->{value}}));
+        $word = $self->parse_word(!(scalar(@{$words}) > 0) || $all_assignments && scalar(@{$redirects}) == 0, 0, $in_assign_builtin);
         if (!defined($word)) {
             last;
         }
@@ -7197,6 +7528,7 @@ sub parse_subshell ($self) {
 }
 
 sub parse_arithmetic_command ($self) {
+    my $c;
     $self->skip_whitespace();
     if ($self->at_end() || $self->peek() ne "(" || $self->{pos_} + 1 >= $self->{length_} || $self->{source}->[$self->{pos_} + 1] ne "(") {
         return undef;
@@ -7207,7 +7539,7 @@ sub parse_arithmetic_command ($self) {
     my $content_start = $self->{pos_};
     my $depth = 1;
     while (!$self->at_end() && $depth > 0) {
-        my $c = $self->peek();
+        $c = $self->peek();
         if ($c eq "'") {
             $self->advance();
             while (!$self->at_end() && $self->peek() ne "'") {
@@ -7313,32 +7645,40 @@ sub cond_at_end ($self) {
 }
 
 sub parse_cond_or ($self) {
+    my $right;
     $self->cond_skip_whitespace();
     my $left = $self->parse_cond_and();
     $self->cond_skip_whitespace();
     if (!$self->cond_at_end() && $self->peek() eq "|" && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "|") {
         $self->advance();
         $self->advance();
-        my $right = $self->parse_cond_or();
+        $right = $self->parse_cond_or();
         return CondOr->new($left, $right, "cond-or");
     }
     return $left;
 }
 
 sub parse_cond_and ($self) {
+    my $right;
     $self->cond_skip_whitespace();
     my $left = $self->parse_cond_term();
     $self->cond_skip_whitespace();
     if (!$self->cond_at_end() && $self->peek() eq "&" && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "&") {
         $self->advance();
         $self->advance();
-        my $right = $self->parse_cond_and();
+        $right = $self->parse_cond_and();
         return CondAnd->new($left, $right, "cond-and");
     }
     return $left;
 }
 
 sub parse_cond_term ($self) {
+    my $inner;
+    my $op;
+    my $op_word;
+    my $operand;
+    my $saved_pos;
+    my $word2;
     $self->cond_skip_whitespace();
     if ($self->cond_at_end()) {
         die "Unexpected end of conditional expression";
@@ -7354,7 +7694,7 @@ sub parse_cond_term ($self) {
     }
     if ($self->peek() eq "(") {
         $self->advance();
-        my $inner = $self->parse_cond_or();
+        $inner = $self->parse_cond_or();
         $self->cond_skip_whitespace();
         if ($self->at_end() || $self->peek() ne ")") {
             die "Expected ) in conditional expression";
@@ -7377,7 +7717,7 @@ sub parse_cond_term ($self) {
     if (!$self->cond_at_end() && $self->peek() ne "&" && $self->peek() ne "|" && $self->peek() ne ")") {
         my $word2 = undef;
         if (is_redirect_char($self->peek()) && !($self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "(")) {
-            my $op = $self->advance();
+            $op = $self->advance();
             $self->cond_skip_whitespace();
             $word2 = $self->parse_cond_word();
             if (!defined($word2)) {
@@ -7385,8 +7725,8 @@ sub parse_cond_term ($self) {
             }
             return BinaryTest->new($op, $word1, $word2, "binary-test");
         }
-        my $saved_pos = $self->{pos_};
-        my $op_word = $self->parse_cond_word();
+        $saved_pos = $self->{pos_};
+        $op_word = $self->parse_cond_word();
         if (defined($op_word) && (exists(COND_BINARY_OPS()->{$op_word->{value}}))) {
             $self->cond_skip_whitespace();
             if ($op_word->{value} eq "=~") {
@@ -7453,6 +7793,9 @@ sub parse_brace_group ($self) {
 }
 
 sub parse_if ($self) {
+    my $elif_condition;
+    my $elif_then_body;
+    my $inner_else;
     $self->skip_whitespace();
     if (!$self->lex_consume_word("if")) {
         return undef;
@@ -7473,7 +7816,7 @@ sub parse_if ($self) {
     my $else_body = undef;
     if ($self->lex_is_at_reserved_word("elif")) {
         $self->lex_consume_word("elif");
-        my $elif_condition = $self->parse_list_until({"then" => 1});
+        $elif_condition = $self->parse_list_until({"then" => 1});
         if (!defined($elif_condition)) {
             die "Expected condition after 'elif'";
         }
@@ -7481,12 +7824,12 @@ sub parse_if ($self) {
         if (!$self->lex_consume_word("then")) {
             die "Expected 'then' after elif condition";
         }
-        my $elif_then_body = $self->parse_list_until({"elif" => 1, "else" => 1, "fi" => 1});
+        $elif_then_body = $self->parse_list_until({"elif" => 1, "else" => 1, "fi" => 1});
         if (!defined($elif_then_body)) {
             die "Expected commands after 'then'";
         }
         $self->skip_whitespace_and_newlines();
-        my $inner_else = undef;
+        $inner_else = undef;
         if ($self->lex_is_at_reserved_word("elif")) {
             $inner_else = $self->parse_elif_chain();
         } elsif ($self->lex_is_at_reserved_word("else")) {
@@ -7588,6 +7931,11 @@ sub parse_until ($self) {
 }
 
 sub parse_for ($self) {
+    my $brace_group;
+    my $saw_delimiter;
+    my $var_name;
+    my $var_word;
+    my $word;
     $self->skip_whitespace();
     if (!$self->lex_consume_word("for")) {
         return undef;
@@ -7598,7 +7946,7 @@ sub parse_for ($self) {
     }
     my $var_name = "";
     if ($self->peek() eq "\$") {
-        my $var_word = $self->parse_word(0, 0, 0);
+        $var_word = $self->parse_word(0, 0, 0);
         if (!defined($var_word)) {
             die "Expected variable name after 'for'";
         }
@@ -7619,7 +7967,7 @@ sub parse_for ($self) {
     if ($self->lex_is_at_reserved_word("in")) {
         $self->lex_consume_word("in");
         $self->skip_whitespace();
-        my $saw_delimiter = is_semicolon_or_newline($self->peek());
+        $saw_delimiter = is_semicolon_or_newline($self->peek());
         if ($self->peek() eq ";") {
             $self->advance();
         }
@@ -7643,7 +7991,7 @@ sub parse_for ($self) {
                 }
                 die "Expected ';' or newline before 'do'";
             }
-            my $word = $self->parse_word(0, 0, 0);
+            $word = $self->parse_word(0, 0, 0);
             if (!defined($word)) {
                 last;
             }
@@ -7652,7 +8000,7 @@ sub parse_for ($self) {
     }
     $self->skip_whitespace_and_newlines();
     if ($self->peek() eq "{") {
-        my $brace_group = $self->parse_brace_group();
+        $brace_group = $self->parse_brace_group();
         if (!defined($brace_group)) {
             die "Expected brace group in for loop";
         }
@@ -7673,13 +8021,14 @@ sub parse_for ($self) {
 }
 
 sub parse_for_arith ($self) {
+    my $ch;
     $self->advance();
     $self->advance();
     my $parts = [];
     my $current = [];
     my $paren_depth = 0;
     while (!$self->at_end()) {
-        my $ch = $self->peek();
+        $ch = $self->peek();
         if ($ch eq "(") {
             $paren_depth += 1;
             $current->push($self->advance());
@@ -7719,6 +8068,7 @@ sub parse_for_arith ($self) {
 }
 
 sub parse_select ($self) {
+    my $word;
     $self->skip_whitespace();
     if (!$self->lex_consume_word("select")) {
         return undef;
@@ -7753,7 +8103,7 @@ sub parse_select ($self) {
             if ($self->lex_is_at_reserved_word("do")) {
                 last;
             }
-            my $word = $self->parse_word(0, 0, 0);
+            $word = $self->parse_word(0, 0, 0);
             if (!defined($word)) {
                 last;
             }
@@ -7775,6 +8125,24 @@ sub consume_case_terminator ($self) {
 }
 
 sub parse_case ($self) {
+    my $body;
+    my $c;
+    my $ch;
+    my $extglob_depth;
+    my $has_first_bracket_literal;
+    my $is_at_terminator;
+    my $is_char_class;
+    my $is_empty_body;
+    my $is_pattern;
+    my $next_ch;
+    my $paren_depth;
+    my $pattern;
+    my $pattern_chars;
+    my $saved;
+    my $sc;
+    my $scan_depth;
+    my $scan_pos;
+    my $terminator;
     if (!$self->consume_word("case")) {
         return undef;
     }
@@ -7794,13 +8162,13 @@ sub parse_case ($self) {
     while (1) {
         $self->skip_whitespace_and_newlines();
         if ($self->lex_is_at_reserved_word("esac")) {
-            my $saved = $self->{pos_};
+            $saved = $self->{pos_};
             $self->skip_whitespace();
             while (!$self->at_end() && !is_metachar($self->peek()) && !is_quote($self->peek())) {
                 $self->advance();
             }
             $self->skip_whitespace();
-            my $is_pattern = 0;
+            $is_pattern = 0;
             if (!$self->at_end() && $self->peek() eq ")") {
                 if ($self->{eof_token} eq ")") {
                     $is_pattern = 0;
@@ -7808,7 +8176,7 @@ sub parse_case ($self) {
                     $self->advance();
                     $self->skip_whitespace();
                     if (!$self->at_end()) {
-                        my $next_ch = $self->peek();
+                        $next_ch = $self->peek();
                         if ($next_ch eq ";") {
                             $is_pattern = 1;
                         } elsif (!is_newline_or_right_paren($next_ch)) {
@@ -7827,10 +8195,10 @@ sub parse_case ($self) {
             $self->advance();
             $self->skip_whitespace_and_newlines();
         }
-        my $pattern_chars = [];
-        my $extglob_depth = 0;
+        $pattern_chars = [];
+        $extglob_depth = 0;
         while (!$self->at_end()) {
-            my $ch = $self->peek();
+            $ch = $self->peek();
             if ($ch eq ")") {
                 if ($extglob_depth > 0) {
                     $pattern_chars->push($self->advance());
@@ -7854,9 +8222,9 @@ sub parse_case ($self) {
                 $pattern_chars->push($self->advance());
                 if (!$self->at_end() && $self->peek() eq "(") {
                     $pattern_chars->push($self->advance());
-                    my $paren_depth = 2;
+                    $paren_depth = 2;
                     while (!$self->at_end() && $paren_depth > 0) {
-                        my $c = $self->peek();
+                        $c = $self->peek();
                         if ($c eq "(") {
                             $paren_depth += 1;
                         } elsif ($c eq ")") {
@@ -7875,10 +8243,10 @@ sub parse_case ($self) {
                 $pattern_chars->push($self->advance());
                 $extglob_depth += 1;
             } elsif ($ch eq "[") {
-                my $is_char_class = 0;
-                my $scan_pos = $self->{pos_} + 1;
-                my $scan_depth = 0;
-                my $has_first_bracket_literal = 0;
+                $is_char_class = 0;
+                $scan_pos = $self->{pos_} + 1;
+                $scan_depth = 0;
+                $has_first_bracket_literal = 0;
                 if ($scan_pos < $self->{length_} && is_caret_or_bang($self->{source}->[$scan_pos])) {
                     $scan_pos += 1;
                 }
@@ -7889,7 +8257,7 @@ sub parse_case ($self) {
                     }
                 }
                 while ($scan_pos < $self->{length_}) {
-                    my $sc = $self->{source}->[$scan_pos];
+                    $sc = $self->{source}->[$scan_pos];
                     if ($sc eq "]" && $scan_depth == 0) {
                         $is_char_class = 1;
                         last;
@@ -7948,24 +8316,24 @@ sub parse_case ($self) {
                 $pattern_chars->push($self->advance());
             }
         }
-        my $pattern = ""->join_($pattern_chars);
+        $pattern = ""->join_($pattern_chars);
         if (!(length($pattern) > 0)) {
             die "Expected pattern in case statement";
         }
         $self->skip_whitespace();
-        my $body = undef;
-        my $is_empty_body = $self->lex_peek_case_terminator() ne "";
+        $body = undef;
+        $is_empty_body = $self->lex_peek_case_terminator() ne "";
         if (!$is_empty_body) {
             $self->skip_whitespace_and_newlines();
             if (!$self->at_end() && !$self->lex_is_at_reserved_word("esac")) {
-                my $is_at_terminator = $self->lex_peek_case_terminator() ne "";
+                $is_at_terminator = $self->lex_peek_case_terminator() ne "";
                 if (!$is_at_terminator) {
                     $body = $self->parse_list_until({"esac" => 1});
                     $self->skip_whitespace();
                 }
             }
         }
-        my $terminator = $self->consume_case_terminator();
+        $terminator = $self->consume_case_terminator();
         $self->skip_whitespace_and_newlines();
         $patterns->push(CasePattern->new($pattern, $body, $terminator, "pattern"));
     }
@@ -7980,6 +8348,7 @@ sub parse_case ($self) {
 }
 
 sub parse_coproc ($self) {
+    my $body;
     $self->skip_whitespace();
     if (!$self->lex_consume_word("coproc")) {
         return undef;
@@ -8063,6 +8432,8 @@ sub parse_coproc ($self) {
 }
 
 sub parse_function ($self) {
+    my $body;
+    my $name;
     $self->skip_whitespace();
     if ($self->at_end()) {
         return undef;
@@ -8200,6 +8571,7 @@ sub parse_compound_command ($self) {
 }
 
 sub at_list_until_terminator ($self, $stop_words) {
+    my $next_pos;
     if ($self->at_end()) {
         return 1;
     }
@@ -8207,7 +8579,7 @@ sub at_list_until_terminator ($self, $stop_words) {
         return 1;
     }
     if ($self->peek() eq "}") {
-        my $next_pos = $self->{pos_} + 1;
+        $next_pos = $self->{pos_} + 1;
         if ($next_pos >= $self->{length_} || is_word_end_context($self->{source}->[$next_pos])) {
             return 1;
         }
@@ -8223,6 +8595,8 @@ sub at_list_until_terminator ($self, $stop_words) {
 }
 
 sub parse_list_until ($self, $stop_words) {
+    my $next_op;
+    my $op;
     $self->skip_whitespace_and_newlines();
     my $reserved = $self->lex_peek_reserved_word();
     if ($reserved ne "" && (exists($stop_words->{$reserved}))) {
@@ -8235,7 +8609,7 @@ sub parse_list_until ($self, $stop_words) {
     my $parts = [$pipeline];
     while (1) {
         $self->skip_whitespace();
-        my $op = $self->parse_list_operator();
+        $op = $self->parse_list_operator();
         if ($op eq "") {
             if (!$self->at_end() && $self->peek() eq "\n") {
                 $self->advance();
@@ -8248,7 +8622,7 @@ sub parse_list_until ($self, $stop_words) {
                 if ($self->at_list_until_terminator($stop_words)) {
                     last;
                 }
-                my $next_op = $self->peek_list_operator();
+                $next_op = $self->peek_list_operator();
                 if ($next_op eq "&" || $next_op eq ";") {
                     last;
                 }
@@ -8294,6 +8668,9 @@ sub parse_list_until ($self, $stop_words) {
 }
 
 sub parse_compound_command ($self) {
+    my $keyword_word;
+    my $result;
+    my $word;
     $self->skip_whitespace();
     if ($self->at_end()) {
         return undef;
@@ -8323,9 +8700,9 @@ sub parse_compound_command ($self) {
     }
     my $reserved = $self->lex_peek_reserved_word();
     if ($reserved eq "" && $self->{in_process_sub}) {
-        my $word = $self->peek_word();
+        $word = $self->peek_word();
         if ($word ne "" && length($word) > 1 && $word->[0] eq "}") {
-            my $keyword_word = substr($word, 1);
+            $keyword_word = substr($word, 1);
             if ((exists(RESERVED_WORDS()->{$keyword_word})) || $keyword_word eq "{" || $keyword_word eq "}" || $keyword_word eq "[[" || $keyword_word eq "]]" || $keyword_word eq "!" || $keyword_word eq "time") {
                 $reserved = $keyword_word;
             }
@@ -8366,6 +8743,8 @@ sub parse_compound_command ($self) {
 }
 
 sub parse_pipeline ($self) {
+    my $inner;
+    my $saved;
     $self->skip_whitespace();
     my $prefix_order = "";
     my $time_posix = 0;
@@ -8427,7 +8806,7 @@ sub parse_pipeline ($self) {
         if (($self->{pos_} + 1 >= $self->{length_} || is_negation_boundary($self->{source}->[$self->{pos_} + 1])) && !$self->is_bang_followed_by_procsub()) {
             $self->advance();
             $self->skip_whitespace();
-            my $inner = $self->parse_pipeline();
+            $inner = $self->parse_pipeline();
             if (defined($inner) && $inner->{kind} == "negation") {
                 if (defined($inner->{pipeline})) {
                     return $inner->{pipeline};
@@ -8456,6 +8835,9 @@ sub parse_pipeline ($self) {
 }
 
 sub parse_simple_pipeline ($self) {
+    my $is_pipe_both;
+    my $token_type;
+    my $value;
     my $cmd = $self->parse_compound_command();
     if (!defined($cmd)) {
         return undef;
@@ -8463,7 +8845,7 @@ sub parse_simple_pipeline ($self) {
     my $commands = [$cmd];
     while (1) {
         $self->skip_whitespace();
-        my ($token_type, $value) = @{$self->lex_peek_operator()};
+        ($token_type, $value) = @{$self->lex_peek_operator()};
         if ($token_type == 0) {
             last;
         }
@@ -8471,7 +8853,7 @@ sub parse_simple_pipeline ($self) {
             last;
         }
         $self->lex_next_token();
-        my $is_pipe_both = $token_type == TOKENTYPE_PIPE_AMP();
+        $is_pipe_both = $token_type == TOKENTYPE_PIPE_AMP();
         $self->skip_whitespace_and_newlines();
         if ($is_pipe_both) {
             $commands->push(PipeBoth->new("pipe-both"));
@@ -8521,6 +8903,8 @@ sub peek_list_operator ($self) {
 }
 
 sub parse_list ($self, $newline_as_separator) {
+    my $next_op;
+    my $op;
     if ($newline_as_separator) {
         $self->skip_whitespace_and_newlines();
     } else {
@@ -8536,7 +8920,7 @@ sub parse_list ($self, $newline_as_separator) {
     }
     while (1) {
         $self->skip_whitespace();
-        my $op = $self->parse_list_operator();
+        $op = $self->parse_list_operator();
         if ($op eq "") {
             if (!$self->at_end() && $self->peek() eq "\n") {
                 if (!$newline_as_separator) {
@@ -8552,7 +8936,7 @@ sub parse_list ($self, $newline_as_separator) {
                 if ($self->at_end() || $self->at_list_terminating_bracket()) {
                     last;
                 }
-                my $next_op = $self->peek_list_operator();
+                $next_op = $self->peek_list_operator();
                 if ($next_op eq "&" || $next_op eq ";") {
                     last;
                 }
@@ -8626,6 +9010,9 @@ sub parse_comment ($self) {
 }
 
 sub parse ($self) {
+    my $comment;
+    my $found_newline;
+    my $result;
     my $source = ($self->{source} =~ s/^\s+|\s+$//gr);
     if (!(length($source) > 0)) {
         return [Empty->new("empty")];
@@ -8639,18 +9026,18 @@ sub parse ($self) {
         if ($self->at_end()) {
             last;
         }
-        my $comment = $self->parse_comment();
+        $comment = $self->parse_comment();
         if (!defined($comment)) {
             last;
         }
     }
     while (!$self->at_end()) {
-        my $result = $self->parse_list(0);
+        $result = $self->parse_list(0);
         if (defined($result)) {
             $results->push($result);
         }
         $self->skip_whitespace();
-        my $found_newline = 0;
+        $found_newline = 0;
         while (!$self->at_end() && $self->peek() eq "\n") {
             $found_newline = 1;
             $self->advance();
@@ -8695,6 +9082,8 @@ sub strip_trailing_backslash_from_last_word ($self, $nodes) {
 }
 
 sub find_last_word ($self, $node) {
+    my $last_redirect;
+    my $last_word;
     if (ref($node) eq 'Word') {
         my $node = $node;
         return $node;
@@ -8702,13 +9091,13 @@ sub find_last_word ($self, $node) {
     if (ref($node) eq 'Command') {
         my $node = $node;
         if ((scalar(@{$node->{words}}) > 0)) {
-            my $last_word = $node->{words}->[-1];
+            $last_word = $node->{words}->[-1];
             if ($last_word->{value}->endswith("\\")) {
                 return $last_word;
             }
         }
         if ((scalar(@{$node->{redirects}}) > 0)) {
-            my $last_redirect = $node->{redirects}->[-1];
+            $last_redirect = $node->{redirects}->[-1];
             if (ref($last_redirect) eq 'Redirect') {
                 my $last_redirect = $last_redirect;
                 return $last_redirect->{target};
@@ -8768,11 +9157,13 @@ sub starts_with_at ($s_, $pos_, $prefix) {
 }
 
 sub count_consecutive_dollars_before ($s_, $pos_) {
+    my $bs_count;
+    my $j;
     my $count = 0;
     my $k = $pos_ - 1;
     while ($k >= 0 && $s_->[$k] eq "\$") {
-        my $bs_count = 0;
-        my $j = $k - 1;
+        $bs_count = 0;
+        $j = $k - 1;
         while ($j >= 0 && $s_->[$j] eq "\\") {
             $bs_count += 1;
             $j -= 1;
@@ -8808,15 +9199,18 @@ sub repeat_str ($s_, $n) {
 }
 
 sub strip_line_continuations_comment_aware ($text) {
+    my $c;
+    my $j;
+    my $num_preceding_backslashes;
     my $result = [];
     my $i = 0;
     my $in_comment = 0;
     my $quote = new_quote_state();
     while ($i < length($text)) {
-        my $c = $text->[$i];
+        $c = $text->[$i];
         if ($c eq "\\" && $i + 1 < length($text) && $text->[$i + 1] eq "\n") {
-            my $num_preceding_backslashes = 0;
-            my $j = $i - 1;
+            $num_preceding_backslashes = 0;
+            $j = $i - 1;
             while ($j >= 0 && $text->[$j] eq "\\") {
                 $num_preceding_backslashes += 1;
                 $j -= 1;
@@ -8850,8 +9244,9 @@ sub strip_line_continuations_comment_aware ($text) {
 }
 
 sub append_redirects ($base, $redirects) {
+    my $parts;
     if ((scalar(@{$redirects}) > 0)) {
-        my $parts = [];
+        $parts = [];
         for my $r (@{$redirects}) {
             $parts->push($r->to_sexp());
         }
@@ -8967,14 +9362,17 @@ sub consume_bracket_class ($s_, $start, $depth) {
 }
 
 sub format_cond_body ($node) {
+    my $left_val;
+    my $operand_val;
+    my $right_val;
     my $kind = $node->{kind};
     if ($kind == "unary-test") {
-        my $operand_val = $node->{operand}->get_cond_formatted_value();
+        $operand_val = $node->{operand}->get_cond_formatted_value();
         return $node->{op} . " " . $operand_val;
     }
     if ($kind == "binary-test") {
-        my $left_val = $node->{left}->get_cond_formatted_value();
-        my $right_val = $node->{right}->get_cond_formatted_value();
+        $left_val = $node->{left}->get_cond_formatted_value();
+        $right_val = $node->{right}->get_cond_formatted_value();
         return $left_val . " " . $node->{op} . " " . $right_val;
     }
     if ($kind == "cond-and") {
@@ -9017,6 +9415,50 @@ sub starts_with_subshell ($node) {
 }
 
 sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsub_first) {
+    my $body;
+    my $body_part;
+    my $cmd;
+    my $cmd_count;
+    my $cmds;
+    my $compact_pipe;
+    my $cond;
+    my $else_body;
+    my $first_nl;
+    my $formatted;
+    my $formatted_cmd;
+    my $has_heredoc;
+    my $heredocs;
+    my $i;
+    my $idx;
+    my $inner_body;
+    my $is_last;
+    my $last_;
+    my $name;
+    my $needs_redirect;
+    my $p;
+    my $part;
+    my $parts;
+    my $pat;
+    my $pat_indent;
+    my $pattern_str;
+    my $patterns;
+    my $prefix;
+    my $redirect_parts;
+    my $redirects;
+    my $result;
+    my $result_parts;
+    my $s_;
+    my $skipped_semi;
+    my $term;
+    my $term_indent;
+    my $terminator;
+    my $then_body;
+    my $val;
+    my $var;
+    my $word;
+    my $word_parts;
+    my $word_vals;
+    my $words;
     if (!defined($node)) {
         return "";
     }
@@ -9028,15 +9470,15 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
     }
     if (ref($node) eq 'Command') {
         my $node = $node;
-        my $parts = [];
+        $parts = [];
         for my $w (@{($node->{words} // [])}) {
-            my $val = $w->expand_all_ansi_c_quotes($w->{value});
+            $val = $w->expand_all_ansi_c_quotes($w->{value});
             $val = $w->strip_locale_string_dollars($val);
             $val = $w->normalize_array_whitespace($val);
             $val = $w->format_command_substitutions($val, 0);
             $parts->push($val);
         }
-        my $heredocs = [];
+        $heredocs = [];
         for my $r (@{($node->{redirects} // [])}) {
             if (ref($r) eq 'HereDoc') {
                 my $r = $r;
@@ -9048,8 +9490,8 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
         }
         my $result = "";
         if ($compact_redirects && (scalar(@{$node->{words}}) > 0) && (scalar(@{$node->{redirects}}) > 0)) {
-            my $word_parts = [@{$parts}[0 .. scalar(@{$node->{words}}) - 1]];
-            my $redirect_parts = [@{$parts}[scalar(@{$node->{words}}) .. $#{$parts}]];
+            $word_parts = [@{$parts}[0 .. scalar(@{$node->{words}}) - 1]];
+            $redirect_parts = [@{$parts}[scalar(@{$node->{words}}) .. $#{$parts}]];
             $result = " "->join_($word_parts) . ""->join_($redirect_parts);
         } else {
             $result = " "->join_($parts);
@@ -9061,8 +9503,8 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
     }
     if (ref($node) eq 'Pipeline') {
         my $node = $node;
-        my $cmds = [];
-        my $i = 0;
+        $cmds = [];
+        $i = 0;
         my $cmd = undef;
         my $needs_redirect = 0;
         while ($i < scalar(@{$node->{commands}})) {
@@ -9076,15 +9518,15 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
             $cmds->push([$cmd, $needs_redirect]);
             $i += 1;
         }
-        my $result_parts = [];
-        my $idx = 0;
+        $result_parts = [];
+        $idx = 0;
         while ($idx < scalar(@{$cmds})) {
             my $entry = $cmds->[$idx];
             $cmd = $entry->[0];
             $needs_redirect = $entry->[1];
-            my $formatted = format_cmdsub_node($cmd, $indent, $in_procsub, 0, $procsub_first && $idx == 0);
-            my $is_last = $idx == scalar(@{$cmds}) - 1;
-            my $has_heredoc = 0;
+            $formatted = format_cmdsub_node($cmd, $indent, $in_procsub, 0, $procsub_first && $idx == 0);
+            $is_last = $idx == scalar(@{$cmds}) - 1;
+            $has_heredoc = 0;
             if ($cmd->{kind} == "command" && (scalar(@{$cmd->{redirects}}) > 0)) {
                 for my $r (@{($cmd->{redirects} // [])}) {
                     if (ref($r) eq 'HereDoc') {
@@ -9118,11 +9560,11 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
             }
             $idx += 1;
         }
-        my $compact_pipe = $in_procsub && (scalar(@{$cmds}) > 0) && $cmds->[0]->[0]->{kind} == "subshell";
+        $compact_pipe = $in_procsub && (scalar(@{$cmds}) > 0) && $cmds->[0]->[0]->{kind} == "subshell";
         $result = "";
         $idx = 0;
         while ($idx < scalar(@{$result_parts})) {
-            my $part = $result_parts->[$idx];
+            $part = $result_parts->[$idx];
             if ($idx > 0) {
                 if ($result->endswith("\n")) {
                     $result = $result + "  " . $part;
@@ -9140,7 +9582,7 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
     }
     if (ref($node) eq 'List') {
         my $node = $node;
-        my $has_heredoc = 0;
+        $has_heredoc = 0;
         for my $p (@{($node->{parts} // [])}) {
             if ($p->{kind} == "command" && (scalar(@{$p->{redirects}}) > 0)) {
                 for my $r (@{($p->{redirects} // [])}) {
@@ -9171,8 +9613,8 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
             }
         }
         $result = [];
-        my $skipped_semi = 0;
-        my $cmd_count = 0;
+        $skipped_semi = 0;
+        $cmd_count = 0;
         for my $p (@{($node->{parts} // [])}) {
             if (ref($p) eq 'Operator') {
                 my $p = $p;
@@ -9201,7 +9643,7 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
                     $skipped_semi = 0;
                 } elsif ($p->{op} eq "&") {
                     if ((scalar(@{$result}) > 0) && ((index($result->[-1], "<<") >= 0)) && ((index($result->[-1], "\n") >= 0))) {
-                        my $last_ = $result->[-1];
+                        $last_ = $result->[-1];
                         if (((index($last_, " |") >= 0)) || $last_->startswith("|")) {
                             $result->[-1] = $last_ . " &";
                         } else {
@@ -9212,7 +9654,7 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
                         $result->push(" &");
                     }
                 } elsif ((scalar(@{$result}) > 0) && ((index($result->[-1], "<<") >= 0)) && ((index($result->[-1], "\n") >= 0))) {
-                    my $last_ = $result->[-1];
+                    $last_ = $result->[-1];
                     $first_nl = $last_->find("\n");
                     $result->[-1] = substr($last_, 0, $first_nl - 0) . " " . $p->{op} . " " . substr($last_, $first_nl);
                 } else {
@@ -9222,9 +9664,9 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
                 if ((scalar(@{$result}) > 0) && !$result->[-1]->endswith([" ", "\n"])) {
                     $result->push(" ");
                 }
-                my $formatted_cmd = format_cmdsub_node($p, $indent, $in_procsub, $compact_redirects, $procsub_first && $cmd_count == 0);
+                $formatted_cmd = format_cmdsub_node($p, $indent, $in_procsub, $compact_redirects, $procsub_first && $cmd_count == 0);
                 if (scalar(@{$result}) > 0) {
-                    my $last_ = $result->[-1];
+                    $last_ = $result->[-1];
                     if (((index($last_, " || \n") >= 0)) || ((index($last_, " && \n") >= 0))) {
                         $formatted_cmd = " " . $formatted_cmd;
                     }
@@ -9237,7 +9679,7 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
                 $cmd_count += 1;
             }
         }
-        my $s_ = ""->join_($result);
+        $s_ = ""->join_($result);
         if (((index($s_, " &\n") >= 0)) && $s_->endswith("\n")) {
             return $s_ . " ";
         }
@@ -9253,11 +9695,11 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
     }
     if (ref($node) eq 'If') {
         my $node = $node;
-        my $cond = format_cmdsub_node($node->{condition}, $indent, 0, 0, 0);
-        my $then_body = format_cmdsub_node($node->{then_body}, $indent + 4, 0, 0, 0);
+        $cond = format_cmdsub_node($node->{condition}, $indent, 0, 0, 0);
+        $then_body = format_cmdsub_node($node->{then_body}, $indent + 4, 0, 0, 0);
         $result = "if " . $cond . "; then\n" . $inner_sp . $then_body . ";";
         if (defined($node->{else_body})) {
-            my $else_body = format_cmdsub_node($node->{else_body}, $indent + 4, 0, 0, 0);
+            $else_body = format_cmdsub_node($node->{else_body}, $indent + 4, 0, 0, 0);
             $result = $result + "\n" . $sp . "else\n" . $inner_sp . $else_body . ";";
         }
         $result = $result + "\n" . $sp . "fi";
@@ -9265,8 +9707,8 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
     }
     if (ref($node) eq 'While') {
         my $node = $node;
-        my $cond = format_cmdsub_node($node->{condition}, $indent, 0, 0, 0);
-        my $body = format_cmdsub_node($node->{body}, $indent + 4, 0, 0, 0);
+        $cond = format_cmdsub_node($node->{condition}, $indent, 0, 0, 0);
+        $body = format_cmdsub_node($node->{body}, $indent + 4, 0, 0, 0);
         $result = "while " . $cond . "; do\n" . $inner_sp . $body . ";\n" . $sp . "done";
         if ((scalar(@{$node->{redirects}}) > 0)) {
             for my $r (@{($node->{redirects} // [])}) {
@@ -9277,8 +9719,8 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
     }
     if (ref($node) eq 'Until') {
         my $node = $node;
-        my $cond = format_cmdsub_node($node->{condition}, $indent, 0, 0, 0);
-        my $body = format_cmdsub_node($node->{body}, $indent + 4, 0, 0, 0);
+        $cond = format_cmdsub_node($node->{condition}, $indent, 0, 0, 0);
+        $body = format_cmdsub_node($node->{body}, $indent + 4, 0, 0, 0);
         $result = "until " . $cond . "; do\n" . $inner_sp . $body . ";\n" . $sp . "done";
         if ((scalar(@{$node->{redirects}}) > 0)) {
             for my $r (@{($node->{redirects} // [])}) {
@@ -9289,15 +9731,15 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
     }
     if (ref($node) eq 'For') {
         my $node = $node;
-        my $var = $node->{var};
-        my $body = format_cmdsub_node($node->{body}, $indent + 4, 0, 0, 0);
+        $var = $node->{var};
+        $body = format_cmdsub_node($node->{body}, $indent + 4, 0, 0, 0);
         my $result = "";
         if (defined($node->{words})) {
-            my $word_vals = [];
+            $word_vals = [];
             for my $w (@{($node->{words} // [])}) {
                 $word_vals->push($w->{value});
             }
-            my $words = " "->join_($word_vals);
+            $words = " "->join_($word_vals);
             if ((length($words) > 0)) {
                 $result = "for " . $var . " in " . $words . ";\n" . $sp . "do\n" . $inner_sp . $body . ";\n" . $sp . "done";
             } else {
@@ -9315,7 +9757,7 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
     }
     if (ref($node) eq 'ForArith') {
         my $node = $node;
-        my $body = format_cmdsub_node($node->{body}, $indent + 4, 0, 0, 0);
+        $body = format_cmdsub_node($node->{body}, $indent + 4, 0, 0, 0);
         $result = "for ((" . $node->{init} . "; " . $node->{cond} . "; " . $node->{incr} . "))\ndo\n" . $inner_sp . $body . ";\n" . $sp . "done";
         if ((scalar(@{$node->{redirects}}) > 0)) {
             for my $r (@{($node->{redirects} // [])}) {
@@ -9326,22 +9768,22 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
     }
     if (ref($node) eq 'Case') {
         my $node = $node;
-        my $word = $node->{word}->{value};
-        my $patterns = [];
-        my $i = 0;
+        $word = $node->{word}->{value};
+        $patterns = [];
+        $i = 0;
         while ($i < scalar(@{$node->{patterns}})) {
-            my $p = $node->{patterns}->[$i];
-            my $pat = $p->{pattern}->replace("|", " | ");
+            $p = $node->{patterns}->[$i];
+            $pat = $p->{pattern}->replace("|", " | ");
             my $body = "";
             if (defined($p->{body})) {
                 $body = format_cmdsub_node($p->{body}, $indent + 8, 0, 0, 0);
             } else {
                 $body = "";
             }
-            my $term = $p->{terminator};
-            my $pat_indent = repeat_str(" ", $indent + 8);
-            my $term_indent = repeat_str(" ", $indent + 4);
-            my $body_part = ((length($body) > 0) ? $pat_indent . $body . "\n" : "\n");
+            $term = $p->{terminator};
+            $pat_indent = repeat_str(" ", $indent + 8);
+            $term_indent = repeat_str(" ", $indent + 4);
+            $body_part = ((length($body) > 0) ? $pat_indent . $body . "\n" : "\n");
             if ($i == 0) {
                 $patterns->push(" " . $pat . ")\n" . $body_part + $term_indent . $term);
             } else {
@@ -9349,10 +9791,10 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
             }
             $i += 1;
         }
-        my $pattern_str = ("\n" . repeat_str(" ", $indent + 4))->join_($patterns);
-        my $redirects = "";
+        $pattern_str = ("\n" . repeat_str(" ", $indent + 4))->join_($patterns);
+        $redirects = "";
         if ((scalar(@{$node->{redirects}}) > 0)) {
-            my $redirect_parts = [];
+            $redirect_parts = [];
             for my $r (@{($node->{redirects} // [])}) {
                 $redirect_parts->append(format_redirect($r, 0, 0));
             }
@@ -9362,8 +9804,8 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
     }
     if (ref($node) eq 'Function') {
         my $node = $node;
-        my $name = $node->{name};
-        my $inner_body = ($node->{body}->{kind} == "brace-group" ? $node->{body}->{body} : $node->{body});
+        $name = $node->{name};
+        $inner_body = ($node->{body}->{kind} == "brace-group" ? $node->{body}->{body} : $node->{body});
         $body = (format_cmdsub_node($inner_body, $indent + 4, 0, 0, 0) =~ s/[";"]+$//r);
         return sprintf("function %s () 
 { 
@@ -9373,9 +9815,9 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
     if (ref($node) eq 'Subshell') {
         my $node = $node;
         $body = format_cmdsub_node($node->{body}, $indent, $in_procsub, $compact_redirects, 0);
-        my $redirects = "";
+        $redirects = "";
         if ((scalar(@{$node->{redirects}}) > 0)) {
-            my $redirect_parts = [];
+            $redirect_parts = [];
             for my $r (@{($node->{redirects} // [])}) {
                 $redirect_parts->append(format_redirect($r, 0, 0));
             }
@@ -9396,10 +9838,10 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
         my $node = $node;
         $body = format_cmdsub_node($node->{body}, $indent, 0, 0, 0);
         $body = ($body =~ s/[";"]+$//r);
-        my $terminator = ($body->endswith(" &") ? " }" : "; }");
-        my $redirects = "";
+        $terminator = ($body->endswith(" &") ? " }" : "; }");
+        $redirects = "";
         if ((scalar(@{$node->{redirects}}) > 0)) {
-            my $redirect_parts = [];
+            $redirect_parts = [];
             for my $r (@{($node->{redirects} // [])}) {
                 $redirect_parts->append(format_redirect($r, 0, 0));
             }
@@ -9428,7 +9870,7 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
     }
     if (ref($node) eq 'Time') {
         my $node = $node;
-        my $prefix = ($node->{posix} ? "time -p " : "time ");
+        $prefix = ($node->{posix} ? "time -p " : "time ");
         if (defined($node->{pipeline})) {
             return $prefix . format_cmdsub_node($node->{pipeline}, $indent, 0, 0, 0);
         }
@@ -9438,6 +9880,11 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
 }
 
 sub format_redirect ($r, $compact, $heredoc_op_only) {
+    my $after_amp;
+    my $delim;
+    my $is_literal_fd;
+    my $op;
+    my $was_input_close;
     if (ref($r) eq 'HereDoc') {
         my $r = $r;
         my $op = "";
@@ -9471,13 +9918,13 @@ sub format_redirect ($r, $compact, $heredoc_op_only) {
     $target = $r->{target}->strip_locale_string_dollars($target);
     $target = $r->{target}->format_command_substitutions($target, 0);
     if ($target->startswith("&")) {
-        my $was_input_close = 0;
+        $was_input_close = 0;
         if ($target eq "&-" && $op->endswith("<")) {
             $was_input_close = 1;
             $op = substring($op, 0, length($op) - 1) . ">";
         }
-        my $after_amp = substring($target, 1, length($target));
-        my $is_literal_fd = $after_amp eq "-" || length($after_amp) > 0 && ($after_amp->[0] =~ /^\d$/);
+        $after_amp = substring($target, 1, length($target));
+        $is_literal_fd = $after_amp eq "-" || length($after_amp) > 0 && ($after_amp->[0] =~ /^\d$/);
         if ($is_literal_fd) {
             if ($op eq ">" || $op eq ">&") {
                 $op = ($was_input_close ? "0>" : "1>");
@@ -9505,11 +9952,12 @@ sub format_heredoc_body ($r) {
 }
 
 sub lookahead_for_esac ($value, $start, $case_depth) {
+    my $c;
     my $i = $start;
     my $depth = $case_depth;
     my $quote = new_quote_state();
     while ($i < length($value)) {
-        my $c = $value->[$i];
+        $c = $value->[$i];
         if ($c eq "\\" && $i + 1 < length($value) && $quote->{double}) {
             $i += 2;
             next;
@@ -9576,12 +10024,16 @@ sub skip_single_quoted ($s_, $start) {
 }
 
 sub skip_double_quoted ($s_, $start) {
-    my $i = $start;
+    my $backq;
+    my $c;
+    my $i;
+    my $pass_next;
+    $i = $start;
     my $n = length($s_);
-    my $pass_next = 0;
-    my $backq = 0;
+    $pass_next = 0;
+    $backq = 0;
     while ($i < $n) {
-        my $c = $s_->[$i];
+        $c = $s_->[$i];
         if ($pass_next) {
             $pass_next = 0;
             $i += 1;
@@ -9623,10 +10075,11 @@ sub skip_double_quoted ($s_, $start) {
 }
 
 sub is_valid_arithmetic_start ($value, $start) {
+    my $scan_c;
     my $scan_paren = 0;
     my $scan_i = $start + 3;
     while ($scan_i < length($value)) {
-        my $scan_c = $value->[$scan_i];
+        $scan_c = $value->[$scan_i];
         if (is_expansion_start($value, $scan_i, "\$(")) {
             $scan_i = find_cmdsub_end($value, $scan_i + 2);
             next;
@@ -9648,11 +10101,12 @@ sub is_valid_arithmetic_start ($value, $start) {
 }
 
 sub find_funsub_end ($value, $start) {
+    my $c;
     my $depth = 1;
     my $i = $start;
     my $quote = new_quote_state();
     while ($i < length($value) && $depth > 0) {
-        my $c = $value->[$i];
+        $c = $value->[$i];
         if ($c eq "\\" && $i + 1 < length($value) && !$quote->{single}) {
             $i += 2;
             next;
@@ -9685,6 +10139,8 @@ sub find_funsub_end ($value, $start) {
 }
 
 sub find_cmdsub_end ($value, $start) {
+    my $c;
+    my $j;
     my $depth = 1;
     my $i = $start;
     my $case_depth = 0;
@@ -9692,7 +10148,7 @@ sub find_cmdsub_end ($value, $start) {
     my $arith_depth = 0;
     my $arith_paren_depth = 0;
     while ($i < length($value) && $depth > 0) {
-        my $c = $value->[$i];
+        $c = $value->[$i];
         if ($c eq "\\" && $i + 1 < length($value)) {
             $i += 2;
             next;
@@ -9749,7 +10205,7 @@ sub find_cmdsub_end ($value, $start) {
                 $i += 3;
                 next;
             }
-            my $j = find_cmdsub_end($value, $i + 2);
+            $j = find_cmdsub_end($value, $i + 2);
             $i = $j;
             next;
         }
@@ -9816,12 +10272,14 @@ sub find_cmdsub_end ($value, $start) {
 }
 
 sub find_braced_param_end ($value, $start) {
+    my $c;
+    my $end;
     my $depth = 1;
     my $i = $start;
     my $in_double = 0;
     my $dolbrace_state = DOLBRACESTATE_PARAM();
     while ($i < length($value) && $depth > 0) {
-        my $c = $value->[$i];
+        $c = $value->[$i];
         if ($c eq "\\" && $i + 1 < length($value)) {
             $i += 2;
             next;
@@ -9845,7 +10303,7 @@ sub find_braced_param_end ($value, $start) {
             $dolbrace_state = DOLBRACESTATE_WORD();
         }
         if ($c eq "[" && $dolbrace_state == DOLBRACESTATE_PARAM() && !$in_double) {
-            my $end = skip_subscript($value, $i, 0);
+            $end = skip_subscript($value, $i, 0);
             if ($end != -1) {
                 $i = $end;
                 next;
@@ -9877,6 +10335,15 @@ sub find_braced_param_end ($value, $start) {
 }
 
 sub skip_heredoc ($value, $start) {
+    my $c;
+    my $delimiter;
+    my $line;
+    my $line_end;
+    my $line_start;
+    my $next_line_start;
+    my $stripped;
+    my $tabs_stripped;
+    my $trailing_bs;
     my $i = $start + 2;
     if ($i < length($value) && $value->[$i] eq "-") {
         $i += 1;
@@ -9918,7 +10385,7 @@ sub skip_heredoc ($value, $start) {
     my $quote = new_quote_state();
     my $in_backtick = 0;
     while ($i < length($value) && $value->[$i] ne "\n") {
-        my $c = $value->[$i];
+        $c = $value->[$i];
         if ($c eq "\\" && $i + 1 < length($value) && ($quote->{double} || $in_backtick)) {
             $i += 2;
             next;
@@ -9959,14 +10426,14 @@ sub skip_heredoc ($value, $start) {
         $i += 1;
     }
     while ($i < length($value)) {
-        my $line_start = $i;
-        my $line_end = $i;
+        $line_start = $i;
+        $line_end = $i;
         while ($line_end < length($value) && $value->[$line_end] ne "\n") {
             $line_end += 1;
         }
-        my $line = substring($value, $line_start, $line_end);
+        $line = substring($value, $line_start, $line_end);
         while ($line_end < length($value)) {
-            my $trailing_bs = 0;
+            $trailing_bs = 0;
             for (my $j = length($line) - 1; $j > -1; $j += -1) {
                 if ($line->[$j] eq "\\") {
                     $trailing_bs += 1;
@@ -9979,7 +10446,7 @@ sub skip_heredoc ($value, $start) {
             }
             $line = substr($line, 0, length($line) - 1 - 0);
             $line_end += 1;
-            my $next_line_start = $line_end;
+            $next_line_start = $line_end;
             while ($line_end < length($value) && $value->[$line_end] ne "\n") {
                 $line_end += 1;
             }
@@ -9999,7 +10466,7 @@ sub skip_heredoc ($value, $start) {
             }
         }
         if ($stripped->startswith($delimiter) && length($stripped) > length($delimiter)) {
-            my $tabs_stripped = length($line) - length($stripped);
+            $tabs_stripped = length($line) - length($stripped);
             return $line_start + $tabs_stripped + length($delimiter);
         }
         if ($line_end < length($value)) {
@@ -10012,6 +10479,15 @@ sub skip_heredoc ($value, $start) {
 }
 
 sub find_heredoc_content_end ($source, $start, $delimiters) {
+    my $delimiter;
+    my $line;
+    my $line_end;
+    my $line_start;
+    my $line_stripped;
+    my $next_line_start;
+    my $strip_tabs;
+    my $tabs_stripped;
+    my $trailing_bs;
     if (!(scalar(@{$delimiters}) > 0)) {
         return [$start, $start];
     }
@@ -10025,17 +10501,17 @@ sub find_heredoc_content_end ($source, $start, $delimiters) {
     my $content_start = $pos_;
     $pos_ += 1;
     for my $item (@{$delimiters}) {
-        my $delimiter = $item->[0];
-        my $strip_tabs = $item->[1];
+        $delimiter = $item->[0];
+        $strip_tabs = $item->[1];
         while ($pos_ < length($source)) {
-            my $line_start = $pos_;
-            my $line_end = $pos_;
+            $line_start = $pos_;
+            $line_end = $pos_;
             while ($line_end < length($source) && $source->[$line_end] ne "\n") {
                 $line_end += 1;
             }
-            my $line = substring($source, $line_start, $line_end);
+            $line = substring($source, $line_start, $line_end);
             while ($line_end < length($source)) {
-                my $trailing_bs = 0;
+                $trailing_bs = 0;
                 for (my $j = length($line) - 1; $j > -1; $j += -1) {
                     if ($line->[$j] eq "\\") {
                         $trailing_bs += 1;
@@ -10048,7 +10524,7 @@ sub find_heredoc_content_end ($source, $start, $delimiters) {
                 }
                 $line = substr($line, 0, length($line) - 1 - 0);
                 $line_end += 1;
-                my $next_line_start = $line_end;
+                $next_line_start = $line_end;
                 while ($line_end < length($source) && $source->[$line_end] ne "\n") {
                     $line_end += 1;
                 }
@@ -10065,7 +10541,7 @@ sub find_heredoc_content_end ($source, $start, $delimiters) {
                 last;
             }
             if ($line_stripped->startswith($delimiter) && length($line_stripped) > length($delimiter)) {
-                my $tabs_stripped = length($line) - length($line_stripped);
+                $tabs_stripped = length($line) - length($line_stripped);
                 $pos_ = $line_start + $tabs_stripped + length($delimiter);
                 last;
             }
@@ -10076,8 +10552,9 @@ sub find_heredoc_content_end ($source, $start, $delimiters) {
 }
 
 sub is_word_boundary ($s_, $pos_, $word_len) {
+    my $prev;
     if ($pos_ > 0) {
-        my $prev = $s_->[$pos_ - 1];
+        $prev = $s_->[$pos_ - 1];
         if (($prev =~ /^[a-zA-Z0-9]$/) || $prev eq "_") {
             return 0;
         }
@@ -10127,6 +10604,9 @@ sub count_trailing_backslashes ($s_) {
 }
 
 sub normalize_heredoc_delimiter ($delimiter) {
+    my $depth;
+    my $inner;
+    my $inner_str;
     my $result = [];
     my $i = 0;
     while ($i < length($delimiter)) {
@@ -10251,6 +10731,9 @@ sub is_word_end_context ($c) {
 }
 
 sub skip_matched_pair ($s_, $start, $open_, $close_, $flags) {
+    my $c;
+    my $i;
+    my $literal;
     my $n = length($s_);
     my $i = 0;
     if (($flags & _SMP_PAST_OPEN() ? 1 : 0)) {
@@ -10265,13 +10748,13 @@ sub skip_matched_pair ($s_, $start, $open_, $close_, $flags) {
     my $pass_next = 0;
     my $backq = 0;
     while ($i < $n && $depth > 0) {
-        my $c = $s_->[$i];
+        $c = $s_->[$i];
         if ($pass_next) {
             $pass_next = 0;
             $i += 1;
             next;
         }
-        my $literal = $flags & _SMP_LITERAL();
+        $literal = $flags & _SMP_LITERAL();
         if (!($literal ? 1 : 0) && $c eq "\\") {
             $pass_next = 1;
             $i += 1;
@@ -10320,6 +10803,9 @@ sub skip_subscript ($s_, $start, $flags) {
 }
 
 sub assignment ($s_, $flags) {
+    my $c;
+    my $end;
+    my $sub_flags;
     if (!(length($s_) > 0)) {
         return -1;
     }
@@ -10328,13 +10814,13 @@ sub assignment ($s_, $flags) {
     }
     my $i = 1;
     while ($i < length($s_)) {
-        my $c = $s_->[$i];
+        $c = $s_->[$i];
         if ($c eq "=") {
             return $i;
         }
         if ($c eq "[") {
-            my $sub_flags = (($flags & 2 ? 1 : 0) ? _SMP_LITERAL() : 0);
-            my $end = skip_subscript($s_, $i, $sub_flags);
+            $sub_flags = (($flags & 2 ? 1 : 0) ? _SMP_LITERAL() : 0);
+            $end = skip_subscript($s_, $i, $sub_flags);
             if ($end == -1) {
                 return -1;
             }
@@ -10362,6 +10848,7 @@ sub assignment ($s_, $flags) {
 }
 
 sub is_array_assignment_prefix ($chars) {
+    my $end;
     if (!(scalar(@{$chars}) > 0)) {
         return 0;
     }
@@ -10377,7 +10864,7 @@ sub is_array_assignment_prefix ($chars) {
         if ($s_->[$i] ne "[") {
             return 0;
         }
-        my $end = skip_subscript($s_, $i, _SMP_LITERAL());
+        $end = skip_subscript($s_, $i, _SMP_LITERAL());
         if ($end == -1) {
             return 0;
         }

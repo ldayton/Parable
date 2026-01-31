@@ -21,11 +21,11 @@ from .backend.php import PhpBackend
 BACKENDS: dict[str, type[GoBackend] | type[JavaBackend] | type[PerlBackend] | type[PythonBackend] | type[RubyBackend] | type[TsBackend] | type[CSharpBackend] | type[PhpBackend]] = {
     "go": GoBackend,
     "java": JavaBackend,
-    "pl": PerlBackend,
-    "py": PythonBackend,
-    "rb": RubyBackend,
-    "ts": TsBackend,
-    "cs": CSharpBackend,
+    "perl": PerlBackend,
+    "python": PythonBackend,
+    "ruby": RubyBackend,
+    "typescript": TsBackend,
+    "csharp": CSharpBackend,
     "php": PhpBackend,
 }
 
@@ -33,7 +33,7 @@ USAGE: str = """\
 tongues [OPTIONS] < input.py > output.go
 
 Options:
-  --target TARGET   Output language: go, java, pl, py, rb, ts, cs, php (default: go)
+  --target TARGET   Output language: go, java, perl, python, ruby, typescript, csharp, php
   --verify [PATH]   Check subset compliance only, no codegen
                     PATH can be a file or directory (reads stdin if omitted)
   --help            Show this help message
@@ -144,10 +144,6 @@ def parse_args() -> tuple[str, bool, str | None]:
         else:
             print("error: unknown option: " + arg, file=sys.stderr)
             sys.exit(1)
-    if target == "python":
-        target = "py"
-    if target == "typescript":
-        target = "ts"
     if target in ("rust", "c"):
         print("error: backend '" + target + "' is not yet implemented", file=sys.stderr)
         sys.exit(1)

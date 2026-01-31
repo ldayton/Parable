@@ -4,22 +4,22 @@ set shell := ["bash", "-o", "pipefail", "-cu"]
 source := "../src/parable.py"
 tests := "../tests"
 dist := "../dist/go"
-backends := "cs go java php pl py ts"
-testable := "go php pl py ts"
+backends := "csharp go java php perl python ruby typescript"
+testable := "go perl php python ruby typescript"
 
 # Transpile source to stdout
-emit backend="go":
+emit backend:
     uv run python -m src.tongues --target {{backend}} < {{source}}
 
 # Transpile source and check syntax/compilation
-prep backend="go":
+prep backend:
     #!/usr/bin/env bash
     set -euo pipefail
     just style
     case "{{backend}}" in
-        cs|csharp)
-            uv run python -m src.tongues --target cs < {{source}} > ../dist/cs/Parable.cs
-            dotnet build ../dist/cs -c Release -v q --nologo
+        csharp)
+            uv run python -m src.tongues --target csharp < {{source}} > ../dist/csharp/Parable.cs
+            dotnet build ../dist/csharp -c Release -v q --nologo
             ;;
         go)
             uv run python -m src.tongues --target go < {{source}} > /tmp/transpile-ir.go
@@ -30,21 +30,25 @@ prep backend="go":
             uv run python -m src.tongues --target java < {{source}} > /tmp/Output.java
             javac /tmp/Output.java -d /tmp
             ;;
-        py|python)
-            uv run python -m src.tongues --target py < {{source}} > /tmp/transpile.py
+        python)
+            uv run python -m src.tongues --target python < {{source}} > /tmp/transpile.py
             ;;
-        ts|typescript)
+        typescript)
             rm -rf /tmp/transpile-ts && mkdir -p /tmp/transpile-ts/src
-            uv run python -m src.tongues --target ts < {{source}} > /tmp/transpile-ts/src/output.ts
+            uv run python -m src.tongues --target typescript < {{source}} > /tmp/transpile-ts/src/output.ts
             tsc --outDir /tmp/transpile-ts/src --lib es2019 --module commonjs --esModuleInterop /tmp/transpile-ts/src/output.ts
             ;;
-        pl|perl)
-            uv run python -m src.tongues --target pl < {{source}} > /tmp/transpile.pl
+        perl)
+            uv run python -m src.tongues --target perl < {{source}} > /tmp/transpile.pl
             perl -c /tmp/transpile.pl
             ;;
         php)
             uv run python -m src.tongues --target php < {{source}} > /tmp/transpile.php
             php -l /tmp/transpile.php
+            ;;
+        ruby)
+            uv run python -m src.tongues --target ruby < {{source}} > /tmp/transpile.rb
+            ruby -c /tmp/transpile.rb
             ;;
         *)
             echo "Unknown backend: {{backend}}"
@@ -53,7 +57,7 @@ prep backend="go":
     esac
 
 # Run full parser test suite (4574 tests)
-test backend="go":
+test backend:
     #!/usr/bin/env bash
     set -euo pipefail
     # Convert relative paths to absolute for subprocesses
@@ -63,18 +67,18 @@ test backend="go":
             just prep go
             go run -C {{dist}} ./cmd/run-tests "$tests_abs"
             ;;
-        py|python)
+        python)
             rm -rf /tmp/transpile-test && mkdir /tmp/transpile-test
-            uv run python -m src.tongues --target py < {{source}} > /tmp/transpile-test/parable.py
+            uv run python -m src.tongues --target python < {{source}} > /tmp/transpile-test/parable.py
             PYTHONPATH=/tmp/transpile-test python3 {{tests}}/bin/run-tests.py {{tests}}
             ;;
-        ts|typescript)
-            just prep ts
+        typescript)
+            just prep typescript
             node {{tests}}/bin/run-js-tests.js /tmp/transpile-ts
             ;;
-        pl|perl)
+        perl)
             rm -rf /tmp/transpile-test-pl && mkdir /tmp/transpile-test-pl
-            uv run python -m src.tongues --target pl < {{source}} > /tmp/transpile-test-pl/parable.pl
+            uv run python -m src.tongues --target perl < {{source}} > /tmp/transpile-test-pl/parable.pl
             perl -c /tmp/transpile-test-pl/parable.pl
             PERL5LIB=/tmp/transpile-test-pl perl {{tests}}/bin/run-tests.pl {{tests}}
             ;;
@@ -83,6 +87,12 @@ test backend="go":
             uv run python -m src.tongues --target php < {{source}} > /tmp/transpile-test-php/parable.php
             php -l /tmp/transpile-test-php/parable.php
             php {{tests}}/bin/run-tests.php {{tests}}
+            ;;
+        ruby)
+            rm -rf /tmp/transpile-test-rb && mkdir /tmp/transpile-test-rb
+            uv run python -m src.tongues --target ruby < {{source}} > /tmp/transpile-test-rb/parable.rb
+            ruby -c /tmp/transpile-test-rb/parable.rb
+            ruby -r /tmp/transpile-test-rb/parable.rb {{tests}}/bin/run-tests.rb {{tests}}
             ;;
         *)
             echo "No test runner for backend: {{backend}}"
@@ -110,7 +120,7 @@ test-all:
     done
 
 # Show compilation errors for debugging
-errors backend="go":
+errors backend:
     @uv run python -m src.tongues --target {{backend}} < {{source}} > /tmp/transpile-out 2>&1 || true
     @echo "=== Transpiler output (first 20 lines) ==="
     @head -20 /tmp/transpile-out || true

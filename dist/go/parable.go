@@ -5368,6 +5368,7 @@ func (self *Parser) parseBacktickSubstitution() (Node, string) {
 	inHeredocBody := false
 	currentHeredocDelim := ""
 	currentHeredocStrip := false
+	var ch string
 	for !self.AtEnd() && (inHeredocBody || self.Peek() != "`") {
 		if inHeredocBody {
 			lineStart := self.Pos
@@ -5431,7 +5432,6 @@ func (self *Parser) parseBacktickSubstitution() (Node, string) {
 			continue
 		}
 		c := self.Peek()
-		var ch string
 		if c == "\\" && self.Pos+1 < self.Length {
 			nextC := _runeAt(self.Source, self.Pos+1)
 			if nextC == "\n" {
@@ -9430,9 +9430,9 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 }
 
 func formatRedirect(r Node, compact bool, heredocOpOnly bool) string {
+	var op string
 	switch r := r.(type) {
 	case *HereDoc:
-		var op string
 		if r.StripTabs {
 			op = "<<-"
 		} else {
@@ -9452,7 +9452,7 @@ func formatRedirect(r Node, compact bool, heredocOpOnly bool) string {
 		}
 		return op + delim + "\n" + r.Content + r.Delimiter + "\n"
 	}
-	op := r.(*Redirect).Op
+	op = r.(*Redirect).Op
 	if op == "1>" {
 		op = ">"
 	} else if op == "0<" {

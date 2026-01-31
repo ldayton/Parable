@@ -7393,6 +7393,7 @@ public class Parser
         bool inHeredocBody = false;
         string currentHeredocDelim = "";
         bool currentHeredocStrip = false;
+        string ch = "";
         while (!(this.AtEnd()) && inHeredocBody || this.Peek() != "`")
         {
             if (inHeredocBody)
@@ -7409,7 +7410,7 @@ public class Parser
                 {
                     foreach (var _c3 in line)
                     {
-                        var ch = _c3.ToString();
+                        ch = _c3.ToString();
                         contentChars.Add(ch);
                         textChars.Add(ch);
                     }
@@ -7456,7 +7457,7 @@ public class Parser
                     {
                         foreach (var _c4 in line)
                         {
-                            var ch = _c4.ToString();
+                            ch = _c4.ToString();
                             contentChars.Add(ch);
                             textChars.Add(ch);
                         }
@@ -7472,7 +7473,6 @@ public class Parser
                 continue;
             }
             string c = this.Peek();
-            string ch = "";
             if (c == "\\" && this.Pos + 1 < this.Length)
             {
                 string nextC = (this.Source[this.Pos + 1]).ToString();
@@ -8093,7 +8093,7 @@ public class Parser
         INode left = this._ArithParseTernary();
         this._ArithSkipWs();
         List<string> assignOps = new List<string> { "<<=", ">>=", "+=", "-=", "*=", "/=", "%=", "&=", "^=", "|=", "=" };
-        foreach (object op in assignOps)
+        foreach (string op in assignOps)
         {
             if (this._ArithMatch(op))
             {
@@ -8151,7 +8151,7 @@ public class Parser
 
     public INode _ArithParseLeftAssoc(List<string> ops, Func<INode> parsefn)
     {
-        object left = parsefn();
+        INode left = parsefn();
         while (true)
         {
             this._ArithSkipWs();
@@ -11178,7 +11178,7 @@ public class Parser
 
     public INode _ParseCompoundCommand()
     {
-        BraceGroup result = this.ParseBraceGroup();
+        INode result = this.ParseBraceGroup();
         if (result != null)
         {
             return result;
@@ -12634,7 +12634,7 @@ public static class ParableFunctions
                             }
                             break;
                         default:
-                            if ((result.Count > 0) && !(result[result.Count - 1].EndsWith((" ", "\n"))))
+                            if ((result.Count > 0) && !((result[result.Count - 1].EndsWith(" ") || result[result.Count - 1].EndsWith("\n"))))
                             {
                                 result.Add(" ");
                             }
@@ -12802,7 +12802,7 @@ public static class ParableFunctions
                     }
                     i += 1;
                 }
-                object patternStr = "\n" + ParableFunctions._RepeatStr(" ", indent + 4).Join(patterns);
+                object patternStr = string.Join("\n" + ParableFunctions._RepeatStr(" ", indent + 4), patterns);
                 string redirects = "";
                 if ((nodeCase.Redirects.Count > 0))
                 {
@@ -12908,10 +12908,10 @@ public static class ParableFunctions
 
     public static string _FormatRedirect(INode r, bool compact, bool heredocOpOnly)
     {
+        string op = "";
         switch (r)
         {
             case HereDoc rHereDoc:
-                string op = "";
                 if (rHereDoc.StripTabs)
                 {
                     op = "<<-";
@@ -12939,7 +12939,7 @@ public static class ParableFunctions
                 }
                 return op + delim + "\n" + rHereDoc.Content + rHereDoc.Delimiter + "\n";
         }
-        string op = ((Redirect)r).Op;
+        op = ((Redirect)r).Op;
         if (op == "1>")
         {
             op = ">";
@@ -14360,7 +14360,7 @@ public static class ParableFunctions
 
     public static MatchedPairError NewMatchedPairError(string message, int pos, int line)
     {
-        return new MatchedPairError();
+        return new MatchedPairError(message, pos, line);
     }
 
     public static QuoteState NewQuoteState()

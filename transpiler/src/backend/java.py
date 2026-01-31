@@ -13,10 +13,6 @@ Frontend deficiencies (should be fixed in frontend.py):
 - Loop variable types in ForRange sometimes fall back to "Object" when element
   type is unknown - frontend should infer element types from iterable types and
   include them in the IR.
-- Frontend now emits NoOp IR nodes for skipped statements.
-- Auto-generates getKind() when struct implements "Node" and has "kind" field -
-  Parable-specific knowledge about AST Node interface contract. Frontend should
-  emit getter methods explicitly or IR should have interface satisfaction markers.
 - ParableFunctions._bytesToString() and _stringToBytes() helpers hardcode Parable's
   byte encoding. Frontend should emit BytesToString/StringToBytes IR nodes that
   backend renders with appropriate charset handling.

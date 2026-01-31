@@ -6,12 +6,6 @@ COMPENSATIONS FOR EARLIER STAGE DEFICIENCIES
 Frontend deficiencies (should be fixed in frontend.py):
 - CommonJS exports hardcode "parse" and "ParseError" - this is Parable-specific
   knowledge. Frontend should emit Export IR nodes that backend renders.
-- Node interface special-cases "Node" to add "kind: string" property - Parable-
-  specific. Frontend should emit interface fields explicitly.
-- Auto-generated getKind() for Node implementations - backend has Parable-specific
-  knowledge about Node interface contract.
-- Frontend now emits TrimChars IR nodes for strip/lstrip/rstrip methods.
-- Frontend now emits NoOp IR nodes for skipped statements.
 
 Middleend deficiencies (should be fixed in middleend.py):
 - VarDecl and Assign use "any" type because middleend doesn't track that the same

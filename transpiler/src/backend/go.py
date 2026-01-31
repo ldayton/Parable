@@ -12,11 +12,6 @@ Frontend deficiencies (should be fixed in frontend.py):
 - _runeAt, _runeLen, _Substring helpers exist because frontend emits string
   indexing as Index nodes without distinguishing byte vs character semantics.
   Frontend should emit distinct IR for character-based string operations.
-- ExprStmt filters expressions starting with "skip", "pass", "localFunc" -
-  frontend emits these markers that should be handled before backend.
-- Auto-generates GetKind() when struct implements "Node" - Parable-specific
-  knowledge about AST Node interface contract. Frontend should emit getter
-  methods explicitly or IR should have interface satisfaction markers.
 
 Middleend deficiencies (should be fixed in middleend.py):
 - _infer_tuple_element_type scans return statements to infer hoisted variable

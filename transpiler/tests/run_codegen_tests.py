@@ -23,14 +23,14 @@ from src.backend.csharp import CSharpBackend
 from src.backend.php import PhpBackend
 
 BACKENDS: dict[str, type[GoBackend] | type[JavaBackend] | type[PerlBackend] | type[PythonBackend] | type[RubyBackend] | type[TsBackend] | type[CSharpBackend] | type[PhpBackend]] = {
+    "csharp": CSharpBackend,
     "go": GoBackend,
     "java": JavaBackend,
-    "pl": PerlBackend,
-    "python": PythonBackend,
-    "rb": RubyBackend,
-    "ts": TsBackend,
-    "cs": CSharpBackend,
+    "perl": PerlBackend,
     "php": PhpBackend,
+    "python": PythonBackend,
+    "ruby": RubyBackend,
+    "typescript": TsBackend,
 }
 
 

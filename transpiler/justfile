@@ -19,7 +19,7 @@ prep backend:
     case "{{backend}}" in
         csharp)
             uv run python -m src.tongues --target csharp < {{source}} > ../dist/csharp/Parable.cs
-            dotnet build ../dist/csharp -c Release -v q --nologo
+            dotnet build ../dist/csharp/csharp.csproj -c Release -v q --nologo
             ;;
         go)
             uv run python -m src.tongues --target go < {{source}} > /tmp/transpile-ir.go

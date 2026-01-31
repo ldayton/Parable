@@ -9,15 +9,15 @@ func Add(a int, b int) int {
 static int add(int a, int b) {
     return a + b;
 }
---- ts
+--- typescript
 function add(a: number, b: number): number {
   return a + b;
 }
---- rb
+--- ruby
 def add(a, b)
   return a + b
 end
---- pl
+--- perl
 sub add ($a, $b) {
     return $a + $b;
 }
@@ -58,7 +58,7 @@ static int sign(int x) {
         }
     }
 }
---- ts
+--- typescript
 function sign(x: number): number {
   if (x > 0) {
     return 1;
@@ -70,7 +70,7 @@ function sign(x: number): number {
     }
   }
 }
---- rb
+--- ruby
 def sign(x)
   if x > 0
     return 1
@@ -80,7 +80,7 @@ def sign(x)
     return 0
   end
 end
---- pl
+--- perl
 sub sign ($x) {
     if ($x > 0) {
         return 1;
@@ -136,7 +136,7 @@ static int countdown(int n) {
     }
     return total;
 }
---- ts
+--- typescript
 function countdown(n: number): number {
   var total: any = 0;
   while (n > 0) {
@@ -145,7 +145,7 @@ function countdown(n: number): number {
   }
   return total;
 }
---- rb
+--- ruby
 def countdown(n)
   total = 0
   while n > 0
@@ -154,7 +154,7 @@ def countdown(n)
   end
   return total
 end
---- pl
+--- perl
 sub countdown ($n) {
     my $total = 0;
     while ($n > 0) {
@@ -187,15 +187,15 @@ func Greet(name string) string {
 static String greet(String name) {
     return "Hello, " + name;
 }
---- ts
+--- typescript
 function greet(name: string): string {
   return "Hello, " + name;
 }
---- rb
+--- ruby
 def greet(name)
   return "Hello, " + name
 end
---- pl
+--- perl
 sub greet ($name) {
     return "Hello, " . $name;
 }
@@ -217,15 +217,15 @@ func Both(a bool, b bool) bool {
 static boolean both(boolean a, boolean b) {
     return a && b;
 }
---- ts
+--- typescript
 function both(a: boolean, b: boolean): boolean {
   return a && b;
 }
---- rb
+--- ruby
 def both(a, b)
   return a && b
 end
---- pl
+--- perl
 sub both ($a, $b) {
     return $a && $b;
 }

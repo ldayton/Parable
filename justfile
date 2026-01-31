@@ -106,7 +106,7 @@ backend-test backend:
     case "{{backend}}" in
         csharp)
             just backend-transpile csharp
-            dotnet build dist/csharp/cs.csproj -o dist/csharp/bin --verbosity quiet
+            dotnet build dist/csharp/csharp.csproj -o dist/csharp/bin --verbosity quiet
             dotnet dist/csharp/bin/cs.dll "$tests_abs"
             ;;
         go)

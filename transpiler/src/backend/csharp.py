@@ -214,6 +214,7 @@ class CSharpBackend:
         self.struct_fields: dict[str, list[tuple[str, Type]]] = {}
         self._hoisted_vars: set[str] = set()
         self._declared_vars: set[str] = set()  # All variables declared in current function
+        self._object_vars: set[str] = set()  # Variables declared with object type
         self._module_name: str = ""
         self._interface_names: set[str] = set()
         self.temp_counter = 0
@@ -308,7 +309,7 @@ class CSharpBackend:
         self._line("{")
         self.indent += 1
         for fld in struct.fields:
-            self._emit_field(fld)
+            self._emit_field(fld, struct.is_exception)
         if struct.fields:
             self._line("")
         self._emit_constructor(struct)
@@ -319,10 +320,11 @@ class CSharpBackend:
         self._line("}")
         self.current_class = ""
 
-    def _emit_field(self, fld: Field) -> None:
+    def _emit_field(self, fld: Field, is_exception: bool = False) -> None:
         typ = self._type(fld.typ)
         name = _safe_pascal(fld.name)
-        self._line(f"public {typ} {name} {{ get; set; }}")
+        modifier = "new " if is_exception and name == "Message" else ""
+        self._line(f"public {modifier}{typ} {name} {{ get; set; }}")
 
     def _emit_constructor(self, struct: Struct) -> None:
         class_name = struct.name
@@ -363,6 +365,7 @@ class CSharpBackend:
     def _emit_function(self, func: Function) -> None:
         self._hoisted_vars = set()
         self._declared_vars = {p.name for p in func.params}  # Track all declared vars
+        self._object_vars = set()
         self._func_params = {p.name for p in func.params if isinstance(p.typ, FuncType)}
         params = self._params(func.params)
         ret = self._type(func.ret)
@@ -380,6 +383,7 @@ class CSharpBackend:
     def _emit_method(self, func: Function) -> None:
         self._hoisted_vars = set()
         self._declared_vars = {p.name for p in func.params}  # Track all declared vars
+        self._object_vars = set()
         self._func_params = {p.name for p in func.params if isinstance(p.typ, FuncType)}
         params = self._params(func.params)
         ret = self._type(func.ret)
@@ -415,6 +419,8 @@ class CSharpBackend:
             self._line(f"{cs_type} {var_name} = {default};")
             self._hoisted_vars.add(name)
             self._declared_vars.add(name)
+            if cs_type == "object":
+                self._object_vars.add(name)
 
     def _emit_stmt(self, stmt: Stmt) -> None:
         match stmt:
@@ -422,6 +428,8 @@ class CSharpBackend:
                 cs_type = self._type(typ)
                 var_name = _safe_name(name)
                 self._declared_vars.add(name)
+                if cs_type == "object":
+                    self._object_vars.add(name)
                 if value is not None:
                     val = self._expr(value)
                     self._line(f"{cs_type} {var_name} = {val};")
@@ -445,6 +453,8 @@ class CSharpBackend:
                         self._line(f"{cs_type} {lv} = {val};")
                         if target_name:
                             self._declared_vars.add(target_name)
+                            if cs_type == "object":
+                                self._object_vars.add(target_name)
                     else:
                         self._line(f"{lv} = {val};")
             case OpAssign(target=target, op=op, value=value):
@@ -525,7 +535,7 @@ class CSharpBackend:
                 self._emit_try_catch(stmt)
             case Raise(error_type=error_type, message=message, pos=pos, reraise_var=reraise_var):
                 if reraise_var:
-                    self._line(f"throw {_safe_name(reraise_var)};")
+                    self._line("throw;")
                 else:
                     msg = self._expr(message)
                     pos_expr = self._expr(pos)
@@ -615,6 +625,14 @@ class CSharpBackend:
             else:
                 self._line(f"{lv} = {entry_var}.Item{i + 1};")
 
+    def _is_terminal_stmt(self, stmt: Stmt) -> bool:
+        """Check if a statement is a flow control terminator (no break needed after)."""
+        return isinstance(stmt, (Return, Continue, Break, Raise))
+
+    def _is_object_var(self, expr: Expr) -> bool:
+        """Check if an expression is a variable declared with object type."""
+        return isinstance(expr, Var) and expr.name in self._object_vars
+
     def _emit_type_switch(self, stmt: TypeSwitch) -> None:
         self._emit_hoisted_vars(stmt)
         var = self._expr(stmt.expr)
@@ -637,7 +655,7 @@ class CSharpBackend:
                 self._emit_stmt(s)
             self._hoisted_vars = saved_hoisted
             self._type_switch_binding_rename.pop(stmt.binding)
-            if case.body and not isinstance(case.body[-1], Return):
+            if case.body and not self._is_terminal_stmt(case.body[-1]):
                 self._line("break;")
             self.indent -= 1
         if default:
@@ -645,7 +663,7 @@ class CSharpBackend:
             self.indent += 1
             for s in default:
                 self._emit_stmt(s)
-            if default and not isinstance(default[-1], Return):
+            if default and not self._is_terminal_stmt(default[-1]):
                 self._line("break;")
             self.indent -= 1
         self.indent -= 1
@@ -663,7 +681,7 @@ class CSharpBackend:
             self.indent += 1
             for s in case.body:
                 self._emit_stmt(s)
-            if case.body and not isinstance(case.body[-1], Return):
+            if case.body and not self._is_terminal_stmt(case.body[-1]):
                 self._line("break;")
             self.indent -= 1
         if stmt.default:
@@ -671,7 +689,7 @@ class CSharpBackend:
             self.indent += 1
             for s in stmt.default:
                 self._emit_stmt(s)
-            if stmt.default and not isinstance(stmt.default[-1], Return):
+            if stmt.default and not self._is_terminal_stmt(stmt.default[-1]):
                 self._line("break;")
             self.indent -= 1
         self.indent -= 1
@@ -785,6 +803,8 @@ class CSharpBackend:
             case VarDecl(name=name, typ=typ, value=value):
                 cs_type = self._type(typ)
                 var_name = _safe_name(name)
+                if cs_type == "object":
+                    self._object_vars.add(name)
                 if value:
                     return f"{cs_type} {var_name} = {self._expr(value)}"
                 return f"{cs_type} {var_name}"
@@ -808,9 +828,12 @@ class CSharpBackend:
         for s in stmt.body:
             self._emit_stmt(s)
         self.indent -= 1
-        var = _safe_name(stmt.catch_var) if stmt.catch_var else "ex"
         exc_type = stmt.catch_type.name if isinstance(stmt.catch_type, StructRef) else "Exception"
-        self._line(f"}} catch ({exc_type} {var})")
+        if stmt.catch_var_unused or not stmt.catch_var:
+            self._line(f"}} catch ({exc_type})")
+        else:
+            var = _safe_name(stmt.catch_var)
+            self._line(f"}} catch ({exc_type} {var})")
         self._line("{")
         self.indent += 1
         for s in stmt.catch_body:
@@ -927,7 +950,12 @@ class CSharpBackend:
                 left_str = self._expr(left)
                 right_str = self._expr(right)
                 cs_op = _binary_op(op)
-                # String comparisons need special handling
+                # Cast object-typed variables to string in string comparisons
+                if cs_op in ("==", "!="):
+                    if _is_string_type(left.typ) and self._is_object_var(right):
+                        right_str = f"(string){right_str}"
+                    elif _is_string_type(right.typ) and self._is_object_var(left):
+                        left_str = f"(string){left_str}"
                 if _is_string_type(left.typ):
                     if cs_op == "==":
                         return f"{left_str} == {right_str}"

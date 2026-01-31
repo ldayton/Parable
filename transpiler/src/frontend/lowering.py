@@ -660,7 +660,10 @@ def lower_expr_Attribute(
             )
     # Infer field type for self.field accesses
     field_type: "Type" = InterfaceRef("any")
-    if is_type(node_value, ["Name"]) and node_value.get("id") == "self":
+    # Node interface field types (kind is defined as string)
+    if is_node_interface_type(obj_type) and node_attr == "kind":
+        field_type = STRING
+    elif is_type(node_value, ["Name"]) and node_value.get("id") == "self":
         if current_class_name in symbols.structs:
             struct_info = symbols.structs[current_class_name]
             field_info = struct_info.fields.get(node_attr)

@@ -268,7 +268,7 @@ function QuoteState:new(single, double, stack)
 end
 
 function QuoteState:push()
-  (function() table.insert(self.stack, {self.single, self.double}); return self.stack end)()
+  ;(function() table.insert(self.stack, {self.single, self.double}); return self.stack end)()
   self.single = false
   self.double = false
 end
@@ -349,7 +349,7 @@ function ContextStack:get_current()
 end
 
 function ContextStack:push(kind)
-  (function() table.insert(self.stack, new_parse_context(kind)); return self.stack end)()
+  ;(function() table.insert(self.stack, new_parse_context(kind)); return self.stack end)()
 end
 
 function ContextStack:pop()
@@ -362,7 +362,7 @@ end
 function ContextStack:copy_stack()
   local result = {}
   for _, ctx in ipairs(self.stack) do
-    (function() table.insert(result, ctx:copy()); return result end)()
+    ;(function() table.insert(result, ctx:copy()); return result end)()
   end
   return result
 end
@@ -370,7 +370,7 @@ end
 function ContextStack:restore_from(saved_stack)
   local result = {}
   for _, ctx in ipairs(saved_stack) do
-    (function() table.insert(result, ctx:copy()); return result end)()
+    ;(function() table.insert(result, ctx:copy()); return result end)()
   end
   self.stack = result
 end
@@ -614,7 +614,7 @@ function Lexer:read_single_quote(start)
     if c == "\n" then
       saw_newline = true
     end
-    (function() table.insert(chars, c); return chars end)()
+    ;(function() table.insert(chars, c); return chars end)()
     self.pos = self.pos + 1
     if c == "'" then
       return {table.concat(chars, ""), saw_newline}
@@ -716,59 +716,59 @@ function Lexer:read_bracket_expression(chars, parts, for_regex, paren_depth)
       return false
     end
   end
-  (function() table.insert(chars, self:advance()); return chars end)()
+  ;(function() table.insert(chars, self:advance()); return chars end)()
   if not self:at_end() and self:peek() == "^" then
-    (function() table.insert(chars, self:advance()); return chars end)()
+    ;(function() table.insert(chars, self:advance()); return chars end)()
   end
   if not self:at_end() and self:peek() == "]" then
-    (function() table.insert(chars, self:advance()); return chars end)()
+    ;(function() table.insert(chars, self:advance()); return chars end)()
   end
   while not self:at_end() do
     local c = self:peek()
     if c == "]" then
-      (function() table.insert(chars, self:advance()); return chars end)()
+      ;(function() table.insert(chars, self:advance()); return chars end)()
       break
     end
     if c == "[" and self.pos + 1 < self.length and string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) == ":" then
-      (function() table.insert(chars, self:advance()); return chars end)()
-      (function() table.insert(chars, self:advance()); return chars end)()
+      ;(function() table.insert(chars, self:advance()); return chars end)()
+      ;(function() table.insert(chars, self:advance()); return chars end)()
       while not self:at_end() and not (self:peek() == ":" and self.pos + 1 < self.length and string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) == "]") do
-        (function() table.insert(chars, self:advance()); return chars end)()
+        ;(function() table.insert(chars, self:advance()); return chars end)()
       end
       if not self:at_end() then
-        (function() table.insert(chars, self:advance()); return chars end)()
-        (function() table.insert(chars, self:advance()); return chars end)()
+        ;(function() table.insert(chars, self:advance()); return chars end)()
+        ;(function() table.insert(chars, self:advance()); return chars end)()
       end
     elseif not for_regex and c == "[" and self.pos + 1 < self.length and string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) == "=" then
-      (function() table.insert(chars, self:advance()); return chars end)()
-      (function() table.insert(chars, self:advance()); return chars end)()
+      ;(function() table.insert(chars, self:advance()); return chars end)()
+      ;(function() table.insert(chars, self:advance()); return chars end)()
       while not self:at_end() and not (self:peek() == "=" and self.pos + 1 < self.length and string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) == "]") do
-        (function() table.insert(chars, self:advance()); return chars end)()
+        ;(function() table.insert(chars, self:advance()); return chars end)()
       end
       if not self:at_end() then
-        (function() table.insert(chars, self:advance()); return chars end)()
-        (function() table.insert(chars, self:advance()); return chars end)()
+        ;(function() table.insert(chars, self:advance()); return chars end)()
+        ;(function() table.insert(chars, self:advance()); return chars end)()
       end
     elseif not for_regex and c == "[" and self.pos + 1 < self.length and string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) == "." then
-      (function() table.insert(chars, self:advance()); return chars end)()
-      (function() table.insert(chars, self:advance()); return chars end)()
+      ;(function() table.insert(chars, self:advance()); return chars end)()
+      ;(function() table.insert(chars, self:advance()); return chars end)()
       while not self:at_end() and not (self:peek() == "." and self.pos + 1 < self.length and string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) == "]") do
-        (function() table.insert(chars, self:advance()); return chars end)()
+        ;(function() table.insert(chars, self:advance()); return chars end)()
       end
       if not self:at_end() then
-        (function() table.insert(chars, self:advance()); return chars end)()
-        (function() table.insert(chars, self:advance()); return chars end)()
+        ;(function() table.insert(chars, self:advance()); return chars end)()
+        ;(function() table.insert(chars, self:advance()); return chars end)()
       end
     elseif for_regex and c == "$" then
       self:sync_to_parser()
       if not self.parser:parse_dollar_expansion(chars, parts, false) then
         self:sync_from_parser()
-        (function() table.insert(chars, self:advance()); return chars end)()
+        ;(function() table.insert(chars, self:advance()); return chars end)()
       else
         self:sync_from_parser()
       end
     else
-      (function() table.insert(chars, self:advance()); return chars end)()
+      ;(function() table.insert(chars, self:advance()); return chars end)()
     end
   end
   return true
@@ -793,7 +793,7 @@ function Lexer:parse_matched_pair(open_char, close_char, flags, initial_was_doll
     end
     if pass_next then
       pass_next = false
-      (function() table.insert(chars, ch); return chars end)()
+      ;(function() table.insert(chars, ch); return chars end)()
       was_dollar = ch == "$"
       was_gtlt = ((string.find("<>", ch, 1, true) ~= nil))
       goto continue
@@ -808,7 +808,7 @@ function Lexer:parse_matched_pair(open_char, close_char, flags, initial_was_doll
       if ch == "\\" and (flags & MATCHEDPAIRFLAGS_ALLOWESC ~= 0) then
         pass_next = true
       end
-      (function() table.insert(chars, ch); return chars end)()
+      ;(function() table.insert(chars, ch); return chars end)()
       was_dollar = false
       was_gtlt = false
       goto continue
@@ -821,7 +821,7 @@ function Lexer:parse_matched_pair(open_char, close_char, flags, initial_was_doll
         goto continue
       end
       pass_next = true
-      (function() table.insert(chars, ch); return chars end)()
+      ;(function() table.insert(chars, ch); return chars end)()
       was_dollar = false
       was_gtlt = false
       goto continue
@@ -831,7 +831,7 @@ function Lexer:parse_matched_pair(open_char, close_char, flags, initial_was_doll
       if count == 0 then
         break
       end
-      (function() table.insert(chars, ch); return chars end)()
+      ;(function() table.insert(chars, ch); return chars end)()
       was_dollar = false
       was_gtlt = ((string.find("<>", ch, 1, true) ~= nil))
       goto continue
@@ -840,7 +840,7 @@ function Lexer:parse_matched_pair(open_char, close_char, flags, initial_was_doll
       if not ((flags & MATCHEDPAIRFLAGS_DOLBRACE ~= 0) and open_char == "{") then
         count = count + 1
       end
-      (function() table.insert(chars, ch); return chars end)()
+      ;(function() table.insert(chars, ch); return chars end)()
       was_dollar = false
       was_gtlt = ((string.find("<>", ch, 1, true) ~= nil))
       goto continue
@@ -848,27 +848,27 @@ function Lexer:parse_matched_pair(open_char, close_char, flags, initial_was_doll
     if (((string.find("'\"`", ch, 1, true) ~= nil))) and open_char ~= close_char then
       local nested
       if ch == "'" then
-        (function() table.insert(chars, ch); return chars end)()
+        ;(function() table.insert(chars, ch); return chars end)()
         local quote_flags = (was_dollar and flags | MATCHEDPAIRFLAGS_ALLOWESC or flags)
         nested = self:parse_matched_pair("'", "'", quote_flags, false)
-        (function() table.insert(chars, nested); return chars end)()
-        (function() table.insert(chars, "'"); return chars end)()
+        ;(function() table.insert(chars, nested); return chars end)()
+        ;(function() table.insert(chars, "'"); return chars end)()
         was_dollar = false
         was_gtlt = false
         goto continue
       elseif ch == "\"" then
-        (function() table.insert(chars, ch); return chars end)()
+        ;(function() table.insert(chars, ch); return chars end)()
         nested = self:parse_matched_pair("\"", "\"", flags | MATCHEDPAIRFLAGS_DQUOTE, false)
-        (function() table.insert(chars, nested); return chars end)()
-        (function() table.insert(chars, "\""); return chars end)()
+        ;(function() table.insert(chars, nested); return chars end)()
+        ;(function() table.insert(chars, "\""); return chars end)()
         was_dollar = false
         was_gtlt = false
         goto continue
       elseif ch == "`" then
-        (function() table.insert(chars, ch); return chars end)()
+        ;(function() table.insert(chars, ch); return chars end)()
         nested = self:parse_matched_pair("`", "`", flags, false)
-        (function() table.insert(chars, nested); return chars end)()
-        (function() table.insert(chars, "`"); return chars end)()
+        ;(function() table.insert(chars, nested); return chars end)()
+        ;(function() table.insert(chars, "`"); return chars end)()
         was_dollar = false
         was_gtlt = false
         goto continue
@@ -877,7 +877,7 @@ function Lexer:parse_matched_pair(open_char, close_char, flags, initial_was_doll
     if ch == "$" and not self:at_end() and ((flags & MATCHEDPAIRFLAGS_EXTGLOB) == 0) then
       local next_ch = self:peek()
       if was_dollar then
-        (function() table.insert(chars, ch); return chars end)()
+        ;(function() table.insert(chars, ch); return chars end)()
         was_dollar = false
         was_gtlt = false
         goto continue
@@ -886,7 +886,7 @@ function Lexer:parse_matched_pair(open_char, close_char, flags, initial_was_doll
         if (flags & MATCHEDPAIRFLAGS_ARITH ~= 0) then
           local after_brace_pos = self.pos + 1
           if after_brace_pos >= self.length or not is_funsub_char(string.sub(self.source, after_brace_pos + 1, after_brace_pos + 1)) then
-            (function() table.insert(chars, ch); return chars end)()
+            ;(function() table.insert(chars, ch); return chars end)()
             was_dollar = true
             was_gtlt = false
             goto continue
@@ -898,11 +898,11 @@ function Lexer:parse_matched_pair(open_char, close_char, flags, initial_was_doll
         local param_node, param_text = table.unpack(self.parser:parse_param_expansion(in_dquote))
         self:sync_from_parser()
         if (param_node ~= nil) then
-          (function() table.insert(chars, param_text); return chars end)()
+          ;(function() table.insert(chars, param_text); return chars end)()
           was_dollar = false
           was_gtlt = false
         else
-          (function() table.insert(chars, self:advance()); return chars end)()
+          ;(function() table.insert(chars, self:advance()); return chars end)()
           was_dollar = true
           was_gtlt = false
         end
@@ -916,7 +916,7 @@ function Lexer:parse_matched_pair(open_char, close_char, flags, initial_was_doll
           local arith_node, arith_text = table.unpack(self.parser:parse_arithmetic_expansion())
           self:sync_from_parser()
           if (arith_node ~= nil) then
-            (function() table.insert(chars, arith_text); return chars end)()
+            ;(function() table.insert(chars, arith_text); return chars end)()
             was_dollar = false
             was_gtlt = false
           else
@@ -924,12 +924,12 @@ function Lexer:parse_matched_pair(open_char, close_char, flags, initial_was_doll
             cmd_node, cmd_text = table.unpack(self.parser:parse_command_substitution())
             self:sync_from_parser()
             if (cmd_node ~= nil) then
-              (function() table.insert(chars, cmd_text); return chars end)()
+              ;(function() table.insert(chars, cmd_text); return chars end)()
               was_dollar = false
               was_gtlt = false
             else
-              (function() table.insert(chars, self:advance()); return chars end)()
-              (function() table.insert(chars, self:advance()); return chars end)()
+              ;(function() table.insert(chars, self:advance()); return chars end)()
+              ;(function() table.insert(chars, self:advance()); return chars end)()
               was_dollar = false
               was_gtlt = false
             end
@@ -938,12 +938,12 @@ function Lexer:parse_matched_pair(open_char, close_char, flags, initial_was_doll
           cmd_node, cmd_text = table.unpack(self.parser:parse_command_substitution())
           self:sync_from_parser()
           if (cmd_node ~= nil) then
-            (function() table.insert(chars, cmd_text); return chars end)()
+            ;(function() table.insert(chars, cmd_text); return chars end)()
             was_dollar = false
             was_gtlt = false
           else
-            (function() table.insert(chars, self:advance()); return chars end)()
-            (function() table.insert(chars, self:advance()); return chars end)()
+            ;(function() table.insert(chars, self:advance()); return chars end)()
+            ;(function() table.insert(chars, self:advance()); return chars end)()
             was_dollar = false
             was_gtlt = false
           end
@@ -955,11 +955,11 @@ function Lexer:parse_matched_pair(open_char, close_char, flags, initial_was_doll
         arith_node, arith_text = table.unpack(self.parser:parse_deprecated_arithmetic())
         self:sync_from_parser()
         if (arith_node ~= nil) then
-          (function() table.insert(chars, arith_text); return chars end)()
+          ;(function() table.insert(chars, arith_text); return chars end)()
           was_dollar = false
           was_gtlt = false
         else
-          (function() table.insert(chars, self:advance()); return chars end)()
+          ;(function() table.insert(chars, self:advance()); return chars end)()
           was_dollar = true
           was_gtlt = false
         end
@@ -976,18 +976,18 @@ function Lexer:parse_matched_pair(open_char, close_char, flags, initial_was_doll
       local procsub_node, procsub_text = table.unpack(self.parser:parse_process_substitution())
       self:sync_from_parser()
       if (procsub_node ~= nil) then
-        (function() table.insert(chars, procsub_text); return chars end)()
+        ;(function() table.insert(chars, procsub_text); return chars end)()
         was_dollar = false
         was_gtlt = false
       else
-        (function() table.insert(chars, direction); return chars end)()
-        (function() table.insert(chars, self:advance()); return chars end)()
+        ;(function() table.insert(chars, direction); return chars end)()
+        ;(function() table.insert(chars, self:advance()); return chars end)()
         was_dollar = false
         was_gtlt = false
       end
       goto continue
     end
-    (function() table.insert(chars, ch); return chars end)()
+    ;(function() table.insert(chars, ch); return chars end)()
     was_dollar = ch == "$"
     was_gtlt = ((string.find("<>", ch, 1, true) ~= nil))
     ::continue::
@@ -1022,7 +1022,7 @@ function Lexer:read_word_internal(ctx, at_command_start, in_array_literal, in_as
     if ctx == WORD_CTX_NORMAL and ch == "[" then
       if bracket_depth > 0 then
         bracket_depth = bracket_depth + 1
-        (function() table.insert(chars, self:advance()); return chars end)()
+        ;(function() table.insert(chars, self:advance()); return chars end)()
         goto continue
       end
       if (#(chars) > 0) and at_command_start and not seen_equals and is_array_assignment_prefix(chars) then
@@ -1030,20 +1030,20 @@ function Lexer:read_word_internal(ctx, at_command_start, in_array_literal, in_as
         if (string.match(prev_char, '^[%w]$') ~= nil) or prev_char == "_" then
           bracket_start_pos = self.pos
           bracket_depth = bracket_depth + 1
-          (function() table.insert(chars, self:advance()); return chars end)()
+          ;(function() table.insert(chars, self:advance()); return chars end)()
           goto continue
         end
       end
       if not (#(chars) > 0) and not seen_equals and in_array_literal then
         bracket_start_pos = self.pos
         bracket_depth = bracket_depth + 1
-        (function() table.insert(chars, self:advance()); return chars end)()
+        ;(function() table.insert(chars, self:advance()); return chars end)()
         goto continue
       end
     end
     if ctx == WORD_CTX_NORMAL and ch == "]" and bracket_depth > 0 then
       bracket_depth = bracket_depth - 1
-      (function() table.insert(chars, self:advance()); return chars end)()
+      ;(function() table.insert(chars, self:advance()); return chars end)()
       goto continue
     end
     if ctx == WORD_CTX_NORMAL and ch == "=" and bracket_depth == 0 then
@@ -1051,13 +1051,13 @@ function Lexer:read_word_internal(ctx, at_command_start, in_array_literal, in_as
     end
     if ctx == WORD_CTX_REGEX and ch == "(" then
       paren_depth = paren_depth + 1
-      (function() table.insert(chars, self:advance()); return chars end)()
+      ;(function() table.insert(chars, self:advance()); return chars end)()
       goto continue
     end
     if ctx == WORD_CTX_REGEX and ch == ")" then
       if paren_depth > 0 then
         paren_depth = paren_depth - 1
-        (function() table.insert(chars, self:advance()); return chars end)()
+        ;(function() table.insert(chars, self:advance()); return chars end)()
         goto continue
       end
       break
@@ -1067,23 +1067,23 @@ function Lexer:read_word_internal(ctx, at_command_start, in_array_literal, in_as
       if self:read_bracket_expression(chars, parts, for_regex, paren_depth) then
         goto continue
       end
-      (function() table.insert(chars, self:advance()); return chars end)()
+      ;(function() table.insert(chars, self:advance()); return chars end)()
       goto continue
     end
     local content
     if ctx == WORD_CTX_COND and ch == "(" then
       if self.extglob and (#(chars) > 0) and is_extglob_prefix(chars[#chars - 1 + 1]) then
-        (function() table.insert(chars, self:advance()); return chars end)()
+        ;(function() table.insert(chars, self:advance()); return chars end)()
         content = self:parse_matched_pair("(", ")", MATCHEDPAIRFLAGS_EXTGLOB, false)
-        (function() table.insert(chars, content); return chars end)()
-        (function() table.insert(chars, ")"); return chars end)()
+        ;(function() table.insert(chars, content); return chars end)()
+        ;(function() table.insert(chars, ")"); return chars end)()
         goto continue
       else
         break
       end
     end
     if ctx == WORD_CTX_REGEX and is_whitespace(ch) and paren_depth > 0 then
-      (function() table.insert(chars, self:advance()); return chars end)()
+      ;(function() table.insert(chars, self:advance()); return chars end)()
       goto continue
     end
     if ch == "'" then
@@ -1091,7 +1091,7 @@ function Lexer:read_word_internal(ctx, at_command_start, in_array_literal, in_as
       local track_newline = ctx == WORD_CTX_NORMAL
       local saw_newline
       content, saw_newline = table.unpack(self:read_single_quote(start))
-      (function() table.insert(chars, content); return chars end)()
+      ;(function() table.insert(chars, content); return chars end)()
       if track_newline and saw_newline and (self.parser ~= nil) then
         self.parser.saw_newline_in_single_quote = true
       end
@@ -1102,12 +1102,12 @@ function Lexer:read_word_internal(ctx, at_command_start, in_array_literal, in_as
     if ch == "\"" then
       self:advance()
       if ctx == WORD_CTX_NORMAL then
-        (function() table.insert(chars, "\""); return chars end)()
+        ;(function() table.insert(chars, "\""); return chars end)()
         local in_single_in_dquote = false
         while not self:at_end() and (in_single_in_dquote or self:peek() ~= "\"") do
           local c = self:peek()
           if in_single_in_dquote then
-            (function() table.insert(chars, self:advance()); return chars end)()
+            ;(function() table.insert(chars, self:advance()); return chars end)()
             if c == "'" then
               in_single_in_dquote = false
             end
@@ -1119,14 +1119,14 @@ function Lexer:read_word_internal(ctx, at_command_start, in_array_literal, in_as
               self:advance()
               self:advance()
             else
-              (function() table.insert(chars, self:advance()); return chars end)()
-              (function() table.insert(chars, self:advance()); return chars end)()
+              ;(function() table.insert(chars, self:advance()); return chars end)()
+              ;(function() table.insert(chars, self:advance()); return chars end)()
             end
           elseif c == "$" then
             self:sync_to_parser()
             if not self.parser:parse_dollar_expansion(chars, parts, true) then
               self:sync_from_parser()
-              (function() table.insert(chars, self:advance()); return chars end)()
+              ;(function() table.insert(chars, self:advance()); return chars end)()
             else
               self:sync_from_parser()
             end
@@ -1135,20 +1135,20 @@ function Lexer:read_word_internal(ctx, at_command_start, in_array_literal, in_as
             cmdsub_result0, cmdsub_result1 = table.unpack(self.parser:parse_backtick_substitution())
             self:sync_from_parser()
             if (cmdsub_result0 ~= nil) then
-              (function() table.insert(parts, cmdsub_result0); return parts end)()
-              (function() table.insert(chars, cmdsub_result1); return chars end)()
+              ;(function() table.insert(parts, cmdsub_result0); return parts end)()
+              ;(function() table.insert(chars, cmdsub_result1); return chars end)()
             else
-              (function() table.insert(chars, self:advance()); return chars end)()
+              ;(function() table.insert(chars, self:advance()); return chars end)()
             end
           else
-            (function() table.insert(chars, self:advance()); return chars end)()
+            ;(function() table.insert(chars, self:advance()); return chars end)()
           end
           ::continue::
         end
         if self:at_end() then
           error({ParseError = true, message = "Unterminated double quote", pos = start})
         end
-        (function() table.insert(chars, self:advance()); return chars end)()
+        ;(function() table.insert(chars, self:advance()); return chars end)()
       else
         local handle_line_continuation = ctx == WORD_CTX_COND
         self:sync_to_parser()
@@ -1163,29 +1163,29 @@ function Lexer:read_word_internal(ctx, at_command_start, in_array_literal, in_as
         self:advance()
         self:advance()
       else
-        (function() table.insert(chars, self:advance()); return chars end)()
-        (function() table.insert(chars, self:advance()); return chars end)()
+        ;(function() table.insert(chars, self:advance()); return chars end)()
+        ;(function() table.insert(chars, self:advance()); return chars end)()
       end
       goto continue
     end
     if ctx ~= WORD_CTX_REGEX and ch == "$" and self.pos + 1 < self.length and string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) == "'" then
       local ansi_result0, ansi_result1 = table.unpack(self:read_ansi_c_quote())
       if (ansi_result0 ~= nil) then
-        (function() table.insert(parts, ansi_result0); return parts end)()
-        (function() table.insert(chars, ansi_result1); return chars end)()
+        ;(function() table.insert(parts, ansi_result0); return parts end)()
+        ;(function() table.insert(chars, ansi_result1); return chars end)()
       else
-        (function() table.insert(chars, self:advance()); return chars end)()
+        ;(function() table.insert(chars, self:advance()); return chars end)()
       end
       goto continue
     end
     if ctx ~= WORD_CTX_REGEX and ch == "$" and self.pos + 1 < self.length and string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) == "\"" then
       local locale_result0, locale_result1, locale_result2 = table.unpack(self:read_locale_string())
       if (locale_result0 ~= nil) then
-        (function() table.insert(parts, locale_result0); return parts end)()
-        (function() for _, v in ipairs(locale_result2) do table.insert(parts, v) end; return parts end)()
-        (function() table.insert(chars, locale_result1); return chars end)()
+        ;(function() table.insert(parts, locale_result0); return parts end)()
+        ;(function() for _, v in ipairs(locale_result2) do table.insert(parts, v) end; return parts end)()
+        ;(function() table.insert(chars, locale_result1); return chars end)()
       else
-        (function() table.insert(chars, self:advance()); return chars end)()
+        ;(function() table.insert(chars, self:advance()); return chars end)()
       end
       goto continue
     end
@@ -1193,14 +1193,14 @@ function Lexer:read_word_internal(ctx, at_command_start, in_array_literal, in_as
       self:sync_to_parser()
       if not self.parser:parse_dollar_expansion(chars, parts, false) then
         self:sync_from_parser()
-        (function() table.insert(chars, self:advance()); return chars end)()
+        ;(function() table.insert(chars, self:advance()); return chars end)()
       else
         self:sync_from_parser()
         if self.extglob and ctx == WORD_CTX_NORMAL and (#(chars) > 0) and #chars[#chars - 1 + 1] == 2 and string.sub(chars[#chars - 1 + 1], 0 + 1, 0 + 1) == "$" and (((string.find("?*@", string.sub(chars[#chars - 1 + 1], 1 + 1, 1 + 1), 1, true) ~= nil))) and not self:at_end() and self:peek() == "(" then
-          (function() table.insert(chars, self:advance()); return chars end)()
+          ;(function() table.insert(chars, self:advance()); return chars end)()
           content = self:parse_matched_pair("(", ")", MATCHEDPAIRFLAGS_EXTGLOB, false)
-          (function() table.insert(chars, content); return chars end)()
-          (function() table.insert(chars, ")"); return chars end)()
+          ;(function() table.insert(chars, content); return chars end)()
+          ;(function() table.insert(chars, ")"); return chars end)()
         end
       end
       goto continue
@@ -1210,10 +1210,10 @@ function Lexer:read_word_internal(ctx, at_command_start, in_array_literal, in_as
       cmdsub_result0, cmdsub_result1 = table.unpack(self.parser:parse_backtick_substitution())
       self:sync_from_parser()
       if (cmdsub_result0 ~= nil) then
-        (function() table.insert(parts, cmdsub_result0); return parts end)()
-        (function() table.insert(chars, cmdsub_result1); return chars end)()
+        ;(function() table.insert(parts, cmdsub_result0); return parts end)()
+        ;(function() table.insert(chars, cmdsub_result1); return chars end)()
       else
-        (function() table.insert(chars, self:advance()); return chars end)()
+        ;(function() table.insert(chars, self:advance()); return chars end)()
       end
       goto continue
     end
@@ -1222,14 +1222,14 @@ function Lexer:read_word_internal(ctx, at_command_start, in_array_literal, in_as
       local procsub_result0, procsub_result1 = table.unpack(self.parser:parse_process_substitution())
       self:sync_from_parser()
       if (procsub_result0 ~= nil) then
-        (function() table.insert(parts, procsub_result0); return parts end)()
-        (function() table.insert(chars, procsub_result1); return chars end)()
+        ;(function() table.insert(parts, procsub_result0); return parts end)()
+        ;(function() table.insert(chars, procsub_result1); return chars end)()
       elseif (procsub_result1 ~= nil and #(procsub_result1) > 0) then
-        (function() table.insert(chars, procsub_result1); return chars end)()
+        ;(function() table.insert(chars, procsub_result1); return chars end)()
       else
-        (function() table.insert(chars, self:advance()); return chars end)()
+        ;(function() table.insert(chars, self:advance()); return chars end)()
         if ctx == WORD_CTX_NORMAL then
-          (function() table.insert(chars, self:advance()); return chars end)()
+          ;(function() table.insert(chars, self:advance()); return chars end)()
         end
       end
       goto continue
@@ -1246,8 +1246,8 @@ function Lexer:read_word_internal(ctx, at_command_start, in_array_literal, in_as
         local array_result0, array_result1 = table.unpack(self.parser:parse_array_literal())
         self:sync_from_parser()
         if (array_result0 ~= nil) then
-          (function() table.insert(parts, array_result0); return parts end)()
-          (function() table.insert(chars, array_result1); return chars end)()
+          ;(function() table.insert(parts, array_result0); return parts end)()
+          ;(function() table.insert(chars, array_result1); return chars end)()
         else
           break
         end
@@ -1255,23 +1255,23 @@ function Lexer:read_word_internal(ctx, at_command_start, in_array_literal, in_as
       end
     end
     if self.extglob and ctx == WORD_CTX_NORMAL and is_extglob_prefix(ch) and self.pos + 1 < self.length and string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) == "(" then
-      (function() table.insert(chars, self:advance()); return chars end)()
-      (function() table.insert(chars, self:advance()); return chars end)()
+      ;(function() table.insert(chars, self:advance()); return chars end)()
+      ;(function() table.insert(chars, self:advance()); return chars end)()
       content = self:parse_matched_pair("(", ")", MATCHEDPAIRFLAGS_EXTGLOB, false)
-      (function() table.insert(chars, content); return chars end)()
-      (function() table.insert(chars, ")"); return chars end)()
+      ;(function() table.insert(chars, content); return chars end)()
+      ;(function() table.insert(chars, ")"); return chars end)()
       goto continue
     end
     if ctx == WORD_CTX_NORMAL and (self.parser_state & PARSERSTATEFLAGS_PST_EOFTOKEN ~= 0) and self.eof_token ~= "" and ch == self.eof_token and bracket_depth == 0 then
       if not (#(chars) > 0) then
-        (function() table.insert(chars, self:advance()); return chars end)()
+        ;(function() table.insert(chars, self:advance()); return chars end)()
       end
       break
     end
     if ctx == WORD_CTX_NORMAL and is_metachar(ch) and bracket_depth == 0 then
       break
     end
-    (function() table.insert(chars, self:advance()); return chars end)()
+    ;(function() table.insert(chars, self:advance()); return chars end)()
     ::continue::
   end
   if bracket_depth > 0 and bracket_start_pos ~= -1 and self:at_end() then
@@ -1382,12 +1382,12 @@ function Lexer:read_ansi_c_quote()
       found_close = true
       break
     elseif ch == "\\" then
-      (function() table.insert(content_chars, self:advance()); return content_chars end)()
+      ;(function() table.insert(content_chars, self:advance()); return content_chars end)()
       if not self:at_end() then
-        (function() table.insert(content_chars, self:advance()); return content_chars end)()
+        ;(function() table.insert(content_chars, self:advance()); return content_chars end)()
       end
     else
-      (function() table.insert(content_chars, self:advance()); return content_chars end)()
+      ;(function() table.insert(content_chars, self:advance()); return content_chars end)()
     end
   end
   if not found_close then
@@ -1436,25 +1436,25 @@ function Lexer:read_locale_string()
         self:advance()
         self:advance()
       else
-        (function() table.insert(content_chars, self:advance()); return content_chars end)()
-        (function() table.insert(content_chars, self:advance()); return content_chars end)()
+        ;(function() table.insert(content_chars, self:advance()); return content_chars end)()
+        ;(function() table.insert(content_chars, self:advance()); return content_chars end)()
       end
     elseif ch == "$" and self.pos + 2 < self.length and string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) == "(" and string.sub(self.source, self.pos + 2 + 1, self.pos + 2 + 1) == "(" then
       self:sync_to_parser()
       local arith_node, arith_text = table.unpack(self.parser:parse_arithmetic_expansion())
       self:sync_from_parser()
       if (arith_node ~= nil) then
-        (function() table.insert(inner_parts, arith_node); return inner_parts end)()
-        (function() table.insert(content_chars, arith_text); return content_chars end)()
+        ;(function() table.insert(inner_parts, arith_node); return inner_parts end)()
+        ;(function() table.insert(content_chars, arith_text); return content_chars end)()
       else
         self:sync_to_parser()
         local cmdsub_node, cmdsub_text = table.unpack(self.parser:parse_command_substitution())
         self:sync_from_parser()
         if (cmdsub_node ~= nil) then
-          (function() table.insert(inner_parts, cmdsub_node); return inner_parts end)()
-          (function() table.insert(content_chars, cmdsub_text); return content_chars end)()
+          ;(function() table.insert(inner_parts, cmdsub_node); return inner_parts end)()
+          ;(function() table.insert(content_chars, cmdsub_text); return content_chars end)()
         else
-          (function() table.insert(content_chars, self:advance()); return content_chars end)()
+          ;(function() table.insert(content_chars, self:advance()); return content_chars end)()
         end
       end
     elseif is_expansion_start(self.source, self.pos, "$(") then
@@ -1462,33 +1462,33 @@ function Lexer:read_locale_string()
       cmdsub_node, cmdsub_text = table.unpack(self.parser:parse_command_substitution())
       self:sync_from_parser()
       if (cmdsub_node ~= nil) then
-        (function() table.insert(inner_parts, cmdsub_node); return inner_parts end)()
-        (function() table.insert(content_chars, cmdsub_text); return content_chars end)()
+        ;(function() table.insert(inner_parts, cmdsub_node); return inner_parts end)()
+        ;(function() table.insert(content_chars, cmdsub_text); return content_chars end)()
       else
-        (function() table.insert(content_chars, self:advance()); return content_chars end)()
+        ;(function() table.insert(content_chars, self:advance()); return content_chars end)()
       end
     elseif ch == "$" then
       self:sync_to_parser()
       local param_node, param_text = table.unpack(self.parser:parse_param_expansion(false))
       self:sync_from_parser()
       if (param_node ~= nil) then
-        (function() table.insert(inner_parts, param_node); return inner_parts end)()
-        (function() table.insert(content_chars, param_text); return content_chars end)()
+        ;(function() table.insert(inner_parts, param_node); return inner_parts end)()
+        ;(function() table.insert(content_chars, param_text); return content_chars end)()
       else
-        (function() table.insert(content_chars, self:advance()); return content_chars end)()
+        ;(function() table.insert(content_chars, self:advance()); return content_chars end)()
       end
     elseif ch == "`" then
       self:sync_to_parser()
       cmdsub_node, cmdsub_text = table.unpack(self.parser:parse_backtick_substitution())
       self:sync_from_parser()
       if (cmdsub_node ~= nil) then
-        (function() table.insert(inner_parts, cmdsub_node); return inner_parts end)()
-        (function() table.insert(content_chars, cmdsub_text); return content_chars end)()
+        ;(function() table.insert(inner_parts, cmdsub_node); return inner_parts end)()
+        ;(function() table.insert(content_chars, cmdsub_text); return content_chars end)()
       else
-        (function() table.insert(content_chars, self:advance()); return content_chars end)()
+        ;(function() table.insert(content_chars, self:advance()); return content_chars end)()
       end
     else
-      (function() table.insert(content_chars, self:advance()); return content_chars end)()
+      ;(function() table.insert(content_chars, self:advance()); return content_chars end)()
     end
   end
   if not found_close then
@@ -1673,7 +1673,7 @@ function Lexer:consume_param_name()
   if (string.match(ch, '^[%d]$') ~= nil) then
     local name_chars = {}
     while not self:at_end() and (string.match(self:peek(), '^[%d]$') ~= nil) do
-      (function() table.insert(name_chars, self:advance()); return name_chars end)()
+      ;(function() table.insert(name_chars, self:advance()); return name_chars end)()
     end
     return table.concat(name_chars, "")
   end
@@ -1682,15 +1682,15 @@ function Lexer:consume_param_name()
     while not self:at_end() do
       local c = self:peek()
       if (string.match(c, '^[%w]$') ~= nil) or c == "_" then
-        (function() table.insert(name_chars, self:advance()); return name_chars end)()
+        ;(function() table.insert(name_chars, self:advance()); return name_chars end)()
       elseif c == "[" then
         if not self:param_subscript_has_close(self.pos) then
           break
         end
-        (function() table.insert(name_chars, self:advance()); return name_chars end)()
+        ;(function() table.insert(name_chars, self:advance()); return name_chars end)()
         local content = self:parse_matched_pair("[", "]", MATCHEDPAIRFLAGS_ARRAYSUB, false)
-        (function() table.insert(name_chars, content); return name_chars end)()
-        (function() table.insert(name_chars, "]"); return name_chars end)()
+        ;(function() table.insert(name_chars, content); return name_chars end)()
+        ;(function() table.insert(name_chars, "]"); return name_chars end)()
         break
       else
         break
@@ -1941,7 +1941,7 @@ function Word:to_sexp()
 end
 
 function Word:append_with_ctlesc(result, byte_val)
-  (function() table.insert(result, byte_val); return result end)()
+  ;(function() table.insert(result, byte_val); return result end)()
 end
 
 function Word:double_ctlesc_smart(value)
@@ -1954,7 +1954,7 @@ function Word:double_ctlesc_smart(value)
     elseif c == "\"" and not quote.single then
       quote.double = not quote.double
     end
-    (function() table.insert(result, c); return result end)()
+    ;(function() table.insert(result, c); return result end)()
     if c == "" then
       if quote.double then
         local bs_count = 0
@@ -1968,10 +1968,10 @@ function Word:double_ctlesc_smart(value)
           j = j + -1
         end
         if bs_count % 2 == 0 then
-          (function() table.insert(result, ""); return result end)()
+          ;(function() table.insert(result, ""); return result end)()
         end
       else
-        (function() table.insert(result, ""); return result end)()
+        ;(function() table.insert(result, ""); return result end)()
       end
     end
   end
@@ -1986,19 +1986,19 @@ function Word:normalize_param_expansion_newlines(value)
     local c = string.sub(value, i + 1, i + 1)
     if c == "'" and not quote.double then
       quote.single = not quote.single
-      (function() table.insert(result, c); return result end)()
+      ;(function() table.insert(result, c); return result end)()
       i = i + 1
     elseif c == "\"" and not quote.single then
       quote.double = not quote.double
-      (function() table.insert(result, c); return result end)()
+      ;(function() table.insert(result, c); return result end)()
       i = i + 1
     elseif is_expansion_start(value, i, "${") and not quote.single then
-      (function() table.insert(result, "$"); return result end)()
-      (function() table.insert(result, "{"); return result end)()
+      ;(function() table.insert(result, "$"); return result end)()
+      ;(function() table.insert(result, "{"); return result end)()
       i = i + 2
       local had_leading_newline = i < #value and string.sub(value, i + 1, i + 1) == "\n"
       if had_leading_newline then
-        (function() table.insert(result, " "); return result end)()
+        ;(function() table.insert(result, " "); return result end)()
         i = i + 1
       end
       local depth = 1
@@ -2009,8 +2009,8 @@ function Word:normalize_param_expansion_newlines(value)
             i = i + 2
             goto continue
           end
-          (function() table.insert(result, ch); return result end)()
-          (function() table.insert(result, string.sub(value, i + 1 + 1, i + 1 + 1)); return result end)()
+          ;(function() table.insert(result, ch); return result end)()
+          ;(function() table.insert(result, string.sub(value, i + 1 + 1, i + 1 + 1)); return result end)()
           i = i + 2
           goto continue
         end
@@ -2025,20 +2025,20 @@ function Word:normalize_param_expansion_newlines(value)
             depth = depth - 1
             if depth == 0 then
               if had_leading_newline then
-                (function() table.insert(result, " "); return result end)()
+                ;(function() table.insert(result, " "); return result end)()
               end
-              (function() table.insert(result, ch); return result end)()
+              ;(function() table.insert(result, ch); return result end)()
               i = i + 1
               break
             end
           end
         end
-        (function() table.insert(result, ch); return result end)()
+        ;(function() table.insert(result, ch); return result end)()
         i = i + 1
         ::continue::
       end
     else
-      (function() table.insert(result, c); return result end)()
+      ;(function() table.insert(result, c); return result end)()
       i = i + 1
     end
   end
@@ -2056,12 +2056,12 @@ function Word:sh_single_quote(s)
   for _ = 1, #s do
     local c = string.sub(s, _, _)
     if c == "'" then
-      (function() table.insert(result, "'\\''"); return result end)()
+      ;(function() table.insert(result, "'\\''"); return result end)()
     else
-      (function() table.insert(result, c); return result end)()
+      ;(function() table.insert(result, c); return result end)()
     end
   end
-  (function() table.insert(result, "'"); return result end)()
+  ;(function() table.insert(result, "'"); return result end)()
   return table.concat(result, "")
 end
 
@@ -2073,10 +2073,10 @@ function Word:ansi_c_to_bytes(inner)
       local c = string.sub(inner, i + 1 + 1, i + 1 + 1)
       local simple = get_ansi_escape(c)
       if simple >= 0 then
-        (function() table.insert(result, simple); return result end)()
+        ;(function() table.insert(result, simple); return result end)()
         i = i + 2
       elseif c == "'" then
-        (function() table.insert(result, 39); return result end)()
+        ;(function() table.insert(result, 39); return result end)()
         i = i + 2
       elseif c == "x" then
         if i + 2 < #inner and string.sub(inner, i + 2 + 1, i + 2 + 1) == "{" then
@@ -2110,7 +2110,7 @@ function Word:ansi_c_to_bytes(inner)
             self:append_with_ctlesc(result, byte_val)
             i = j
           else
-            (function() table.insert(result, string.byte(string.sub(string.sub(inner, i + 1, i + 1), 0 + 1, 0 + 1))); return result end)()
+            ;(function() table.insert(result, string.byte(string.sub(string.sub(inner, i + 1, i + 1), 0 + 1, 0 + 1))); return result end)()
             i = i + 1
           end
         end
@@ -2124,10 +2124,10 @@ function Word:ansi_c_to_bytes(inner)
           if codepoint == 0 then
             return result
           end
-          (function() for _, v in ipairs(({string.byte(string.char(codepoint), 1, -1)})) do table.insert(result, v) end; return result end)()
+          ;(function() for _, v in ipairs(({string.byte(string.char(codepoint), 1, -1)})) do table.insert(result, v) end; return result end)()
           i = j
         else
-          (function() table.insert(result, string.byte(string.sub(string.sub(inner, i + 1, i + 1), 0 + 1, 0 + 1))); return result end)()
+          ;(function() table.insert(result, string.byte(string.sub(string.sub(inner, i + 1, i + 1), 0 + 1, 0 + 1))); return result end)()
           i = i + 1
         end
       elseif c == "U" then
@@ -2140,10 +2140,10 @@ function Word:ansi_c_to_bytes(inner)
           if codepoint == 0 then
             return result
           end
-          (function() for _, v in ipairs(({string.byte(string.char(codepoint), 1, -1)})) do table.insert(result, v) end; return result end)()
+          ;(function() for _, v in ipairs(({string.byte(string.char(codepoint), 1, -1)})) do table.insert(result, v) end; return result end)()
           i = j
         else
-          (function() table.insert(result, string.byte(string.sub(string.sub(inner, i + 1, i + 1), 0 + 1, 0 + 1))); return result end)()
+          ;(function() table.insert(result, string.byte(string.sub(string.sub(inner, i + 1, i + 1), 0 + 1, 0 + 1))); return result end)()
           i = i + 1
         end
       elseif c == "c" then
@@ -2160,7 +2160,7 @@ function Word:ansi_c_to_bytes(inner)
           self:append_with_ctlesc(result, ctrl_val)
           i = i + 3 + skip_extra
         else
-          (function() table.insert(result, string.byte(string.sub(string.sub(inner, i + 1, i + 1), 0 + 1, 0 + 1))); return result end)()
+          ;(function() table.insert(result, string.byte(string.sub(string.sub(inner, i + 1, i + 1), 0 + 1, 0 + 1))); return result end)()
           i = i + 1
         end
       elseif c == "0" then
@@ -2190,12 +2190,12 @@ function Word:ansi_c_to_bytes(inner)
         self:append_with_ctlesc(result, byte_val)
         i = j
       else
-        (function() table.insert(result, 92); return result end)()
-        (function() table.insert(result, string.byte(string.sub(c, 0 + 1, 0 + 1))); return result end)()
+        ;(function() table.insert(result, 92); return result end)()
+        ;(function() table.insert(result, string.byte(string.sub(c, 0 + 1, 0 + 1))); return result end)()
         i = i + 2
       end
     else
-      (function() for _, v in ipairs(({string.byte(string.sub(inner, i + 1, i + 1), 1, -1)})) do table.insert(result, v) end; return result end)()
+      ;(function() for _, v in ipairs(({string.byte(string.sub(inner, i + 1, i + 1), 1, -1)})) do table.insert(result, v) end; return result end)()
       i = i + 1
     end
   end
@@ -2222,17 +2222,17 @@ function Word:expand_all_ansi_c_quotes(value)
     local ch = string.sub(value, i + 1, i + 1)
     if ch == "`" and not quote.single then
       in_backtick = not in_backtick
-      (function() table.insert(result, ch); return result end)()
+      ;(function() table.insert(result, ch); return result end)()
       i = i + 1
       goto continue
     end
     if in_backtick then
       if ch == "\\" and i + 1 < #value then
-        (function() table.insert(result, ch); return result end)()
-        (function() table.insert(result, string.sub(value, i + 1 + 1, i + 1 + 1)); return result end)()
+        ;(function() table.insert(result, ch); return result end)()
+        ;(function() table.insert(result, string.sub(value, i + 1 + 1, i + 1 + 1)); return result end)()
         i = i + 2
       else
-        (function() table.insert(result, ch); return result end)()
+        ;(function() table.insert(result, ch); return result end)()
         i = i + 1
       end
       goto continue
@@ -2241,12 +2241,12 @@ function Word:expand_all_ansi_c_quotes(value)
       if is_expansion_start(value, i, "${") then
         brace_depth = brace_depth + 1
         quote:push()
-        (function() table.insert(result, "${"); return result end)()
+        ;(function() table.insert(result, "${"); return result end)()
         i = i + 2
         goto continue
       elseif ch == "}" and brace_depth > 0 and not quote.double then
         brace_depth = brace_depth - 1
-        (function() table.insert(result, ch); return result end)()
+        ;(function() table.insert(result, ch); return result end)()
         quote:pop()
         i = i + 1
         goto continue
@@ -2258,15 +2258,15 @@ function Word:expand_all_ansi_c_quotes(value)
       if not is_ansi_c then
         quote.single = not quote.single
       end
-      (function() table.insert(result, ch); return result end)()
+      ;(function() table.insert(result, ch); return result end)()
       i = i + 1
     elseif ch == "\"" and not quote.single then
       quote.double = not quote.double
-      (function() table.insert(result, ch); return result end)()
+      ;(function() table.insert(result, ch); return result end)()
       i = i + 1
     elseif ch == "\\" and i + 1 < #value and not quote.single then
-      (function() table.insert(result, ch); return result end)()
-      (function() table.insert(result, string.sub(value, i + 1 + 1, i + 1 + 1)); return result end)()
+      ;(function() table.insert(result, ch); return result end)()
+      ;(function() table.insert(result, string.sub(value, i + 1 + 1, i + 1 + 1)); return result end)()
       i = i + 2
     elseif starts_with_at(value, i, "$'") and not quote.single and not effective_in_dquote and count_consecutive_dollars_before(value, i) % 2 == 0 then
       local j = i + 2
@@ -2342,10 +2342,10 @@ function Word:expand_all_ansi_c_quotes(value)
           end
         end
       end
-      (function() table.insert(result, expanded); return result end)()
+      ;(function() table.insert(result, expanded); return result end)()
       i = j
     else
-      (function() table.insert(result, ch); return result end)()
+      ;(function() table.insert(result, ch); return result end)()
       i = i + 1
     end
     ::continue::
@@ -2364,53 +2364,53 @@ function Word:strip_locale_string_dollars(value)
   while i < #value do
     local ch = string.sub(value, i + 1, i + 1)
     if ch == "\\" and i + 1 < #value and not quote.single and not brace_quote.single then
-      (function() table.insert(result, ch); return result end)()
-      (function() table.insert(result, string.sub(value, i + 1 + 1, i + 1 + 1)); return result end)()
+      ;(function() table.insert(result, ch); return result end)()
+      ;(function() table.insert(result, string.sub(value, i + 1 + 1, i + 1 + 1)); return result end)()
       i = i + 2
     elseif starts_with_at(value, i, "${") and not quote.single and not brace_quote.single and (i == 0 or string.sub(value, i - 1 + 1, i - 1 + 1) ~= "$") then
       brace_depth = brace_depth + 1
       brace_quote.double = false
       brace_quote.single = false
-      (function() table.insert(result, "$"); return result end)()
-      (function() table.insert(result, "{"); return result end)()
+      ;(function() table.insert(result, "$"); return result end)()
+      ;(function() table.insert(result, "{"); return result end)()
       i = i + 2
     elseif ch == "}" and brace_depth > 0 and not quote.single and not brace_quote.double and not brace_quote.single then
       brace_depth = brace_depth - 1
-      (function() table.insert(result, ch); return result end)()
+      ;(function() table.insert(result, ch); return result end)()
       i = i + 1
     elseif ch == "[" and brace_depth > 0 and not quote.single and not brace_quote.double then
       bracket_depth = bracket_depth + 1
       bracket_in_double_quote = false
-      (function() table.insert(result, ch); return result end)()
+      ;(function() table.insert(result, ch); return result end)()
       i = i + 1
     elseif ch == "]" and bracket_depth > 0 and not quote.single and not bracket_in_double_quote then
       bracket_depth = bracket_depth - 1
-      (function() table.insert(result, ch); return result end)()
+      ;(function() table.insert(result, ch); return result end)()
       i = i + 1
     elseif ch == "'" and not quote.double and brace_depth == 0 then
       quote.single = not quote.single
-      (function() table.insert(result, ch); return result end)()
+      ;(function() table.insert(result, ch); return result end)()
       i = i + 1
     elseif ch == "\"" and not quote.single and brace_depth == 0 then
       quote.double = not quote.double
-      (function() table.insert(result, ch); return result end)()
+      ;(function() table.insert(result, ch); return result end)()
       i = i + 1
     elseif ch == "\"" and not quote.single and bracket_depth > 0 then
       bracket_in_double_quote = not bracket_in_double_quote
-      (function() table.insert(result, ch); return result end)()
+      ;(function() table.insert(result, ch); return result end)()
       i = i + 1
     elseif ch == "\"" and not quote.single and not brace_quote.single and brace_depth > 0 then
       brace_quote.double = not brace_quote.double
-      (function() table.insert(result, ch); return result end)()
+      ;(function() table.insert(result, ch); return result end)()
       i = i + 1
     elseif ch == "'" and not quote.double and not brace_quote.double and brace_depth > 0 then
       brace_quote.single = not brace_quote.single
-      (function() table.insert(result, ch); return result end)()
+      ;(function() table.insert(result, ch); return result end)()
       i = i + 1
     elseif starts_with_at(value, i, "$\"") and not quote.single and not brace_quote.single and (brace_depth > 0 or bracket_depth > 0 or not quote.double) and not brace_quote.double and not bracket_in_double_quote then
       local dollar_count = 1 + count_consecutive_dollars_before(value, i)
       if dollar_count % 2 == 1 then
-        (function() table.insert(result, "\""); return result end)()
+        ;(function() table.insert(result, "\""); return result end)()
         if bracket_depth > 0 then
           bracket_in_double_quote = true
         elseif brace_depth > 0 then
@@ -2420,11 +2420,11 @@ function Word:strip_locale_string_dollars(value)
         end
         i = i + 2
       else
-        (function() table.insert(result, ch); return result end)()
+        ;(function() table.insert(result, ch); return result end)()
         i = i + 1
       end
     else
-      (function() table.insert(result, ch); return result end)()
+      ;(function() table.insert(result, ch); return result end)()
       i = i + 1
     end
   end
@@ -2535,11 +2535,11 @@ function Word:normalize_array_inner(inner)
     local ch = string.sub(inner, i + 1, i + 1)
     if is_whitespace(ch) then
       if not in_whitespace and (#(normalized) > 0) and brace_depth == 0 and bracket_depth == 0 then
-        (function() table.insert(normalized, " "); return normalized end)()
+        ;(function() table.insert(normalized, " "); return normalized end)()
         in_whitespace = true
       end
       if brace_depth > 0 or bracket_depth > 0 then
-        (function() table.insert(normalized, ch); return normalized end)()
+        ;(function() table.insert(normalized, ch); return normalized end)()
       end
       i = i + 1
     elseif ch == "'" then
@@ -2548,7 +2548,7 @@ function Word:normalize_array_inner(inner)
       while j < #inner and string.sub(inner, j + 1, j + 1) ~= "'" do
         j = j + 1
       end
-      (function() table.insert(normalized, substring(inner, i, j + 1)); return normalized end)()
+      ;(function() table.insert(normalized, substring(inner, i, j + 1)); return normalized end)()
       i = j + 1
     elseif ch == "\"" then
       in_whitespace = false
@@ -2560,35 +2560,35 @@ function Word:normalize_array_inner(inner)
           if string.sub(inner, j + 1 + 1, j + 1 + 1) == "\n" then
             j = j + 2
           else
-            (function() table.insert(dq_content, string.sub(inner, j + 1, j + 1)); return dq_content end)()
-            (function() table.insert(dq_content, string.sub(inner, j + 1 + 1, j + 1 + 1)); return dq_content end)()
+            ;(function() table.insert(dq_content, string.sub(inner, j + 1, j + 1)); return dq_content end)()
+            ;(function() table.insert(dq_content, string.sub(inner, j + 1 + 1, j + 1 + 1)); return dq_content end)()
             j = j + 2
           end
         elseif is_expansion_start(inner, j, "${") then
-          (function() table.insert(dq_content, "${"); return dq_content end)()
+          ;(function() table.insert(dq_content, "${"); return dq_content end)()
           dq_brace_depth = dq_brace_depth + 1
           j = j + 2
         elseif string.sub(inner, j + 1, j + 1) == "}" and dq_brace_depth > 0 then
-          (function() table.insert(dq_content, "}"); return dq_content end)()
+          ;(function() table.insert(dq_content, "}"); return dq_content end)()
           dq_brace_depth = dq_brace_depth - 1
           j = j + 1
         elseif string.sub(inner, j + 1, j + 1) == "\"" and dq_brace_depth == 0 then
-          (function() table.insert(dq_content, "\""); return dq_content end)()
+          ;(function() table.insert(dq_content, "\""); return dq_content end)()
           j = j + 1
           break
         else
-          (function() table.insert(dq_content, string.sub(inner, j + 1, j + 1)); return dq_content end)()
+          ;(function() table.insert(dq_content, string.sub(inner, j + 1, j + 1)); return dq_content end)()
           j = j + 1
         end
       end
-      (function() table.insert(normalized, table.concat(dq_content, "")); return normalized end)()
+      ;(function() table.insert(normalized, table.concat(dq_content, "")); return normalized end)()
       i = j
     elseif ch == "\\" and i + 1 < #inner then
       if string.sub(inner, i + 1 + 1, i + 1 + 1) == "\n" then
         i = i + 2
       else
         in_whitespace = false
-        (function() table.insert(normalized, substring(inner, i, i + 2)); return normalized end)()
+        ;(function() table.insert(normalized, substring(inner, i, i + 2)); return normalized end)()
         i = i + 2
       end
     elseif is_expansion_start(inner, i, "$((") then
@@ -2606,7 +2606,7 @@ function Word:normalize_array_inner(inner)
           j = j + 1
         end
       end
-      (function() table.insert(normalized, substring(inner, i, j)); return normalized end)()
+      ;(function() table.insert(normalized, substring(inner, i, j)); return normalized end)()
       i = j
     elseif is_expansion_start(inner, i, "$(") then
       in_whitespace = false
@@ -2638,7 +2638,7 @@ function Word:normalize_array_inner(inner)
         end
         j = j + 1
       end
-      (function() table.insert(normalized, substring(inner, i, j)); return normalized end)()
+      ;(function() table.insert(normalized, substring(inner, i, j)); return normalized end)()
       i = j
     elseif (ch == "<" or ch == ">") and i + 1 < #inner and string.sub(inner, i + 1 + 1, i + 1 + 1) == "(" then
       in_whitespace = false
@@ -2670,19 +2670,19 @@ function Word:normalize_array_inner(inner)
         end
         j = j + 1
       end
-      (function() table.insert(normalized, substring(inner, i, j)); return normalized end)()
+      ;(function() table.insert(normalized, substring(inner, i, j)); return normalized end)()
       i = j
     elseif is_expansion_start(inner, i, "${") then
       in_whitespace = false
-      (function() table.insert(normalized, "${"); return normalized end)()
+      ;(function() table.insert(normalized, "${"); return normalized end)()
       brace_depth = brace_depth + 1
       i = i + 2
     elseif ch == "{" and brace_depth > 0 then
-      (function() table.insert(normalized, ch); return normalized end)()
+      ;(function() table.insert(normalized, ch); return normalized end)()
       brace_depth = brace_depth + 1
       i = i + 1
     elseif ch == "}" and brace_depth > 0 then
-      (function() table.insert(normalized, ch); return normalized end)()
+      ;(function() table.insert(normalized, ch); return normalized end)()
       brace_depth = brace_depth - 1
       i = i + 1
     elseif ch == "#" and brace_depth == 0 and in_whitespace then
@@ -2694,15 +2694,15 @@ function Word:normalize_array_inner(inner)
         bracket_depth = bracket_depth + 1
       end
       in_whitespace = false
-      (function() table.insert(normalized, ch); return normalized end)()
+      ;(function() table.insert(normalized, ch); return normalized end)()
       i = i + 1
     elseif ch == "]" and bracket_depth > 0 then
-      (function() table.insert(normalized, ch); return normalized end)()
+      ;(function() table.insert(normalized, ch); return normalized end)()
       bracket_depth = bracket_depth - 1
       i = i + 1
     else
       in_whitespace = false
-      (function() table.insert(normalized, ch); return normalized end)()
+      ;(function() table.insert(normalized, ch); return normalized end)()
       i = i + 1
     end
   end
@@ -2721,7 +2721,7 @@ function Word:strip_arith_line_continuations(value)
       local first_close_idx = -1
       while i < #value and depth > 0 do
         if string.sub(value, i + 1, i + 1) == "(" then
-          (function() table.insert(arith_content, "("); return arith_content end)()
+          ;(function() table.insert(arith_content, "("); return arith_content end)()
           depth = depth + 1
           i = i + 1
           if depth > 1 then
@@ -2733,7 +2733,7 @@ function Word:strip_arith_line_continuations(value)
           end
           depth = depth - 1
           if depth > 0 then
-            (function() table.insert(arith_content, ")"); return arith_content end)()
+            ;(function() table.insert(arith_content, ")"); return arith_content end)()
           end
           i = i + 1
         elseif string.sub(value, i + 1, i + 1) == "\\" and i + 1 < #value and string.sub(value, i + 1 + 1, i + 1 + 1) == "\n" then
@@ -2747,8 +2747,8 @@ function Word:strip_arith_line_continuations(value)
             j = j - 1
           end
           if num_backslashes % 2 == 1 then
-            (function() table.insert(arith_content, "\\"); return arith_content end)()
-            (function() table.insert(arith_content, "\n"); return arith_content end)()
+            ;(function() table.insert(arith_content, "\\"); return arith_content end)()
+            ;(function() table.insert(arith_content, "\n"); return arith_content end)()
             i = i + 2
           else
             i = i + 2
@@ -2757,7 +2757,7 @@ function Word:strip_arith_line_continuations(value)
             first_close_idx = -1
           end
         else
-          (function() table.insert(arith_content, string.sub(value, i + 1, i + 1)); return arith_content end)()
+          ;(function() table.insert(arith_content, string.sub(value, i + 1, i + 1)); return arith_content end)()
           i = i + 1
           if depth == 1 then
             first_close_idx = -1
@@ -2769,15 +2769,15 @@ function Word:strip_arith_line_continuations(value)
         if first_close_idx ~= -1 then
           content = string.sub(content, 1, first_close_idx)
           local closing = (depth == 0 and "))" or ")")
-          (function() table.insert(result, "$((" .. content .. closing); return result end)()
+          ;(function() table.insert(result, "$((" .. content .. closing); return result end)()
         else
-          (function() table.insert(result, "$((" .. content .. ")"); return result end)()
+          ;(function() table.insert(result, "$((" .. content .. ")"); return result end)()
         end
       else
-        (function() table.insert(result, substring(value, start, i)); return result end)()
+        ;(function() table.insert(result, substring(value, start, i)); return result end)()
       end
     else
-      (function() table.insert(result, string.sub(value, i + 1, i + 1)); return result end)()
+      ;(function() table.insert(result, string.sub(value, i + 1, i + 1)); return result end)()
       i = i + 1
     end
   end
@@ -2788,56 +2788,56 @@ function Word:collect_cmdsubs(node)
   local result = {}
   if type(node) == 'table' then
     local node = node
-    (function() table.insert(result, node); return result end)()
+    ;(function() table.insert(result, node); return result end)()
   elseif type(node) == 'table' then
     local node = node
     for _, elem in ipairs(node.elements) do
       for _, p in ipairs(elem.parts) do
         if type(p) == 'table' then
           local p = p
-          (function() table.insert(result, p); return result end)()
+          ;(function() table.insert(result, p); return result end)()
         else
-          (function() for _, v in ipairs(self:collect_cmdsubs(p)) do table.insert(result, v) end; return result end)()
+          ;(function() for _, v in ipairs(self:collect_cmdsubs(p)) do table.insert(result, v) end; return result end)()
         end
       end
     end
   elseif type(node) == 'table' then
     local node = node
     if (node.expression ~= nil) then
-      (function() for _, v in ipairs(self:collect_cmdsubs(node.expression)) do table.insert(result, v) end; return result end)()
+      ;(function() for _, v in ipairs(self:collect_cmdsubs(node.expression)) do table.insert(result, v) end; return result end)()
     end
   elseif type(node) == 'table' then
     local node = node
-    (function() for _, v in ipairs(self:collect_cmdsubs(node.left)) do table.insert(result, v) end; return result end)()
-    (function() for _, v in ipairs(self:collect_cmdsubs(node.right)) do table.insert(result, v) end; return result end)()
+    ;(function() for _, v in ipairs(self:collect_cmdsubs(node.left)) do table.insert(result, v) end; return result end)()
+    ;(function() for _, v in ipairs(self:collect_cmdsubs(node.right)) do table.insert(result, v) end; return result end)()
   elseif type(node) == 'table' then
     local node = node
-    (function() for _, v in ipairs(self:collect_cmdsubs(node.left)) do table.insert(result, v) end; return result end)()
-    (function() for _, v in ipairs(self:collect_cmdsubs(node.right)) do table.insert(result, v) end; return result end)()
+    ;(function() for _, v in ipairs(self:collect_cmdsubs(node.left)) do table.insert(result, v) end; return result end)()
+    ;(function() for _, v in ipairs(self:collect_cmdsubs(node.right)) do table.insert(result, v) end; return result end)()
   elseif type(node) == 'table' then
     local node = node
-    (function() for _, v in ipairs(self:collect_cmdsubs(node.operand)) do table.insert(result, v) end; return result end)()
+    ;(function() for _, v in ipairs(self:collect_cmdsubs(node.operand)) do table.insert(result, v) end; return result end)()
   elseif type(node) == 'table' then
     local node = node
-    (function() for _, v in ipairs(self:collect_cmdsubs(node.operand)) do table.insert(result, v) end; return result end)()
+    ;(function() for _, v in ipairs(self:collect_cmdsubs(node.operand)) do table.insert(result, v) end; return result end)()
   elseif type(node) == 'table' then
     local node = node
-    (function() for _, v in ipairs(self:collect_cmdsubs(node.operand)) do table.insert(result, v) end; return result end)()
+    ;(function() for _, v in ipairs(self:collect_cmdsubs(node.operand)) do table.insert(result, v) end; return result end)()
   elseif type(node) == 'table' then
     local node = node
-    (function() for _, v in ipairs(self:collect_cmdsubs(node.operand)) do table.insert(result, v) end; return result end)()
+    ;(function() for _, v in ipairs(self:collect_cmdsubs(node.operand)) do table.insert(result, v) end; return result end)()
   elseif type(node) == 'table' then
     local node = node
-    (function() for _, v in ipairs(self:collect_cmdsubs(node.operand)) do table.insert(result, v) end; return result end)()
+    ;(function() for _, v in ipairs(self:collect_cmdsubs(node.operand)) do table.insert(result, v) end; return result end)()
   elseif type(node) == 'table' then
     local node = node
-    (function() for _, v in ipairs(self:collect_cmdsubs(node.condition)) do table.insert(result, v) end; return result end)()
-    (function() for _, v in ipairs(self:collect_cmdsubs(node.if_true)) do table.insert(result, v) end; return result end)()
-    (function() for _, v in ipairs(self:collect_cmdsubs(node.if_false)) do table.insert(result, v) end; return result end)()
+    ;(function() for _, v in ipairs(self:collect_cmdsubs(node.condition)) do table.insert(result, v) end; return result end)()
+    ;(function() for _, v in ipairs(self:collect_cmdsubs(node.if_true)) do table.insert(result, v) end; return result end)()
+    ;(function() for _, v in ipairs(self:collect_cmdsubs(node.if_false)) do table.insert(result, v) end; return result end)()
   elseif type(node) == 'table' then
     local node = node
-    (function() for _, v in ipairs(self:collect_cmdsubs(node.target)) do table.insert(result, v) end; return result end)()
-    (function() for _, v in ipairs(self:collect_cmdsubs(node.value)) do table.insert(result, v) end; return result end)()
+    ;(function() for _, v in ipairs(self:collect_cmdsubs(node.target)) do table.insert(result, v) end; return result end)()
+    ;(function() for _, v in ipairs(self:collect_cmdsubs(node.value)) do table.insert(result, v) end; return result end)()
   end
   return result
 end
@@ -2846,16 +2846,16 @@ function Word:collect_procsubs(node)
   local result = {}
   if type(node) == 'table' then
     local node = node
-    (function() table.insert(result, node); return result end)()
+    ;(function() table.insert(result, node); return result end)()
   elseif type(node) == 'table' then
     local node = node
     for _, elem in ipairs(node.elements) do
       for _, p in ipairs(elem.parts) do
         if type(p) == 'table' then
           local p = p
-          (function() table.insert(result, p); return result end)()
+          ;(function() table.insert(result, p); return result end)()
         else
-          (function() for _, v in ipairs(self:collect_procsubs(p)) do table.insert(result, v) end; return result end)()
+          ;(function() for _, v in ipairs(self:collect_procsubs(p)) do table.insert(result, v) end; return result end)()
         end
       end
     end
@@ -2870,16 +2870,16 @@ function Word:format_command_substitutions(value, in_arith)
   for _, p in ipairs(self.parts) do
     if type(p) == 'table' then
       local p = p
-      (function() table.insert(cmdsub_parts, p); return cmdsub_parts end)()
+      ;(function() table.insert(cmdsub_parts, p); return cmdsub_parts end)()
     elseif type(p) == 'table' then
       local p = p
-      (function() table.insert(procsub_parts, p); return procsub_parts end)()
+      ;(function() table.insert(procsub_parts, p); return procsub_parts end)()
     elseif type(p) == 'table' then
       local p = p
       has_arith = true
     else
-      (function() for _, v in ipairs(self:collect_cmdsubs(p)) do table.insert(cmdsub_parts, v) end; return cmdsub_parts end)()
-      (function() for _, v in ipairs(self:collect_procsubs(p)) do table.insert(procsub_parts, v) end; return procsub_parts end)()
+      ;(function() for _, v in ipairs(self:collect_cmdsubs(p)) do table.insert(cmdsub_parts, v) end; return cmdsub_parts end)()
+      ;(function() for _, v in ipairs(self:collect_procsubs(p)) do table.insert(procsub_parts, v) end; return procsub_parts end)()
     end
   end
   local has_brace_cmdsub = _string_find(value, "${ ") ~= -1 or _string_find(value, "${\t") ~= -1 or _string_find(value, "${\n") ~= -1 or _string_find(value, "${|") ~= -1
@@ -2928,51 +2928,51 @@ function Word:format_command_substitutions(value, in_arith)
   while i < #value do
     if i > 0 and is_extglob_prefix(string.sub(value, i - 1 + 1, i - 1 + 1)) and string.sub(value, i + 1, i + 1) == "(" and not is_backslash_escaped(value, i - 1) then
       extglob_depth = extglob_depth + 1
-      (function() table.insert(result, string.sub(value, i + 1, i + 1)); return result end)()
+      ;(function() table.insert(result, string.sub(value, i + 1, i + 1)); return result end)()
       i = i + 1
       goto continue
     end
     if string.sub(value, i + 1, i + 1) == ")" and extglob_depth > 0 then
       extglob_depth = extglob_depth - 1
-      (function() table.insert(result, string.sub(value, i + 1, i + 1)); return result end)()
+      ;(function() table.insert(result, string.sub(value, i + 1, i + 1)); return result end)()
       i = i + 1
       goto continue
     end
     if starts_with_at(value, i, "$[") and not is_backslash_escaped(value, i) then
       deprecated_arith_depth = deprecated_arith_depth + 1
-      (function() table.insert(result, string.sub(value, i + 1, i + 1)); return result end)()
+      ;(function() table.insert(result, string.sub(value, i + 1, i + 1)); return result end)()
       i = i + 1
       goto continue
     end
     if string.sub(value, i + 1, i + 1) == "]" and deprecated_arith_depth > 0 then
       deprecated_arith_depth = deprecated_arith_depth - 1
-      (function() table.insert(result, string.sub(value, i + 1, i + 1)); return result end)()
+      ;(function() table.insert(result, string.sub(value, i + 1, i + 1)); return result end)()
       i = i + 1
       goto continue
     end
     if is_expansion_start(value, i, "$((") and not is_backslash_escaped(value, i) and has_arith then
       arith_depth = arith_depth + 1
       arith_paren_depth = arith_paren_depth + 2
-      (function() table.insert(result, "$(("); return result end)()
+      ;(function() table.insert(result, "$(("); return result end)()
       i = i + 3
       goto continue
     end
     if arith_depth > 0 and arith_paren_depth == 2 and starts_with_at(value, i, "))") then
       arith_depth = arith_depth - 1
       arith_paren_depth = arith_paren_depth - 2
-      (function() table.insert(result, "))"); return result end)()
+      ;(function() table.insert(result, "))"); return result end)()
       i = i + 2
       goto continue
     end
     if arith_depth > 0 then
       if string.sub(value, i + 1, i + 1) == "(" then
         arith_paren_depth = arith_paren_depth + 1
-        (function() table.insert(result, string.sub(value, i + 1, i + 1)); return result end)()
+        ;(function() table.insert(result, string.sub(value, i + 1, i + 1)); return result end)()
         i = i + 1
         goto continue
       elseif string.sub(value, i + 1, i + 1) == ")" then
         arith_paren_depth = arith_paren_depth - 1
-        (function() table.insert(result, string.sub(value, i + 1, i + 1)); return result end)()
+        ;(function() table.insert(result, string.sub(value, i + 1, i + 1)); return result end)()
         i = i + 1
         goto continue
       end
@@ -2980,7 +2980,7 @@ function Word:format_command_substitutions(value, in_arith)
     local j
     if is_expansion_start(value, i, "$((") and not has_arith then
       j = find_cmdsub_end(value, i + 2)
-      (function() table.insert(result, substring(value, i, j)); return result end)()
+      ;(function() table.insert(result, substring(value, i, j)); return result end)()
       if cmdsub_idx < #cmdsub_parts then
         cmdsub_idx = cmdsub_idx + 1
       end
@@ -2995,7 +2995,7 @@ function Word:format_command_substitutions(value, in_arith)
     if starts_with_at(value, i, "$(") and not starts_with_at(value, i, "$((") and not is_backslash_escaped(value, i) and not is_dollar_dollar_paren(value, i) then
       j = find_cmdsub_end(value, i + 2)
       if extglob_depth > 0 then
-        (function() table.insert(result, substring(value, i, j)); return result end)()
+        ;(function() table.insert(result, substring(value, i, j)); return result end)()
         if cmdsub_idx < #cmdsub_parts then
           cmdsub_idx = cmdsub_idx + 1
         end
@@ -3018,9 +3018,9 @@ function Word:format_command_substitutions(value, in_arith)
         end
       end
       if (string.sub(formatted, 1, #"(") == "(") then
-        (function() table.insert(result, "$( " .. formatted .. ")"); return result end)()
+        ;(function() table.insert(result, "$( " .. formatted .. ")"); return result end)()
       else
-        (function() table.insert(result, "$(" .. formatted .. ")"); return result end)()
+        ;(function() table.insert(result, "$(" .. formatted .. ")"); return result end)()
       end
       i = j
     elseif string.sub(value, i + 1, i + 1) == "`" and cmdsub_idx < #cmdsub_parts then
@@ -3037,7 +3037,7 @@ function Word:format_command_substitutions(value, in_arith)
         j = j + 1
         ::continue::
       end
-      (function() table.insert(result, substring(value, i, j)); return result end)()
+      ;(function() table.insert(result, substring(value, i, j)); return result end)()
       cmdsub_idx = cmdsub_idx + 1
       i = j
     elseif is_expansion_start(value, i, "${") and i + 2 < #value and is_funsub_char(string.sub(value, i + 2 + 1, i + 2 + 1)) and not is_backslash_escaped(value, i) then
@@ -3060,17 +3060,17 @@ function Word:format_command_substitutions(value, in_arith)
         else
           suffix = "; }"
         end
-        (function() table.insert(result, prefix .. formatted .. suffix); return result end)()
+        ;(function() table.insert(result, prefix .. formatted .. suffix); return result end)()
         cmdsub_idx = cmdsub_idx + 1
       else
-        (function() table.insert(result, substring(value, i, j)); return result end)()
+        ;(function() table.insert(result, substring(value, i, j)); return result end)()
       end
       i = j
     elseif (starts_with_at(value, i, ">(") or starts_with_at(value, i, "<(")) and not main_quote.double and deprecated_arith_depth == 0 and arith_depth == 0 then
       local is_procsub = i == 0 or not (string.match(string.sub(value, i - 1 + 1, i - 1 + 1), '^[%w]$') ~= nil) and ((not (string.find("\"'", string.sub(value, i - 1 + 1, i - 1 + 1), 1, true) ~= nil)))
       if extglob_depth > 0 then
         j = find_cmdsub_end(value, i + 2)
-        (function() table.insert(result, substring(value, i, j)); return result end)()
+        ;(function() table.insert(result, substring(value, i, j)); return result end)()
         if procsub_idx < #procsub_parts then
           procsub_idx = procsub_idx + 1
         end
@@ -3098,10 +3098,10 @@ function Word:format_command_substitutions(value, in_arith)
             if (leading_ws ~= nil and #(leading_ws) > 0) then
               local normalized_ws = (string.gsub((string.gsub(leading_ws, "\n", " ")), "\t", " "))
               local spaced = format_cmdsub_node(node.command, 0, false, false, false)
-              (function() table.insert(result, direction .. "(" .. normalized_ws .. spaced .. ")"); return result end)()
+              ;(function() table.insert(result, direction .. "(" .. normalized_ws .. spaced .. ")"); return result end)()
             else
               raw_content = (string.gsub(raw_content, "\\\n", ""))
-              (function() table.insert(result, direction .. "(" .. raw_content .. ")"); return result end)()
+              ;(function() table.insert(result, direction .. "(" .. raw_content .. ")"); return result end)()
             end
             procsub_idx = procsub_idx + 1
             i = j
@@ -3111,10 +3111,10 @@ function Word:format_command_substitutions(value, in_arith)
         raw_content = substring(value, i + 2, j - 1)
         local raw_stripped = (string.gsub(raw_content, "\\\n", ""))
         if starts_with_subshell(node.command) and formatted ~= raw_stripped then
-          (function() table.insert(result, direction .. "(" .. raw_stripped .. ")"); return result end)()
+          ;(function() table.insert(result, direction .. "(" .. raw_stripped .. ")"); return result end)()
         else
           local final_output = direction .. "(" .. formatted .. ")"
-          (function() table.insert(result, final_output); return result end)()
+          ;(function() table.insert(result, final_output); return result end)()
         end
         procsub_idx = procsub_idx + 1
         i = j
@@ -3122,7 +3122,7 @@ function Word:format_command_substitutions(value, in_arith)
         direction = string.sub(value, i + 1, i + 1)
         j = find_cmdsub_end(value, i + 2)
         if j > #value or j > 0 and j <= #value and string.sub(value, j - 1 + 1, j - 1 + 1) ~= ")" then
-          (function() table.insert(result, string.sub(value, i + 1, i + 1)); return result end)()
+          ;(function() table.insert(result, string.sub(value, i + 1, i + 1)); return result end)()
           i = i + 1
           goto continue
         end
@@ -3140,28 +3140,28 @@ function Word:format_command_substitutions(value, in_arith)
         if not _ok then
           formatted = inner
         end
-        (function() table.insert(result, direction .. "(" .. formatted .. ")"); return result end)()
+        ;(function() table.insert(result, direction .. "(" .. formatted .. ")"); return result end)()
         i = j
       elseif is_procsub then
         direction = string.sub(value, i + 1, i + 1)
         j = find_cmdsub_end(value, i + 2)
         if j > #value or j > 0 and j <= #value and string.sub(value, j - 1 + 1, j - 1 + 1) ~= ")" then
-          (function() table.insert(result, string.sub(value, i + 1, i + 1)); return result end)()
+          ;(function() table.insert(result, string.sub(value, i + 1, i + 1)); return result end)()
           i = i + 1
           goto continue
         end
         inner = substring(value, i + 2, j - 1)
         if in_arith then
-          (function() table.insert(result, direction .. "(" .. inner .. ")"); return result end)()
+          ;(function() table.insert(result, direction .. "(" .. inner .. ")"); return result end)()
         elseif (string.gsub(string.gsub(inner, '^[' .. " \t\n\r" .. ']+', ''), '[' .. " \t\n\r" .. ']+$', '') ~= nil and #(string.gsub(string.gsub(inner, '^[' .. " \t\n\r" .. ']+', ''), '[' .. " \t\n\r" .. ']+$', '')) > 0) then
           stripped = string.gsub(inner, '^[' .. " \t" .. ']+', '')
-          (function() table.insert(result, direction .. "(" .. stripped .. ")"); return result end)()
+          ;(function() table.insert(result, direction .. "(" .. stripped .. ")"); return result end)()
         else
-          (function() table.insert(result, direction .. "(" .. inner .. ")"); return result end)()
+          ;(function() table.insert(result, direction .. "(" .. inner .. ")"); return result end)()
         end
         i = j
       else
-        (function() table.insert(result, string.sub(value, i + 1, i + 1)); return result end)()
+        ;(function() table.insert(result, string.sub(value, i + 1, i + 1)); return result end)()
         i = i + 1
       end
     elseif (is_expansion_start(value, i, "${ ") or is_expansion_start(value, i, "${\t") or is_expansion_start(value, i, "${\n") or is_expansion_start(value, i, "${|")) and not is_backslash_escaped(value, i) then
@@ -3178,7 +3178,7 @@ function Word:format_command_substitutions(value, in_arith)
       end
       inner = substring(value, i + 2, j - 1)
       if string.gsub(string.gsub(inner, '^[' .. " \t\n\r" .. ']+', ''), '[' .. " \t\n\r" .. ']+$', '') == "" then
-        (function() table.insert(result, "${ }"); return result end)()
+        ;(function() table.insert(result, "${ }"); return result end)()
       else
         local _ok, _err = pcall(function()
           parser = new_parser(string.gsub(inner, '^[' .. " \t\n|" .. ']+', ''), false, false)
@@ -3194,13 +3194,13 @@ function Word:format_command_substitutions(value, in_arith)
             else
               terminator = "; }"
             end
-            (function() table.insert(result, prefix .. formatted .. terminator); return result end)()
+            ;(function() table.insert(result, prefix .. formatted .. terminator); return result end)()
           else
-            (function() table.insert(result, "${ }"); return result end)()
+            ;(function() table.insert(result, "${ }"); return result end)()
           end
         end)
         if not _ok then
-          (function() table.insert(result, substring(value, i, j)); return result end)()
+          ;(function() table.insert(result, substring(value, i, j)); return result end)()
         end
       end
       i = j
@@ -3240,14 +3240,14 @@ function Word:format_command_substitutions(value, in_arith)
       local formatted_inner = self:format_command_substitutions(inner, false)
       formatted_inner = self:normalize_extglob_whitespace(formatted_inner)
       if depth == 0 then
-        (function() table.insert(result, "${" .. formatted_inner .. "}"); return result end)()
+        ;(function() table.insert(result, "${" .. formatted_inner .. "}"); return result end)()
       else
-        (function() table.insert(result, "${" .. formatted_inner); return result end)()
+        ;(function() table.insert(result, "${" .. formatted_inner); return result end)()
       end
       i = j
     elseif string.sub(value, i + 1, i + 1) == "\"" then
       main_quote.double = not main_quote.double
-      (function() table.insert(result, string.sub(value, i + 1, i + 1)); return result end)()
+      ;(function() table.insert(result, string.sub(value, i + 1, i + 1)); return result end)()
       i = i + 1
     elseif string.sub(value, i + 1, i + 1) == "'" and not main_quote.double then
       j = i + 1
@@ -3257,10 +3257,10 @@ function Word:format_command_substitutions(value, in_arith)
       if j < #value then
         j = j + 1
       end
-      (function() table.insert(result, substring(value, i, j)); return result end)()
+      ;(function() table.insert(result, substring(value, i, j)); return result end)()
       i = j
     else
-      (function() table.insert(result, string.sub(value, i + 1, i + 1)); return result end)()
+      ;(function() table.insert(result, string.sub(value, i + 1, i + 1)); return result end)()
       i = i + 1
     end
     ::continue::
@@ -3276,27 +3276,27 @@ function Word:normalize_extglob_whitespace(value)
   while i < #value do
     if string.sub(value, i + 1, i + 1) == "\"" then
       extglob_quote.double = not extglob_quote.double
-      (function() table.insert(result, string.sub(value, i + 1, i + 1)); return result end)()
+      ;(function() table.insert(result, string.sub(value, i + 1, i + 1)); return result end)()
       i = i + 1
       goto continue
     end
     if starts_with_at(value, i, "$[") and not is_backslash_escaped(value, i) then
       deprecated_arith_depth = deprecated_arith_depth + 1
-      (function() table.insert(result, string.sub(value, i + 1, i + 1)); return result end)()
+      ;(function() table.insert(result, string.sub(value, i + 1, i + 1)); return result end)()
       i = i + 1
       goto continue
     end
     if string.sub(value, i + 1, i + 1) == "]" and deprecated_arith_depth > 0 then
       deprecated_arith_depth = deprecated_arith_depth - 1
-      (function() table.insert(result, string.sub(value, i + 1, i + 1)); return result end)()
+      ;(function() table.insert(result, string.sub(value, i + 1, i + 1)); return result end)()
       i = i + 1
       goto continue
     end
     if i + 1 < #value and string.sub(value, i + 1 + 1, i + 1 + 1) == "(" then
       local prefix_char = string.sub(value, i + 1, i + 1)
       if (((string.find("><", prefix_char, 1, true) ~= nil))) and not extglob_quote.double and deprecated_arith_depth == 0 then
-        (function() table.insert(result, prefix_char); return result end)()
-        (function() table.insert(result, "("); return result end)()
+        ;(function() table.insert(result, prefix_char); return result end)()
+        ;(function() table.insert(result, "("); return result end)()
         i = i + 2
         local depth = 1
         local pattern_parts = {}
@@ -3304,58 +3304,58 @@ function Word:normalize_extglob_whitespace(value)
         local has_pipe = false
         while i < #value and depth > 0 do
           if string.sub(value, i + 1, i + 1) == "\\" and i + 1 < #value then
-            (function() table.insert(current_part, string.sub(value, (i) + 1, i + 2)); return current_part end)()
+            ;(function() table.insert(current_part, string.sub(value, (i) + 1, i + 2)); return current_part end)()
             i = i + 2
             goto continue
           elseif string.sub(value, i + 1, i + 1) == "(" then
             depth = depth + 1
-            (function() table.insert(current_part, string.sub(value, i + 1, i + 1)); return current_part end)()
+            ;(function() table.insert(current_part, string.sub(value, i + 1, i + 1)); return current_part end)()
             i = i + 1
           elseif string.sub(value, i + 1, i + 1) == ")" then
             depth = depth - 1
             if depth == 0 then
               local part_content = table.concat(current_part, "")
               if ((string.find(part_content, "<<", 1, true) ~= nil)) then
-                (function() table.insert(pattern_parts, part_content); return pattern_parts end)()
+                ;(function() table.insert(pattern_parts, part_content); return pattern_parts end)()
               elseif has_pipe then
-                (function() table.insert(pattern_parts, string.gsub(string.gsub(part_content, '^[' .. " \t\n\r" .. ']+', ''), '[' .. " \t\n\r" .. ']+$', '')); return pattern_parts end)()
+                ;(function() table.insert(pattern_parts, string.gsub(string.gsub(part_content, '^[' .. " \t\n\r" .. ']+', ''), '[' .. " \t\n\r" .. ']+$', '')); return pattern_parts end)()
               else
-                (function() table.insert(pattern_parts, part_content); return pattern_parts end)()
+                ;(function() table.insert(pattern_parts, part_content); return pattern_parts end)()
               end
               break
             end
-            (function() table.insert(current_part, string.sub(value, i + 1, i + 1)); return current_part end)()
+            ;(function() table.insert(current_part, string.sub(value, i + 1, i + 1)); return current_part end)()
             i = i + 1
           elseif string.sub(value, i + 1, i + 1) == "|" and depth == 1 then
             if i + 1 < #value and string.sub(value, i + 1 + 1, i + 1 + 1) == "|" then
-              (function() table.insert(current_part, "||"); return current_part end)()
+              ;(function() table.insert(current_part, "||"); return current_part end)()
               i = i + 2
             else
               has_pipe = true
               part_content = table.concat(current_part, "")
               if ((string.find(part_content, "<<", 1, true) ~= nil)) then
-                (function() table.insert(pattern_parts, part_content); return pattern_parts end)()
+                ;(function() table.insert(pattern_parts, part_content); return pattern_parts end)()
               else
-                (function() table.insert(pattern_parts, string.gsub(string.gsub(part_content, '^[' .. " \t\n\r" .. ']+', ''), '[' .. " \t\n\r" .. ']+$', '')); return pattern_parts end)()
+                ;(function() table.insert(pattern_parts, string.gsub(string.gsub(part_content, '^[' .. " \t\n\r" .. ']+', ''), '[' .. " \t\n\r" .. ']+$', '')); return pattern_parts end)()
               end
               current_part = {}
               i = i + 1
             end
           else
-            (function() table.insert(current_part, string.sub(value, i + 1, i + 1)); return current_part end)()
+            ;(function() table.insert(current_part, string.sub(value, i + 1, i + 1)); return current_part end)()
             i = i + 1
           end
           ::continue::
         end
-        (function() table.insert(result, table.concat(pattern_parts, " | ")); return result end)()
+        ;(function() table.insert(result, table.concat(pattern_parts, " | ")); return result end)()
         if depth == 0 then
-          (function() table.insert(result, ")"); return result end)()
+          ;(function() table.insert(result, ")"); return result end)()
           i = i + 1
         end
         goto continue
       end
     end
-    (function() table.insert(result, string.sub(value, i + 1, i + 1)); return result end)()
+    ;(function() table.insert(result, string.sub(value, i + 1, i + 1)); return result end)()
     i = i + 1
     ::continue::
   end
@@ -3392,10 +3392,10 @@ end
 function Command:to_sexp()
   local parts = {}
   for _, w in ipairs(self.words) do
-    (function() table.insert(parts, w:to_sexp()); return parts end)()
+    ;(function() table.insert(parts, w:to_sexp()); return parts end)()
   end
   for _, r in ipairs(self.redirects) do
-    (function() table.insert(parts, r:to_sexp()); return parts end)()
+    ;(function() table.insert(parts, r:to_sexp()); return parts end)()
   end
   local inner = table.concat(parts, " ")
   if not (inner ~= nil and #(inner) > 0) then
@@ -3435,7 +3435,7 @@ function Pipeline:to_sexp()
       goto continue
     end
     local needs_redirect = i + 1 < #self.commands and self.commands[i + 1 + 1].kind == "pipe-both"
-    (function() table.insert(cmds, {cmd, needs_redirect}); return cmds end)()
+    ;(function() table.insert(cmds, {cmd, needs_redirect}); return cmds end)()
     i = i + 1
     ::continue::
   end
@@ -3474,12 +3474,12 @@ function Pipeline:cmd_sexp(cmd, needs_redirect)
     local cmd = cmd
     local parts = {}
     for _, w in ipairs(cmd.words) do
-      (function() table.insert(parts, w:to_sexp()); return parts end)()
+      ;(function() table.insert(parts, w:to_sexp()); return parts end)()
     end
     for _, r in ipairs(cmd.redirects) do
-      (function() table.insert(parts, r:to_sexp()); return parts end)()
+      ;(function() table.insert(parts, r:to_sexp()); return parts end)()
     end
-    (function() table.insert(parts, "(redirect \">&\" 1)"); return parts end)()
+    ;(function() table.insert(parts, "(redirect \">&\" 1)"); return parts end)()
     return "(command " .. table.concat(parts, " ") .. ")"
   end
   return cmd:to_sexp()
@@ -3546,7 +3546,7 @@ function List:to_sexp_with_precedence(parts, op_names)
   local semi_positions = {}
   for i = 0, #parts - 1 do
     if parts[i + 1].kind == "operator" and (parts[i + 1].op == ";" or parts[i + 1].op == "\n") then
-      (function() table.insert(semi_positions, i); return semi_positions end)()
+      ;(function() table.insert(semi_positions, i); return semi_positions end)()
     end
   end
   if (#(semi_positions) > 0) then
@@ -3556,13 +3556,13 @@ function List:to_sexp_with_precedence(parts, op_names)
     for _, pos in ipairs(semi_positions) do
       seg = sublist(parts, start, pos)
       if (#(seg) > 0) and seg[0 + 1].kind ~= "operator" then
-        (function() table.insert(segments, seg); return segments end)()
+        ;(function() table.insert(segments, seg); return segments end)()
       end
       start = pos + 1
     end
     seg = sublist(parts, start, #parts)
     if (#(seg) > 0) and seg[0 + 1].kind ~= "operator" then
-      (function() table.insert(segments, seg); return segments end)()
+      ;(function() table.insert(segments, seg); return segments end)()
     end
     if not (#(segments) > 0) then
       return "()"
@@ -3586,7 +3586,7 @@ function List:to_sexp_amp_and_higher(parts, op_names)
   local i = 1
   while i < #parts - 1 do
     if parts[i + 1].kind == "operator" and parts[i + 1].op == "&" then
-      (function() table.insert(amp_positions, i); return amp_positions end)()
+      ;(function() table.insert(amp_positions, i); return amp_positions end)()
     end
     i = i + 2
   end
@@ -3594,10 +3594,10 @@ function List:to_sexp_amp_and_higher(parts, op_names)
     local segments = {}
     local start = 0
     for _, pos in ipairs(amp_positions) do
-      (function() table.insert(segments, sublist(parts, start, pos)); return segments end)()
+      ;(function() table.insert(segments, sublist(parts, start, pos)); return segments end)()
       start = pos + 1
     end
-    (function() table.insert(segments, sublist(parts, start, #parts)); return segments end)()
+    ;(function() table.insert(segments, sublist(parts, start, #parts)); return segments end)()
     local result = self:to_sexp_and_or(segments[0 + 1], op_names)
     i = 1
     while i < #segments do
@@ -3982,7 +3982,7 @@ function For:to_sexp()
   if (#(self.redirects) > 0) then
     local redirect_parts = {}
     for _, r in ipairs(self.redirects) do
-      (function() table.insert(redirect_parts, r:to_sexp()); return redirect_parts end)()
+      ;(function() table.insert(redirect_parts, r:to_sexp()); return redirect_parts end)()
     end
     suffix = " " .. table.concat(redirect_parts, " ")
   end
@@ -3996,7 +3996,7 @@ function For:to_sexp()
   else
     local word_parts = {}
     for _, w in ipairs(self.words) do
-      (function() table.insert(word_parts, w:to_sexp()); return word_parts end)()
+      ;(function() table.insert(word_parts, w:to_sexp()); return word_parts end)()
     end
     local word_strs = table.concat(word_parts, " ")
     return "(for (word \"" .. var_escaped .. "\") (in " .. word_strs .. ") " .. self.body:to_sexp() .. ")" .. suffix
@@ -4032,7 +4032,7 @@ function ForArith:to_sexp()
   if (#(self.redirects) > 0) then
     local redirect_parts = {}
     for _, r in ipairs(self.redirects) do
-      (function() table.insert(redirect_parts, r:to_sexp()); return redirect_parts end)()
+      ;(function() table.insert(redirect_parts, r:to_sexp()); return redirect_parts end)()
     end
     suffix = " " .. table.concat(redirect_parts, " ")
   end
@@ -4073,7 +4073,7 @@ function Select:to_sexp()
   if (#(self.redirects) > 0) then
     local redirect_parts = {}
     for _, r in ipairs(self.redirects) do
-      (function() table.insert(redirect_parts, r:to_sexp()); return redirect_parts end)()
+      ;(function() table.insert(redirect_parts, r:to_sexp()); return redirect_parts end)()
     end
     suffix = " " .. table.concat(redirect_parts, " ")
   end
@@ -4082,7 +4082,7 @@ function Select:to_sexp()
   if (self.words ~= nil) then
     local word_parts = {}
     for _, w in ipairs(self.words) do
-      (function() table.insert(word_parts, w:to_sexp()); return word_parts end)()
+      ;(function() table.insert(word_parts, w:to_sexp()); return word_parts end)()
     end
     local word_strs = table.concat(word_parts, " ")
     if (self.words ~= nil and #(self.words) > 0) then
@@ -4118,9 +4118,9 @@ end
 
 function Case:to_sexp()
   local parts = {}
-  (function() table.insert(parts, "(case " .. self.word:to_sexp()); return parts end)()
+  ;(function() table.insert(parts, "(case " .. self.word:to_sexp()); return parts end)()
   for _, p in ipairs(self.patterns) do
-    (function() table.insert(parts, p:to_sexp()); return parts end)()
+    ;(function() table.insert(parts, p:to_sexp()); return parts end)()
   end
   local base = table.concat(parts, " ") .. ")"
   return append_redirects(base, self.redirects)
@@ -4154,60 +4154,60 @@ function CasePattern:to_sexp()
   while i < #self.pattern do
     local ch = string.sub(self.pattern, i + 1, i + 1)
     if ch == "\\" and i + 1 < #self.pattern then
-      (function() table.insert(current, substring(self.pattern, i, i + 2)); return current end)()
+      ;(function() table.insert(current, substring(self.pattern, i, i + 2)); return current end)()
       i = i + 2
     elseif (ch == "@" or ch == "?" or ch == "*" or ch == "+" or ch == "!") and i + 1 < #self.pattern and string.sub(self.pattern, i + 1 + 1, i + 1 + 1) == "(" then
-      (function() table.insert(current, ch); return current end)()
-      (function() table.insert(current, "("); return current end)()
+      ;(function() table.insert(current, ch); return current end)()
+      ;(function() table.insert(current, "("); return current end)()
       depth = depth + 1
       i = i + 2
     elseif is_expansion_start(self.pattern, i, "$(") then
-      (function() table.insert(current, ch); return current end)()
-      (function() table.insert(current, "("); return current end)()
+      ;(function() table.insert(current, ch); return current end)()
+      ;(function() table.insert(current, "("); return current end)()
       depth = depth + 1
       i = i + 2
     elseif ch == "(" and depth > 0 then
-      (function() table.insert(current, ch); return current end)()
+      ;(function() table.insert(current, ch); return current end)()
       depth = depth + 1
       i = i + 1
     elseif ch == ")" and depth > 0 then
-      (function() table.insert(current, ch); return current end)()
+      ;(function() table.insert(current, ch); return current end)()
       depth = depth - 1
       i = i + 1
     elseif ch == "[" then
       local result0, result1, result2 = table.unpack(consume_bracket_class(self.pattern, i, depth))
       i = result0
-      (function() for _, v in ipairs(result1) do table.insert(current, v) end; return current end)()
+      ;(function() for _, v in ipairs(result1) do table.insert(current, v) end; return current end)()
     elseif ch == "'" and depth == 0 then
       result0, result1 = table.unpack(consume_single_quote(self.pattern, i))
       i = result0
-      (function() for _, v in ipairs(result1) do table.insert(current, v) end; return current end)()
+      ;(function() for _, v in ipairs(result1) do table.insert(current, v) end; return current end)()
     elseif ch == "\"" and depth == 0 then
       result0, result1 = table.unpack(consume_double_quote(self.pattern, i))
       i = result0
-      (function() for _, v in ipairs(result1) do table.insert(current, v) end; return current end)()
+      ;(function() for _, v in ipairs(result1) do table.insert(current, v) end; return current end)()
     elseif ch == "|" and depth == 0 then
-      (function() table.insert(alternatives, table.concat(current, "")); return alternatives end)()
+      ;(function() table.insert(alternatives, table.concat(current, "")); return alternatives end)()
       current = {}
       i = i + 1
     else
-      (function() table.insert(current, ch); return current end)()
+      ;(function() table.insert(current, ch); return current end)()
       i = i + 1
     end
   end
-  (function() table.insert(alternatives, table.concat(current, "")); return alternatives end)()
+  ;(function() table.insert(alternatives, table.concat(current, "")); return alternatives end)()
   local word_list = {}
   for _, alt in ipairs(alternatives) do
-    (function() table.insert(word_list, Word:new(alt, nil, "word"):to_sexp()); return word_list end)()
+    ;(function() table.insert(word_list, Word:new(alt, nil, "word"):to_sexp()); return word_list end)()
   end
   local pattern_str = table.concat(word_list, " ")
   local parts = {"(pattern (" .. pattern_str .. ")"}
   if (self.body ~= nil) then
-    (function() table.insert(parts, " " .. self.body:to_sexp()); return parts end)()
+    ;(function() table.insert(parts, " " .. self.body:to_sexp()); return parts end)()
   else
-    (function() table.insert(parts, " ()"); return parts end)()
+    ;(function() table.insert(parts, " ()"); return parts end)()
   end
-  (function() table.insert(parts, ")"); return parts end)()
+  ;(function() table.insert(parts, ")"); return parts end)()
   return table.concat(parts, "")
 end
 
@@ -4401,7 +4401,7 @@ function ArithmeticCommand:to_sexp()
   if (#(self.redirects) > 0) then
     local redirect_parts = {}
     for _, r in ipairs(self.redirects) do
-      (function() table.insert(redirect_parts, r:to_sexp()); return redirect_parts end)()
+      ;(function() table.insert(redirect_parts, r:to_sexp()); return redirect_parts end)()
     end
     local redirect_sexps = table.concat(redirect_parts, " ")
     return result .. " " .. redirect_sexps
@@ -4745,7 +4745,7 @@ end
 function ArithConcat:to_sexp()
   local sexps = {}
   for _, p in ipairs(self.parts) do
-    (function() table.insert(sexps, p:to_sexp()); return sexps end)()
+    ;(function() table.insert(sexps, p:to_sexp()); return sexps end)()
   end
   return "(arith-concat " .. table.concat(sexps, " ") .. ")"
 end
@@ -4900,7 +4900,7 @@ function ConditionalExpr:to_sexp()
   if (#(self.redirects) > 0) then
     local redirect_parts = {}
     for _, r in ipairs(self.redirects) do
-      (function() table.insert(redirect_parts, r:to_sexp()); return redirect_parts end)()
+      ;(function() table.insert(redirect_parts, r:to_sexp()); return redirect_parts end)()
     end
     local redirect_sexps = table.concat(redirect_parts, " ")
     return result .. " " .. redirect_sexps
@@ -5063,7 +5063,7 @@ function Array:to_sexp()
   end
   local parts = {}
   for _, e in ipairs(self.elements) do
-    (function() table.insert(parts, e:to_sexp()); return parts end)()
+    ;(function() table.insert(parts, e:to_sexp()); return parts end)()
   end
   local inner = table.concat(parts, " ")
   return "(array " .. inner .. ")"
@@ -5468,7 +5468,7 @@ function Parser:collect_redirects()
     if (redirect == nil) then
       break
     end
-    (function() table.insert(redirects, redirect); return redirects end)()
+    ;(function() table.insert(redirects, redirect); return redirects end)()
   end
   return ((#(redirects) > 0) and redirects or nil)
 end
@@ -5512,11 +5512,11 @@ function Parser:peek_word()
       break
     end
     if ch == "\\" and self.pos + 1 < self.length then
-      (function() table.insert(chars, self:advance()); return chars end)()
-      (function() table.insert(chars, self:advance()); return chars end)()
+      ;(function() table.insert(chars, self:advance()); return chars end)()
+      ;(function() table.insert(chars, self:advance()); return chars end)()
       goto continue
     end
-    (function() table.insert(chars, self:advance()); return chars end)()
+    ;(function() table.insert(chars, self:advance()); return chars end)()
     ::continue::
   end
   local word
@@ -5563,7 +5563,7 @@ function Parser:is_word_terminator(ctx, ch, bracket_depth, paren_depth)
 end
 
 function Parser:scan_double_quote(chars, parts, start, handle_line_continuation)
-  (function() table.insert(chars, "\""); return chars end)()
+  ;(function() table.insert(chars, "\""); return chars end)()
   while not self:at_end() and self:peek() ~= "\"" do
     local c = self:peek()
     if c == "\\" and self.pos + 1 < self.length then
@@ -5572,21 +5572,21 @@ function Parser:scan_double_quote(chars, parts, start, handle_line_continuation)
         self:advance()
         self:advance()
       else
-        (function() table.insert(chars, self:advance()); return chars end)()
-        (function() table.insert(chars, self:advance()); return chars end)()
+        ;(function() table.insert(chars, self:advance()); return chars end)()
+        ;(function() table.insert(chars, self:advance()); return chars end)()
       end
     elseif c == "$" then
       if not self:parse_dollar_expansion(chars, parts, true) then
-        (function() table.insert(chars, self:advance()); return chars end)()
+        ;(function() table.insert(chars, self:advance()); return chars end)()
       end
     else
-      (function() table.insert(chars, self:advance()); return chars end)()
+      ;(function() table.insert(chars, self:advance()); return chars end)()
     end
   end
   if self:at_end() then
     error({ParseError = true, message = "Unterminated double quote", pos = start})
   end
-  (function() table.insert(chars, self:advance()); return chars end)()
+  ;(function() table.insert(chars, self:advance()); return chars end)()
 end
 
 function Parser:parse_dollar_expansion(chars, parts, in_dquote)
@@ -5595,14 +5595,14 @@ function Parser:parse_dollar_expansion(chars, parts, in_dquote)
   if self.pos + 2 < self.length and string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) == "(" and string.sub(self.source, self.pos + 2 + 1, self.pos + 2 + 1) == "(" then
     result0, result1 = table.unpack(self:parse_arithmetic_expansion())
     if (result0 ~= nil) then
-      (function() table.insert(parts, result0); return parts end)()
-      (function() table.insert(chars, result1); return chars end)()
+      ;(function() table.insert(parts, result0); return parts end)()
+      ;(function() table.insert(chars, result1); return chars end)()
       return true
     end
     result0, result1 = table.unpack(self:parse_command_substitution())
     if (result0 ~= nil) then
-      (function() table.insert(parts, result0); return parts end)()
-      (function() table.insert(chars, result1); return chars end)()
+      ;(function() table.insert(parts, result0); return parts end)()
+      ;(function() table.insert(chars, result1); return chars end)()
       return true
     end
     return false
@@ -5610,8 +5610,8 @@ function Parser:parse_dollar_expansion(chars, parts, in_dquote)
   if self.pos + 1 < self.length and string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) == "[" then
     result0, result1 = table.unpack(self:parse_deprecated_arithmetic())
     if (result0 ~= nil) then
-      (function() table.insert(parts, result0); return parts end)()
-      (function() table.insert(chars, result1); return chars end)()
+      ;(function() table.insert(parts, result0); return parts end)()
+      ;(function() table.insert(chars, result1); return chars end)()
       return true
     end
     return false
@@ -5619,16 +5619,16 @@ function Parser:parse_dollar_expansion(chars, parts, in_dquote)
   if self.pos + 1 < self.length and string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) == "(" then
     result0, result1 = table.unpack(self:parse_command_substitution())
     if (result0 ~= nil) then
-      (function() table.insert(parts, result0); return parts end)()
-      (function() table.insert(chars, result1); return chars end)()
+      ;(function() table.insert(parts, result0); return parts end)()
+      ;(function() table.insert(chars, result1); return chars end)()
       return true
     end
     return false
   end
   result0, result1 = table.unpack(self:parse_param_expansion(in_dquote))
   if (result0 ~= nil) then
-    (function() table.insert(parts, result0); return parts end)()
-    (function() table.insert(chars, result1); return chars end)()
+    ;(function() table.insert(parts, result0); return parts end)()
+    ;(function() table.insert(chars, result1); return chars end)()
     return true
   end
   return false
@@ -5745,13 +5745,13 @@ function Parser:parse_backtick_substitution()
       if check_line == current_heredoc_delim then
         for _ = 1, #line do
           local ch = string.sub(line, _, _)
-          (function() table.insert(content_chars, ch); return content_chars end)()
-          (function() table.insert(text_chars, ch); return text_chars end)()
+          ;(function() table.insert(content_chars, ch); return content_chars end)()
+          ;(function() table.insert(text_chars, ch); return text_chars end)()
         end
         self.pos = line_end
         if self.pos < self.length and string.sub(self.source, self.pos + 1, self.pos + 1) == "\n" then
-          (function() table.insert(content_chars, "\n"); return content_chars end)()
-          (function() table.insert(text_chars, "\n"); return text_chars end)()
+          ;(function() table.insert(content_chars, "\n"); return content_chars end)()
+          ;(function() table.insert(text_chars, "\n"); return text_chars end)()
           self:advance()
         end
         in_heredoc_body = false
@@ -5763,8 +5763,8 @@ function Parser:parse_backtick_substitution()
         local tabs_stripped = #line - #check_line
         local end_pos = tabs_stripped + #current_heredoc_delim
         for i = 0, end_pos - 1 do
-          (function() table.insert(content_chars, string.sub(line, i + 1, i + 1)); return content_chars end)()
-          (function() table.insert(text_chars, string.sub(line, i + 1, i + 1)); return text_chars end)()
+          ;(function() table.insert(content_chars, string.sub(line, i + 1, i + 1)); return content_chars end)()
+          ;(function() table.insert(text_chars, string.sub(line, i + 1, i + 1)); return text_chars end)()
         end
         self.pos = line_start + end_pos
         in_heredoc_body = false
@@ -5775,13 +5775,13 @@ function Parser:parse_backtick_substitution()
       else
         for _ = 1, #line do
           local ch = string.sub(line, _, _)
-          (function() table.insert(content_chars, ch); return content_chars end)()
-          (function() table.insert(text_chars, ch); return text_chars end)()
+          ;(function() table.insert(content_chars, ch); return content_chars end)()
+          ;(function() table.insert(text_chars, ch); return text_chars end)()
         end
         self.pos = line_end
         if self.pos < self.length and string.sub(self.source, self.pos + 1, self.pos + 1) == "\n" then
-          (function() table.insert(content_chars, "\n"); return content_chars end)()
-          (function() table.insert(text_chars, "\n"); return text_chars end)()
+          ;(function() table.insert(content_chars, "\n"); return content_chars end)()
+          ;(function() table.insert(text_chars, "\n"); return text_chars end)()
           self:advance()
         end
       end
@@ -5796,80 +5796,80 @@ function Parser:parse_backtick_substitution()
       elseif is_escape_char_in_backtick(next_c) then
         self:advance()
         local escaped = self:advance()
-        (function() table.insert(content_chars, escaped); return content_chars end)()
-        (function() table.insert(text_chars, "\\"); return text_chars end)()
-        (function() table.insert(text_chars, escaped); return text_chars end)()
+        ;(function() table.insert(content_chars, escaped); return content_chars end)()
+        ;(function() table.insert(text_chars, "\\"); return text_chars end)()
+        ;(function() table.insert(text_chars, escaped); return text_chars end)()
       else
         ch = self:advance()
-        (function() table.insert(content_chars, ch); return content_chars end)()
-        (function() table.insert(text_chars, ch); return text_chars end)()
+        ;(function() table.insert(content_chars, ch); return content_chars end)()
+        ;(function() table.insert(text_chars, ch); return text_chars end)()
       end
       goto continue
     end
     if c == "<" and self.pos + 1 < self.length and string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) == "<" then
       local quote
       if self.pos + 2 < self.length and string.sub(self.source, self.pos + 2 + 1, self.pos + 2 + 1) == "<" then
-        (function() table.insert(content_chars, self:advance()); return content_chars end)()
-        (function() table.insert(text_chars, "<"); return text_chars end)()
-        (function() table.insert(content_chars, self:advance()); return content_chars end)()
-        (function() table.insert(text_chars, "<"); return text_chars end)()
-        (function() table.insert(content_chars, self:advance()); return content_chars end)()
-        (function() table.insert(text_chars, "<"); return text_chars end)()
+        ;(function() table.insert(content_chars, self:advance()); return content_chars end)()
+        ;(function() table.insert(text_chars, "<"); return text_chars end)()
+        ;(function() table.insert(content_chars, self:advance()); return content_chars end)()
+        ;(function() table.insert(text_chars, "<"); return text_chars end)()
+        ;(function() table.insert(content_chars, self:advance()); return content_chars end)()
+        ;(function() table.insert(text_chars, "<"); return text_chars end)()
         while not self:at_end() and is_whitespace_no_newline(self:peek()) do
           ch = self:advance()
-          (function() table.insert(content_chars, ch); return content_chars end)()
-          (function() table.insert(text_chars, ch); return text_chars end)()
+          ;(function() table.insert(content_chars, ch); return content_chars end)()
+          ;(function() table.insert(text_chars, ch); return text_chars end)()
         end
         while not self:at_end() and not is_whitespace(self:peek()) and ((not (string.find("()", self:peek(), 1, true) ~= nil))) do
           if self:peek() == "\\" and self.pos + 1 < self.length then
             ch = self:advance()
-            (function() table.insert(content_chars, ch); return content_chars end)()
-            (function() table.insert(text_chars, ch); return text_chars end)()
+            ;(function() table.insert(content_chars, ch); return content_chars end)()
+            ;(function() table.insert(text_chars, ch); return text_chars end)()
             ch = self:advance()
-            (function() table.insert(content_chars, ch); return content_chars end)()
-            (function() table.insert(text_chars, ch); return text_chars end)()
+            ;(function() table.insert(content_chars, ch); return content_chars end)()
+            ;(function() table.insert(text_chars, ch); return text_chars end)()
           elseif ((string.find("\"'", self:peek(), 1, true) ~= nil)) then
             quote = self:peek()
             ch = self:advance()
-            (function() table.insert(content_chars, ch); return content_chars end)()
-            (function() table.insert(text_chars, ch); return text_chars end)()
+            ;(function() table.insert(content_chars, ch); return content_chars end)()
+            ;(function() table.insert(text_chars, ch); return text_chars end)()
             while not self:at_end() and self:peek() ~= quote do
               if quote == "\"" and self:peek() == "\\" then
                 ch = self:advance()
-                (function() table.insert(content_chars, ch); return content_chars end)()
-                (function() table.insert(text_chars, ch); return text_chars end)()
+                ;(function() table.insert(content_chars, ch); return content_chars end)()
+                ;(function() table.insert(text_chars, ch); return text_chars end)()
               end
               ch = self:advance()
-              (function() table.insert(content_chars, ch); return content_chars end)()
-              (function() table.insert(text_chars, ch); return text_chars end)()
+              ;(function() table.insert(content_chars, ch); return content_chars end)()
+              ;(function() table.insert(text_chars, ch); return text_chars end)()
             end
             if not self:at_end() then
               ch = self:advance()
-              (function() table.insert(content_chars, ch); return content_chars end)()
-              (function() table.insert(text_chars, ch); return text_chars end)()
+              ;(function() table.insert(content_chars, ch); return content_chars end)()
+              ;(function() table.insert(text_chars, ch); return text_chars end)()
             end
           else
             ch = self:advance()
-            (function() table.insert(content_chars, ch); return content_chars end)()
-            (function() table.insert(text_chars, ch); return text_chars end)()
+            ;(function() table.insert(content_chars, ch); return content_chars end)()
+            ;(function() table.insert(text_chars, ch); return text_chars end)()
           end
         end
         goto continue
       end
-      (function() table.insert(content_chars, self:advance()); return content_chars end)()
-      (function() table.insert(text_chars, "<"); return text_chars end)()
-      (function() table.insert(content_chars, self:advance()); return content_chars end)()
-      (function() table.insert(text_chars, "<"); return text_chars end)()
+      ;(function() table.insert(content_chars, self:advance()); return content_chars end)()
+      ;(function() table.insert(text_chars, "<"); return text_chars end)()
+      ;(function() table.insert(content_chars, self:advance()); return content_chars end)()
+      ;(function() table.insert(text_chars, "<"); return text_chars end)()
       local strip_tabs = false
       if not self:at_end() and self:peek() == "-" then
         strip_tabs = true
-        (function() table.insert(content_chars, self:advance()); return content_chars end)()
-        (function() table.insert(text_chars, "-"); return text_chars end)()
+        ;(function() table.insert(content_chars, self:advance()); return content_chars end)()
+        ;(function() table.insert(text_chars, "-"); return text_chars end)()
       end
       while not self:at_end() and is_whitespace_no_newline(self:peek()) do
         ch = self:advance()
-        (function() table.insert(content_chars, ch); return content_chars end)()
-        (function() table.insert(text_chars, ch); return text_chars end)()
+        ;(function() table.insert(content_chars, ch); return content_chars end)()
+        ;(function() table.insert(text_chars, ch); return text_chars end)()
       end
       local delimiter_chars = {}
       if not self:at_end() then
@@ -5878,82 +5878,82 @@ function Parser:parse_backtick_substitution()
         local closing
         if is_quote(ch) then
           quote = self:advance()
-          (function() table.insert(content_chars, quote); return content_chars end)()
-          (function() table.insert(text_chars, quote); return text_chars end)()
+          ;(function() table.insert(content_chars, quote); return content_chars end)()
+          ;(function() table.insert(text_chars, quote); return text_chars end)()
           while not self:at_end() and self:peek() ~= quote do
             dch = self:advance()
-            (function() table.insert(content_chars, dch); return content_chars end)()
-            (function() table.insert(text_chars, dch); return text_chars end)()
-            (function() table.insert(delimiter_chars, dch); return delimiter_chars end)()
+            ;(function() table.insert(content_chars, dch); return content_chars end)()
+            ;(function() table.insert(text_chars, dch); return text_chars end)()
+            ;(function() table.insert(delimiter_chars, dch); return delimiter_chars end)()
           end
           if not self:at_end() then
             closing = self:advance()
-            (function() table.insert(content_chars, closing); return content_chars end)()
-            (function() table.insert(text_chars, closing); return text_chars end)()
+            ;(function() table.insert(content_chars, closing); return content_chars end)()
+            ;(function() table.insert(text_chars, closing); return text_chars end)()
           end
         elseif ch == "\\" then
           local esc = self:advance()
-          (function() table.insert(content_chars, esc); return content_chars end)()
-          (function() table.insert(text_chars, esc); return text_chars end)()
+          ;(function() table.insert(content_chars, esc); return content_chars end)()
+          ;(function() table.insert(text_chars, esc); return text_chars end)()
           if not self:at_end() then
             dch = self:advance()
-            (function() table.insert(content_chars, dch); return content_chars end)()
-            (function() table.insert(text_chars, dch); return text_chars end)()
-            (function() table.insert(delimiter_chars, dch); return delimiter_chars end)()
+            ;(function() table.insert(content_chars, dch); return content_chars end)()
+            ;(function() table.insert(text_chars, dch); return text_chars end)()
+            ;(function() table.insert(delimiter_chars, dch); return delimiter_chars end)()
           end
           while not self:at_end() and not is_metachar(self:peek()) do
             dch = self:advance()
-            (function() table.insert(content_chars, dch); return content_chars end)()
-            (function() table.insert(text_chars, dch); return text_chars end)()
-            (function() table.insert(delimiter_chars, dch); return delimiter_chars end)()
+            ;(function() table.insert(content_chars, dch); return content_chars end)()
+            ;(function() table.insert(text_chars, dch); return text_chars end)()
+            ;(function() table.insert(delimiter_chars, dch); return delimiter_chars end)()
           end
         else
           while not self:at_end() and not is_metachar(self:peek()) and self:peek() ~= "`" do
             ch = self:peek()
             if is_quote(ch) then
               quote = self:advance()
-              (function() table.insert(content_chars, quote); return content_chars end)()
-              (function() table.insert(text_chars, quote); return text_chars end)()
+              ;(function() table.insert(content_chars, quote); return content_chars end)()
+              ;(function() table.insert(text_chars, quote); return text_chars end)()
               while not self:at_end() and self:peek() ~= quote do
                 dch = self:advance()
-                (function() table.insert(content_chars, dch); return content_chars end)()
-                (function() table.insert(text_chars, dch); return text_chars end)()
-                (function() table.insert(delimiter_chars, dch); return delimiter_chars end)()
+                ;(function() table.insert(content_chars, dch); return content_chars end)()
+                ;(function() table.insert(text_chars, dch); return text_chars end)()
+                ;(function() table.insert(delimiter_chars, dch); return delimiter_chars end)()
               end
               if not self:at_end() then
                 closing = self:advance()
-                (function() table.insert(content_chars, closing); return content_chars end)()
-                (function() table.insert(text_chars, closing); return text_chars end)()
+                ;(function() table.insert(content_chars, closing); return content_chars end)()
+                ;(function() table.insert(text_chars, closing); return text_chars end)()
               end
             elseif ch == "\\" then
               esc = self:advance()
-              (function() table.insert(content_chars, esc); return content_chars end)()
-              (function() table.insert(text_chars, esc); return text_chars end)()
+              ;(function() table.insert(content_chars, esc); return content_chars end)()
+              ;(function() table.insert(text_chars, esc); return text_chars end)()
               if not self:at_end() then
                 dch = self:advance()
-                (function() table.insert(content_chars, dch); return content_chars end)()
-                (function() table.insert(text_chars, dch); return text_chars end)()
-                (function() table.insert(delimiter_chars, dch); return delimiter_chars end)()
+                ;(function() table.insert(content_chars, dch); return content_chars end)()
+                ;(function() table.insert(text_chars, dch); return text_chars end)()
+                ;(function() table.insert(delimiter_chars, dch); return delimiter_chars end)()
               end
             else
               dch = self:advance()
-              (function() table.insert(content_chars, dch); return content_chars end)()
-              (function() table.insert(text_chars, dch); return text_chars end)()
-              (function() table.insert(delimiter_chars, dch); return delimiter_chars end)()
+              ;(function() table.insert(content_chars, dch); return content_chars end)()
+              ;(function() table.insert(text_chars, dch); return text_chars end)()
+              ;(function() table.insert(delimiter_chars, dch); return delimiter_chars end)()
             end
           end
         end
       end
       local delimiter = table.concat(delimiter_chars, "")
       if (delimiter ~= nil and #(delimiter) > 0) then
-        (function() table.insert(pending_heredocs, {delimiter, strip_tabs}); return pending_heredocs end)()
+        ;(function() table.insert(pending_heredocs, {delimiter, strip_tabs}); return pending_heredocs end)()
       end
       goto continue
     end
     if c == "\n" then
       ch = self:advance()
-      (function() table.insert(content_chars, ch); return content_chars end)()
-      (function() table.insert(text_chars, ch); return text_chars end)()
+      ;(function() table.insert(content_chars, ch); return content_chars end)()
+      ;(function() table.insert(text_chars, ch); return text_chars end)()
       if #pending_heredocs > 0 then
         current_heredoc_delim, current_heredoc_strip = table.unpack(table.remove(pending_heredocs, 1))
         in_heredoc_body = true
@@ -5961,15 +5961,15 @@ function Parser:parse_backtick_substitution()
       goto continue
     end
     ch = self:advance()
-    (function() table.insert(content_chars, ch); return content_chars end)()
-    (function() table.insert(text_chars, ch); return text_chars end)()
+    ;(function() table.insert(content_chars, ch); return content_chars end)()
+    ;(function() table.insert(text_chars, ch); return text_chars end)()
     ::continue::
   end
   if self:at_end() then
     error({ParseError = true, message = "Unterminated backtick", pos = start})
   end
   self:advance()
-  (function() table.insert(text_chars, "`"); return text_chars end)()
+  ;(function() table.insert(text_chars, "`"); return text_chars end)()
   local text = table.concat(text_chars, "")
   local content = table.concat(content_chars, "")
   if #pending_heredocs > 0 then
@@ -6067,7 +6067,7 @@ function Parser:parse_array_literal()
       self:clear_state(PARSERSTATEFLAGS_PST_COMPASSIGN)
       error({ParseError = true, message = "Expected word in array literal", pos = self.pos})
     end
-    (function() table.insert(elements, word); return elements end)()
+    ;(function() table.insert(elements, word); return elements end)()
   end
   if self:at_end() or self:peek() ~= ")" then
     self:clear_state(PARSERSTATEFLAGS_PST_COMPASSIGN)
@@ -6634,9 +6634,9 @@ function Parser:arith_parse_expansion()
   while not self:arith_at_end() do
     local ch = self:arith_peek(0)
     if (string.match(ch, '^[%w]$') ~= nil) or ch == "_" then
-      (function() table.insert(name_chars, self:arith_advance()); return name_chars end)()
+      ;(function() table.insert(name_chars, self:arith_advance()); return name_chars end)()
     elseif (is_special_param_or_digit(ch) or ch == "#") and not (#(name_chars) > 0) then
-      (function() table.insert(name_chars, self:arith_advance()); return name_chars end)()
+      ;(function() table.insert(name_chars, self:arith_advance()); return name_chars end)()
       break
     else
       break
@@ -6710,7 +6710,7 @@ function Parser:arith_parse_braced_param()
     self:arith_advance()
     name_chars = {}
     while not self:arith_at_end() and self:arith_peek(0) ~= "}" do
-      (function() table.insert(name_chars, self:arith_advance()); return name_chars end)()
+      ;(function() table.insert(name_chars, self:arith_advance()); return name_chars end)()
     end
     self:arith_consume("}")
     return ParamIndirect:new(table.concat(name_chars, ""), nil, nil, "param-indirect")
@@ -6719,7 +6719,7 @@ function Parser:arith_parse_braced_param()
     self:arith_advance()
     name_chars = {}
     while not self:arith_at_end() and self:arith_peek(0) ~= "}" do
-      (function() table.insert(name_chars, self:arith_advance()); return name_chars end)()
+      ;(function() table.insert(name_chars, self:arith_advance()); return name_chars end)()
     end
     self:arith_consume("}")
     return ParamLength:new(table.concat(name_chars, ""), "param-len")
@@ -6735,7 +6735,7 @@ function Parser:arith_parse_braced_param()
     if is_param_expansion_op(ch) then
       break
     end
-    (function() table.insert(name_chars, self:arith_advance()); return name_chars end)()
+    ;(function() table.insert(name_chars, self:arith_advance()); return name_chars end)()
   end
   local name = table.concat(name_chars, "")
   local op_chars = {}
@@ -6744,15 +6744,15 @@ function Parser:arith_parse_braced_param()
     ch = self:arith_peek(0)
     if ch == "{" then
       depth = depth + 1
-      (function() table.insert(op_chars, self:arith_advance()); return op_chars end)()
+      ;(function() table.insert(op_chars, self:arith_advance()); return op_chars end)()
     elseif ch == "}" then
       depth = depth - 1
       if depth == 0 then
         break
       end
-      (function() table.insert(op_chars, self:arith_advance()); return op_chars end)()
+      ;(function() table.insert(op_chars, self:arith_advance()); return op_chars end)()
     else
-      (function() table.insert(op_chars, self:arith_advance()); return op_chars end)()
+      ;(function() table.insert(op_chars, self:arith_advance()); return op_chars end)()
     end
   end
   self:arith_consume("}")
@@ -6855,7 +6855,7 @@ function Parser:arith_parse_number_or_var()
     while not self:arith_at_end() do
       ch = self:arith_peek(0)
       if (string.match(ch, '^[%w]$') ~= nil) or ch == "#" or ch == "_" then
-        (function() table.insert(chars, self:arith_advance()); return chars end)()
+        ;(function() table.insert(chars, self:arith_advance()); return chars end)()
       else
         break
       end
@@ -6871,7 +6871,7 @@ function Parser:arith_parse_number_or_var()
     while not self:arith_at_end() do
       ch = self:arith_peek(0)
       if (string.match(ch, '^[%w]$') ~= nil) or ch == "_" then
-        (function() table.insert(chars, self:arith_advance()); return chars end)()
+        ;(function() table.insert(chars, self:arith_advance()); return chars end)()
       else
         break
       end
@@ -6925,14 +6925,14 @@ function Parser:parse_redirect()
         break
       elseif ch == "[" then
         in_bracket = true
-        (function() table.insert(varname_chars, self:advance()); return varname_chars end)()
+        ;(function() table.insert(varname_chars, self:advance()); return varname_chars end)()
       elseif ch == "]" then
         in_bracket = false
-        (function() table.insert(varname_chars, self:advance()); return varname_chars end)()
+        ;(function() table.insert(varname_chars, self:advance()); return varname_chars end)()
       elseif (string.match(ch, '^[%w]$') ~= nil) or ch == "_" then
-        (function() table.insert(varname_chars, self:advance()); return varname_chars end)()
+        ;(function() table.insert(varname_chars, self:advance()); return varname_chars end)()
       elseif in_bracket and not is_metachar(ch) then
-        (function() table.insert(varname_chars, self:advance()); return varname_chars end)()
+        ;(function() table.insert(varname_chars, self:advance()); return varname_chars end)()
       else
         break
       end
@@ -6980,7 +6980,7 @@ function Parser:parse_redirect()
   if varfd == "" and (self:peek() ~= nil and #(self:peek()) > 0) and (string.match(self:peek(), '^[%d]$') ~= nil) then
     fd_chars = {}
     while not self:at_end() and (string.match(self:peek(), '^[%d]$') ~= nil) do
-      (function() table.insert(fd_chars, self:advance()); return fd_chars end)()
+      ;(function() table.insert(fd_chars, self:advance()); return fd_chars end)()
     end
     fd = tonumber(table.concat(fd_chars, ""))
   end
@@ -7079,7 +7079,7 @@ function Parser:parse_redirect()
         local word_start = self.pos
         fd_chars = {}
         while not self:at_end() and (string.match(self:peek(), '^[%d]$') ~= nil) do
-          (function() table.insert(fd_chars, self:advance()); return fd_chars end)()
+          ;(function() table.insert(fd_chars, self:advance()); return fd_chars end)()
         end
         local fd_target
         if (#(fd_chars) > 0) then
@@ -7144,7 +7144,7 @@ function Parser:parse_heredoc_delimiter()
         quoted = true
         self:advance()
         while not self:at_end() and self:peek() ~= "\"" do
-          (function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
+          ;(function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
         end
         if not self:at_end() then
           self:advance()
@@ -7157,7 +7157,7 @@ function Parser:parse_heredoc_delimiter()
           if c == "\n" then
             self.saw_newline_in_single_quote = true
           end
-          (function() table.insert(delimiter_chars, c); return delimiter_chars end)()
+          ;(function() table.insert(delimiter_chars, c); return delimiter_chars end)()
         end
         if not self:at_end() then
           self:advance()
@@ -7170,7 +7170,7 @@ function Parser:parse_heredoc_delimiter()
             self:advance()
           else
             quoted = true
-            (function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
+            ;(function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
           end
         end
       elseif ch == "$" and self.pos + 1 < self.length and string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) == "'" then
@@ -7184,23 +7184,23 @@ function Parser:parse_heredoc_delimiter()
             local esc = self:peek()
             local esc_val = get_ansi_escape(esc)
             if esc_val >= 0 then
-              (function() table.insert(delimiter_chars, string.char(esc_val)); return delimiter_chars end)()
+              ;(function() table.insert(delimiter_chars, string.char(esc_val)); return delimiter_chars end)()
               self:advance()
             elseif esc == "'" then
-              (function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
+              ;(function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
             else
-              (function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
+              ;(function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
             end
           else
-            (function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
+            ;(function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
           end
         end
         if not self:at_end() then
           self:advance()
         end
       elseif is_expansion_start(self.source, self.pos, "$(") then
-        (function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
-        (function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
+        ;(function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
+        ;(function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
         depth = 1
         while not self:at_end() and depth > 0 do
           c = self:peek()
@@ -7209,7 +7209,7 @@ function Parser:parse_heredoc_delimiter()
           elseif c == ")" then
             depth = depth - 1
           end
-          (function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
+          ;(function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
         end
       elseif ch == "$" and self.pos + 1 < self.length and string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) == "{" then
         local dollar_count = 0
@@ -7222,17 +7222,17 @@ function Parser:parse_heredoc_delimiter()
           dollar_count = dollar_count - 1
         end
         if dollar_count % 2 == 1 then
-          (function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
+          ;(function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
         else
-          (function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
-          (function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
+          ;(function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
+          ;(function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
           depth = 0
           while not self:at_end() do
             c = self:peek()
             if c == "{" then
               depth = depth + 1
             elseif c == "}" then
-              (function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
+              ;(function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
               if depth == 0 then
                 break
               end
@@ -7242,7 +7242,7 @@ function Parser:parse_heredoc_delimiter()
               end
               goto continue
             end
-            (function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
+            ;(function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
             ::continue::
           end
         end
@@ -7257,10 +7257,10 @@ function Parser:parse_heredoc_delimiter()
           dollar_count = dollar_count - 1
         end
         if dollar_count % 2 == 1 then
-          (function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
+          ;(function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
         else
-          (function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
-          (function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
+          ;(function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
+          ;(function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
           depth = 1
           while not self:at_end() and depth > 0 do
             c = self:peek()
@@ -7269,49 +7269,49 @@ function Parser:parse_heredoc_delimiter()
             elseif c == "]" then
               depth = depth - 1
             end
-            (function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
+            ;(function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
           end
         end
       elseif ch == "`" then
-        (function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
+        ;(function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
         while not self:at_end() and self:peek() ~= "`" do
           c = self:peek()
           if c == "'" then
-            (function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
+            ;(function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
             while not self:at_end() and self:peek() ~= "'" and self:peek() ~= "`" do
-              (function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
+              ;(function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
             end
             if not self:at_end() and self:peek() == "'" then
-              (function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
+              ;(function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
             end
           elseif c == "\"" then
-            (function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
+            ;(function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
             while not self:at_end() and self:peek() ~= "\"" and self:peek() ~= "`" do
               if self:peek() == "\\" and self.pos + 1 < self.length then
-                (function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
+                ;(function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
               end
-              (function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
+              ;(function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
             end
             if not self:at_end() and self:peek() == "\"" then
-              (function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
+              ;(function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
             end
           elseif c == "\\" and self.pos + 1 < self.length then
-            (function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
-            (function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
+            ;(function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
+            ;(function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
           else
-            (function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
+            ;(function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
           end
         end
         if not self:at_end() then
-          (function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
+          ;(function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
         end
       else
-        (function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
+        ;(function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
       end
     end
     if not self:at_end() and (((string.find("<>", self:peek(), 1, true) ~= nil))) and self.pos + 1 < self.length and string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) == "(" then
-      (function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
-      (function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
+      ;(function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
+      ;(function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
       depth = 1
       while not self:at_end() and depth > 0 do
         c = self:peek()
@@ -7320,7 +7320,7 @@ function Parser:parse_heredoc_delimiter()
         elseif c == ")" then
           depth = depth - 1
         end
-        (function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
+        ;(function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
       end
       goto continue
     end
@@ -7391,14 +7391,14 @@ function Parser:gather_heredoc_bodies()
         line = string.gsub(line, '^[' .. "\t" .. ']+', '')
       end
       if line_end < self.length then
-        (function() table.insert(content_lines, line .. "\n"); return content_lines end)()
+        ;(function() table.insert(content_lines, line .. "\n"); return content_lines end)()
         self.pos = line_end + 1
       else
         local add_newline = true
         if not heredoc.quoted and count_trailing_backslashes(line) % 2 == 1 then
           add_newline = false
         end
-        (function() table.insert(content_lines, line .. ((add_newline and "\n" or ""))); return content_lines end)()
+        ;(function() table.insert(content_lines, line .. ((add_newline and "\n" or ""))); return content_lines end)()
         self.pos = self.length
       end
     end
@@ -7419,7 +7419,7 @@ function Parser:parse_heredoc(fd, strip_tabs)
   end
   local heredoc = HereDoc:new(delimiter, "", strip_tabs, quoted, fd, false, nil, "heredoc")
   heredoc.start_pos = start_pos
-  (function() table.insert(self.pending_heredocs, heredoc); return self.pending_heredocs end)()
+  ;(function() table.insert(self.pending_heredocs, heredoc); return self.pending_heredocs end)()
   self:clear_state(PARSERSTATEFLAGS_PST_HEREDOC)
   return heredoc
 end
@@ -7440,7 +7440,7 @@ function Parser:parse_command()
     end
     local redirect = self:parse_redirect()
     if (redirect ~= nil) then
-      (function() table.insert(redirects, redirect); return redirects end)()
+      ;(function() table.insert(redirects, redirect); return redirects end)()
       goto continue
     end
     local all_assignments = true
@@ -7455,7 +7455,7 @@ function Parser:parse_command()
     if (word == nil) then
       break
     end
-    (function() table.insert(words, word); return words end)()
+    ;(function() table.insert(words, word); return words end)()
     ::continue::
   end
   if not (#(words) > 0) and not (#(redirects) > 0) then
@@ -7938,7 +7938,7 @@ function Parser:parse_for()
       if (word == nil) then
         break
       end
-      (function() table.insert(words, word); return words end)()
+      ;(function() table.insert(words, word); return words end)()
     end
   end
   self:skip_whitespace_and_newlines()
@@ -7973,25 +7973,25 @@ function Parser:parse_for_arith()
     local ch = self:peek()
     if ch == "(" then
       paren_depth = paren_depth + 1
-      (function() table.insert(current, self:advance()); return current end)()
+      ;(function() table.insert(current, self:advance()); return current end)()
     elseif ch == ")" then
       if paren_depth > 0 then
         paren_depth = paren_depth - 1
-        (function() table.insert(current, self:advance()); return current end)()
+        ;(function() table.insert(current, self:advance()); return current end)()
       elseif self.pos + 1 < self.length and string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) == ")" then
-        (function() table.insert(parts, string.gsub(table.concat(current, ""), '^[' .. " \t" .. ']+', '')); return parts end)()
+        ;(function() table.insert(parts, string.gsub(table.concat(current, ""), '^[' .. " \t" .. ']+', '')); return parts end)()
         self:advance()
         self:advance()
         break
       else
-        (function() table.insert(current, self:advance()); return current end)()
+        ;(function() table.insert(current, self:advance()); return current end)()
       end
     elseif ch == ";" and paren_depth == 0 then
-      (function() table.insert(parts, string.gsub(table.concat(current, ""), '^[' .. " \t" .. ']+', '')); return parts end)()
+      ;(function() table.insert(parts, string.gsub(table.concat(current, ""), '^[' .. " \t" .. ']+', '')); return parts end)()
       current = {}
       self:advance()
     else
-      (function() table.insert(current, self:advance()); return current end)()
+      ;(function() table.insert(current, self:advance()); return current end)()
     end
   end
   if #parts ~= 3 then
@@ -8048,7 +8048,7 @@ function Parser:parse_select()
       if (word == nil) then
         break
       end
-      (function() table.insert(words, word); return words end)()
+      ;(function() table.insert(words, word); return words end)()
     end
   end
   self:skip_whitespace_and_newlines()
@@ -8124,7 +8124,7 @@ function Parser:parse_case()
       local ch = self:peek()
       if ch == ")" then
         if extglob_depth > 0 then
-          (function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
+          ;(function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
           extglob_depth = extglob_depth - 1
         else
           self:advance()
@@ -8135,16 +8135,16 @@ function Parser:parse_case()
           self:advance()
           self:advance()
         else
-          (function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
+          ;(function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
           if not self:at_end() then
-            (function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
+            ;(function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
           end
         end
       elseif is_expansion_start(self.source, self.pos, "$(") then
-        (function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
-        (function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
+        ;(function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
+        ;(function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
         if not self:at_end() and self:peek() == "(" then
-          (function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
+          ;(function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
           local paren_depth = 2
           while not self:at_end() and paren_depth > 0 do
             local c = self:peek()
@@ -8153,17 +8153,17 @@ function Parser:parse_case()
             elseif c == ")" then
               paren_depth = paren_depth - 1
             end
-            (function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
+            ;(function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
           end
         else
           extglob_depth = extglob_depth + 1
         end
       elseif ch == "(" and extglob_depth > 0 then
-        (function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
+        ;(function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
         extglob_depth = extglob_depth + 1
       elseif self.extglob and is_extglob_prefix(ch) and self.pos + 1 < self.length and string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) == "(" then
-        (function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
-        (function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
+        ;(function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
+        ;(function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
         extglob_depth = extglob_depth + 1
       elseif ch == "[" then
         local is_char_class = false
@@ -8194,49 +8194,49 @@ function Parser:parse_case()
           scan_pos = scan_pos + 1
         end
         if is_char_class then
-          (function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
+          ;(function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
           if not self:at_end() and is_caret_or_bang(self:peek()) then
-            (function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
+            ;(function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
           end
           if has_first_bracket_literal and not self:at_end() and self:peek() == "]" then
-            (function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
+            ;(function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
           end
           while not self:at_end() and self:peek() ~= "]" do
-            (function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
+            ;(function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
           end
           if not self:at_end() then
-            (function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
+            ;(function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
           end
         else
-          (function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
+          ;(function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
         end
       elseif ch == "'" then
-        (function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
+        ;(function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
         while not self:at_end() and self:peek() ~= "'" do
-          (function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
+          ;(function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
         end
         if not self:at_end() then
-          (function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
+          ;(function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
         end
       elseif ch == "\"" then
-        (function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
+        ;(function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
         while not self:at_end() and self:peek() ~= "\"" do
           if self:peek() == "\\" and self.pos + 1 < self.length then
-            (function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
+            ;(function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
           end
-          (function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
+          ;(function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
         end
         if not self:at_end() then
-          (function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
+          ;(function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
         end
       elseif is_whitespace(ch) then
         if extglob_depth > 0 then
-          (function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
+          ;(function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
         else
           self:advance()
         end
       else
-        (function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
+        ;(function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
       end
     end
     local pattern = table.concat(pattern_chars, "")
@@ -8258,7 +8258,7 @@ function Parser:parse_case()
     end
     local terminator = self:consume_case_terminator()
     self:skip_whitespace_and_newlines()
-    (function() table.insert(patterns, CasePattern:new(pattern, body, terminator, "pattern")); return patterns end)()
+    ;(function() table.insert(patterns, CasePattern:new(pattern, body, terminator, "pattern")); return patterns end)()
   end
   self:clear_state(PARSERSTATEFLAGS_PST_CASEPAT)
   self:skip_whitespace_and_newlines()
@@ -8557,18 +8557,18 @@ function Parser:parse_list_until(stop_words)
       if self:at_list_until_terminator(stop_words) then
         break
       end
-      (function() table.insert(parts, Operator:new(op, "operator")); return parts end)()
+      ;(function() table.insert(parts, Operator:new(op, "operator")); return parts end)()
     elseif op == "&" then
-      (function() table.insert(parts, Operator:new(op, "operator")); return parts end)()
+      ;(function() table.insert(parts, Operator:new(op, "operator")); return parts end)()
       self:skip_whitespace_and_newlines()
       if self:at_list_until_terminator(stop_words) then
         break
       end
     elseif op == "&&" or op == "||" then
-      (function() table.insert(parts, Operator:new(op, "operator")); return parts end)()
+      ;(function() table.insert(parts, Operator:new(op, "operator")); return parts end)()
       self:skip_whitespace_and_newlines()
     else
-      (function() table.insert(parts, Operator:new(op, "operator")); return parts end)()
+      ;(function() table.insert(parts, Operator:new(op, "operator")); return parts end)()
     end
     if self:at_list_until_terminator(stop_words) then
       break
@@ -8577,7 +8577,7 @@ function Parser:parse_list_until(stop_words)
     if (pipeline == nil) then
       error({ParseError = true, message = "Expected command after " .. op, pos = self.pos})
     end
-    (function() table.insert(parts, pipeline); return parts end)()
+    ;(function() table.insert(parts, pipeline); return parts end)()
   end
   if #parts == 1 then
     return parts[0 + 1]
@@ -8766,13 +8766,13 @@ function Parser:parse_simple_pipeline()
     local is_pipe_both = token_type == TOKENTYPE_PIPE_AMP
     self:skip_whitespace_and_newlines()
     if is_pipe_both then
-      (function() table.insert(commands, PipeBoth:new("pipe-both")); return commands end)()
+      ;(function() table.insert(commands, PipeBoth:new("pipe-both")); return commands end)()
     end
     cmd = self:parse_compound_command()
     if (cmd == nil) then
       error({ParseError = true, message = "Expected command after |", pos = self.pos})
     end
-    (function() table.insert(commands, cmd); return commands end)()
+    ;(function() table.insert(commands, cmd); return commands end)()
   end
   if #commands == 1 then
     return commands[0 + 1]
@@ -8856,7 +8856,7 @@ function Parser:parse_list(newline_as_separator)
     if op == "" then
       break
     end
-    (function() table.insert(parts, Operator:new(op, "operator")); return parts end)()
+    ;(function() table.insert(parts, Operator:new(op, "operator")); return parts end)()
     if op == "&&" or op == "||" then
       self:skip_whitespace_and_newlines()
     elseif op == "&" then
@@ -8894,7 +8894,7 @@ function Parser:parse_list(newline_as_separator)
     if (pipeline == nil) then
       error({ParseError = true, message = "Expected command after " .. op, pos = self.pos})
     end
-    (function() table.insert(parts, pipeline); return parts end)()
+    ;(function() table.insert(parts, pipeline); return parts end)()
     if self:in_state(PARSERSTATEFLAGS_PST_EOFTOKEN) and self:at_eof_token() then
       break
     end
@@ -8939,7 +8939,7 @@ function Parser:parse()
   while not self:at_end() do
     local result = self:parse_list(false)
     if (result ~= nil) then
-      (function() table.insert(results, result); return results end)()
+      ;(function() table.insert(results, result); return results end)()
     end
     self:skip_whitespace()
     local found_newline = false
@@ -9091,7 +9091,7 @@ function repeat_str(s, n)
   local result = {}
   local i = 0
   while i < n do
-    (function() table.insert(result, s); return result end)()
+    ;(function() table.insert(result, s); return result end)()
     i = i + 1
   end
   return table.concat(result, "")
@@ -9113,7 +9113,7 @@ function strip_line_continuations_comment_aware(text)
       end
       if num_preceding_backslashes % 2 == 0 then
         if in_comment then
-          (function() table.insert(result, "\n"); return result end)()
+          ;(function() table.insert(result, "\n"); return result end)()
         end
         i = i + 2
         in_comment = false
@@ -9122,7 +9122,7 @@ function strip_line_continuations_comment_aware(text)
     end
     if c == "\n" then
       in_comment = false
-      (function() table.insert(result, c); return result end)()
+      ;(function() table.insert(result, c); return result end)()
       i = i + 1
       goto continue
     end
@@ -9133,7 +9133,7 @@ function strip_line_continuations_comment_aware(text)
     elseif c == "#" and not quote.single and not in_comment then
       in_comment = true
     end
-    (function() table.insert(result, c); return result end)()
+    ;(function() table.insert(result, c); return result end)()
     i = i + 1
     ::continue::
   end
@@ -9144,7 +9144,7 @@ function append_redirects(base, redirects)
   if (#(redirects) > 0) then
     local parts = {}
     for _, r in ipairs(redirects) do
-      (function() table.insert(parts, r:to_sexp()); return parts end)()
+      ;(function() table.insert(parts, r:to_sexp()); return parts end)()
     end
     return base .. " " .. table.concat(parts, " ")
   end
@@ -9165,11 +9165,11 @@ function consume_single_quote(s, start)
   local chars = {"'"}
   local i = start + 1
   while i < #s and string.sub(s, i + 1, i + 1) ~= "'" do
-    (function() table.insert(chars, string.sub(s, i + 1, i + 1)); return chars end)()
+    ;(function() table.insert(chars, string.sub(s, i + 1, i + 1)); return chars end)()
     i = i + 1
   end
   if i < #s then
-    (function() table.insert(chars, string.sub(s, i + 1, i + 1)); return chars end)()
+    ;(function() table.insert(chars, string.sub(s, i + 1, i + 1)); return chars end)()
     i = i + 1
   end
   return {i, chars}
@@ -9180,14 +9180,14 @@ function consume_double_quote(s, start)
   local i = start + 1
   while i < #s and string.sub(s, i + 1, i + 1) ~= "\"" do
     if string.sub(s, i + 1, i + 1) == "\\" and i + 1 < #s then
-      (function() table.insert(chars, string.sub(s, i + 1, i + 1)); return chars end)()
+      ;(function() table.insert(chars, string.sub(s, i + 1, i + 1)); return chars end)()
       i = i + 1
     end
-    (function() table.insert(chars, string.sub(s, i + 1, i + 1)); return chars end)()
+    ;(function() table.insert(chars, string.sub(s, i + 1, i + 1)); return chars end)()
     i = i + 1
   end
   if i < #s then
-    (function() table.insert(chars, string.sub(s, i + 1, i + 1)); return chars end)()
+    ;(function() table.insert(chars, string.sub(s, i + 1, i + 1)); return chars end)()
     i = i + 1
   end
   return {i, chars}
@@ -9237,21 +9237,21 @@ function consume_bracket_class(s, start, depth)
   local chars = {"["}
   local i = start + 1
   if i < #s and (string.sub(s, i + 1, i + 1) == "!" or string.sub(s, i + 1, i + 1) == "^") then
-    (function() table.insert(chars, string.sub(s, i + 1, i + 1)); return chars end)()
+    ;(function() table.insert(chars, string.sub(s, i + 1, i + 1)); return chars end)()
     i = i + 1
   end
   if i < #s and string.sub(s, i + 1, i + 1) == "]" then
     if has_bracket_close(s, i + 1, depth) then
-      (function() table.insert(chars, string.sub(s, i + 1, i + 1)); return chars end)()
+      ;(function() table.insert(chars, string.sub(s, i + 1, i + 1)); return chars end)()
       i = i + 1
     end
   end
   while i < #s and string.sub(s, i + 1, i + 1) ~= "]" do
-    (function() table.insert(chars, string.sub(s, i + 1, i + 1)); return chars end)()
+    ;(function() table.insert(chars, string.sub(s, i + 1, i + 1)); return chars end)()
     i = i + 1
   end
   if i < #s then
-    (function() table.insert(chars, string.sub(s, i + 1, i + 1)); return chars end)()
+    ;(function() table.insert(chars, string.sub(s, i + 1, i + 1)); return chars end)()
     i = i + 1
   end
   return {i, chars, true}
@@ -9325,17 +9325,17 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
       val = w:strip_locale_string_dollars(val)
       val = w:normalize_array_whitespace(val)
       val = w:format_command_substitutions(val, false)
-      (function() table.insert(parts, val); return parts end)()
+      ;(function() table.insert(parts, val); return parts end)()
     end
     local heredocs = {}
     for _, r in ipairs(node.redirects) do
       if type(r) == 'table' then
         local r = r
-        (function() table.insert(heredocs, r); return heredocs end)()
+        ;(function() table.insert(heredocs, r); return heredocs end)()
       end
     end
     for _, r in ipairs(node.redirects) do
-      (function() table.insert(parts, format_redirect(r, compact_redirects, true)); return parts end)()
+      ;(function() table.insert(parts, format_redirect(r, compact_redirects, true)); return parts end)()
     end
     local result
     if compact_redirects and (#(node.words) > 0) and (#(node.redirects) > 0) then
@@ -9364,7 +9364,7 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
         goto continue
       end
       needs_redirect = i + 1 < #node.commands and node.commands[i + 1 + 1].kind == "pipe-both"
-      (function() table.insert(cmds, {cmd, needs_redirect}); return cmds end)()
+      ;(function() table.insert(cmds, {cmd, needs_redirect}); return cmds end)()
       i = i + 1
       ::continue::
     end
@@ -9406,9 +9406,9 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
         if first_nl ~= -1 then
           formatted = string.sub(formatted, 1, first_nl) .. " |" .. string.sub(formatted, (first_nl) + 1, #formatted)
         end
-        (function() table.insert(result_parts, formatted); return result_parts end)()
+        ;(function() table.insert(result_parts, formatted); return result_parts end)()
       else
-        (function() table.insert(result_parts, formatted); return result_parts end)()
+        ;(function() table.insert(result_parts, formatted); return result_parts end)()
       end
       idx = idx + 1
     end
@@ -9479,7 +9479,7 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
             skipped_semi = true
             goto continue
           end
-          (function() table.insert(result, ";"); return result end)()
+          ;(function() table.insert(result, ";"); return result end)()
           skipped_semi = false
         elseif p.op == "\n" then
           if (#(result) > 0) and result[#result - 1 + 1] == ";" then
@@ -9487,11 +9487,11 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
             goto continue
           end
           if (#(result) > 0) and (string.sub(result[#result - 1 + 1], -#"\n") == "\n") then
-            (function() table.insert(result, (skipped_semi and " " or "\n")); return result end)()
+            ;(function() table.insert(result, (skipped_semi and " " or "\n")); return result end)()
             skipped_semi = false
             goto continue
           end
-          (function() table.insert(result, "\n"); return result end)()
+          ;(function() table.insert(result, "\n"); return result end)()
           skipped_semi = false
         elseif p.op == "&" then
           if (#(result) > 0) and (((string.find(result[#result - 1 + 1], "<<", 1, true) ~= nil))) and (((string.find(result[#result - 1 + 1], "\n", 1, true) ~= nil))) then
@@ -9503,18 +9503,18 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
               result[#result - 1 + 1] = string.sub(last, 1, first_nl) .. " &" .. string.sub(last, (first_nl) + 1, #last)
             end
           else
-            (function() table.insert(result, " &"); return result end)()
+            ;(function() table.insert(result, " &"); return result end)()
           end
         elseif (#(result) > 0) and (((string.find(result[#result - 1 + 1], "<<", 1, true) ~= nil))) and (((string.find(result[#result - 1 + 1], "\n", 1, true) ~= nil))) then
           last = result[#result - 1 + 1]
           first_nl = _string_find(last, "\n")
           result[#result - 1 + 1] = string.sub(last, 1, first_nl) .. " " .. p.op .. " " .. string.sub(last, (first_nl) + 1, #last)
         else
-          (function() table.insert(result, " " .. p.op); return result end)()
+          ;(function() table.insert(result, " " .. p.op); return result end)()
         end
       else
         if (#(result) > 0) and not (string.sub(result[#result - 1 + 1], -#{" ", "\n"}) == {" ", "\n"}) then
-          (function() table.insert(result, " "); return result end)()
+          ;(function() table.insert(result, " "); return result end)()
         end
         local formatted_cmd = format_cmdsub_node(p, indent, in_procsub, compact_redirects, procsub_first and cmd_count == 0)
         if #result > 0 then
@@ -9527,7 +9527,7 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
           formatted_cmd = " " .. formatted_cmd
           skipped_semi = false
         end
-        (function() table.insert(result, formatted_cmd); return result end)()
+        ;(function() table.insert(result, formatted_cmd); return result end)()
         cmd_count = cmd_count + 1
       end
       ::continue::
@@ -9589,7 +9589,7 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
     if (node.words ~= nil) then
       local word_vals = {}
       for _, w in ipairs(node.words) do
-        (function() table.insert(word_vals, w.value); return word_vals end)()
+        ;(function() table.insert(word_vals, w.value); return word_vals end)()
       end
       local words = table.concat(word_vals, " ")
       if (words ~= nil and #(words) > 0) then
@@ -9636,9 +9636,9 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
       local term_indent = repeat_str(" ", indent + 4)
       local body_part = ((body ~= nil and #(body) > 0) and pat_indent .. body .. "\n" or "\n")
       if i == 0 then
-        (function() table.insert(patterns, " " .. pat .. ")\n" .. body_part + term_indent .. term); return patterns end)()
+        ;(function() table.insert(patterns, " " .. pat .. ")\n" .. body_part + term_indent .. term); return patterns end)()
       else
-        (function() table.insert(patterns, pat .. ")\n" .. body_part + term_indent .. term); return patterns end)()
+        ;(function() table.insert(patterns, pat .. ")\n" .. body_part + term_indent .. term); return patterns end)()
       end
       i = i + 1
     end
@@ -10408,11 +10408,11 @@ function collapse_whitespace(s)
     local c = string.sub(s, _, _)
     if c == " " or c == "\t" then
       if not prev_was_ws then
-        (function() table.insert(result, " "); return result end)()
+        ;(function() table.insert(result, " "); return result end)()
       end
       prev_was_ws = true
     else
-      (function() table.insert(result, c); return result end)()
+      ;(function() table.insert(result, c); return result end)()
       prev_was_ws = false
     end
   end
@@ -10442,80 +10442,80 @@ function normalize_heredoc_delimiter(delimiter)
     local inner
     local inner_str
     if i + 1 < #delimiter and string.sub(delimiter, (i) + 1, i + 2) == "$(" then
-      (function() table.insert(result, "$("); return result end)()
+      ;(function() table.insert(result, "$("); return result end)()
       i = i + 2
       depth = 1
       inner = {}
       while i < #delimiter and depth > 0 do
         if string.sub(delimiter, i + 1, i + 1) == "(" then
           depth = depth + 1
-          (function() table.insert(inner, string.sub(delimiter, i + 1, i + 1)); return inner end)()
+          ;(function() table.insert(inner, string.sub(delimiter, i + 1, i + 1)); return inner end)()
         elseif string.sub(delimiter, i + 1, i + 1) == ")" then
           depth = depth - 1
           if depth == 0 then
             inner_str = table.concat(inner, "")
             inner_str = collapse_whitespace(inner_str)
-            (function() table.insert(result, inner_str); return result end)()
-            (function() table.insert(result, ")"); return result end)()
+            ;(function() table.insert(result, inner_str); return result end)()
+            ;(function() table.insert(result, ")"); return result end)()
           else
-            (function() table.insert(inner, string.sub(delimiter, i + 1, i + 1)); return inner end)()
+            ;(function() table.insert(inner, string.sub(delimiter, i + 1, i + 1)); return inner end)()
           end
         else
-          (function() table.insert(inner, string.sub(delimiter, i + 1, i + 1)); return inner end)()
+          ;(function() table.insert(inner, string.sub(delimiter, i + 1, i + 1)); return inner end)()
         end
         i = i + 1
       end
     elseif i + 1 < #delimiter and string.sub(delimiter, (i) + 1, i + 2) == "${" then
-      (function() table.insert(result, "${"); return result end)()
+      ;(function() table.insert(result, "${"); return result end)()
       i = i + 2
       depth = 1
       inner = {}
       while i < #delimiter and depth > 0 do
         if string.sub(delimiter, i + 1, i + 1) == "{" then
           depth = depth + 1
-          (function() table.insert(inner, string.sub(delimiter, i + 1, i + 1)); return inner end)()
+          ;(function() table.insert(inner, string.sub(delimiter, i + 1, i + 1)); return inner end)()
         elseif string.sub(delimiter, i + 1, i + 1) == "}" then
           depth = depth - 1
           if depth == 0 then
             inner_str = table.concat(inner, "")
             inner_str = collapse_whitespace(inner_str)
-            (function() table.insert(result, inner_str); return result end)()
-            (function() table.insert(result, "}"); return result end)()
+            ;(function() table.insert(result, inner_str); return result end)()
+            ;(function() table.insert(result, "}"); return result end)()
           else
-            (function() table.insert(inner, string.sub(delimiter, i + 1, i + 1)); return inner end)()
+            ;(function() table.insert(inner, string.sub(delimiter, i + 1, i + 1)); return inner end)()
           end
         else
-          (function() table.insert(inner, string.sub(delimiter, i + 1, i + 1)); return inner end)()
+          ;(function() table.insert(inner, string.sub(delimiter, i + 1, i + 1)); return inner end)()
         end
         i = i + 1
       end
     elseif i + 1 < #delimiter and (((string.find("<>", string.sub(delimiter, i + 1, i + 1), 1, true) ~= nil))) and string.sub(delimiter, i + 1 + 1, i + 1 + 1) == "(" then
-      (function() table.insert(result, string.sub(delimiter, i + 1, i + 1)); return result end)()
-      (function() table.insert(result, "("); return result end)()
+      ;(function() table.insert(result, string.sub(delimiter, i + 1, i + 1)); return result end)()
+      ;(function() table.insert(result, "("); return result end)()
       i = i + 2
       depth = 1
       inner = {}
       while i < #delimiter and depth > 0 do
         if string.sub(delimiter, i + 1, i + 1) == "(" then
           depth = depth + 1
-          (function() table.insert(inner, string.sub(delimiter, i + 1, i + 1)); return inner end)()
+          ;(function() table.insert(inner, string.sub(delimiter, i + 1, i + 1)); return inner end)()
         elseif string.sub(delimiter, i + 1, i + 1) == ")" then
           depth = depth - 1
           if depth == 0 then
             inner_str = table.concat(inner, "")
             inner_str = collapse_whitespace(inner_str)
-            (function() table.insert(result, inner_str); return result end)()
-            (function() table.insert(result, ")"); return result end)()
+            ;(function() table.insert(result, inner_str); return result end)()
+            ;(function() table.insert(result, ")"); return result end)()
           else
-            (function() table.insert(inner, string.sub(delimiter, i + 1, i + 1)); return inner end)()
+            ;(function() table.insert(inner, string.sub(delimiter, i + 1, i + 1)); return inner end)()
           end
         else
-          (function() table.insert(inner, string.sub(delimiter, i + 1, i + 1)); return inner end)()
+          ;(function() table.insert(inner, string.sub(delimiter, i + 1, i + 1)); return inner end)()
         end
         i = i + 1
       end
     else
-      (function() table.insert(result, string.sub(delimiter, i + 1, i + 1)); return result end)()
+      ;(function() table.insert(result, string.sub(delimiter, i + 1, i + 1)); return result end)()
       i = i + 1
     end
   end

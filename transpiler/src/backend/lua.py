@@ -603,7 +603,12 @@ class LuaBackend:
             case NoOp():
                 pass
             case ExprStmt(expr=expr):
-                self._line(self._expr(expr))
+                e = self._expr(expr)
+                # Prefix with ; if expr starts with ( to prevent Lua parsing ambiguity
+                if e.startswith("("):
+                    self._line(";" + e)
+                else:
+                    self._line(e)
             case Return(value=value):
                 if value is not None:
                     self._line(f"return {self._expr(value)}")

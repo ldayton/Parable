@@ -4,8 +4,8 @@ set shell := ["bash", "-o", "pipefail", "-cu"]
 source := "../src/parable.py"
 tests := "../tests"
 dist := "../dist/go"
-backends := "csharp go java javascript php perl python ruby typescript"
-testable := "go javascript perl php python ruby typescript"
+backends := "csharp go java javascript lua php perl python ruby typescript"
+testable := "go javascript lua perl php python ruby typescript"
 
 # Transpile source to stdout
 emit backend:
@@ -34,6 +34,10 @@ prep backend:
             rm -rf /tmp/transpile-js && mkdir -p /tmp/transpile-js
             uv run python -m src.tongues --target javascript < {{source}} > /tmp/transpile-js/parable.js
             node --check /tmp/transpile-js/parable.js
+            ;;
+        lua)
+            uv run python -m src.tongues --target lua < {{source}} > /tmp/transpile.lua
+            luac -p /tmp/transpile.lua
             ;;
         python)
             uv run python -m src.tongues --target python < {{source}} > /tmp/transpile.py
@@ -75,6 +79,12 @@ test backend:
         javascript)
             just prep javascript
             node {{tests}}/bin/run-js-tests.js /tmp/transpile-js
+            ;;
+        lua)
+            rm -rf /tmp/transpile-test-lua && mkdir /tmp/transpile-test-lua
+            uv run python -m src.tongues --target lua < {{source}} > /tmp/transpile-test-lua/parable.lua
+            luac -p /tmp/transpile-test-lua/parable.lua
+            lua -l /tmp/transpile-test-lua/parable {{tests}}/bin/run-tests.lua {{tests}}
             ;;
         python)
             rm -rf /tmp/transpile-test && mkdir /tmp/transpile-test

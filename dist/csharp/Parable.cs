@@ -111,7 +111,7 @@ public interface INode
 
 public class ParseError : Exception
 {
-    public string Message { get; set; }
+    public new string Message { get; set; }
     public int Pos { get; set; }
     public int Line { get; set; }
 
@@ -2355,10 +2355,10 @@ public class Lexer
             int flags = (inDquote ? Constants.MATCHEDPAIRFLAGS_DQUOTE : Constants.MATCHEDPAIRFLAGS_NONE);
             bool paramEndsWithDollar = param != "" && param.EndsWith("$");
             arg = this._CollectParamArgument(flags, paramEndsWithDollar);
-        } catch (MatchedPairError e)
+        } catch (MatchedPairError)
         {
             this._DolbraceState = savedDolbrace;
-            throw e;
+            throw;
         }
         if (op == "<" || op == ">" && arg.StartsWith("(") && arg.EndsWith(")"))
         {
@@ -2372,7 +2372,7 @@ public class Lexer
                     string formatted = ParableFunctions._FormatCmdsubNode(parsed, 0, true, false, true);
                     arg = "(" + formatted + ")";
                 }
-            } catch (Exception ex)
+            } catch (Exception)
             {
             }
         }
@@ -4051,7 +4051,7 @@ public class Word : INode
                         parser = ParableFunctions.NewParser(inner, false, false);
                         parsed = parser.ParseList(true);
                         formatted = (parsed != null ? ParableFunctions._FormatCmdsubNode(parsed, 0, false, false, false) : "");
-                    } catch (Exception ex)
+                    } catch (Exception)
                     {
                         formatted = inner;
                     }
@@ -4230,7 +4230,7 @@ public class Word : INode
                                         {
                                             formatted = inner;
                                         }
-                                    } catch (Exception ex)
+                                    } catch (Exception)
                                     {
                                         formatted = inner;
                                     }
@@ -4336,7 +4336,7 @@ public class Word : INode
                                         {
                                             result.Add("${ }");
                                         }
-                                    } catch (Exception ex)
+                                    } catch (Exception)
                                     {
                                         result.Add(ParableFunctions._Substring(value, i, j));
                                     }
@@ -4670,7 +4670,6 @@ public class Pipeline : INode
                 case PipeBoth cmdPipeBoth:
                     i += 1;
                     continue;
-                    break;
             }
             bool needsRedirect = i + 1 < this.Commands.Count && this.Commands[i + 1].Kind == "pipe-both";
             cmds.Add((cmd, needsRedirect));
@@ -7778,14 +7777,14 @@ public class Parser
             this._RestoreParserState(saved);
             this._InProcessSub = oldInProcessSub;
             return (new ProcessSubstitution(direction, cmd, "procsub"), text);
-        } catch (ParseError e)
+        } catch (ParseError)
         {
             this._RestoreParserState(saved);
             this._InProcessSub = oldInProcessSub;
             string contentStartChar = (start + 2 < this.Length ? (this.Source[start + 2]).ToString() : "");
             if (" \t\n".Contains(contentStartChar))
             {
-                throw e;
+                throw;
             }
             this.Pos = start + 2;
             this._Lexer.Pos = this.Pos;
@@ -7966,7 +7965,7 @@ public class Parser
         try
         {
             expr = this._ParseArithExpr(content);
-        } catch (ParseError ex)
+        } catch (ParseError)
         {
             this.Pos = start;
             return (null, "");
@@ -8523,7 +8522,6 @@ public class Parser
                                 left = new ArithSubscript(leftArithVar.Name, index, "subscript");
                                 break;
                             default:
-                                break;
                                 break;
                         }
                     }
@@ -12273,7 +12271,7 @@ public static class ParableFunctions
 
     public static string _FormatCondBody(INode node)
     {
-        object kind = node.Kind;
+        string kind = node.Kind;
         if (kind == "unary-test")
         {
             string operandVal = ((Word)((UnaryTest)node).Operand).GetCondFormattedValue();
@@ -12406,7 +12404,6 @@ public static class ParableFunctions
                         case PipeBoth cmdPipeBoth:
                             i += 1;
                             continue;
-                            break;
                     }
                     needsRedirect = i + 1 < nodePipeline.Commands.Count && nodePipeline.Commands[i + 1].Kind == "pipe-both";
                     cmds.Add((cmd, needsRedirect));
@@ -12432,7 +12429,6 @@ public static class ParableFunctions
                             {
                                 case HereDoc rHereDoc:
                                     hasHeredoc = true;
-                                    break;
                                     break;
                             }
                         }
@@ -12519,7 +12515,6 @@ public static class ParableFunctions
                                 case HereDoc rHereDoc:
                                     hasHeredoc = true;
                                     break;
-                                    break;
                             }
                         }
                     }
@@ -12538,7 +12533,6 @@ public static class ParableFunctions
                                             {
                                                 case HereDoc rHereDoc:
                                                     hasHeredoc = true;
-                                                    break;
                                                     break;
                                             }
                                         }
@@ -13558,7 +13552,7 @@ public static class ParableFunctions
             quoteChar = (value[i]).ToString();
             i += 1;
             delimStart = i;
-            while (i < value.Length && (value[i]).ToString() != quoteChar)
+            while (i < value.Length && (value[i]).ToString() != (string)quoteChar)
             {
                 i += 1;
             }

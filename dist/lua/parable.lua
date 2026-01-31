@@ -2786,14 +2786,14 @@ end
 
 function Word:collect_cmdsubs(node)
   local result = {}
-  if type(node) == 'table' then
+  if (type(node) == 'table' and getmetatable(node) == CommandSubstitution) then
     local node = node
     ;(function() table.insert(result, node); return result end)()
-  elseif type(node) == 'table' then
+  elseif (type(node) == 'table' and getmetatable(node) == Array) then
     local node = node
     for _, elem in ipairs(node.elements) do
       for _, p in ipairs(elem.parts) do
-        if type(p) == 'table' then
+        if (type(p) == 'table' and getmetatable(p) == CommandSubstitution) then
           local p = p
           ;(function() table.insert(result, p); return result end)()
         else
@@ -2801,40 +2801,40 @@ function Word:collect_cmdsubs(node)
         end
       end
     end
-  elseif type(node) == 'table' then
+  elseif (type(node) == 'table' and getmetatable(node) == ArithmeticExpansion) then
     local node = node
     if (node.expression ~= nil) then
       ;(function() for _, v in ipairs(self:collect_cmdsubs(node.expression)) do table.insert(result, v) end; return result end)()
     end
-  elseif type(node) == 'table' then
+  elseif (type(node) == 'table' and getmetatable(node) == ArithBinaryOp) then
     local node = node
     ;(function() for _, v in ipairs(self:collect_cmdsubs(node.left)) do table.insert(result, v) end; return result end)()
     ;(function() for _, v in ipairs(self:collect_cmdsubs(node.right)) do table.insert(result, v) end; return result end)()
-  elseif type(node) == 'table' then
+  elseif (type(node) == 'table' and getmetatable(node) == ArithComma) then
     local node = node
     ;(function() for _, v in ipairs(self:collect_cmdsubs(node.left)) do table.insert(result, v) end; return result end)()
     ;(function() for _, v in ipairs(self:collect_cmdsubs(node.right)) do table.insert(result, v) end; return result end)()
-  elseif type(node) == 'table' then
+  elseif (type(node) == 'table' and getmetatable(node) == ArithUnaryOp) then
     local node = node
     ;(function() for _, v in ipairs(self:collect_cmdsubs(node.operand)) do table.insert(result, v) end; return result end)()
-  elseif type(node) == 'table' then
+  elseif (type(node) == 'table' and getmetatable(node) == ArithPreIncr) then
     local node = node
     ;(function() for _, v in ipairs(self:collect_cmdsubs(node.operand)) do table.insert(result, v) end; return result end)()
-  elseif type(node) == 'table' then
+  elseif (type(node) == 'table' and getmetatable(node) == ArithPostIncr) then
     local node = node
     ;(function() for _, v in ipairs(self:collect_cmdsubs(node.operand)) do table.insert(result, v) end; return result end)()
-  elseif type(node) == 'table' then
+  elseif (type(node) == 'table' and getmetatable(node) == ArithPreDecr) then
     local node = node
     ;(function() for _, v in ipairs(self:collect_cmdsubs(node.operand)) do table.insert(result, v) end; return result end)()
-  elseif type(node) == 'table' then
+  elseif (type(node) == 'table' and getmetatable(node) == ArithPostDecr) then
     local node = node
     ;(function() for _, v in ipairs(self:collect_cmdsubs(node.operand)) do table.insert(result, v) end; return result end)()
-  elseif type(node) == 'table' then
+  elseif (type(node) == 'table' and getmetatable(node) == ArithTernary) then
     local node = node
     ;(function() for _, v in ipairs(self:collect_cmdsubs(node.condition)) do table.insert(result, v) end; return result end)()
     ;(function() for _, v in ipairs(self:collect_cmdsubs(node.if_true)) do table.insert(result, v) end; return result end)()
     ;(function() for _, v in ipairs(self:collect_cmdsubs(node.if_false)) do table.insert(result, v) end; return result end)()
-  elseif type(node) == 'table' then
+  elseif (type(node) == 'table' and getmetatable(node) == ArithAssign) then
     local node = node
     ;(function() for _, v in ipairs(self:collect_cmdsubs(node.target)) do table.insert(result, v) end; return result end)()
     ;(function() for _, v in ipairs(self:collect_cmdsubs(node.value)) do table.insert(result, v) end; return result end)()
@@ -2844,14 +2844,14 @@ end
 
 function Word:collect_procsubs(node)
   local result = {}
-  if type(node) == 'table' then
+  if (type(node) == 'table' and getmetatable(node) == ProcessSubstitution) then
     local node = node
     ;(function() table.insert(result, node); return result end)()
-  elseif type(node) == 'table' then
+  elseif (type(node) == 'table' and getmetatable(node) == Array) then
     local node = node
     for _, elem in ipairs(node.elements) do
       for _, p in ipairs(elem.parts) do
-        if type(p) == 'table' then
+        if (type(p) == 'table' and getmetatable(p) == ProcessSubstitution) then
           local p = p
           ;(function() table.insert(result, p); return result end)()
         else
@@ -2868,13 +2868,13 @@ function Word:format_command_substitutions(value, in_arith)
   local procsub_parts = {}
   local has_arith = false
   for _, p in ipairs(self.parts) do
-    if type(p) == 'table' then
+    if (type(p) == 'table' and getmetatable(p) == CommandSubstitution) then
       local p = p
       ;(function() table.insert(cmdsub_parts, p); return cmdsub_parts end)()
-    elseif type(p) == 'table' then
+    elseif (type(p) == 'table' and getmetatable(p) == ProcessSubstitution) then
       local p = p
       ;(function() table.insert(procsub_parts, p); return procsub_parts end)()
-    elseif type(p) == 'table' then
+    elseif (type(p) == 'table' and getmetatable(p) == ArithmeticExpansion) then
       local p = p
       has_arith = true
     else
@@ -3043,7 +3043,7 @@ function Word:format_command_substitutions(value, in_arith)
     elseif is_expansion_start(value, i, "${") and i + 2 < #value and is_funsub_char(string.sub(value, i + 2 + 1, i + 2 + 1)) and not is_backslash_escaped(value, i) then
       j = find_funsub_end(value, i + 2)
       local cmdsub_node = (cmdsub_idx < #cmdsub_parts and cmdsub_parts[cmdsub_idx + 1] or nil)
-      if type(cmdsub_node) == 'table' and cmdsub_node.brace then
+      if (type(cmdsub_node) == 'table' and getmetatable(cmdsub_node) == CommandSubstitution) and cmdsub_node.brace then
         node = cmdsub_node
         formatted = format_cmdsub_node(node.command, 0, false, false, false)
         local has_pipe = string.sub(value, i + 2 + 1, i + 2 + 1) == "|"
@@ -3429,7 +3429,7 @@ function Pipeline:to_sexp()
   local cmd
   while i < #self.commands do
     cmd = self.commands[i + 1]
-    if type(cmd) == 'table' then
+    if (type(cmd) == 'table' and getmetatable(cmd) == PipeBoth) then
       local cmd = cmd
       i = i + 1
       goto continue
@@ -3470,7 +3470,7 @@ function Pipeline:cmd_sexp(cmd, needs_redirect)
   if not needs_redirect then
     return cmd:to_sexp()
   end
-  if type(cmd) == 'table' then
+  if (type(cmd) == 'table' and getmetatable(cmd) == Command) then
     local cmd = cmd
     local parts = {}
     for _, w in ipairs(cmd.words) do
@@ -6556,7 +6556,7 @@ function Parser:arith_parse_postfix()
       self:arith_consume("--")
       left = ArithPostDecr:new(left, "post-decr")
     elseif self:arith_peek(0) == "[" then
-      if type(left) == 'table' then
+      if (type(left) == 'table' and getmetatable(left) == ArithVar) then
         local left = left
         self:arith_advance()
         self:arith_skip_ws()
@@ -8980,18 +8980,18 @@ function Parser:strip_trailing_backslash_from_last_word(nodes)
   local last_word = self:find_last_word(last_node)
   if (last_word ~= nil) and (string.sub(last_word.value, -#"\\") == "\\") then
     last_word.value = substring(last_word.value, 0, #last_word.value - 1)
-    if not (last_word.value ~= nil and #(last_word.value) > 0) and type(last_node) == 'table' and (#(last_node.words) > 0) then
+    if not (last_word.value ~= nil and #(last_word.value) > 0) and (type(last_node) == 'table' and getmetatable(last_node) == Command) and (#(last_node.words) > 0) then
       table.remove(last_node.words)
     end
   end
 end
 
 function Parser:find_last_word(node)
-  if type(node) == 'table' then
+  if (type(node) == 'table' and getmetatable(node) == Word) then
     local node = node
     return node
   end
-  if type(node) == 'table' then
+  if (type(node) == 'table' and getmetatable(node) == Command) then
     local node = node
     if (#(node.words) > 0) then
       local last_word = node.words[#node.words - 1 + 1]
@@ -9001,7 +9001,7 @@ function Parser:find_last_word(node)
     end
     if (#(node.redirects) > 0) then
       local last_redirect = node.redirects[#node.redirects - 1 + 1]
-      if type(last_redirect) == 'table' then
+      if (type(last_redirect) == 'table' and getmetatable(last_redirect) == Redirect) then
         local last_redirect = last_redirect
         return last_redirect.target
       end
@@ -9010,13 +9010,13 @@ function Parser:find_last_word(node)
       return node.words[#node.words - 1 + 1]
     end
   end
-  if type(node) == 'table' then
+  if (type(node) == 'table' and getmetatable(node) == Pipeline) then
     local node = node
     if (#(node.commands) > 0) then
       return self:find_last_word(node.commands[#node.commands - 1 + 1])
     end
   end
-  if type(node) == 'table' then
+  if (type(node) == 'table' and getmetatable(node) == List) then
     local node = node
     if (#(node.parts) > 0) then
       return self:find_last_word(node.parts[#node.parts - 1 + 1])
@@ -9284,11 +9284,11 @@ function format_cond_body(node)
 end
 
 function starts_with_subshell(node)
-  if type(node) == 'table' then
+  if (type(node) == 'table' and getmetatable(node) == Subshell) then
     local node = node
     return true
   end
-  if type(node) == 'table' then
+  if (type(node) == 'table' and getmetatable(node) == List) then
     local node = node
     for _, p in ipairs(node.parts) do
       if p.kind ~= "operator" then
@@ -9297,7 +9297,7 @@ function starts_with_subshell(node)
     end
     return false
   end
-  if type(node) == 'table' then
+  if (type(node) == 'table' and getmetatable(node) == Pipeline) then
     local node = node
     if (#(node.commands) > 0) then
       return starts_with_subshell(node.commands[0 + 1])
@@ -9313,11 +9313,11 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
   end
   local sp = repeat_str(" ", indent)
   local inner_sp = repeat_str(" ", indent + 4)
-  if type(node) == 'table' then
+  if (type(node) == 'table' and getmetatable(node) == ArithEmpty) then
     local node = node
     return ""
   end
-  if type(node) == 'table' then
+  if (type(node) == 'table' and getmetatable(node) == Command) then
     local node = node
     local parts = {}
     for _, w in ipairs(node.words) do
@@ -9329,7 +9329,7 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
     end
     local heredocs = {}
     for _, r in ipairs(node.redirects) do
-      if type(r) == 'table' then
+      if (type(r) == 'table' and getmetatable(r) == HereDoc) then
         local r = r
         ;(function() table.insert(heredocs, r); return heredocs end)()
       end
@@ -9350,7 +9350,7 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
     end
     return result
   end
-  if type(node) == 'table' then
+  if (type(node) == 'table' and getmetatable(node) == Pipeline) then
     local node = node
     local cmds = {}
     local i = 0
@@ -9358,7 +9358,7 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
     local needs_redirect
     while i < #node.commands do
       cmd = node.commands[i + 1]
-      if type(cmd) == 'table' then
+      if (type(cmd) == 'table' and getmetatable(cmd) == PipeBoth) then
         local cmd = cmd
         i = i + 1
         goto continue
@@ -9381,7 +9381,7 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
       local has_heredoc = false
       if cmd.kind == "command" and (#(cmd.redirects) > 0) then
         for _, r in ipairs(cmd.redirects) do
-          if type(r) == 'table' then
+          if (type(r) == 'table' and getmetatable(r) == HereDoc) then
             local r = r
             has_heredoc = true
             break
@@ -9432,25 +9432,25 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
     end
     return result
   end
-  if type(node) == 'table' then
+  if (type(node) == 'table' and getmetatable(node) == List) then
     local node = node
     has_heredoc = false
     for _, p in ipairs(node.parts) do
       if p.kind == "command" and (#(p.redirects) > 0) then
         for _, r in ipairs(p.redirects) do
-          if type(r) == 'table' then
+          if (type(r) == 'table' and getmetatable(r) == HereDoc) then
             local r = r
             has_heredoc = true
             break
           end
         end
       else
-        if type(p) == 'table' then
+        if (type(p) == 'table' and getmetatable(p) == Pipeline) then
           local p = p
           for _, cmd in ipairs(p.commands) do
             if cmd.kind == "command" and (#(cmd.redirects) > 0) then
               for _, r in ipairs(cmd.redirects) do
-                if type(r) == 'table' then
+                if (type(r) == 'table' and getmetatable(r) == HereDoc) then
                   local r = r
                   has_heredoc = true
                   break
@@ -9468,7 +9468,7 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
     local skipped_semi = false
     local cmd_count = 0
     for _, p in ipairs(node.parts) do
-      if type(p) == 'table' then
+      if (type(p) == 'table' and getmetatable(p) == Operator) then
         local p = p
         if p.op == ";" then
           if (#(result) > 0) and (string.sub(result[#result - 1 + 1], -#"\n") == "\n") then
@@ -9546,7 +9546,7 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
     end
     return s
   end
-  if type(node) == 'table' then
+  if (type(node) == 'table' and getmetatable(node) == If) then
     local node = node
     local cond = format_cmdsub_node(node.condition, indent, false, false, false)
     local then_body = format_cmdsub_node(node.then_body, indent + 4, false, false, false)
@@ -9558,7 +9558,7 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
     result = result + "\n" .. sp .. "fi"
     return result
   end
-  if type(node) == 'table' then
+  if (type(node) == 'table' and getmetatable(node) == While) then
     local node = node
     cond = format_cmdsub_node(node.condition, indent, false, false, false)
     local body = format_cmdsub_node(node.body, indent + 4, false, false, false)
@@ -9570,7 +9570,7 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
     end
     return result
   end
-  if type(node) == 'table' then
+  if (type(node) == 'table' and getmetatable(node) == Until) then
     local node = node
     cond = format_cmdsub_node(node.condition, indent, false, false, false)
     body = format_cmdsub_node(node.body, indent + 4, false, false, false)
@@ -9582,7 +9582,7 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
     end
     return result
   end
-  if type(node) == 'table' then
+  if (type(node) == 'table' and getmetatable(node) == For) then
     local node = node
     local var = node.var
     body = format_cmdsub_node(node.body, indent + 4, false, false, false)
@@ -9607,7 +9607,7 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
     end
     return result
   end
-  if type(node) == 'table' then
+  if (type(node) == 'table' and getmetatable(node) == ForArith) then
     local node = node
     body = format_cmdsub_node(node.body, indent + 4, false, false, false)
     result = "for ((" .. node.init .. "; " .. node.cond .. "; " .. node.incr .. "))\ndo\n" .. inner_sp .. body .. ";\n" .. sp .. "done"
@@ -9618,7 +9618,7 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
     end
     return result
   end
-  if type(node) == 'table' then
+  if (type(node) == 'table' and getmetatable(node) == Case) then
     local node = node
     local word = node.word.value
     local patterns = {}
@@ -9653,14 +9653,14 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
     end
     return "case " .. word .. " in" .. pattern_str + "\n" .. sp .. "esac" .. redirects
   end
-  if type(node) == 'table' then
+  if (type(node) == 'table' and getmetatable(node) == Function) then
     local node = node
     local name = node.name
     local inner_body = (node.body.kind == "brace-group" and node.body.body or node.body)
     body = string.gsub(format_cmdsub_node(inner_body, indent + 4, false, false, false), '[' .. ";" .. ']+$', '')
     return "function %s () \n{ \n%s%s\n}"
   end
-  if type(node) == 'table' then
+  if (type(node) == 'table' and getmetatable(node) == Subshell) then
     local node = node
     body = format_cmdsub_node(node.body, indent, in_procsub, compact_redirects, false)
     redirects = ""
@@ -9682,7 +9682,7 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
     end
     return "( " .. body .. " )"
   end
-  if type(node) == 'table' then
+  if (type(node) == 'table' and getmetatable(node) == BraceGroup) then
     local node = node
     body = format_cmdsub_node(node.body, indent, false, false, false)
     body = string.gsub(body, '[' .. ";" .. ']+$', '')
@@ -9700,23 +9700,23 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
     end
     return "{ " .. body .. terminator
   end
-  if type(node) == 'table' then
+  if (type(node) == 'table' and getmetatable(node) == ArithmeticCommand) then
     local node = node
     return "((" .. node.raw_content .. "))"
   end
-  if type(node) == 'table' then
+  if (type(node) == 'table' and getmetatable(node) == ConditionalExpr) then
     local node = node
     body = format_cond_body(node.body)
     return "[[ " .. body .. " ]]"
   end
-  if type(node) == 'table' then
+  if (type(node) == 'table' and getmetatable(node) == Negation) then
     local node = node
     if (node.pipeline ~= nil) then
       return "! " .. format_cmdsub_node(node.pipeline, indent, false, false, false)
     end
     return "! "
   end
-  if type(node) == 'table' then
+  if (type(node) == 'table' and getmetatable(node) == Time) then
     local node = node
     local prefix = (node.posix and "time -p " or "time ")
     if (node.pipeline ~= nil) then
@@ -9729,7 +9729,7 @@ end
 
 function format_redirect(r, compact, heredoc_op_only)
   local op
-  if type(r) == 'table' then
+  if (type(r) == 'table' and getmetatable(r) == HereDoc) then
     local r = r
     if r.strip_tabs then
       op = "<<-"

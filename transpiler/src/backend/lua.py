@@ -764,6 +764,19 @@ class LuaBackend:
             case StructRef(name=name):
                 type_name = _safe_type_name(name)
                 return f"(type({var}) == 'table' and getmetatable({var}) == {type_name})"
+            case InterfaceRef(name=name):
+                type_name = _safe_type_name(name)
+                return f"(type({var}) == 'table' and getmetatable({var}) == {type_name})"
+            case Pointer(target=target):
+                return self._type_check(var, target)
+            case Optional(inner=inner):
+                return self._type_check(var, inner)
+            case Union(name=name):
+                type_name = _safe_type_name(name)
+                return f"(type({var}) == 'table' and getmetatable({var}) == {type_name})"
+            case Struct(name=name):
+                type_name = _safe_type_name(name)
+                return f"(type({var}) == 'table' and getmetatable({var}) == {type_name})"
             case _:
                 return f"type({var}) == 'table'"
 

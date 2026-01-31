@@ -14,6 +14,7 @@ from ..ir import (
     RUNE,
     STRING,
     VOID,
+    FuncType,
     InterfaceRef,
     Loc,
     Map,
@@ -665,6 +666,12 @@ def lower_expr_Attribute(
             field_info = struct_info.fields.get(node_attr)
             if field_info:
                 field_type = field_info.typ
+            # Check if this is a method reference (bound method, not field access)
+            elif node_attr in struct_info.methods:
+                method_info = struct_info.methods[node_attr]
+                param_types = tuple(p.typ for p in method_info.params)
+                func_type = FuncType(params=param_types, ret=method_info.return_type, captures=True)
+                return ir.FuncRef(name=node_attr, obj=obj, typ=func_type, loc=loc_from_node(node))
     # Also look up field type from the asserted struct type
     if isinstance(obj, ir.TypeAssert):
         asserted = obj.asserted

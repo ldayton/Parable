@@ -11,8 +11,6 @@ Frontend deficiencies (should be fixed in frontend.py):
 - Auto-generated getKind() for Node implementations - backend has Parable-specific
   knowledge about Node interface contract.
 - Frontend now emits TrimChars IR nodes for strip/lstrip/rstrip methods.
-- FieldAccess for "this.method" emits ".bind(this)" - frontend should emit FuncRef
-  IR for method references, not FieldAccess that backend must detect and fix.
 - Frontend now emits NoOp IR nodes for skipped statements.
 
 Middleend deficiencies (should be fixed in middleend.py):
@@ -84,6 +82,7 @@ from src.ir import (
     FloatLit,
     ForClassic,
     ForRange,
+    FuncRef,
     FuncType,
     Function,
     If,
@@ -749,19 +748,12 @@ class TsBackend:
                     return f"{self._expr(obj)}[{field[1:]}]"
                 obj_str = self._expr(obj)
                 field_str = _camel(field)
-                # Check if this is a method reference on 'this' (needs .bind(this))
-                # If accessing 'this.method' where method is not a struct field,
-                # it's a method reference being passed as a callback
-                struct_field_names = [
-                    name for name, _ in self.struct_fields.get(self.current_struct, [])
-                ]
-                if (
-                    obj_str == "this"
-                    and self.current_struct is not None
-                    and field not in struct_field_names
-                ):
-                    return f"{obj_str}.{field_str}.bind(this)"
                 return f"{obj_str}.{field_str}"
+            case FuncRef(name=name, obj=obj):
+                if obj is not None:
+                    obj_str = self._expr(obj)
+                    return f"{obj_str}.{_camel(name)}.bind({obj_str})"
+                return _camel(name)
             case Index(obj=obj, index=index, typ=typ):
                 obj_str = self._expr(obj)
                 idx_str = self._expr(index)

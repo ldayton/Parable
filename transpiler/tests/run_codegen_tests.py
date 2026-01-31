@@ -15,6 +15,7 @@ from src.frontend.names import resolve_names
 from src.middleend import analyze
 from src.backend.go import GoBackend
 from src.backend.java import JavaBackend
+from src.backend.javascript import JsBackend
 from src.backend.perl import PerlBackend
 from src.backend.python import PythonBackend
 from src.backend.ruby import RubyBackend
@@ -22,10 +23,11 @@ from src.backend.typescript import TsBackend
 from src.backend.csharp import CSharpBackend
 from src.backend.php import PhpBackend
 
-BACKENDS: dict[str, type[GoBackend] | type[JavaBackend] | type[PerlBackend] | type[PythonBackend] | type[RubyBackend] | type[TsBackend] | type[CSharpBackend] | type[PhpBackend]] = {
+BACKENDS: dict[str, type[GoBackend] | type[JavaBackend] | type[JsBackend] | type[PerlBackend] | type[PythonBackend] | type[RubyBackend] | type[TsBackend] | type[CSharpBackend] | type[PhpBackend]] = {
     "csharp": CSharpBackend,
     "go": GoBackend,
     "java": JavaBackend,
+    "javascript": JsBackend,
     "perl": PerlBackend,
     "php": PhpBackend,
     "python": PythonBackend,

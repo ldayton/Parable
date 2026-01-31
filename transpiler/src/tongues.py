@@ -11,6 +11,7 @@ from .frontend.names import resolve_names
 from .middleend import analyze
 from .backend.go import GoBackend
 from .backend.java import JavaBackend
+from .backend.javascript import JsBackend
 from .backend.perl import PerlBackend
 from .backend.python import PythonBackend
 from .backend.ruby import RubyBackend
@@ -18,9 +19,10 @@ from .backend.typescript import TsBackend
 from .backend.csharp import CSharpBackend
 from .backend.php import PhpBackend
 
-BACKENDS: dict[str, type[GoBackend] | type[JavaBackend] | type[PerlBackend] | type[PythonBackend] | type[RubyBackend] | type[TsBackend] | type[CSharpBackend] | type[PhpBackend]] = {
+BACKENDS: dict[str, type[GoBackend] | type[JavaBackend] | type[JsBackend] | type[PerlBackend] | type[PythonBackend] | type[RubyBackend] | type[TsBackend] | type[CSharpBackend] | type[PhpBackend]] = {
     "go": GoBackend,
     "java": JavaBackend,
+    "javascript": JsBackend,
     "perl": PerlBackend,
     "python": PythonBackend,
     "ruby": RubyBackend,
@@ -33,7 +35,7 @@ USAGE: str = """\
 tongues [OPTIONS] < input.py > output.go
 
 Options:
-  --target TARGET   Output language: go, java, perl, python, ruby, typescript, csharp, php
+  --target TARGET   Output language: csharp, go, java, javascript, perl, php, python, ruby, typescript
   --verify [PATH]   Check subset compliance only, no codegen
                     PATH can be a file or directory (reads stdin if omitted)
   --help            Show this help message

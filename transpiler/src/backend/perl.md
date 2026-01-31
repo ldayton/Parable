@@ -1,222 +1,149 @@
-# Perl Backend Implementation Plan
+# Perl Backend Status
 
-## Goal
+## Current State
+
+- **Codegen tests**: 39/39 passing
+- **Syntax check** (`just prep pl`): Passes with warnings
+- **Test runner** (`just test pl`): 40 passed, 4534 failed
+
+## Known Issues
+
+### 1. Module-Level Functions in Wrong Package (BLOCKING)
+
+**Symptom**: `Undefined subroutine &main::parse` at runtime
+
+**Cause**: After emitting classes (`package Foo; ... package Bar; ...`), module-level functions are still inside the last package scope (`package Parser;`). The test runner calls `main::parse()` but the function is actually `Parser::parse()`.
+
+**Evidence**:
+```
+$ rg -n "^package" /tmp/transpile.pl | tail -3
+5035:package Coproc;
+5062:package Parser;
+# No "package main;" before module-level functions
+
+$ rg -n "^sub parse\b" /tmp/transpile.pl
+9012:sub parse ($self) {      # Parser method
+10959:sub parse ($source, $extglob) {  # Module-level function (but inside Parser::)
+```
+
+**Fix**: Emit `package main;` before module-level functions when classes have been emitted. In `_emit_module()`, after emitting all packages and before emitting module-level functions:
+```perl
+package main;  # Return to main package for module-level functions
+
+sub parse ($source, $extglob) { ... }
+sub new_parser (...) { ... }
+```
+
+**Location**: `perl.py:_emit_module()` - add `package main;` transition
+
+### 2. Subroutine Redefinition Warnings
+
+**Symptom**: `Subroutine parse_compound_command redefined at line 8670`
+
+**Cause**: The IR contains functions with the same name at different scopes (e.g., `Parser.parse` method and `parse` module-level function). When all end up in the same Perl package, they collide.
+
+**Evidence**:
+```
+Subroutine parse_compound_command redefined at /tmp/transpile.pl line 8670.
+Subroutine parse redefined at /tmp/transpile.pl line 10959.
+```
+
+**Fix**: This will be resolved by Issue #1 - once module-level functions go to `package main;`, they won't collide with class methods in their respective packages.
+
+### 3. Variable Masking Warnings (42 instances)
+
+**Symptom**: `"my" variable $foo masks earlier declaration in same scope`
+
+**Cause**: We pre-declare variables at function scope (`my $foo;`) to handle Perl's block scoping, but the middleend also hoists declarations before control flow. This causes:
+```perl
+my $op;  # Our pre-declaration
+...
+my $op = ...;  # Middleend hoisting - masks the earlier one
+```
+
+**Evidence**: 42 warnings like:
+```
+"my" variable $op masks earlier declaration in same scope at line 1734
+"my" variable $ch masks earlier declaration in same scope at line 6654
+```
+
+**Fix Options**:
+1. **Skip `my` for pre-declared vars in `_emit_hoisted_vars`**: Track which vars were pre-declared and don't emit `my` again
+2. **Use assignment instead of declaration for hoisted vars**: Change `my $x = ...` to `$x = ...` when var is pre-declared
+
+**Location**: `perl.py:_emit_hoisted_vars()` - check against `_predeclared_vars` set
+
+### 4. Character Iteration Bug
+
+**Symptom**: Iterating over string characters produces wrong results
+
+**Evidence**: In generated code:
+```perl
+for my $c (@{substr($name, 1)}) {  # WRONG: substr returns string, not arrayref
+```
+
+**Fix**: String character iteration needs `split('', substr($name, 1))`:
+```perl
+for my $c (split('', substr($name, 1))) {
+```
+
+**Location**: `perl.py:_emit_for_range()` - handle `Slice(Primitive("byte"))` over string
+
+---
+
+## Implementation Plan
+
+### Phase 1: Fix Package Scoping (Critical)
+
+1. Track whether any classes have been emitted in `_emit_module()`
+2. Before emitting module-level functions, emit `package main;` if classes were emitted
+3. Verify with `just test pl` - should eliminate "Undefined subroutine" errors
+
+### Phase 2: Fix Variable Masking Warnings
+
+1. Add `_predeclared_vars: set[str]` to track pre-declared variables per function
+2. Populate it in `_emit_function_body()` from `_collect_undeclared_assigns()`
+3. In `_emit_hoisted_vars()`, skip `my` for vars already in `_predeclared_vars`
+
+### Phase 3: Fix String Iteration
+
+1. In `_emit_for_range()`, detect when iterating over string bytes
+2. Emit `split('', $str)` instead of `@{$str}`
+
+### Phase 4: Run Full Test Suite
+
+1. `just test pl` - aim for majority passing
+2. Analyze remaining failures by category
+3. Fix in priority order
+
+---
+
+## Reference: Original Implementation Plan
+
+<details>
+<summary>Initial design document (click to expand)</summary>
+
+### Goal
 Create a clean, generic Perl backend for the Tongues transpiler that:
 - Uses only IR type information (no type override tables)
 - Has no domain-specific knowledge (no hardcoded interface names, prefixes, etc.)
 - Follows Perl idioms (sigils, references, `use strict; use warnings;`)
 - Targets Perl 5.36+ with native subroutine signatures
 
-## Files to Create
-
-### `/Users/lily/source/Parable/transpiler/src/backend/perl.py`
-
-```python
-class PerlBackend:
-    def __init__(self) -> None:
-        self.indent = 0
-        self.lines: list[str] = []
-        self.receiver_name: str | None = None
-
-    def emit(self, module: Module) -> str:
-        """Emit complete Perl source from IR Module."""
-```
-
-**Structure:**
-1. Reserved word handling (`_PERL_RESERVED` frozenset, suffix `_` for escaping)
-2. Naming helpers (`_snake()`, `_safe_name()`, `_sigil()`)
-3. Type→sigil mapping (`_sigil(typ: Type) -> str`)
-4. Module emission (`_emit_module()`, `_emit_constants()`, `_emit_package()`, `_emit_functions()`)
-5. Statement dispatch (`_emit_stmt()` with match/case to specific handlers)
-6. Expression dispatch (`_expr()` with match/case to specific handlers)
-7. LValue emission (`_lvalue()`)
-
-## Type Mapping
-
-Perl is dynamically typed; types map to runtime representations:
+### Type Mapping
 
 | IR Type | Perl Representation | Notes |
 |---------|---------------------|-------|
 | `Primitive("string")` | scalar | Native |
 | `Primitive("int")` | scalar | Native (arbitrary precision) |
 | `Primitive("bool")` | scalar | `1`/`0` or `!!` for coercion |
-| `Primitive("float")` | scalar | Native |
-| `Primitive("byte")` | scalar | `ord()`/`chr()` for conversion |
-| `Primitive("rune")` | scalar | Single character string |
 | `Slice(T)` | arrayref `[]` | `@$ref` to dereference |
 | `Map(K, V)` | hashref `{}` | `%$ref` to dereference |
-| `Set(T)` | hashref `{}` | Keys only, values = 1 |
-| `Tuple(...)` | arrayref `[]` | Access via `$ref->[0]`, `$ref->[1]` |
 | `Optional(T)` | scalar | `undef` for None |
 | `StructRef(X)` | blessed hashref | `bless {}, 'X'` |
-| `InterfaceRef(X)` | scalar | Duck typing, no prefix |
 | `FuncType` | coderef | `sub { ... }` or `\&name` |
 
-## Key Perl Features to Use
-
-- **Signatures**: `sub foo ($a, $b) { ... }` — native in 5.36+
-- **References**: `\@array`, `\%hash`, `$ref->method()` for OO
-- **Autovivification**: Arrays/hashes grow automatically
-- **Duck typing**: No interface declarations needed
-- **Ternary**: `$cond ? $a : $b` — native
-- **Range**: `for my $i (0 .. $n-1)` — native
-- **Pattern matching**: `given`/`when` or chained `if`/`elsif`
-- **Exception handling**: `eval { ... }; if ($@) { ... }`
-
-## Sigil Rules
-
-| Context | Sigil | Example |
-|---------|-------|---------|
-| Scalar variable | `$` | `$x`, `$name` |
-| Array variable | `@` | `@items` |
-| Hash variable | `%` | `%lookup` |
-| Array element | `$` | `$items[0]`, `$ref->[0]` |
-| Hash element | `$` | `$lookup{key}`, `$ref->{key}` |
-| Subroutine | `&` | `&func` (rarely needed) |
-| Coderef call | | `$coderef->()` |
-
-For IR, always use references for collections:
-- `Slice` → `$items = [...]` (arrayref, access via `$items->[$i]`)
-- `Map` → `$lookup = {...}` (hashref, access via `$lookup->{$k}`)
-
-## OO Strategy
-
-Use simple blessed hashrefs (no Moo/Moose dependency):
-
-```perl
-package Foo;
-use strict;
-use warnings;
-
-sub new ($class, $x, $y) {
-    return bless { x => $x, y => $y }, $class;
-}
-
-sub x ($self) { $self->{x} }
-sub set_x ($self, $val) { $self->{x} = $val }
-```
-
-Alternatively, generate accessors inline:
-```perl
-sub x ($self, $val = undef) {
-    $self->{x} = $val if defined $val;
-    return $self->{x};
-}
-```
-
-## Files to Modify
-
-### `/Users/lily/source/Parable/transpiler/src/tongues.py`
-
-Add import (after line 15):
-```python
-from .backend.perl import PerlBackend
-```
-
-Update BACKENDS dict:
-```python
-BACKENDS: dict[str, type[...]] = {
-    "go": GoBackend,
-    "java": JavaBackend,
-    "py": PythonBackend,
-    "ts": TsBackend,
-    "pl": PerlBackend,
-}
-```
-
-Update USAGE string:
-```python
---target TARGET   Output language: go, java, py, ts, pl (default: go)
-```
-
-### `/Users/lily/source/Parable/transpiler/tests/run_codegen_tests.py`
-
-Add import:
-```python
-from src.backend.perl import PerlBackend
-```
-
-Update BACKENDS dict:
-```python
-BACKENDS: dict[str, type[...]] = {
-    "go": GoBackend,
-    "java": JavaBackend,
-    "python": PythonBackend,
-    "ts": TsBackend,
-    "pl": PerlBackend,
-}
-```
-
-### `/Users/lily/source/Parable/transpiler/tests/codegen/basic.tests`
-
-Add `--- pl` sections to each test case with expected Perl output.
-
-## Implementation Order
-
-1. **Core infrastructure** (~80 lines)
-   - Imports, reserved words, naming helpers
-   - `PerlBackend` class with `__init__`, `emit`, `_line`
-   - Sigil/reference helper functions
-
-2. **Module structure** (~120 lines)
-   - `_emit_module()` - `use` statements, `use strict; use warnings; use feature 'signatures';`
-   - `_emit_constants()` - `use constant` or `Readonly`
-   - `_emit_package()` - `package Name;` with constructor and accessors
-   - `_emit_enum()` - constants or hash mapping
-
-3. **Statements** (~250 lines)
-   - Simple: VarDecl, Assign, TupleAssign, OpAssign, Return, ExprStmt, NoOp
-   - Control: If, While, ForRange, ForClassic, Break (`last`), Continue (`next`), Block
-   - Complex: TryCatch (`eval`/`$@`), Raise (`die`), SoftFail, TypeSwitch, Match
-
-4. **Expressions** (~350 lines)
-   - Literals: IntLit, FloatLit, StringLit, CharLit, BoolLit, NilLit (`undef`)
-   - Access: Var, FieldAccess (`$obj->{field}`), Index (`$ref->[$i]`), SliceExpr
-   - Calls: Call, MethodCall (`$obj->method()`), StaticCall (`Package::func()`)
-   - Operators: BinaryOp, UnaryOp, Ternary
-   - Types: Cast, TypeAssert (`ref($x) eq 'Type'`), IsType, IsNil (`!defined`), Truthy
-   - Collections: Len (`scalar @$ref` / `keys %$ref`), MakeSlice, MakeMap, SliceLit, MapLit, SetLit, TupleLit, StructLit
-   - Strings: StringConcat (`.`), StringFormat (`sprintf`), ParseInt, IntToStr, CharClassify, TrimChars, CharAt (`substr`), Substring
-
-5. **LValues** (~30 lines)
-   - VarLV, FieldLV, IndexLV, DerefLV
-
-6. **Registration & tests**
-   - Update tongues.py and run_codegen_tests.py
-   - Add `--- pl` sections to test files
-
-## Perl-Specific Mappings
-
-| IR Construct | Perl Output |
-|--------------|-------------|
-| `BinaryOp(+, a, b)` (int) | `$a + $b` |
-| `BinaryOp(+, a, b)` (str) | `$a . $b` |
-| `BinaryOp(==, a, b)` (int) | `$a == $b` |
-| `BinaryOp(==, a, b)` (str) | `$a eq $b` |
-| `Len(slice)` | `scalar @$slice` |
-| `Len(map)` | `scalar keys %$map` |
-| `Len(str)` | `length($s)` |
-| `Index(slice, i)` | `$slice->[$i]` |
-| `Index(map, k)` | `$map->{$k}` |
-| `Index(str, i)` | `substr($s, $i, 1)` |
-| `SliceExpr(s, a, b)` | `substr($s, $a, $b - $a)` (str) |
-| `SliceExpr(arr, a, b)` | `[@$arr[$a .. $b-1]]` |
-| `IsNil(x)` | `!defined($x)` |
-| `Truthy(x)` (str/list) | `$x` (Perl truthiness) |
-| `TryCatch` | `eval { ... }; if ($@) { ... }` |
-| `Raise(msg)` | `die $msg` |
-| `Break` | `last` |
-| `Continue` | `next` |
-| `ForRange(i, 0, n)` | `for my $i (0 .. $n-1)` |
-| `Print(x)` | `say $x` or `print $x` |
-| `ReadLine` | `my $line = <STDIN>; chomp $line;` |
-| `ReadAll` | `do { local $/; <STDIN> }` |
-| `Args` | `@ARGV` |
-| `GetEnv(name)` | `$ENV{$name}` |
-
-## String vs Numeric Operators
-
-Perl requires different operators for string vs numeric comparison:
+### Key Perl Operators
 
 | Operation | Numeric | String |
 |-----------|---------|--------|
@@ -224,69 +151,39 @@ Perl requires different operators for string vs numeric comparison:
 | Not equal | `!=` | `ne` |
 | Less than | `<` | `lt` |
 | Greater than | `>` | `gt` |
-| Less/equal | `<=` | `le` |
-| Greater/equal | `>=` | `ge` |
-| Compare | `<=>` | `cmp` |
+| Concatenate | N/A | `.` |
 
-Backend must check IR types to emit correct operator.
+### IR → Perl Mappings
 
-## What NOT to Do
+| IR Construct | Perl Output |
+|--------------|-------------|
+| `Len(slice)` | `scalar @$slice` |
+| `Len(str)` | `length($s)` |
+| `Index(slice, i)` | `$slice->[$i]` |
+| `Index(str, i)` | `substr($s, $i, 1)` |
+| `IsNil(x)` | `!defined($x)` |
+| `TryCatch` | `eval { ... }; if ($@) { ... }` |
+| `Raise(msg)` | `die $msg` |
+| `Break` | `last` |
+| `Continue` | `next` |
+| `ForRange(i, 0, n)` | `for my $i (0 .. $n-1)` |
 
-- **No type override tables** - IR has complete type info
-- **No domain-specific names** - no hardcoded class names
-- **No Moose/Moo** - keep dependency-free with blessed refs
-- **No indirect object syntax** - always `$obj->method()`, never `method $obj`
+</details>
 
-## Verification
+---
+
+## Verification Commands
 
 ```bash
-cd /Users/lily/source/Parable/transpiler
+# Syntax check only
+just prep pl
 
-# Run codegen tests
-python3 tests/run_codegen_tests.py tests/codegen/
+# Full test suite
+just test pl
 
-# Manual test
-echo 'def add(a: int, b: int) -> int:
-    return a + b' | python3 -m src.tongues --target pl
+# Codegen tests (should stay at 39/39)
+just test-codegen
+
+# Debug specific function
+just emit pl | grep -A 20 "^sub parse "
 ```
-
-Expected output for simple function:
-```perl
-use strict;
-use warnings;
-use feature 'signatures';
-no warnings 'experimental::signatures';
-
-sub add ($a, $b) {
-    return $a + $b;
-}
-```
-
-Expected output for class:
-```perl
-use strict;
-use warnings;
-use feature 'signatures';
-no warnings 'experimental::signatures';
-
-package Point;
-
-sub new ($class, $x, $y) {
-    return bless { x => $x, y => $y }, $class;
-}
-
-sub x ($self) { $self->{x} }
-sub y ($self) { $self->{y} }
-
-sub distance ($self, $other) {
-    my $dx = $self->{x} - $other->{x};
-    my $dy = $self->{y} - $other->{y};
-    return sqrt($dx * $dx + $dy * $dy);
-}
-
-1;
-```
-
-## Estimated Size
-
-~800-900 lines (smaller than Go/Java due to dynamic typing, no type declarations, simple OO)

@@ -29,11 +29,11 @@ The transpiler supports these target languages:
 | Go         | Go 1.21      | Aug 2023 | `go@1.21`     | `setup-go@v5`     | Done   |
 | Java       | Temurin 21   | Sep 2023 | `temurin@21`  | `setup-java@v4`   | Done   |
 | Javascript | Node.js 21   | Oct 2023 | `node@21`     | `setup-node@v4`   | Done   |
+| Lua        | Lua 5.4      | May 2023 | `lua`         | `gh-actions-lua`  | Done   |
 | Python     | CPython 3.12 | Oct 2023 | `python@3.12` | `setup-uv@v4`     | Done   |
 | Ruby       | Ruby 3.3     | Dec 2023 | `ruby@3.3`    | `setup-ruby@v1`   | Done   |
 | Typescript | tsc 5.3      | Nov 2023 | `node@21`     | `setup-node@v4`   | Done   |
 | C#         | .NET 8       | Nov 2023 | `dotnet@8`    | `setup-dotnet@v4` | WIP    |
-| Lua        | Lua 5.4      | May 2023 | `lua`         | `gh-actions-lua`  | WIP    |
 | Perl       | Perl 5.38    | Jul 2023 | `perl`        | `setup-perl@v1`   | WIP    |
 | PHP        | PHP 8.3      | Nov 2023 | `php@8.3`     | `setup-php@v2`    | WIP    |
 | C          | GCC 13       | Jul 2023 | `gcc@13`      | `setup-gcc@v1`    | Future |

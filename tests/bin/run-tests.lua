@@ -244,10 +244,6 @@ local function main()
         effective_expected = "<error>"
       end
 
-      -- Show which test is running (for debugging hangs)
-      io.stderr:write(string.format("\r[%d] %s:%d %s                    ", total_passed + total_failed + 1, rel_path, line_num, name:sub(1,30)))
-      io.stderr:flush()
-
       local passed, actual, error_msg = run_test(test_input, effective_expected)
 
       if passed then
@@ -276,7 +272,6 @@ local function main()
   end
 
   local elapsed = os.clock() - start_time
-  io.stderr:write("\r" .. string.rep(" ", 40) .. "\r")  -- Clear progress line
 
   -- Print summary
   print("")

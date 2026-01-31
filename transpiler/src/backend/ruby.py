@@ -778,7 +778,12 @@ class RubyBackend:
                 expr_str = self._expr(e)
                 if isinstance(inner_type, Slice) or isinstance(inner_type, Map) or isinstance(inner_type, Set):
                     return f"({expr_str} && !{expr_str}.empty?)"
-                if isinstance(inner_type, Optional) or isinstance(inner_type, Pointer):
+                if isinstance(inner_type, Optional):
+                    inner = inner_type.inner
+                    if isinstance(inner, (Slice, Map, Set)):
+                        return f"({expr_str} && !{expr_str}.empty?)"
+                    return f"!{expr_str}.nil?"
+                if isinstance(inner_type, Pointer):
                     return f"!{expr_str}.nil?"
                 if inner_type == Primitive(kind="string"):
                     return f"({expr_str} && !{expr_str}.empty?)"

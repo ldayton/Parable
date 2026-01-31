@@ -3832,7 +3832,7 @@ class Select
         word_parts.push(w.to_sexp)
       end
       word_strs = word_parts.join(" ")
-      if !self.words.nil?
+      if (self.words && !self.words.empty?)
         in_clause = "(in " + word_strs + ")"
       else
         in_clause = "(in)"

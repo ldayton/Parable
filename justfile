@@ -3,7 +3,7 @@ set shell := ["bash", "-o", "pipefail", "-cu"]
 # --- Configuration ---
 project := "parable"
 run_id := `head -c 16 /dev/urandom | xxd -p`
-backends := "go python ts"  # Testable transpiled backends
+backends := "go php pl python ts"  # Testable transpiled backends
 
 # --- Helpers ---
 
@@ -74,6 +74,22 @@ backend-transpile backend:
             mkdir -p dist/java
             uv run --directory transpiler python -m src.tongues --target java < "$(pwd)/src/parable.py" > dist/java/Parable.java
             ;;
+        cs)
+            mkdir -p dist/cs
+            uv run --directory transpiler python -m src.tongues --target cs < "$(pwd)/src/parable.py" > dist/cs/Parable.cs
+            ;;
+        rb)
+            mkdir -p dist/rb
+            uv run --directory transpiler python -m src.tongues --target rb < "$(pwd)/src/parable.py" > dist/rb/parable.rb
+            ;;
+        pl)
+            mkdir -p dist/pl
+            uv run --directory transpiler python -m src.tongues --target pl < "$(pwd)/src/parable.py" > dist/pl/parable.pl
+            ;;
+        php)
+            mkdir -p dist/php
+            uv run --directory transpiler python -m src.tongues --target php < "$(pwd)/src/parable.py" > dist/php/parable.php
+            ;;
         *)
             echo "Unknown backend: {{backend}}"
             exit 1
@@ -108,6 +124,25 @@ backend-test backend:
             javac -d dist/java/classes dist/java/Parable.java dist/java/RunTests.java
             java -cp dist/java/classes RunTests "$tests_abs"
             ;;
+        rb)
+            just backend-transpile rb
+            ruby -r ./dist/rb/parable.rb tests/bin/run-tests.rb "$tests_abs"
+            ;;
+        pl)
+            just backend-transpile pl
+            perl -c dist/pl/parable.pl
+            PERL5LIB=dist/pl perl tests/bin/run-tests.pl "$tests_abs"
+            ;;
+        php)
+            just backend-transpile php
+            php -l dist/php/parable.php
+            php tests/bin/run-tests.php "$tests_abs"
+            ;;
+        cs)
+            just backend-transpile cs
+            dotnet build dist/cs/cs.csproj -o dist/cs/bin --verbosity quiet
+            dotnet dist/cs/bin/cs.dll "$tests_abs"
+            ;;
         *)
             echo "No test runner for backend: {{backend}}"
             echo "Available backends: {{backends}}"
@@ -120,7 +155,7 @@ backend-test backend:
 # Internal: run all parallel checks
 [private]
 [parallel]
-_check-parallel: src-test src-lint src-fmt src-verify-lock src-subset transpiler-subset transpiler-test check-dump-ast (backend-test "go") (backend-test "python") (backend-test "ts") (backend-test "java")
+_check-parallel: src-test src-lint src-fmt src-verify-lock src-subset transpiler-subset transpiler-test check-dump-ast (backend-test "go") (backend-test "php") (backend-test "pl") (backend-test "python") (backend-test "ts") (backend-test "java") (backend-test "rb") (backend-test "cs")
 
 # Ensure biome is installed (prevents race condition in parallel JS checks)
 [private]

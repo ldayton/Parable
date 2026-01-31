@@ -492,6 +492,19 @@ class LuaBackend:
         self._line("if v == nil then return default else return v end")
         self.indent -= 1
         self._line("end")
+        self._line()
+        # Bytes to string helper (for decode())
+        self._line("local function _bytes_to_string(bytes)")
+        self.indent += 1
+        self._line("local chars = {}")
+        self._line("for i, b in ipairs(bytes) do")
+        self.indent += 1
+        self._line("chars[i] = string.char(b)")
+        self.indent -= 1
+        self._line("end")
+        self._line("return table.concat(chars, '')")
+        self.indent -= 1
+        self._line("end")
 
     def _emit_constant(self, const: Constant) -> None:
         name = to_screaming_snake(const.name)
@@ -1165,7 +1178,7 @@ class LuaBackend:
             case Cast(expr=inner, to_type=to_type):
                 if to_type == Primitive(kind="string") and isinstance(inner.typ, Slice):
                     # byte slice to string
-                    return f"table.concat({self._expr(inner)}, '')"
+                    return f"_bytes_to_string({self._expr(inner)})"
                 if to_type == Primitive(kind="string") and inner.typ == Primitive(
                     kind="rune"
                 ):

@@ -71,6 +71,14 @@ local function _map_get(m, key, default)
   local v = m[key]
   if v == nil then return default else return v end
 end
+
+local function _bytes_to_string(bytes)
+  local chars = {}
+  for i, b in ipairs(bytes) do
+    chars[i] = string.char(b)
+  end
+  return table.concat(chars, '')
+end
 ANSI_C_ESCAPES = {["a"] = 7, ["b"] = 8, ["e"] = 27, ["E"] = 27, ["f"] = 12, ["n"] = 10, ["r"] = 13, ["t"] = 9, ["v"] = 11, ["\\"] = 92, ["\""] = 34, ["?"] = 63}
 TOKENTYPE_EOF = 0
 TOKENTYPE_WORD = 1
@@ -2206,7 +2214,7 @@ function Word:expand_ansi_c_escapes(value)
   end
   local inner = substring(value, 1, #value - 1)
   local literal_bytes = self:ansi_c_to_bytes(inner)
-  local literal_str = table.concat(literal_bytes, '')
+  local literal_str = _bytes_to_string(literal_bytes)
   return self:sh_single_quote(literal_str)
 end
 

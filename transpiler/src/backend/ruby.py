@@ -302,7 +302,7 @@ class RubyBackend:
         if is_empty and not struct.is_exception and not struct.implements:
             return
         if struct.is_exception:
-            base = struct.embedded_type if struct.embedded_type else "StandardError"
+            base = _safe_type_name(struct.embedded_type) if struct.embedded_type else "StandardError"
             self._line(f"class {_safe_type_name(struct.name)} < {base}")
         else:
             self._line(f"class {_safe_type_name(struct.name)}")
@@ -592,7 +592,7 @@ class RubyBackend:
             self._emit_stmt(s)
         self.indent -= 1
         var = _safe_name(catch_var) if catch_var else "_e"
-        exc_type = catch_type.name if isinstance(catch_type, StructRef) else "StandardError"
+        exc_type = _safe_type_name(catch_type.name) if isinstance(catch_type, StructRef) else "StandardError"
         self._line(f"rescue {exc_type} => {var}")
         self.indent += 1
         if _is_empty_body(catch_body) and not reraise:
@@ -685,12 +685,12 @@ class RubyBackend:
             case CharClassify(kind=kind, char=char):
                 char_expr = self._expr(char)
                 method_map = {
-                    "digit": f"{char_expr}.match?(/\\d/)",
-                    "alpha": f"{char_expr}.match?(/[[:alpha:]]/)",
-                    "alnum": f"{char_expr}.match?(/[[:alnum:]]/)",
-                    "space": f"{char_expr}.match?(/\\s/)",
-                    "upper": f"{char_expr}.match?(/[[:upper:]]/)",
-                    "lower": f"{char_expr}.match?(/[[:lower:]]/)",
+                    "digit": f"({char_expr}).match?(/\\A\\d+\\z/)",
+                    "alpha": f"({char_expr}).match?(/\\A[[:alpha:]]+\\z/)",
+                    "alnum": f"({char_expr}).match?(/\\A[[:alnum:]]+\\z/)",
+                    "space": f"({char_expr}).match?(/\\A\\s+\\z/)",
+                    "upper": f"({char_expr}).match?(/\\A[[:upper:]]+\\z/)",
+                    "lower": f"({char_expr}).match?(/\\A[[:lower:]]+\\z/)",
                 }
                 return method_map[kind]
             case TrimChars(string=s, chars=chars, mode=mode):
@@ -944,12 +944,12 @@ class RubyBackend:
             case Optional(inner=inner):
                 return self._type(inner)
             case StructRef(name=name):
-                return name
+                return _safe_type_name(name)
             case InterfaceRef(name=name):
-                return name
+                return _safe_type_name(name)
             case Union(name=name, variants=variants):
                 if name:
-                    return name
+                    return _safe_type_name(name)
                 return "Object"
             case FuncType(params=params, ret=ret):
                 return "Proc"

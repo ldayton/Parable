@@ -260,3 +260,25 @@ function add(int $a, int $b): int
 ## Estimated Size
 
 ~900-1100 lines (smaller than Go/Java due to simpler type system, native match, ternary)
+
+## Known Issues / Fix Plan
+
+### Tuple Field Access Bug
+
+**Problem:** Tests fail with `Attempt to read property "f0" on array` because tuple field access generates `$pair->f0` instead of `$pair[0]`.
+
+**Root Cause:** In `php.py` line 680, the check uses lowercase `"f"`:
+```python
+if isinstance(obj_type, Tuple) and field.startswith("f") and field[1:].isdigit():
+```
+
+But the IR uses uppercase `"F0"`, `"F1"`, etc. All other backends use uppercase `"F"`.
+
+**Fix:** Change line 680 from `field.startswith("f")` to `field.startswith("F")`.
+
+**File:** `transpiler/src/backend/php.py` (line 680)
+
+**Verification:**
+```bash
+just backend-test php
+```

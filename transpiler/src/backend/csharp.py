@@ -216,6 +216,9 @@ class CSharpBackend:
         self._module_name: str = ""
         self._interface_names: set[str] = set()
         self.temp_counter = 0
+        self._type_switch_binding_rename: dict[str, str] = {}
+        self._loop_temp_counter = 0
+        self._func_params: set[str] = set()
 
     def emit(self, module: Module) -> str:
         """Emit C# code from IR Module."""
@@ -358,6 +361,7 @@ class CSharpBackend:
 
     def _emit_function(self, func: Function) -> None:
         self._hoisted_vars = set()
+        self._func_params = {p.name for p in func.params if isinstance(p.typ, FuncType)}
         params = self._params(func.params)
         ret = self._type(func.ret)
         name = _safe_pascal(func.name)
@@ -373,6 +377,7 @@ class CSharpBackend:
 
     def _emit_method(self, func: Function) -> None:
         self._hoisted_vars = set()
+        self._func_params = {p.name for p in func.params if isinstance(p.typ, FuncType)}
         params = self._params(func.params)
         ret = self._type(func.ret)
         name = _safe_pascal(func.name)
@@ -609,10 +614,17 @@ class CSharpBackend:
         self.indent += 1
         for case in cases:
             type_name = self._type_name_for_check(case.typ)
-            self._line(f"case {type_name} {binding}:")
+            # Create unique narrowed name to avoid CS0136 variable shadowing
+            narrowed_name = f"{binding}{type_name}"
+            self._line(f"case {type_name} {narrowed_name}:")
             self.indent += 1
+            # Track rename so Var references use narrowed name
+            self._type_switch_binding_rename[stmt.binding] = narrowed_name
+            saved_hoisted = self._hoisted_vars.copy()
             for s in case.body:
                 self._emit_stmt(s)
+            self._hoisted_vars = saved_hoisted
+            self._type_switch_binding_rename.pop(stmt.binding)
             if case.body and not isinstance(case.body[-1], Return):
                 self._line("break;")
             self.indent -= 1
@@ -664,33 +676,54 @@ class CSharpBackend:
         if value is not None and index is not None:
             idx = _safe_name(index)
             val = _safe_name(value)
+            val_hoisted = value in self._hoisted_vars
             if is_string:
                 self._line(f"for (int {idx} = 0; {idx} < {iter_expr}.Length; {idx}++)")
                 self._line("{")
                 self.indent += 1
-                self._line(f"var {val} = {iter_expr}[{idx}].ToString();")
+                if val_hoisted:
+                    self._line(f"{val} = {iter_expr}[{idx}].ToString();")
+                else:
+                    self._line(f"var {val} = {iter_expr}[{idx}].ToString();")
             else:
                 self._line(f"for (int {idx} = 0; {idx} < {iter_expr}.Count; {idx}++)")
                 self._line("{")
                 self.indent += 1
                 elem_type = self._element_type(iter_type)
-                self._line(f"{elem_type} {val} = {iter_expr}[{idx}];")
+                if val_hoisted:
+                    self._line(f"{val} = {iter_expr}[{idx}];")
+                else:
+                    self._line(f"{elem_type} {val} = {iter_expr}[{idx}];")
             for s in body:
                 self._emit_stmt(s)
             self.indent -= 1
             self._line("}")
         elif value is not None:
             val = _safe_name(value)
+            is_hoisted = value in self._hoisted_vars
             if is_string:
-                self._line(f"foreach (var _c in {iter_expr})")
+                self._loop_temp_counter += 1
+                temp_var = f"_c{self._loop_temp_counter}"
+                self._line(f"foreach (var {temp_var} in {iter_expr})")
                 self._line("{")
                 self.indent += 1
-                self._line(f"var {val} = _c.ToString();")
+                if is_hoisted:
+                    self._line(f"{val} = {temp_var}.ToString();")
+                else:
+                    self._line(f"var {val} = {temp_var}.ToString();")
             else:
                 elem_type = self._element_type(iter_type)
-                self._line(f"foreach ({elem_type} {val} in {iter_expr})")
-                self._line("{")
-                self.indent += 1
+                if is_hoisted:
+                    self._loop_temp_counter += 1
+                    temp_var = f"_e{self._loop_temp_counter}"
+                    self._line(f"foreach ({elem_type} {temp_var} in {iter_expr})")
+                    self._line("{")
+                    self.indent += 1
+                    self._line(f"{val} = {temp_var};")
+                else:
+                    self._line(f"foreach ({elem_type} {val} in {iter_expr})")
+                    self._line("{")
+                    self.indent += 1
             for s in body:
                 self._emit_stmt(s)
             self.indent -= 1
@@ -788,6 +821,8 @@ class CSharpBackend:
             case NilLit():
                 return "null"
             case Var(name=name):
+                if name in self._type_switch_binding_rename:
+                    return self._type_switch_binding_rename[name]
                 if name == self.receiver_name:
                     return "this"
                 if name.isupper() or (name[0].isupper() and "_" in name and name.split("_", 1)[1].isupper()):
@@ -1023,6 +1058,12 @@ class CSharpBackend:
             return f"Math.Min({args_str})"
         if func == "max":
             return f"Math.Max({args_str})"
+        # Pointer boxing not needed in C#
+        if func in ("_intPtr", "_int_ptr"):
+            return self._expr(args[0])
+        # Function-typed parameters are called directly, not via ParableFunctions
+        if func in self._func_params:
+            return f"{_safe_name(func)}({args_str})"
         func_class = to_pascal(self._module_name) + "Functions"
         return f"{func_class}.{_safe_pascal(func)}({args_str})"
 
@@ -1082,6 +1123,14 @@ class CSharpBackend:
             return f"{obj_str}.Clear()"
         if method == "insert":
             return f"{obj_str}.Insert({args_str})"
+        # Handle common methods that fall through when receiver type is unknown
+        if method == "endswith":
+            return f"{obj_str}.EndsWith({args_str})"
+        if method == "startswith":
+            return f"{obj_str}.StartsWith({args_str})"
+        # ToSexp needs cast when receiver is object (from type switch default)
+        if method == "to_sexp":
+            return f"((INode){obj_str}).ToSexp()"
         return f"{obj_str}.{_safe_pascal(method)}({args_str})"
 
     def _slice_expr(self, obj: Expr, low: Expr | None, high: Expr | None) -> str:
@@ -1274,6 +1323,9 @@ class CSharpBackend:
             case Slice():
                 elem = self._type(typ.element)
                 return f"new List<{elem}>()"
+            case Tuple(elements=elements):
+                defaults = ", ".join(self._default_value(t) for t in elements)
+                return f"({defaults})"
             case Optional():
                 return "null"
             case _:

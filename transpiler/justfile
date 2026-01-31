@@ -4,8 +4,8 @@ set shell := ["bash", "-o", "pipefail", "-cu"]
 source := "../src/parable.py"
 tests := "../tests"
 dist := "../dist/go"
-backends := "go java py ts"
-testable := "go py ts"
+backends := "cs go java php pl py ts"
+testable := "go php pl py ts"
 
 # Transpile source to stdout
 emit backend="go":
@@ -17,6 +17,10 @@ prep backend="go":
     set -euo pipefail
     just style
     case "{{backend}}" in
+        cs|csharp)
+            uv run python -m src.tongues --target cs < {{source}} > ../dist/cs/Parable.cs
+            dotnet build ../dist/cs -c Release -v q --nologo
+            ;;
         go)
             uv run python -m src.tongues --target go < {{source}} > /tmp/transpile-ir.go
             gofmt /tmp/transpile-ir.go > {{dist}}/parable.go
@@ -33,6 +37,14 @@ prep backend="go":
             rm -rf /tmp/transpile-ts && mkdir -p /tmp/transpile-ts/src
             uv run python -m src.tongues --target ts < {{source}} > /tmp/transpile-ts/src/output.ts
             tsc --outDir /tmp/transpile-ts/src --lib es2019 --module commonjs --esModuleInterop /tmp/transpile-ts/src/output.ts
+            ;;
+        pl|perl)
+            uv run python -m src.tongues --target pl < {{source}} > /tmp/transpile.pl
+            perl -c /tmp/transpile.pl
+            ;;
+        php)
+            uv run python -m src.tongues --target php < {{source}} > /tmp/transpile.php
+            php -l /tmp/transpile.php
             ;;
         *)
             echo "Unknown backend: {{backend}}"
@@ -59,6 +71,18 @@ test backend="go":
         ts|typescript)
             just prep ts
             node {{tests}}/bin/run-js-tests.js /tmp/transpile-ts
+            ;;
+        pl|perl)
+            rm -rf /tmp/transpile-test-pl && mkdir /tmp/transpile-test-pl
+            uv run python -m src.tongues --target pl < {{source}} > /tmp/transpile-test-pl/parable.pl
+            perl -c /tmp/transpile-test-pl/parable.pl
+            PERL5LIB=/tmp/transpile-test-pl perl {{tests}}/bin/run-tests.pl {{tests}}
+            ;;
+        php)
+            rm -rf /tmp/transpile-test-php && mkdir /tmp/transpile-test-php
+            uv run python -m src.tongues --target php < {{source}} > /tmp/transpile-test-php/parable.php
+            php -l /tmp/transpile-test-php/parable.php
+            php {{tests}}/bin/run-tests.php {{tests}}
             ;;
         *)
             echo "No test runner for backend: {{backend}}"

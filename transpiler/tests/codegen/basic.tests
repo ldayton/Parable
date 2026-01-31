@@ -13,6 +13,19 @@ static int add(int a, int b) {
 function add(a: number, b: number): number {
   return a + b;
 }
+--- rb
+def add(a, b)
+  return a + b
+end
+--- pl
+sub add ($a, $b) {
+    return $a + $b;
+}
+--- php
+function add(int $a, int $b): int
+{
+    return $a + $b;
+}
 ---
 
 === if statement
@@ -57,6 +70,45 @@ function sign(x: number): number {
     }
   }
 }
+--- rb
+def sign(x)
+  if x > 0
+    return 1
+  elsif x < 0
+    return -1
+  else
+    return 0
+  end
+end
+--- pl
+sub sign ($x) {
+    if ($x > 0) {
+        return 1;
+    } elsif ($x < 0) {
+        return -1;
+    } else {
+        return 0;
+    }
+}
+--- php
+function sign(int $x): int
+{
+    if ($x > 0)
+    {
+        return 1;
+    }
+    else
+    {
+        if ($x < 0)
+        {
+            return -1;
+        }
+        else
+        {
+            return 0;
+        }
+    }
+}
 ---
 
 === while loop
@@ -93,6 +145,35 @@ function countdown(n: number): number {
   }
   return total;
 }
+--- rb
+def countdown(n)
+  total = 0
+  while n > 0
+    total = total + n
+    n = n - 1
+  end
+  return total
+end
+--- pl
+sub countdown ($n) {
+    my $total = 0;
+    while ($n > 0) {
+        $total = $total + $n;
+        $n = $n - 1;
+    }
+    return $total;
+}
+--- php
+function countdown(int $n): int
+{
+    $total = 0;
+    while ($n > 0)
+    {
+        $total = $total + $n;
+        $n = $n - 1;
+    }
+    return $total;
+}
 ---
 
 === string concat
@@ -110,6 +191,19 @@ static String greet(String name) {
 function greet(name: string): string {
   return "Hello, " + name;
 }
+--- rb
+def greet(name)
+  return "Hello, " + name
+end
+--- pl
+sub greet ($name) {
+    return "Hello, " . $name;
+}
+--- php
+function greet(string $name): string
+{
+    return "Hello, " . $name;
+}
 ---
 
 === boolean and
@@ -126,5 +220,18 @@ static boolean both(boolean a, boolean b) {
 --- ts
 function both(a: boolean, b: boolean): boolean {
   return a && b;
+}
+--- rb
+def both(a, b)
+  return a && b
+end
+--- pl
+sub both ($a, $b) {
+    return $a && $b;
+}
+--- php
+function both(bool $a, bool $b): bool
+{
+    return $a && $b;
 }
 ---

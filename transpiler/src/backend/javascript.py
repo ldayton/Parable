@@ -107,12 +107,14 @@ class JsBackend:
         self.receiver_name: str | None = None
         self.current_struct: str | None = None
         self.struct_fields: dict[str, list[str]] = {}  # struct name -> [field_names]
+        self._hoisted_vars: set[str] = set()  # vars hoisted in current scope
 
     def emit(self, module: Module) -> str:
         """Emit JavaScript code from IR Module."""
         self.indent = 0
         self.lines = []
         self.struct_fields = {}
+        self._hoisted_vars = set()
         for struct in module.structs:
             self.struct_fields[struct.name] = [f.name for f in struct.fields]
         self._emit_module(module)
@@ -133,11 +135,11 @@ class JsBackend:
         self._line("const result = [];")
         self._line("if (step > 0) {")
         self.indent += 1
-        self._line("for (let i = start; i < end; i += step) result.push(i);")
+        self._line("for (var i = start; i < end; i += step) result.push(i);")
         self.indent -= 1
         self._line("} else {")
         self.indent += 1
-        self._line("for (let i = start; i > end; i += step) result.push(i);")
+        self._line("for (var i = start; i > end; i += step) result.push(i);")
         self.indent -= 1
         self._line("}")
         self._line("return result;")
@@ -237,6 +239,7 @@ class JsBackend:
         return "null"
 
     def _emit_function(self, func: Function) -> None:
+        self._hoisted_vars = set()
         if func.doc:
             self._line(f"/** {func.doc} */")
         params = self._params(func.params)
@@ -248,6 +251,7 @@ class JsBackend:
         self._line("}")
 
     def _emit_method(self, func: Function) -> None:
+        self._hoisted_vars = set()
         if func.doc:
             self._line(f"/** {func.doc} */")
         params = self._params(func.params)
@@ -264,30 +268,47 @@ class JsBackend:
     def _params(self, params: list[Param]) -> str:
         return ", ".join(_camel(p.name) for p in params)
 
+    def _emit_hoisted_vars(self, hoisted_vars: list[tuple[str, Type]]) -> None:
+        """Emit var declarations for hoisted variables before control structures."""
+        for name, _ in hoisted_vars:
+            js_name = _camel(name)
+            if name not in self._hoisted_vars:
+                self._line(f"var {js_name};")
+                self._hoisted_vars.add(name)
+
     def _emit_stmt(self, stmt: Stmt) -> None:
         match stmt:
             case VarDecl(name=name, typ=typ, value=value):
                 if value is not None:
                     val = self._expr(value)
-                    self._line(f"let {_camel(name)} = {val};")
+                    self._line(f"var {_camel(name)} = {val};")
                 else:
-                    self._line(f"let {_camel(name)};")
+                    self._line(f"var {_camel(name)};")
             case Assign(target=target, value=value):
                 lv = self._lvalue(target)
                 val = self._expr(value)
-                if stmt.is_declaration:
-                    self._line(f"let {lv} = {val};")
+                # Check if variable was hoisted (already declared)
+                var_name = target.name if isinstance(target, VarLV) else None
+                is_hoisted = var_name is not None and var_name in self._hoisted_vars
+                if stmt.is_declaration and not is_hoisted:
+                    self._line(f"var {lv} = {val};")
                 else:
                     self._line(f"{lv} = {val};")
             case TupleAssign(targets=targets, value=value):
                 lvalues = ", ".join(self._lvalue(t) for t in targets)
                 val = self._expr(value)
-                if stmt.is_declaration:
-                    self._line(f"let [{lvalues}] = {val};")
+                # Check if all targets are hoisted
+                all_hoisted = all(
+                    isinstance(t, VarLV) and t.name in self._hoisted_vars
+                    for t in targets
+                )
+                if stmt.is_declaration and not all_hoisted:
+                    self._line(f"var [{lvalues}] = {val};")
                 else:
                     new_targets = stmt.new_targets
                     for name in new_targets:
-                        self._line(f"let {_camel(name)};")
+                        if name not in self._hoisted_vars:
+                            self._line(f"var {_camel(name)};")
                     self._line(f"[{lvalues}] = {val};")
             case OpAssign(target=target, op=op, value=value):
                 lv = self._lvalue(target)
@@ -303,6 +324,7 @@ class JsBackend:
                 else:
                     self._line("return;")
             case If(cond=cond, then_body=then_body, else_body=else_body, init=init):
+                self._emit_hoisted_vars(stmt.hoisted_vars)
                 if init is not None:
                     self._emit_stmt(init)
                 self._line(f"if ({self._expr(cond)}) {{")
@@ -318,14 +340,19 @@ class JsBackend:
                     self.indent -= 1
                 self._line("}")
             case TypeSwitch(expr=expr, binding=binding, cases=cases, default=default):
+                self._emit_hoisted_vars(stmt.hoisted_vars)
                 self._emit_type_switch(expr, binding, cases, default)
             case Match(expr=expr, cases=cases, default=default):
+                self._emit_hoisted_vars(stmt.hoisted_vars)
                 self._emit_match(expr, cases, default)
             case ForRange(index=index, value=value, iterable=iterable, body=body):
+                self._emit_hoisted_vars(stmt.hoisted_vars)
                 self._emit_for_range(index, value, iterable, body)
             case ForClassic(init=init, cond=cond, post=post, body=body):
+                self._emit_hoisted_vars(stmt.hoisted_vars)
                 self._emit_for_classic(init, cond, post, body)
             case While(cond=cond, body=body):
+                self._emit_hoisted_vars(stmt.hoisted_vars)
                 self._line(f"while ({self._expr(cond)}) {{")
                 self.indent += 1
                 for s in body:
@@ -350,6 +377,7 @@ class JsBackend:
                 self.indent -= 1
                 self._line("}")
             case TryCatch(body=body, catch_var=catch_var, catch_body=catch_body, reraise=reraise):
+                self._emit_hoisted_vars(stmt.hoisted_vars)
                 self._emit_try_catch(body, catch_var, catch_body, reraise)
             case Raise(error_type=error_type, message=message, pos=pos, reraise_var=reraise_var):
                 if reraise_var:
@@ -438,7 +466,7 @@ class JsBackend:
         is_string = isinstance(iter_type, Primitive) and iter_type.kind == "string"
         if index is not None and value is not None:
             self._line(
-                f"for (let {_camel(index)} = 0; {_camel(index)} < {iter_expr}.length; {_camel(index)}++) {{"
+                f"for (var {_camel(index)} = 0; {_camel(index)} < {iter_expr}.length; {_camel(index)}++) {{"
             )
             self.indent += 1
             self._line(f"const {_camel(value)} = {iter_expr}[{_camel(index)}];")
@@ -447,7 +475,7 @@ class JsBackend:
             self.indent += 1
         elif index is not None:
             self._line(
-                f"for (let {_camel(index)} = 0; {_camel(index)} < {iter_expr}.length; {_camel(index)}++) {{"
+                f"for (var {_camel(index)} = 0; {_camel(index)} < {iter_expr}.length; {_camel(index)}++) {{"
             )
             self.indent += 1
         else:
@@ -550,8 +578,8 @@ class JsBackend:
         match stmt:
             case VarDecl(name=name, typ=typ, value=value):
                 if value is not None:
-                    return f"let {_camel(name)} = {self._expr(value)}"
-                return f"let {_camel(name)}"
+                    return f"var {_camel(name)} = {self._expr(value)}"
+                return f"var {_camel(name)}"
             case Assign(
                 target=VarLV(name=name),
                 value=BinaryOp(op=op, left=Var(name=left_name), right=IntLit(value=1)),
@@ -561,7 +589,7 @@ class JsBackend:
                 lv = self._lvalue(target)
                 val = self._expr(value)
                 if stmt.is_declaration:
-                    return f"let {lv} = {val}"
+                    return f"var {lv} = {val}"
                 return f"{lv} = {val}"
             case OpAssign(target=target, op=op, value=value):
                 return f"{self._lvalue(target)} {op}= {self._expr(value)}"
@@ -689,6 +717,11 @@ class JsBackend:
                 obj_str = self._expr(obj)
                 checks = [f"{obj_str}.{js_method}({self._expr(e)})" for e in elements]
                 return f"({' || '.join(checks)})"
+            case MethodCall(
+                obj=obj, method="pop", args=[IntLit(value=0)], receiver_type=receiver_type
+            ) if _is_array_type(receiver_type):
+                # Python: list.pop(0) -> JS: list.shift()
+                return f"{self._expr(obj)}.shift()"
             case MethodCall(obj=obj, method=method, args=args, receiver_type=receiver_type):
                 args_str = ", ".join(self._expr(a) for a in args)
                 js_method = _method_name(method, receiver_type)
@@ -900,6 +933,8 @@ class JsBackend:
                 return _safe_name(name)
             case InterfaceRef(name=name):
                 return _safe_name(name)
+            case Pointer(target=target):
+                return self._type_name_for_check(target)
             case _:
                 return "Object"
 
@@ -934,7 +969,7 @@ def _camel(name: str, is_receiver_ref: bool = False) -> str:
 
 _JS_RESERVED = {
     "var",
-    "let",
+    "var",
     "const",
     "function",
     "class",

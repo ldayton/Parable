@@ -5678,7 +5678,7 @@ class Parser {
           }
           inHeredocBody = false;
           if (pendingHeredocs.length > 0) {
-            [currentHeredocDelim, currentHeredocStrip] = pendingHeredocs.pop(0);
+            [currentHeredocDelim, currentHeredocStrip] = pendingHeredocs.shift();
             inHeredocBody = true;
           }
         } else {
@@ -5692,7 +5692,7 @@ class Parser {
             this.pos = lineStart + endPos;
             inHeredocBody = false;
             if (pendingHeredocs.length > 0) {
-              [currentHeredocDelim, currentHeredocStrip] = pendingHeredocs.pop(0);
+              [currentHeredocDelim, currentHeredocStrip] = pendingHeredocs.shift();
               inHeredocBody = true;
             }
           } else {
@@ -5883,7 +5883,7 @@ class Parser {
         contentChars.push(ch);
         textChars.push(ch);
         if (pendingHeredocs.length > 0) {
-          [currentHeredocDelim, currentHeredocStrip] = pendingHeredocs.pop(0);
+          [currentHeredocDelim, currentHeredocStrip] = pendingHeredocs.shift();
           inHeredocBody = true;
         }
         continue;

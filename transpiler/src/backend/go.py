@@ -91,6 +91,7 @@ from src.ir import (
     FloatLit,
     ForClassic,
     ForRange,
+    FuncRef,
     Function,
     FuncType,
     If,
@@ -1347,6 +1348,8 @@ func _Substring(s string, start int, end int) string {
             return self._emit_expr_Var(expr)
         if isinstance(expr, FieldAccess):
             return self._emit_expr_FieldAccess(expr)
+        if isinstance(expr, FuncRef):
+            return self._emit_expr_FuncRef(expr)
         if isinstance(expr, Index):
             return self._emit_expr_Index(expr)
         if isinstance(expr, SliceExpr):
@@ -1439,6 +1442,13 @@ func _Substring(s string, start int, end int) string {
         if is_node_type and expr.field == "kind":
             return f"{obj}.GetKind()"
         return f"{obj}.{field}"
+
+    def _emit_expr_FuncRef(self, expr: FuncRef) -> str:
+        """Emit method reference: obj.Method (Go method values capture receiver)."""
+        if expr.obj is not None:
+            obj_str = self._emit_expr(expr.obj)
+            return f"{obj_str}.{go_to_pascal(expr.name)}"
+        return go_to_pascal(expr.name)
 
     def _emit_expr_Index(self, expr: Index) -> str:
         obj = self._emit_expr(expr.obj)

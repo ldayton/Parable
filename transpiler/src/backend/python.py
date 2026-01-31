@@ -48,6 +48,7 @@ from src.ir import (
     FloatLit,
     ForClassic,
     ForRange,
+    FuncRef,
     FuncType,
     Function,
     If,
@@ -606,6 +607,10 @@ class PythonBackend:
                 if field.startswith("F") and field[1:].isdigit():
                     return f"{self._expr(obj)}[{field[1:]}]"
                 return f"{self._expr(obj)}.{field}"
+            case FuncRef(name=name, obj=obj):
+                if obj is not None:
+                    return f"{self._expr(obj)}.{name}"
+                return name
             case Index(obj=obj, index=index):
                 # Detect len(x) - N pattern for negative indexing
                 if neg_idx := self._negative_index(obj, index):

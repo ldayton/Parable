@@ -4,9 +4,6 @@ COMPENSATIONS FOR EARLIER STAGE DEFICIENCIES
 ============================================
 
 Frontend deficiencies (should be fixed in frontend.py):
-- FieldAccess for "this._arith_parse_*" is special-cased to emit lambda syntax
-  "() -> this.method()" - frontend should emit FuncRef IR for bound method
-  references instead of FieldAccess. Parable-specific: hardcoded method prefix.
 - SliceConvert IR node is not handled - either frontend shouldn't emit it for
   Java-targeted code, or this backend needs to implement covariant conversion.
 - VAR_TYPE_OVERRIDES and FIELD_TYPE_OVERRIDES imported from src/type_overrides
@@ -193,6 +190,7 @@ from src.ir import (
     FloatLit,
     ForClassic,
     ForRange,
+    FuncRef,
     FuncType,
     Function,
     If,
@@ -1189,11 +1187,12 @@ class JavaBackend:
                 obj_type = obj.typ
                 if field == "kind" and isinstance(obj_type, (InterfaceRef, StructRef)):
                     return f"{obj_str}.getKind()"
-                # Method reference on self: _arith_parse_* -> () -> this._arithParse*()
-                # This handles bound method references in Python that are passed as callbacks
-                if obj_str == "this" and field.startswith("_arith_parse_"):
-                    return f"() -> this.{to_camel(field)}()"
                 return f"{obj_str}.{_java_safe_name(field)}"
+            case FuncRef(name=name, obj=obj):
+                if obj is not None:
+                    obj_str = self._expr(obj)
+                    return f"() -> {obj_str}.{to_camel(name)}()"
+                return to_camel(name)
             case Index(obj=obj, index=index):
                 obj_str = self._expr(obj)
                 idx_str = self._expr(index)

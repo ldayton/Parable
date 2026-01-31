@@ -5825,6 +5825,7 @@ class Parser {
         boolean inHeredocBody = false;
         String currentHeredocDelim = "";
         boolean currentHeredocStrip = false;
+        String ch = "";
         while (!this.atEnd() && (inHeredocBody || !this.peek().equals("`"))) {
             if (inHeredocBody) {
                 int lineStart = this.pos;
@@ -5836,7 +5837,7 @@ class Parser {
                 String checkLine = (currentHeredocStrip ? line.replaceFirst("^[" + "\t" + "]+", "") : line);
                 if (checkLine.equals(currentHeredocDelim)) {
                     for (int _i = 0; _i < line.length(); _i++) {
-                        String ch = String.valueOf(line.charAt(_i));
+                        ch = String.valueOf(line.charAt(_i));
                         contentChars.add(ch);
                         textChars.add(ch);
                     }
@@ -5871,7 +5872,7 @@ class Parser {
                         }
                     } else {
                         for (int _i = 0; _i < line.length(); _i++) {
-                            String ch = String.valueOf(line.charAt(_i));
+                            ch = String.valueOf(line.charAt(_i));
                             contentChars.add(ch);
                             textChars.add(ch);
                         }
@@ -5886,7 +5887,6 @@ class Parser {
                 continue;
             }
             String c = this.peek();
-            String ch = "";
             if (c.equals("\\") && this.pos + 1 < this.length) {
                 String nextC = String.valueOf(this.source.charAt(this.pos + 1));
                 if (nextC.equals("\n")) {
@@ -9997,8 +9997,8 @@ final class ParableFunctions {
     }
 
     static String _formatRedirect(Node r, boolean compact, boolean heredocOpOnly) {
+        String op = "";
         if (r instanceof HereDoc rHereDoc) {
-            String op = "";
             if (rHereDoc.stripTabs) {
                 op = "<<-";
             } else {
@@ -10018,7 +10018,7 @@ final class ParableFunctions {
             }
             return op + delim + "\n" + rHereDoc.content + rHereDoc.delimiter + "\n";
         }
-        String op = ((Redirect) r).op;
+        op = ((Redirect) r).op;
         if (op.equals("1>")) {
             op = ">";
         } else {

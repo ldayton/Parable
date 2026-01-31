@@ -743,6 +743,24 @@ class RubyBackend:
                         default = self._expr(args[1])
                         return f"{obj_str}.fetch({key}, {default})"
                     return f"{obj_str}[{key}]"
+                # Python: list.pop(0) -> Ruby: list.shift
+                if method == "pop" and isinstance(receiver_type, Slice) and len(args) == 1:
+                    if isinstance(args[0], IntLit) and args[0].value == 0:
+                        obj_str = self._expr(obj)
+                        return f"{obj_str}.shift"
+                # Python: str.replace("\\", "\\\\") needs special handling in Ruby
+                # because gsub's replacement string interprets \\ specially
+                if method == "replace" and len(args) == 2:
+                    if isinstance(args[0], StringLit) and isinstance(args[1], StringLit):
+                        pattern = args[0].value
+                        replacement = args[1].value
+                        # When escaping backslashes, use block form to avoid gsub quirks
+                        if "\\" in pattern or "\\" in replacement:
+                            obj_str = self._expr(obj)
+                            # Escape for Ruby string literal
+                            pat_escaped = pattern.replace("\\", "\\\\").replace('"', '\\"')
+                            repl_escaped = replacement.replace("\\", "\\\\").replace('"', '\\"')
+                            return f'{obj_str}.gsub("{pat_escaped}") {{ "{repl_escaped}" }}'
                 args_str = ", ".join(self._expr(a) for a in args)
                 rb_method = _method_name(method, receiver_type)
                 obj_str = self._expr(obj)

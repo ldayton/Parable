@@ -1876,10 +1876,6 @@ class Word implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     var value: any = this.value;
     value = this.ExpandAllAnsiCQuotes(value);
@@ -3444,6 +3440,10 @@ class Word implements Node {
     value = value.replace(//g, "");
     return value.replace(/[\n]+$/, '');
   }
+
+  getKind(): string {
+    return this.kind;
+  }
 }
 
 class Command implements Node {
@@ -3457,10 +3457,6 @@ class Command implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     var parts: any = [];
     parts.push(...this.words.map(w => w.toSexp()));
@@ -3471,6 +3467,10 @@ class Command implements Node {
     }
     return "(command " + inner + ")";
   }
+
+  getKind(): string {
+    return this.kind;
+  }
 }
 
 class Pipeline implements Node {
@@ -3480,10 +3480,6 @@ class Pipeline implements Node {
   constructor(commands: Node[] = [], kind: string = "") {
     this.commands = commands ?? [];
     this.kind = kind;
-  }
-
-  getKind(): string {
-    return this.kind;
   }
 
   toSexp(): string {
@@ -3540,6 +3536,10 @@ class Pipeline implements Node {
     }
     return cmd.toSexp();
   }
+
+  getKind(): string {
+    return this.kind;
+  }
 }
 
 class List implements Node {
@@ -3549,10 +3549,6 @@ class List implements Node {
   constructor(parts: Node[] = [], kind: string = "") {
     this.parts = parts ?? [];
     this.kind = kind;
-  }
-
-  getKind(): string {
-    return this.kind;
   }
 
   toSexp(): string {
@@ -3665,6 +3661,10 @@ class List implements Node {
     }
     return result;
   }
+
+  getKind(): string {
+    return this.kind;
+  }
 }
 
 class Operator implements Node {
@@ -3676,13 +3676,13 @@ class Operator implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     var names: any = new Map([["&&", "and"], ["||", "or"], [";", "semi"], ["&", "bg"], ["|", "pipe"]]);
     return ("(" + (names.get(this.op) ?? this.op)) + ")";
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -3693,12 +3693,12 @@ class PipeBoth implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     return "(pipe-both)";
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -3709,12 +3709,12 @@ class Empty implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     return "";
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -3727,12 +3727,12 @@ class Comment implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     return "";
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -3747,10 +3747,6 @@ class Redirect implements Node {
     this.target = target;
     this.fd = fd;
     this.kind = kind;
-  }
-
-  getKind(): string {
-    return this.kind;
   }
 
   toSexp(): string {
@@ -3820,6 +3816,10 @@ class Redirect implements Node {
     }
     return "(redirect \"" + op + "\" \"" + targetVal + "\")";
   }
+
+  getKind(): string {
+    return this.kind;
+  }
 }
 
 class HereDoc implements Node {
@@ -3843,10 +3843,6 @@ class HereDoc implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     var op: any = (this.stripTabs ? "<<-" : "<<");
     var content: any = this.content;
@@ -3854,6 +3850,10 @@ class HereDoc implements Node {
       content = content + "\\";
     }
     return `(redirect "${op}" "${content}")`;
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -3868,13 +3868,13 @@ class Subshell implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     var base: any = "(subshell " + this.body.toSexp() + ")";
     return AppendRedirects(base, this.redirects);
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -3889,13 +3889,13 @@ class BraceGroup implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     var base: any = "(brace-group " + this.body.toSexp() + ")";
     return AppendRedirects(base, this.redirects);
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -3914,10 +3914,6 @@ class If implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     var result: any = "(if " + this.condition.toSexp() + " " + this.thenBody.toSexp();
     if (this.elseBody !== null) {
@@ -3928,6 +3924,10 @@ class If implements Node {
       result = result + " " + r.toSexp();
     }
     return result;
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -3944,13 +3944,13 @@ class While implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     var base: any = "(while " + this.condition.toSexp() + " " + this.body.toSexp() + ")";
     return AppendRedirects(base, this.redirects);
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -3967,13 +3967,13 @@ class Until implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     var base: any = "(until " + this.condition.toSexp() + " " + this.body.toSexp() + ")";
     return AppendRedirects(base, this.redirects);
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -3990,10 +3990,6 @@ class For implements Node {
     this.body = body;
     this.redirects = redirects ?? [];
     this.kind = kind;
-  }
-
-  getKind(): string {
-    return this.kind;
   }
 
   toSexp(): string {
@@ -4019,6 +4015,10 @@ class For implements Node {
       }
     }
   }
+
+  getKind(): string {
+    return this.kind;
+  }
 }
 
 class ForArith implements Node {
@@ -4038,10 +4038,6 @@ class ForArith implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     var suffix: any = "";
     if ((this.redirects.length > 0)) {
@@ -4058,6 +4054,10 @@ class ForArith implements Node {
     var bodyStr: any = this.body.toSexp();
     return `(arith-for (init (word "${initStr}")) (test (word "${condStr}")) (step (word "${incrStr}")) ${bodyStr})${suffix}`;
   }
+
+  getKind(): string {
+    return this.kind;
+  }
 }
 
 class Select implements Node {
@@ -4073,10 +4073,6 @@ class Select implements Node {
     this.body = body;
     this.redirects = redirects ?? [];
     this.kind = kind;
-  }
-
-  getKind(): string {
-    return this.kind;
   }
 
   toSexp(): string {
@@ -4101,6 +4097,10 @@ class Select implements Node {
     }
     return "(select (word \"" + varEscaped + "\") " + inClause + " " + this.body.toSexp() + ")" + suffix;
   }
+
+  getKind(): string {
+    return this.kind;
+  }
 }
 
 class Case implements Node {
@@ -4116,16 +4116,16 @@ class Case implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     var parts: any = [];
     parts.push("(case " + this.word.toSexp());
     parts.push(...this.patterns.map(p => p.toSexp()));
     var base: any = parts.join(" ") + ")";
     return AppendRedirects(base, this.redirects);
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -4140,10 +4140,6 @@ class CasePattern implements Node {
     this.body = body;
     this.terminator = terminator;
     this.kind = kind;
-  }
-
-  getKind(): string {
-    return this.kind;
   }
 
   toSexp(): string {
@@ -4224,6 +4220,10 @@ class CasePattern implements Node {
     parts.push(")");
     return parts.join("");
   }
+
+  getKind(): string {
+    return this.kind;
+  }
 }
 
 class FunctionName implements Node {
@@ -4237,12 +4237,12 @@ class FunctionName implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     return "(function \"" + this.name + "\" " + this.body.toSexp() + ")";
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -4259,10 +4259,6 @@ class ParamExpansion implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     var escapedParam: any = this.param.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
     if (this.op !== "") {
@@ -4277,6 +4273,10 @@ class ParamExpansion implements Node {
     }
     return "(param \"" + escapedParam + "\")";
   }
+
+  getKind(): string {
+    return this.kind;
+  }
 }
 
 class ParamLength implements Node {
@@ -4288,13 +4288,13 @@ class ParamLength implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     var escaped: any = this.param.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
     return "(param-len \"" + escaped + "\")";
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -4311,10 +4311,6 @@ class ParamIndirect implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     var escaped: any = this.param.replace(/\\/g, "\\\\").replace(/"/g, "\\\"");
     if (this.op !== "") {
@@ -4329,6 +4325,10 @@ class ParamIndirect implements Node {
     }
     return "(param-indirect \"" + escaped + "\")";
   }
+
+  getKind(): string {
+    return this.kind;
+  }
 }
 
 class CommandSubstitution implements Node {
@@ -4342,15 +4342,15 @@ class CommandSubstitution implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     if (this.brace) {
       return "(funsub " + this.command.toSexp() + ")";
     }
     return "(cmdsub " + this.command.toSexp() + ")";
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -4363,15 +4363,15 @@ class ArithmeticExpansion implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     if (this.expression === null) {
       return "(arith)";
     }
     return "(arith " + this.expression.toSexp() + ")";
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -4388,10 +4388,6 @@ class ArithmeticCommand implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     var formatted: any = new Word(this.rawContent as any, [], "word" as any).FormatCommandSubstitutions(this.rawContent, true);
     var escaped: any = formatted.replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, "\\n").replace(/\t/g, "\\t");
@@ -4404,6 +4400,10 @@ class ArithmeticCommand implements Node {
     }
     return result;
   }
+
+  getKind(): string {
+    return this.kind;
+  }
 }
 
 class ArithNumber implements Node {
@@ -4415,12 +4415,12 @@ class ArithNumber implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     return "(number \"" + this.value + "\")";
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -4431,12 +4431,12 @@ class ArithEmpty implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     return "(empty)";
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -4449,12 +4449,12 @@ class ArithVar implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     return "(var \"" + this.name + "\")";
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -4471,12 +4471,12 @@ class ArithBinaryOp implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     return "(binary-op \"" + this.op + "\" " + this.left.toSexp() + " " + this.right.toSexp() + ")";
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -4491,12 +4491,12 @@ class ArithUnaryOp implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     return "(unary-op \"" + this.op + "\" " + this.operand.toSexp() + ")";
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -4509,12 +4509,12 @@ class ArithPreIncr implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     return "(pre-incr " + this.operand.toSexp() + ")";
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -4527,12 +4527,12 @@ class ArithPostIncr implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     return "(post-incr " + this.operand.toSexp() + ")";
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -4545,12 +4545,12 @@ class ArithPreDecr implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     return "(pre-decr " + this.operand.toSexp() + ")";
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -4563,12 +4563,12 @@ class ArithPostDecr implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     return "(post-decr " + this.operand.toSexp() + ")";
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -4585,12 +4585,12 @@ class ArithAssign implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     return "(assign \"" + this.op + "\" " + this.target.toSexp() + " " + this.value.toSexp() + ")";
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -4607,12 +4607,12 @@ class ArithTernary implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     return "(ternary " + this.condition.toSexp() + " " + this.ifTrue.toSexp() + " " + this.ifFalse.toSexp() + ")";
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -4627,12 +4627,12 @@ class ArithComma implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     return "(comma " + this.left.toSexp() + " " + this.right.toSexp() + ")";
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -4647,12 +4647,12 @@ class ArithSubscript implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     return "(subscript \"" + this.array + "\" " + this.index.toSexp() + ")";
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -4665,12 +4665,12 @@ class ArithEscape implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     return "(escape \"" + this.char + "\")";
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -4683,13 +4683,13 @@ class ArithDeprecated implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     var escaped: any = this.expression.replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, "\\n");
     return "(arith-deprecated \"" + escaped + "\")";
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -4702,14 +4702,14 @@ class ArithConcat implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     var sexps: any = [];
     sexps.push(...this.parts.map(p => p.toSexp()));
     return "(arith-concat " + sexps.join(" ") + ")";
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -4722,13 +4722,13 @@ class AnsiCQuote implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     var escaped: any = this.content.replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, "\\n");
     return "(ansi-c \"" + escaped + "\")";
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -4741,13 +4741,13 @@ class LocaleString implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     var escaped: any = this.content.replace(/\\/g, "\\\\").replace(/"/g, "\\\"").replace(/\n/g, "\\n");
     return "(locale \"" + escaped + "\")";
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -4762,12 +4762,12 @@ class ProcessSubstitution implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     return "(procsub \"" + this.direction + "\" " + this.command.toSexp() + ")";
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -4780,15 +4780,15 @@ class Negation implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     if (this.pipeline === null) {
       return "(negation (command))";
     }
     return "(negation " + this.pipeline.toSexp() + ")";
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -4801,10 +4801,6 @@ class Time implements Node {
     this.pipeline = pipeline;
     this.posix = posix;
     this.kind = kind;
-  }
-
-  getKind(): string {
-    return this.kind;
   }
 
   toSexp(): string {
@@ -4820,6 +4816,10 @@ class Time implements Node {
     }
     return "(time " + this.pipeline.toSexp() + ")";
   }
+
+  getKind(): string {
+    return this.kind;
+  }
 }
 
 class ConditionalExpr implements Node {
@@ -4831,10 +4831,6 @@ class ConditionalExpr implements Node {
     this.body = body;
     this.redirects = redirects ?? [];
     this.kind = kind;
-  }
-
-  getKind(): string {
-    return this.kind;
   }
 
   toSexp(): string {
@@ -4853,6 +4849,10 @@ class ConditionalExpr implements Node {
     }
     return result;
   }
+
+  getKind(): string {
+    return this.kind;
+  }
 }
 
 class UnaryTest implements Node {
@@ -4866,13 +4866,13 @@ class UnaryTest implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     var operandVal: any = (this.operand as unknown as Word).getCondFormattedValue();
     return "(cond-unary \"" + this.op + "\" (cond-term \"" + operandVal + "\"))";
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -4889,14 +4889,14 @@ class BinaryTest implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     var leftVal: any = (this.left as unknown as Word).getCondFormattedValue();
     var rightVal: any = (this.right as unknown as Word).getCondFormattedValue();
     return "(cond-binary \"" + this.op + "\" (cond-term \"" + leftVal + "\") (cond-term \"" + rightVal + "\"))";
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -4911,12 +4911,12 @@ class CondAnd implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     return "(cond-and " + this.left.toSexp() + " " + this.right.toSexp() + ")";
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -4931,12 +4931,12 @@ class CondOr implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     return "(cond-or " + this.left.toSexp() + " " + this.right.toSexp() + ")";
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -4949,12 +4949,12 @@ class CondNot implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     return this.operand.toSexp();
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -4967,12 +4967,12 @@ class CondParen implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     return "(cond-expr " + this.inner.toSexp() + ")";
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -4985,10 +4985,6 @@ class ArrayName implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     if (!(this.elements.length > 0)) {
       return "(array)";
@@ -4997,6 +4993,10 @@ class ArrayName implements Node {
     parts.push(...this.elements.map(e => e.toSexp()));
     var inner: any = parts.join(" ");
     return "(array " + inner + ")";
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 
@@ -5011,10 +5011,6 @@ class Coproc implements Node {
     this.kind = kind;
   }
 
-  getKind(): string {
-    return this.kind;
-  }
-
   toSexp(): string {
     if ((this.name.length > 0)) {
       var name: any = this.name;
@@ -5022,6 +5018,10 @@ class Coproc implements Node {
       var name: any = "COPROC";
     }
     return "(coproc \"" + name + "\" " + this.command.toSexp() + ")";
+  }
+
+  getKind(): string {
+    return this.kind;
   }
 }
 

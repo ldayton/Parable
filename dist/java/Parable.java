@@ -1959,8 +1959,6 @@ class Word implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         String value = this.value;
         value = this._expandAllAnsiCQuotes(value);
@@ -3547,6 +3545,10 @@ class Word implements Node {
         value = value.replace("", "");
         return value.replaceFirst("[" + "\n" + "]+$", "");
     }
+
+    public String getKind() {
+        return this.kind;
+    }
 }
 
 class Command implements Node {
@@ -3559,8 +3561,6 @@ class Command implements Node {
         this.redirects = redirects;
         this.kind = kind;
     }
-
-    public String getKind() { return this.kind; }
 
     public String toSexp() {
         List<String> parts = new ArrayList<>();
@@ -3576,6 +3576,10 @@ class Command implements Node {
         }
         return "(command " + inner + ")";
     }
+
+    public String getKind() {
+        return this.kind;
+    }
 }
 
 class Pipeline implements Node {
@@ -3586,8 +3590,6 @@ class Pipeline implements Node {
         this.commands = commands;
         this.kind = kind;
     }
-
-    public String getKind() { return this.kind; }
 
     public String toSexp() {
         if (this.commands.size() == 1) {
@@ -3650,6 +3652,10 @@ class Pipeline implements Node {
         }
         return ((Node) cmd).toSexp();
     }
+
+    public String getKind() {
+        return this.kind;
+    }
 }
 
 class ListNode implements Node {
@@ -3660,8 +3666,6 @@ class ListNode implements Node {
         this.parts = parts;
         this.kind = kind;
     }
-
-    public String getKind() { return this.kind; }
 
     public String toSexp() {
         List<Node> parts = new ArrayList<>(this.parts);
@@ -3776,6 +3780,10 @@ class ListNode implements Node {
         }
         return result;
     }
+
+    public String getKind() {
+        return this.kind;
+    }
 }
 
 class Operator implements Node {
@@ -3787,11 +3795,13 @@ class Operator implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         Map<String, String> names = new HashMap<>(Map.of("&&", "and", "||", "or", ";", "semi", "&", "bg", "|", "pipe"));
         return "(" + names.getOrDefault(this.op, this.op) + ")";
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -3802,10 +3812,12 @@ class PipeBoth implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         return "(pipe-both)";
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -3816,10 +3828,12 @@ class Empty implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         return "";
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -3832,10 +3846,12 @@ class Comment implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         return "";
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -3851,8 +3867,6 @@ class Redirect implements Node {
         this.fd = fd;
         this.kind = kind;
     }
-
-    public String getKind() { return this.kind; }
 
     public String toSexp() {
         String op = this.op.replaceFirst("^[" + "0123456789" + "]+", "");
@@ -3921,6 +3935,10 @@ class Redirect implements Node {
         }
         return "(redirect \"" + op + "\" \"" + targetVal + "\")";
     }
+
+    public String getKind() {
+        return this.kind;
+    }
 }
 
 class HereDoc implements Node {
@@ -3944,8 +3962,6 @@ class HereDoc implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         String op = (this.stripTabs ? "<<-" : "<<");
         String content = this.content;
@@ -3953,6 +3969,10 @@ class HereDoc implements Node {
             content = content + "\\";
         }
         return String.format("(redirect \"%s\" \"%s\")", op, content);
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -3967,11 +3987,13 @@ class Subshell implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         String base = "(subshell " + ((Node) this.body).toSexp() + ")";
         return ParableFunctions._appendRedirects(base, this.redirects);
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -3986,11 +4008,13 @@ class BraceGroup implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         String base = "(brace-group " + ((Node) this.body).toSexp() + ")";
         return ParableFunctions._appendRedirects(base, this.redirects);
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -4009,8 +4033,6 @@ class If implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         String result = "(if " + ((Node) this.condition).toSexp() + " " + ((Node) this.thenBody).toSexp();
         if (this.elseBody != null) {
@@ -4021,6 +4043,10 @@ class If implements Node {
             result = result + " " + ((Node) r).toSexp();
         }
         return result;
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -4037,11 +4063,13 @@ class While implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         String base = "(while " + ((Node) this.condition).toSexp() + " " + ((Node) this.body).toSexp() + ")";
         return ParableFunctions._appendRedirects(base, this.redirects);
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -4058,11 +4086,13 @@ class Until implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         String base = "(until " + ((Node) this.condition).toSexp() + " " + ((Node) this.body).toSexp() + ")";
         return ParableFunctions._appendRedirects(base, this.redirects);
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -4080,8 +4110,6 @@ class For implements Node {
         this.redirects = redirects;
         this.kind = kind;
     }
-
-    public String getKind() { return this.kind; }
 
     public String toSexp() {
         String suffix = "";
@@ -4110,6 +4138,10 @@ class For implements Node {
             }
         }
     }
+
+    public String getKind() {
+        return this.kind;
+    }
 }
 
 class ForArith implements Node {
@@ -4129,8 +4161,6 @@ class ForArith implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         String suffix = "";
         if ((!this.redirects.isEmpty())) {
@@ -4149,6 +4179,10 @@ class ForArith implements Node {
         String bodyStr = ((Node) this.body).toSexp();
         return String.format("(arith-for (init (word \"%s\")) (test (word \"%s\")) (step (word \"%s\")) %s)%s", initStr, condStr, incrStr, bodyStr, suffix);
     }
+
+    public String getKind() {
+        return this.kind;
+    }
 }
 
 class Select implements Node {
@@ -4165,8 +4199,6 @@ class Select implements Node {
         this.redirects = redirects;
         this.kind = kind;
     }
-
-    public String getKind() { return this.kind; }
 
     public String toSexp() {
         String suffix = "";
@@ -4195,6 +4227,10 @@ class Select implements Node {
         }
         return "(select (word \"" + varEscaped + "\") " + inClause + " " + ((Node) this.body).toSexp() + ")" + suffix;
     }
+
+    public String getKind() {
+        return this.kind;
+    }
 }
 
 class Case implements Node {
@@ -4210,8 +4246,6 @@ class Case implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         List<String> parts = new ArrayList<>();
         parts.add("(case " + ((Node) this.word).toSexp());
@@ -4220,6 +4254,10 @@ class Case implements Node {
         }
         String base = String.join(" ", parts) + ")";
         return ParableFunctions._appendRedirects(base, this.redirects);
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -4235,8 +4273,6 @@ class CasePattern implements Node {
         this.terminator = terminator;
         this.kind = kind;
     }
-
-    public String getKind() { return this.kind; }
 
     public String toSexp() {
         List<String> alternatives = new ArrayList<>();
@@ -4327,6 +4363,10 @@ class CasePattern implements Node {
         parts.add(")");
         return String.join("", parts);
     }
+
+    public String getKind() {
+        return this.kind;
+    }
 }
 
 class Function implements Node {
@@ -4340,10 +4380,12 @@ class Function implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         return "(function \"" + this.name + "\" " + ((Node) this.body).toSexp() + ")";
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -4360,8 +4402,6 @@ class ParamExpansion implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         String escapedParam = this.param.replace("\\", "\\\\").replace("\"", "\\\"");
         if (!this.op.equals("")) {
@@ -4377,6 +4417,10 @@ class ParamExpansion implements Node {
         }
         return "(param \"" + escapedParam + "\")";
     }
+
+    public String getKind() {
+        return this.kind;
+    }
 }
 
 class ParamLength implements Node {
@@ -4388,11 +4432,13 @@ class ParamLength implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         String escaped = this.param.replace("\\", "\\\\").replace("\"", "\\\"");
         return "(param-len \"" + escaped + "\")";
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -4409,8 +4455,6 @@ class ParamIndirect implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         String escaped = this.param.replace("\\", "\\\\").replace("\"", "\\\"");
         if (!this.op.equals("")) {
@@ -4426,6 +4470,10 @@ class ParamIndirect implements Node {
         }
         return "(param-indirect \"" + escaped + "\")";
     }
+
+    public String getKind() {
+        return this.kind;
+    }
 }
 
 class CommandSubstitution implements Node {
@@ -4439,13 +4487,15 @@ class CommandSubstitution implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         if (this.brace) {
             return "(funsub " + ((Node) this.command).toSexp() + ")";
         }
         return "(cmdsub " + ((Node) this.command).toSexp() + ")";
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -4458,13 +4508,15 @@ class ArithmeticExpansion implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         if (this.expression == null) {
             return "(arith)";
         }
         return "(arith " + ((Node) this.expression).toSexp() + ")";
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -4481,8 +4533,6 @@ class ArithmeticCommand implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         String formatted = new Word(this.rawContent, new ArrayList<>(), "word")._formatCommandSubstitutions(this.rawContent, true);
         String escaped = formatted.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n").replace("\t", "\\t");
@@ -4497,6 +4547,10 @@ class ArithmeticCommand implements Node {
         }
         return result;
     }
+
+    public String getKind() {
+        return this.kind;
+    }
 }
 
 class ArithNumber implements Node {
@@ -4508,10 +4562,12 @@ class ArithNumber implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         return "(number \"" + this.value + "\")";
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -4522,10 +4578,12 @@ class ArithEmpty implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         return "(empty)";
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -4538,10 +4596,12 @@ class ArithVar implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         return "(var \"" + this.name + "\")";
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -4558,10 +4618,12 @@ class ArithBinaryOp implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         return "(binary-op \"" + this.op + "\" " + ((Node) this.left).toSexp() + " " + ((Node) this.right).toSexp() + ")";
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -4576,10 +4638,12 @@ class ArithUnaryOp implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         return "(unary-op \"" + this.op + "\" " + ((Node) this.operand).toSexp() + ")";
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -4592,10 +4656,12 @@ class ArithPreIncr implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         return "(pre-incr " + ((Node) this.operand).toSexp() + ")";
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -4608,10 +4674,12 @@ class ArithPostIncr implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         return "(post-incr " + ((Node) this.operand).toSexp() + ")";
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -4624,10 +4692,12 @@ class ArithPreDecr implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         return "(pre-decr " + ((Node) this.operand).toSexp() + ")";
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -4640,10 +4710,12 @@ class ArithPostDecr implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         return "(post-decr " + ((Node) this.operand).toSexp() + ")";
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -4660,10 +4732,12 @@ class ArithAssign implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         return "(assign \"" + this.op + "\" " + ((Node) this.target).toSexp() + " " + ((Node) this.value).toSexp() + ")";
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -4680,10 +4754,12 @@ class ArithTernary implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         return "(ternary " + ((Node) this.condition).toSexp() + " " + ((Node) this.ifTrue).toSexp() + " " + ((Node) this.ifFalse).toSexp() + ")";
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -4698,10 +4774,12 @@ class ArithComma implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         return "(comma " + ((Node) this.left).toSexp() + " " + ((Node) this.right).toSexp() + ")";
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -4716,10 +4794,12 @@ class ArithSubscript implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         return "(subscript \"" + this.array + "\" " + ((Node) this.index).toSexp() + ")";
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -4732,10 +4812,12 @@ class ArithEscape implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         return "(escape \"" + this.char_ + "\")";
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -4748,11 +4830,13 @@ class ArithDeprecated implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         String escaped = this.expression.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n");
         return "(arith-deprecated \"" + escaped + "\")";
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -4765,14 +4849,16 @@ class ArithConcat implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         List<String> sexps = new ArrayList<>();
         for (Node p : this.parts) {
             sexps.add(((Node) p).toSexp());
         }
         return "(arith-concat " + String.join(" ", sexps) + ")";
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -4785,11 +4871,13 @@ class AnsiCQuote implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         String escaped = this.content.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n");
         return "(ansi-c \"" + escaped + "\")";
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -4802,11 +4890,13 @@ class LocaleString implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         String escaped = this.content.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n");
         return "(locale \"" + escaped + "\")";
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -4821,10 +4911,12 @@ class ProcessSubstitution implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         return "(procsub \"" + this.direction + "\" " + ((Node) this.command).toSexp() + ")";
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -4837,13 +4929,15 @@ class Negation implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         if (this.pipeline == null) {
             return "(negation (command))";
         }
         return "(negation " + ((Node) this.pipeline).toSexp() + ")";
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -4858,8 +4952,6 @@ class Time implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         if (this.pipeline == null) {
             if (this.posix) {
@@ -4873,6 +4965,10 @@ class Time implements Node {
         }
         return "(time " + ((Node) this.pipeline).toSexp() + ")";
     }
+
+    public String getKind() {
+        return this.kind;
+    }
 }
 
 class ConditionalExpr implements Node {
@@ -4885,8 +4981,6 @@ class ConditionalExpr implements Node {
         this.redirects = redirects;
         this.kind = kind;
     }
-
-    public String getKind() { return this.kind; }
 
     public String toSexp() {
         Object body = this.body;
@@ -4907,6 +5001,10 @@ class ConditionalExpr implements Node {
         }
         return result;
     }
+
+    public String getKind() {
+        return this.kind;
+    }
 }
 
 class UnaryTest implements Node {
@@ -4920,11 +5018,13 @@ class UnaryTest implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         String operandVal = ((Word) this.operand).getCondFormattedValue();
         return "(cond-unary \"" + this.op + "\" (cond-term \"" + operandVal + "\"))";
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -4941,12 +5041,14 @@ class BinaryTest implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         String leftVal = ((Word) this.left).getCondFormattedValue();
         String rightVal = ((Word) this.right).getCondFormattedValue();
         return "(cond-binary \"" + this.op + "\" (cond-term \"" + leftVal + "\") (cond-term \"" + rightVal + "\"))";
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -4961,10 +5063,12 @@ class CondAnd implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         return "(cond-and " + ((Node) this.left).toSexp() + " " + ((Node) this.right).toSexp() + ")";
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -4979,10 +5083,12 @@ class CondOr implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         return "(cond-or " + ((Node) this.left).toSexp() + " " + ((Node) this.right).toSexp() + ")";
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -4995,10 +5101,12 @@ class CondNot implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         return ((Node) this.operand).toSexp();
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -5011,10 +5119,12 @@ class CondParen implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         return "(cond-expr " + ((Node) this.inner).toSexp() + ")";
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -5027,8 +5137,6 @@ class Array implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         if (!(!this.elements.isEmpty())) {
             return "(array)";
@@ -5039,6 +5147,10 @@ class Array implements Node {
         }
         String inner = String.join(" ", parts);
         return "(array " + inner + ")";
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 
@@ -5053,8 +5165,6 @@ class Coproc implements Node {
         this.kind = kind;
     }
 
-    public String getKind() { return this.kind; }
-
     public String toSexp() {
         String name = "";
         if ((!this.name.isEmpty())) {
@@ -5063,6 +5173,10 @@ class Coproc implements Node {
             name = "COPROC";
         }
         return "(coproc \"" + name + "\" " + ((Node) this.command).toSexp() + ")";
+    }
+
+    public String getKind() {
+        return this.kind;
     }
 }
 

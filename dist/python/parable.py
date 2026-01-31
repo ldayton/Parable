@@ -2609,6 +2609,9 @@ class Word(Node):
         value = value.replace("", "")
         return value.rstrip("\n")
 
+    def GetKind(self) -> str:
+        return self.kind
+
 
 @dataclass
 class Command(Node):
@@ -2626,6 +2629,9 @@ class Command(Node):
         if not inner:
             return "(command)"
         return "(command " + inner + ")"
+
+    def GetKind(self) -> str:
+        return self.kind
 
 
 @dataclass
@@ -2681,6 +2687,9 @@ class Pipeline(Node):
             parts.append("(redirect \">&\" 1)")
             return "(command " + " ".join(parts) + ")"
         return cmd.to_sexp()
+
+    def GetKind(self) -> str:
+        return self.kind
 
 
 @dataclass
@@ -2781,6 +2790,9 @@ class List(Node):
             i += 2
         return result
 
+    def GetKind(self) -> str:
+        return self.kind
+
 
 @dataclass
 class Operator(Node):
@@ -2791,6 +2803,9 @@ class Operator(Node):
         names = {"&&": "and", "||": "or", ";": "semi", "&": "bg", "|": "pipe"}
         return "(" + names.get(self.op, self.op) + ")"
 
+    def GetKind(self) -> str:
+        return self.kind
+
 
 @dataclass
 class PipeBoth(Node):
@@ -2798,6 +2813,9 @@ class PipeBoth(Node):
 
     def to_sexp(self) -> str:
         return "(pipe-both)"
+
+    def GetKind(self) -> str:
+        return self.kind
 
 
 @dataclass
@@ -2807,6 +2825,9 @@ class Empty(Node):
     def to_sexp(self) -> str:
         return ""
 
+    def GetKind(self) -> str:
+        return self.kind
+
 
 @dataclass
 class Comment(Node):
@@ -2815,6 +2836,9 @@ class Comment(Node):
 
     def to_sexp(self) -> str:
         return ""
+
+    def GetKind(self) -> str:
+        return self.kind
 
 
 @dataclass
@@ -2872,6 +2896,9 @@ class Redirect(Node):
             return "(redirect \"" + op + "\" \"" + out_val + "\")"
         return "(redirect \"" + op + "\" \"" + target_val + "\")"
 
+    def GetKind(self) -> str:
+        return self.kind
+
 
 @dataclass
 class HereDoc(Node):
@@ -2891,6 +2918,9 @@ class HereDoc(Node):
             content = content + "\\"
         return f"(redirect \"{op}\" \"{content}\")"
 
+    def GetKind(self) -> str:
+        return self.kind
+
 
 @dataclass
 class Subshell(Node):
@@ -2902,6 +2932,9 @@ class Subshell(Node):
         base = "(subshell " + self.body.to_sexp() + ")"
         return _append_redirects(base, self.redirects)
 
+    def GetKind(self) -> str:
+        return self.kind
+
 
 @dataclass
 class BraceGroup(Node):
@@ -2912,6 +2945,9 @@ class BraceGroup(Node):
     def to_sexp(self) -> str:
         base = "(brace-group " + self.body.to_sexp() + ")"
         return _append_redirects(base, self.redirects)
+
+    def GetKind(self) -> str:
+        return self.kind
 
 
 @dataclass
@@ -2931,6 +2967,9 @@ class If(Node):
             result = result + " " + r.to_sexp()
         return result
 
+    def GetKind(self) -> str:
+        return self.kind
+
 
 @dataclass
 class While(Node):
@@ -2943,6 +2982,9 @@ class While(Node):
         base = "(while " + self.condition.to_sexp() + " " + self.body.to_sexp() + ")"
         return _append_redirects(base, self.redirects)
 
+    def GetKind(self) -> str:
+        return self.kind
+
 
 @dataclass
 class Until(Node):
@@ -2954,6 +2996,9 @@ class Until(Node):
     def to_sexp(self) -> str:
         base = "(until " + self.condition.to_sexp() + " " + self.body.to_sexp() + ")"
         return _append_redirects(base, self.redirects)
+
+    def GetKind(self) -> str:
+        return self.kind
 
 
 @dataclass
@@ -2985,6 +3030,9 @@ class For(Node):
             word_strs = " ".join(word_parts)
             return "(for (word \"" + var_escaped + "\") (in " + word_strs + ") " + self.body.to_sexp() + ")" + suffix
 
+    def GetKind(self) -> str:
+        return self.kind
+
 
 @dataclass
 class ForArith(Node):
@@ -3010,6 +3058,9 @@ class ForArith(Node):
         incr_str = _format_arith_val(incr_val)
         body_str = self.body.to_sexp()
         return f"(arith-for (init (word \"{init_str}\")) (test (word \"{cond_str}\")) (step (word \"{incr_str}\")) {body_str}){suffix}"
+
+    def GetKind(self) -> str:
+        return self.kind
 
 
 @dataclass
@@ -3041,6 +3092,9 @@ class Select(Node):
             in_clause = "(in (word \"\\\"$@\\\"\"))"
         return "(select (word \"" + var_escaped + "\") " + in_clause + " " + self.body.to_sexp() + ")" + suffix
 
+    def GetKind(self) -> str:
+        return self.kind
+
 
 @dataclass
 class Case(Node):
@@ -3056,6 +3110,9 @@ class Case(Node):
             parts.append(p.to_sexp())
         base = " ".join(parts) + ")"
         return _append_redirects(base, self.redirects)
+
+    def GetKind(self) -> str:
+        return self.kind
 
 
 @dataclass
@@ -3125,6 +3182,9 @@ class CasePattern(Node):
         parts.append(")")
         return "".join(parts)
 
+    def GetKind(self) -> str:
+        return self.kind
+
 
 @dataclass
 class Function(Node):
@@ -3134,6 +3194,9 @@ class Function(Node):
 
     def to_sexp(self) -> str:
         return "(function \"" + self.name + "\" " + self.body.to_sexp() + ")"
+
+    def GetKind(self) -> str:
+        return self.kind
 
 
 @dataclass
@@ -3155,6 +3218,9 @@ class ParamExpansion(Node):
             return "(param \"" + escaped_param + "\" \"" + escaped_op + "\" \"" + escaped_arg + "\")"
         return "(param \"" + escaped_param + "\")"
 
+    def GetKind(self) -> str:
+        return self.kind
+
 
 @dataclass
 class ParamLength(Node):
@@ -3164,6 +3230,9 @@ class ParamLength(Node):
     def to_sexp(self) -> str:
         escaped = self.param.replace("\\", "\\\\").replace("\"", "\\\"")
         return "(param-len \"" + escaped + "\")"
+
+    def GetKind(self) -> str:
+        return self.kind
 
 
 @dataclass
@@ -3185,6 +3254,9 @@ class ParamIndirect(Node):
             return "(param-indirect \"" + escaped + "\" \"" + escaped_op + "\" \"" + escaped_arg + "\")"
         return "(param-indirect \"" + escaped + "\")"
 
+    def GetKind(self) -> str:
+        return self.kind
+
 
 @dataclass
 class CommandSubstitution(Node):
@@ -3197,6 +3269,9 @@ class CommandSubstitution(Node):
             return "(funsub " + self.command.to_sexp() + ")"
         return "(cmdsub " + self.command.to_sexp() + ")"
 
+    def GetKind(self) -> str:
+        return self.kind
+
 
 @dataclass
 class ArithmeticExpansion(Node):
@@ -3207,6 +3282,9 @@ class ArithmeticExpansion(Node):
         if self.expression is None:
             return "(arith)"
         return "(arith " + self.expression.to_sexp() + ")"
+
+    def GetKind(self) -> str:
+        return self.kind
 
 
 @dataclass
@@ -3228,6 +3306,9 @@ class ArithmeticCommand(Node):
             return result + " " + redirect_sexps
         return result
 
+    def GetKind(self) -> str:
+        return self.kind
+
 
 @dataclass
 class ArithNumber(Node):
@@ -3237,6 +3318,9 @@ class ArithNumber(Node):
     def to_sexp(self) -> str:
         return "(number \"" + self.value + "\")"
 
+    def GetKind(self) -> str:
+        return self.kind
+
 
 @dataclass
 class ArithEmpty(Node):
@@ -3244,6 +3328,9 @@ class ArithEmpty(Node):
 
     def to_sexp(self) -> str:
         return "(empty)"
+
+    def GetKind(self) -> str:
+        return self.kind
 
 
 @dataclass
@@ -3253,6 +3340,9 @@ class ArithVar(Node):
 
     def to_sexp(self) -> str:
         return "(var \"" + self.name + "\")"
+
+    def GetKind(self) -> str:
+        return self.kind
 
 
 @dataclass
@@ -3265,6 +3355,9 @@ class ArithBinaryOp(Node):
     def to_sexp(self) -> str:
         return "(binary-op \"" + self.op + "\" " + self.left.to_sexp() + " " + self.right.to_sexp() + ")"
 
+    def GetKind(self) -> str:
+        return self.kind
+
 
 @dataclass
 class ArithUnaryOp(Node):
@@ -3275,6 +3368,9 @@ class ArithUnaryOp(Node):
     def to_sexp(self) -> str:
         return "(unary-op \"" + self.op + "\" " + self.operand.to_sexp() + ")"
 
+    def GetKind(self) -> str:
+        return self.kind
+
 
 @dataclass
 class ArithPreIncr(Node):
@@ -3283,6 +3379,9 @@ class ArithPreIncr(Node):
 
     def to_sexp(self) -> str:
         return "(pre-incr " + self.operand.to_sexp() + ")"
+
+    def GetKind(self) -> str:
+        return self.kind
 
 
 @dataclass
@@ -3293,6 +3392,9 @@ class ArithPostIncr(Node):
     def to_sexp(self) -> str:
         return "(post-incr " + self.operand.to_sexp() + ")"
 
+    def GetKind(self) -> str:
+        return self.kind
+
 
 @dataclass
 class ArithPreDecr(Node):
@@ -3302,6 +3404,9 @@ class ArithPreDecr(Node):
     def to_sexp(self) -> str:
         return "(pre-decr " + self.operand.to_sexp() + ")"
 
+    def GetKind(self) -> str:
+        return self.kind
+
 
 @dataclass
 class ArithPostDecr(Node):
@@ -3310,6 +3415,9 @@ class ArithPostDecr(Node):
 
     def to_sexp(self) -> str:
         return "(post-decr " + self.operand.to_sexp() + ")"
+
+    def GetKind(self) -> str:
+        return self.kind
 
 
 @dataclass
@@ -3322,6 +3430,9 @@ class ArithAssign(Node):
     def to_sexp(self) -> str:
         return "(assign \"" + self.op + "\" " + self.target.to_sexp() + " " + self.value.to_sexp() + ")"
 
+    def GetKind(self) -> str:
+        return self.kind
+
 
 @dataclass
 class ArithTernary(Node):
@@ -3333,6 +3444,9 @@ class ArithTernary(Node):
     def to_sexp(self) -> str:
         return "(ternary " + self.condition.to_sexp() + " " + self.if_true.to_sexp() + " " + self.if_false.to_sexp() + ")"
 
+    def GetKind(self) -> str:
+        return self.kind
+
 
 @dataclass
 class ArithComma(Node):
@@ -3342,6 +3456,9 @@ class ArithComma(Node):
 
     def to_sexp(self) -> str:
         return "(comma " + self.left.to_sexp() + " " + self.right.to_sexp() + ")"
+
+    def GetKind(self) -> str:
+        return self.kind
 
 
 @dataclass
@@ -3353,6 +3470,9 @@ class ArithSubscript(Node):
     def to_sexp(self) -> str:
         return "(subscript \"" + self.array + "\" " + self.index.to_sexp() + ")"
 
+    def GetKind(self) -> str:
+        return self.kind
+
 
 @dataclass
 class ArithEscape(Node):
@@ -3361,6 +3481,9 @@ class ArithEscape(Node):
 
     def to_sexp(self) -> str:
         return "(escape \"" + self.char + "\")"
+
+    def GetKind(self) -> str:
+        return self.kind
 
 
 @dataclass
@@ -3371,6 +3494,9 @@ class ArithDeprecated(Node):
     def to_sexp(self) -> str:
         escaped = self.expression.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")
         return "(arith-deprecated \"" + escaped + "\")"
+
+    def GetKind(self) -> str:
+        return self.kind
 
 
 @dataclass
@@ -3384,6 +3510,9 @@ class ArithConcat(Node):
             sexps.append(p.to_sexp())
         return "(arith-concat " + " ".join(sexps) + ")"
 
+    def GetKind(self) -> str:
+        return self.kind
+
 
 @dataclass
 class AnsiCQuote(Node):
@@ -3393,6 +3522,9 @@ class AnsiCQuote(Node):
     def to_sexp(self) -> str:
         escaped = self.content.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")
         return "(ansi-c \"" + escaped + "\")"
+
+    def GetKind(self) -> str:
+        return self.kind
 
 
 @dataclass
@@ -3404,6 +3536,9 @@ class LocaleString(Node):
         escaped = self.content.replace("\\", "\\\\").replace("\"", "\\\"").replace("\n", "\\n")
         return "(locale \"" + escaped + "\")"
 
+    def GetKind(self) -> str:
+        return self.kind
+
 
 @dataclass
 class ProcessSubstitution(Node):
@@ -3413,6 +3548,9 @@ class ProcessSubstitution(Node):
 
     def to_sexp(self) -> str:
         return "(procsub \"" + self.direction + "\" " + self.command.to_sexp() + ")"
+
+    def GetKind(self) -> str:
+        return self.kind
 
 
 @dataclass
@@ -3424,6 +3562,9 @@ class Negation(Node):
         if self.pipeline is None:
             return "(negation (command))"
         return "(negation " + self.pipeline.to_sexp() + ")"
+
+    def GetKind(self) -> str:
+        return self.kind
 
 
 @dataclass
@@ -3441,6 +3582,9 @@ class Time(Node):
         if self.posix:
             return "(time -p " + self.pipeline.to_sexp() + ")"
         return "(time " + self.pipeline.to_sexp() + ")"
+
+    def GetKind(self) -> str:
+        return self.kind
 
 
 @dataclass
@@ -3465,6 +3609,9 @@ class ConditionalExpr(Node):
             return result + " " + redirect_sexps
         return result
 
+    def GetKind(self) -> str:
+        return self.kind
+
 
 @dataclass
 class UnaryTest(Node):
@@ -3475,6 +3622,9 @@ class UnaryTest(Node):
     def to_sexp(self) -> str:
         operand_val = self.operand.get_cond_formatted_value()
         return "(cond-unary \"" + self.op + "\" (cond-term \"" + operand_val + "\"))"
+
+    def GetKind(self) -> str:
+        return self.kind
 
 
 @dataclass
@@ -3489,6 +3639,9 @@ class BinaryTest(Node):
         right_val = self.right.get_cond_formatted_value()
         return "(cond-binary \"" + self.op + "\" (cond-term \"" + left_val + "\") (cond-term \"" + right_val + "\"))"
 
+    def GetKind(self) -> str:
+        return self.kind
+
 
 @dataclass
 class CondAnd(Node):
@@ -3498,6 +3651,9 @@ class CondAnd(Node):
 
     def to_sexp(self) -> str:
         return "(cond-and " + self.left.to_sexp() + " " + self.right.to_sexp() + ")"
+
+    def GetKind(self) -> str:
+        return self.kind
 
 
 @dataclass
@@ -3509,6 +3665,9 @@ class CondOr(Node):
     def to_sexp(self) -> str:
         return "(cond-or " + self.left.to_sexp() + " " + self.right.to_sexp() + ")"
 
+    def GetKind(self) -> str:
+        return self.kind
+
 
 @dataclass
 class CondNot(Node):
@@ -3518,6 +3677,9 @@ class CondNot(Node):
     def to_sexp(self) -> str:
         return self.operand.to_sexp()
 
+    def GetKind(self) -> str:
+        return self.kind
+
 
 @dataclass
 class CondParen(Node):
@@ -3526,6 +3688,9 @@ class CondParen(Node):
 
     def to_sexp(self) -> str:
         return "(cond-expr " + self.inner.to_sexp() + ")"
+
+    def GetKind(self) -> str:
+        return self.kind
 
 
 @dataclass
@@ -3542,6 +3707,9 @@ class Array(Node):
         inner = " ".join(parts)
         return "(array " + inner + ")"
 
+    def GetKind(self) -> str:
+        return self.kind
+
 
 @dataclass
 class Coproc(Node):
@@ -3555,6 +3723,9 @@ class Coproc(Node):
         else:
             name = "COPROC"
         return "(coproc \"" + name + "\" " + self.command.to_sexp() + ")"
+
+    def GetKind(self) -> str:
+        return self.kind
 
 
 @dataclass

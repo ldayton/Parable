@@ -368,6 +368,28 @@ def build_struct(
                     stmt, node_name, symbols, callbacks, with_body=with_body
                 )
                 methods.append(method)
+    # Synthesize GetKind() for Node structs with a kind field
+    if info.is_node and "kind" in info.fields:
+        has_getkind = any(m.name in ("GetKind", "get_kind") for m in methods)
+        if not has_getkind:
+            from .. import ir
+
+            getkind_method = Function(
+                name="GetKind",
+                params=[],
+                ret=STRING,
+                body=[
+                    ir.Return(
+                        value=ir.FieldAccess(
+                            obj=ir.Var(name="self", typ=Pointer(StructRef(node_name))),
+                            field="kind",
+                            typ=STRING,
+                        )
+                    )
+                ],
+                receiver=Receiver(name="self", typ=StructRef(node_name), pointer=True),
+            )
+            methods.append(getkind_method)
     implements = []
     if info.is_node:
         implements.append("Node")
@@ -455,6 +477,7 @@ def build_module(
             MethodSig(name="GetKind", params=[], ret=STRING),
             MethodSig(name="ToSexp", params=[], ret=STRING),
         ],
+        fields=[Field(name="kind", typ=STRING)],
     )
     module.interfaces.append(node_interface)
     # Build structs (with method bodies) and collect constructor functions

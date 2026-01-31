@@ -1972,8 +1972,6 @@ type Word struct {
 	Kind  string
 }
 
-func (self *Word) GetKind() string { return self.Kind }
-
 func (self *Word) ToSexp() string {
 	value := self.Value
 	value = self.expandAllAnsiCQuotes(value)
@@ -3434,13 +3432,15 @@ func (self *Word) GetCondFormattedValue() string {
 	return strings.TrimRight(value, "\n")
 }
 
+func (self *Word) GetKind() string {
+	return self.Kind
+}
+
 type Command struct {
 	Words     []*Word
 	Redirects []Node
 	Kind      string
 }
-
-func (self *Command) GetKind() string { return self.Kind }
 
 func (self *Command) ToSexp() string {
 	parts := []string{}
@@ -3457,12 +3457,14 @@ func (self *Command) ToSexp() string {
 	return "(command " + inner + ")"
 }
 
+func (self *Command) GetKind() string {
+	return self.Kind
+}
+
 type Pipeline struct {
 	Commands []Node
 	Kind     string
 }
-
-func (self *Pipeline) GetKind() string { return self.Kind }
 
 func (self *Pipeline) ToSexp() string {
 	if len(self.Commands) == 1 {
@@ -3537,12 +3539,14 @@ func (self *Pipeline) cmdSexp(cmd Node, needsRedirect bool) string {
 	return cmd.ToSexp()
 }
 
+func (self *Pipeline) GetKind() string {
+	return self.Kind
+}
+
 type List struct {
 	Parts []Node
 	Kind  string
 }
-
-func (self *List) GetKind() string { return self.Kind }
 
 func (self *List) ToSexp() string {
 	parts := append(self.Parts[:0:0], self.Parts...)
@@ -3658,36 +3662,46 @@ func (self *List) toSexpAndOr(parts []Node, opNames map[string]string) string {
 	return result
 }
 
+func (self *List) GetKind() string {
+	return self.Kind
+}
+
 type Operator struct {
 	Op   string
 	Kind string
 }
-
-func (self *Operator) GetKind() string { return self.Kind }
 
 func (self *Operator) ToSexp() string {
 	names := map[string]string{"&&": "and", "||": "or", ";": "semi", "&": "bg", "|": "pipe"}
 	return "(" + _mapGet(names, self.Op, self.Op) + ")"
 }
 
+func (self *Operator) GetKind() string {
+	return self.Kind
+}
+
 type PipeBoth struct {
 	Kind string
 }
 
-func (self *PipeBoth) GetKind() string { return self.Kind }
-
 func (self *PipeBoth) ToSexp() string {
 	return "(pipe-both)"
+}
+
+func (self *PipeBoth) GetKind() string {
+	return self.Kind
 }
 
 type Empty struct {
 	Kind string
 }
 
-func (self *Empty) GetKind() string { return self.Kind }
-
 func (self *Empty) ToSexp() string {
 	return ""
+}
+
+func (self *Empty) GetKind() string {
+	return self.Kind
 }
 
 type Comment struct {
@@ -3695,10 +3709,12 @@ type Comment struct {
 	Kind string
 }
 
-func (self *Comment) GetKind() string { return self.Kind }
-
 func (self *Comment) ToSexp() string {
 	return ""
+}
+
+func (self *Comment) GetKind() string {
+	return self.Kind
 }
 
 type Redirect struct {
@@ -3707,8 +3723,6 @@ type Redirect struct {
 	Fd     *int
 	Kind   string
 }
-
-func (self *Redirect) GetKind() string { return self.Kind }
 
 func (self *Redirect) ToSexp() string {
 	op := strings.TrimLeft(self.Op, "0123456789")
@@ -3788,6 +3802,10 @@ func (self *Redirect) ToSexp() string {
 	return "(redirect \"" + op + "\" \"" + targetVal + "\")"
 }
 
+func (self *Redirect) GetKind() string {
+	return self.Kind
+}
+
 type HereDoc struct {
 	Delimiter string
 	Content   string
@@ -3798,8 +3816,6 @@ type HereDoc struct {
 	startPos  int
 	Kind      string
 }
-
-func (self *HereDoc) GetKind() string { return self.Kind }
 
 func (self *HereDoc) ToSexp() string {
 	op := func() string {
@@ -3816,17 +3832,23 @@ func (self *HereDoc) ToSexp() string {
 	return fmt.Sprintf("(redirect \"%v\" \"%v\")", op, content)
 }
 
+func (self *HereDoc) GetKind() string {
+	return self.Kind
+}
+
 type Subshell struct {
 	Body      Node
 	Redirects []Node
 	Kind      string
 }
 
-func (self *Subshell) GetKind() string { return self.Kind }
-
 func (self *Subshell) ToSexp() string {
 	base := "(subshell " + self.Body.ToSexp() + ")"
 	return appendRedirects(base, self.Redirects)
+}
+
+func (self *Subshell) GetKind() string {
+	return self.Kind
 }
 
 type BraceGroup struct {
@@ -3835,11 +3857,13 @@ type BraceGroup struct {
 	Kind      string
 }
 
-func (self *BraceGroup) GetKind() string { return self.Kind }
-
 func (self *BraceGroup) ToSexp() string {
 	base := "(brace-group " + self.Body.ToSexp() + ")"
 	return appendRedirects(base, self.Redirects)
+}
+
+func (self *BraceGroup) GetKind() string {
+	return self.Kind
 }
 
 type If struct {
@@ -3849,8 +3873,6 @@ type If struct {
 	Redirects []Node
 	Kind      string
 }
-
-func (self *If) GetKind() string { return self.Kind }
 
 func (self *If) ToSexp() string {
 	result := "(if " + self.Condition.ToSexp() + " " + self.ThenBody.ToSexp()
@@ -3864,6 +3886,10 @@ func (self *If) ToSexp() string {
 	return result
 }
 
+func (self *If) GetKind() string {
+	return self.Kind
+}
+
 type While struct {
 	Condition Node
 	Body      Node
@@ -3871,11 +3897,13 @@ type While struct {
 	Kind      string
 }
 
-func (self *While) GetKind() string { return self.Kind }
-
 func (self *While) ToSexp() string {
 	base := "(while " + self.Condition.ToSexp() + " " + self.Body.ToSexp() + ")"
 	return appendRedirects(base, self.Redirects)
+}
+
+func (self *While) GetKind() string {
+	return self.Kind
 }
 
 type Until struct {
@@ -3885,11 +3913,13 @@ type Until struct {
 	Kind      string
 }
 
-func (self *Until) GetKind() string { return self.Kind }
-
 func (self *Until) ToSexp() string {
 	base := "(until " + self.Condition.ToSexp() + " " + self.Body.ToSexp() + ")"
 	return appendRedirects(base, self.Redirects)
+}
+
+func (self *Until) GetKind() string {
+	return self.Kind
 }
 
 type For struct {
@@ -3899,8 +3929,6 @@ type For struct {
 	Redirects []Node
 	Kind      string
 }
-
-func (self *For) GetKind() string { return self.Kind }
 
 func (self *For) ToSexp() string {
 	suffix := ""
@@ -3928,6 +3956,10 @@ func (self *For) ToSexp() string {
 	}
 }
 
+func (self *For) GetKind() string {
+	return self.Kind
+}
+
 type ForArith struct {
 	Init      string
 	Cond      string
@@ -3936,8 +3968,6 @@ type ForArith struct {
 	Redirects []Node
 	Kind      string
 }
-
-func (self *ForArith) GetKind() string { return self.Kind }
 
 func (self *ForArith) ToSexp() string {
 	suffix := ""
@@ -3976,6 +4006,10 @@ func (self *ForArith) ToSexp() string {
 	return fmt.Sprintf("(arith-for (init (word \"%v\")) (test (word \"%v\")) (step (word \"%v\")) %v)%v", initStr, condStr, incrStr, bodyStr, suffix)
 }
 
+func (self *ForArith) GetKind() string {
+	return self.Kind
+}
+
 type Select struct {
 	Var       string
 	Words     []*Word
@@ -3983,8 +4017,6 @@ type Select struct {
 	Redirects []Node
 	Kind      string
 }
-
-func (self *Select) GetKind() string { return self.Kind }
 
 func (self *Select) ToSexp() string {
 	suffix := ""
@@ -4014,14 +4046,16 @@ func (self *Select) ToSexp() string {
 	return "(select (word \"" + varEscaped + "\") " + inClause + " " + self.Body.ToSexp() + ")" + suffix
 }
 
+func (self *Select) GetKind() string {
+	return self.Kind
+}
+
 type Case struct {
 	Word      Node
 	Patterns  []Node
 	Redirects []Node
 	Kind      string
 }
-
-func (self *Case) GetKind() string { return self.Kind }
 
 func (self *Case) ToSexp() string {
 	parts := []string{}
@@ -4033,14 +4067,16 @@ func (self *Case) ToSexp() string {
 	return appendRedirects(base, self.Redirects)
 }
 
+func (self *Case) GetKind() string {
+	return self.Kind
+}
+
 type CasePattern struct {
 	Pattern    string
 	Body       Node
 	Terminator string
 	Kind       string
 }
-
-func (self *CasePattern) GetKind() string { return self.Kind }
 
 func (self *CasePattern) ToSexp() string {
 	alternatives := []string{}
@@ -4107,16 +4143,22 @@ func (self *CasePattern) ToSexp() string {
 	return strings.Join(parts, "")
 }
 
+func (self *CasePattern) GetKind() string {
+	return self.Kind
+}
+
 type Function struct {
 	Name string
 	Body Node
 	Kind string
 }
 
-func (self *Function) GetKind() string { return self.Kind }
-
 func (self *Function) ToSexp() string {
 	return "(function \"" + self.Name + "\" " + self.Body.ToSexp() + ")"
+}
+
+func (self *Function) GetKind() string {
+	return self.Kind
 }
 
 type ParamExpansion struct {
@@ -4125,8 +4167,6 @@ type ParamExpansion struct {
 	Arg   string
 	Kind  string
 }
-
-func (self *ParamExpansion) GetKind() string { return self.Kind }
 
 func (self *ParamExpansion) ToSexp() string {
 	escapedParam := strings.ReplaceAll(strings.ReplaceAll(self.Param, "\\", "\\\\"), "\"", "\\\"")
@@ -4144,16 +4184,22 @@ func (self *ParamExpansion) ToSexp() string {
 	return "(param \"" + escapedParam + "\")"
 }
 
+func (self *ParamExpansion) GetKind() string {
+	return self.Kind
+}
+
 type ParamLength struct {
 	Param string
 	Kind  string
 }
 
-func (self *ParamLength) GetKind() string { return self.Kind }
-
 func (self *ParamLength) ToSexp() string {
 	escaped := strings.ReplaceAll(strings.ReplaceAll(self.Param, "\\", "\\\\"), "\"", "\\\"")
 	return "(param-len \"" + escaped + "\")"
+}
+
+func (self *ParamLength) GetKind() string {
+	return self.Kind
 }
 
 type ParamIndirect struct {
@@ -4162,8 +4208,6 @@ type ParamIndirect struct {
 	Arg   string
 	Kind  string
 }
-
-func (self *ParamIndirect) GetKind() string { return self.Kind }
 
 func (self *ParamIndirect) ToSexp() string {
 	escaped := strings.ReplaceAll(strings.ReplaceAll(self.Param, "\\", "\\\\"), "\"", "\\\"")
@@ -4181,13 +4225,15 @@ func (self *ParamIndirect) ToSexp() string {
 	return "(param-indirect \"" + escaped + "\")"
 }
 
+func (self *ParamIndirect) GetKind() string {
+	return self.Kind
+}
+
 type CommandSubstitution struct {
 	Command Node
 	Brace   bool
 	Kind    string
 }
-
-func (self *CommandSubstitution) GetKind() string { return self.Kind }
 
 func (self *CommandSubstitution) ToSexp() string {
 	if self.Brace {
@@ -4196,12 +4242,14 @@ func (self *CommandSubstitution) ToSexp() string {
 	return "(cmdsub " + self.Command.ToSexp() + ")"
 }
 
+func (self *CommandSubstitution) GetKind() string {
+	return self.Kind
+}
+
 type ArithmeticExpansion struct {
 	Expression Node
 	Kind       string
 }
-
-func (self *ArithmeticExpansion) GetKind() string { return self.Kind }
 
 func (self *ArithmeticExpansion) ToSexp() string {
 	if self.Expression == nil {
@@ -4210,14 +4258,16 @@ func (self *ArithmeticExpansion) ToSexp() string {
 	return "(arith " + self.Expression.ToSexp() + ")"
 }
 
+func (self *ArithmeticExpansion) GetKind() string {
+	return self.Kind
+}
+
 type ArithmeticCommand struct {
 	Expression Node
 	Redirects  []Node
 	RawContent string
 	Kind       string
 }
-
-func (self *ArithmeticCommand) GetKind() string { return self.Kind }
 
 func (self *ArithmeticCommand) ToSexp() string {
 	formatted := (&Word{Value: self.RawContent, Kind: "word"}).formatCommandSubstitutions(self.RawContent, true)
@@ -4234,25 +4284,33 @@ func (self *ArithmeticCommand) ToSexp() string {
 	return result
 }
 
+func (self *ArithmeticCommand) GetKind() string {
+	return self.Kind
+}
+
 type ArithNumber struct {
 	Value string
 	Kind  string
 }
 
-func (self *ArithNumber) GetKind() string { return self.Kind }
-
 func (self *ArithNumber) ToSexp() string {
 	return "(number \"" + self.Value + "\")"
+}
+
+func (self *ArithNumber) GetKind() string {
+	return self.Kind
 }
 
 type ArithEmpty struct {
 	Kind string
 }
 
-func (self *ArithEmpty) GetKind() string { return self.Kind }
-
 func (self *ArithEmpty) ToSexp() string {
 	return "(empty)"
+}
+
+func (self *ArithEmpty) GetKind() string {
+	return self.Kind
 }
 
 type ArithVar struct {
@@ -4260,10 +4318,12 @@ type ArithVar struct {
 	Kind string
 }
 
-func (self *ArithVar) GetKind() string { return self.Kind }
-
 func (self *ArithVar) ToSexp() string {
 	return "(var \"" + self.Name + "\")"
+}
+
+func (self *ArithVar) GetKind() string {
+	return self.Kind
 }
 
 type ArithBinaryOp struct {
@@ -4273,10 +4333,12 @@ type ArithBinaryOp struct {
 	Kind  string
 }
 
-func (self *ArithBinaryOp) GetKind() string { return self.Kind }
-
 func (self *ArithBinaryOp) ToSexp() string {
 	return "(binary-op \"" + self.Op + "\" " + self.Left.ToSexp() + " " + self.Right.ToSexp() + ")"
+}
+
+func (self *ArithBinaryOp) GetKind() string {
+	return self.Kind
 }
 
 type ArithUnaryOp struct {
@@ -4285,10 +4347,12 @@ type ArithUnaryOp struct {
 	Kind    string
 }
 
-func (self *ArithUnaryOp) GetKind() string { return self.Kind }
-
 func (self *ArithUnaryOp) ToSexp() string {
 	return "(unary-op \"" + self.Op + "\" " + self.Operand.ToSexp() + ")"
+}
+
+func (self *ArithUnaryOp) GetKind() string {
+	return self.Kind
 }
 
 type ArithPreIncr struct {
@@ -4296,10 +4360,12 @@ type ArithPreIncr struct {
 	Kind    string
 }
 
-func (self *ArithPreIncr) GetKind() string { return self.Kind }
-
 func (self *ArithPreIncr) ToSexp() string {
 	return "(pre-incr " + self.Operand.ToSexp() + ")"
+}
+
+func (self *ArithPreIncr) GetKind() string {
+	return self.Kind
 }
 
 type ArithPostIncr struct {
@@ -4307,10 +4373,12 @@ type ArithPostIncr struct {
 	Kind    string
 }
 
-func (self *ArithPostIncr) GetKind() string { return self.Kind }
-
 func (self *ArithPostIncr) ToSexp() string {
 	return "(post-incr " + self.Operand.ToSexp() + ")"
+}
+
+func (self *ArithPostIncr) GetKind() string {
+	return self.Kind
 }
 
 type ArithPreDecr struct {
@@ -4318,10 +4386,12 @@ type ArithPreDecr struct {
 	Kind    string
 }
 
-func (self *ArithPreDecr) GetKind() string { return self.Kind }
-
 func (self *ArithPreDecr) ToSexp() string {
 	return "(pre-decr " + self.Operand.ToSexp() + ")"
+}
+
+func (self *ArithPreDecr) GetKind() string {
+	return self.Kind
 }
 
 type ArithPostDecr struct {
@@ -4329,10 +4399,12 @@ type ArithPostDecr struct {
 	Kind    string
 }
 
-func (self *ArithPostDecr) GetKind() string { return self.Kind }
-
 func (self *ArithPostDecr) ToSexp() string {
 	return "(post-decr " + self.Operand.ToSexp() + ")"
+}
+
+func (self *ArithPostDecr) GetKind() string {
+	return self.Kind
 }
 
 type ArithAssign struct {
@@ -4342,10 +4414,12 @@ type ArithAssign struct {
 	Kind   string
 }
 
-func (self *ArithAssign) GetKind() string { return self.Kind }
-
 func (self *ArithAssign) ToSexp() string {
 	return "(assign \"" + self.Op + "\" " + self.Target.ToSexp() + " " + self.Value.ToSexp() + ")"
+}
+
+func (self *ArithAssign) GetKind() string {
+	return self.Kind
 }
 
 type ArithTernary struct {
@@ -4355,10 +4429,12 @@ type ArithTernary struct {
 	Kind      string
 }
 
-func (self *ArithTernary) GetKind() string { return self.Kind }
-
 func (self *ArithTernary) ToSexp() string {
 	return "(ternary " + self.Condition.ToSexp() + " " + self.IfTrue.ToSexp() + " " + self.IfFalse.ToSexp() + ")"
+}
+
+func (self *ArithTernary) GetKind() string {
+	return self.Kind
 }
 
 type ArithComma struct {
@@ -4367,10 +4443,12 @@ type ArithComma struct {
 	Kind  string
 }
 
-func (self *ArithComma) GetKind() string { return self.Kind }
-
 func (self *ArithComma) ToSexp() string {
 	return "(comma " + self.Left.ToSexp() + " " + self.Right.ToSexp() + ")"
+}
+
+func (self *ArithComma) GetKind() string {
+	return self.Kind
 }
 
 type ArithSubscript struct {
@@ -4379,10 +4457,12 @@ type ArithSubscript struct {
 	Kind  string
 }
 
-func (self *ArithSubscript) GetKind() string { return self.Kind }
-
 func (self *ArithSubscript) ToSexp() string {
 	return "(subscript \"" + self.Array + "\" " + self.Index.ToSexp() + ")"
+}
+
+func (self *ArithSubscript) GetKind() string {
+	return self.Kind
 }
 
 type ArithEscape struct {
@@ -4390,10 +4470,12 @@ type ArithEscape struct {
 	Kind string
 }
 
-func (self *ArithEscape) GetKind() string { return self.Kind }
-
 func (self *ArithEscape) ToSexp() string {
 	return "(escape \"" + self.Char + "\")"
+}
+
+func (self *ArithEscape) GetKind() string {
+	return self.Kind
 }
 
 type ArithDeprecated struct {
@@ -4401,19 +4483,19 @@ type ArithDeprecated struct {
 	Kind       string
 }
 
-func (self *ArithDeprecated) GetKind() string { return self.Kind }
-
 func (self *ArithDeprecated) ToSexp() string {
 	escaped := strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(self.Expression, "\\", "\\\\"), "\"", "\\\""), "\n", "\\n")
 	return "(arith-deprecated \"" + escaped + "\")"
+}
+
+func (self *ArithDeprecated) GetKind() string {
+	return self.Kind
 }
 
 type ArithConcat struct {
 	Parts []Node
 	Kind  string
 }
-
-func (self *ArithConcat) GetKind() string { return self.Kind }
 
 func (self *ArithConcat) ToSexp() string {
 	sexps := []string{}
@@ -4423,16 +4505,22 @@ func (self *ArithConcat) ToSexp() string {
 	return "(arith-concat " + strings.Join(sexps, " ") + ")"
 }
 
+func (self *ArithConcat) GetKind() string {
+	return self.Kind
+}
+
 type AnsiCQuote struct {
 	Content string
 	Kind    string
 }
 
-func (self *AnsiCQuote) GetKind() string { return self.Kind }
-
 func (self *AnsiCQuote) ToSexp() string {
 	escaped := strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(self.Content, "\\", "\\\\"), "\"", "\\\""), "\n", "\\n")
 	return "(ansi-c \"" + escaped + "\")"
+}
+
+func (self *AnsiCQuote) GetKind() string {
+	return self.Kind
 }
 
 type LocaleString struct {
@@ -4440,11 +4528,13 @@ type LocaleString struct {
 	Kind    string
 }
 
-func (self *LocaleString) GetKind() string { return self.Kind }
-
 func (self *LocaleString) ToSexp() string {
 	escaped := strings.ReplaceAll(strings.ReplaceAll(strings.ReplaceAll(self.Content, "\\", "\\\\"), "\"", "\\\""), "\n", "\\n")
 	return "(locale \"" + escaped + "\")"
+}
+
+func (self *LocaleString) GetKind() string {
+	return self.Kind
 }
 
 type ProcessSubstitution struct {
@@ -4453,18 +4543,18 @@ type ProcessSubstitution struct {
 	Kind      string
 }
 
-func (self *ProcessSubstitution) GetKind() string { return self.Kind }
-
 func (self *ProcessSubstitution) ToSexp() string {
 	return "(procsub \"" + self.Direction + "\" " + self.Command.ToSexp() + ")"
+}
+
+func (self *ProcessSubstitution) GetKind() string {
+	return self.Kind
 }
 
 type Negation struct {
 	Pipeline Node
 	Kind     string
 }
-
-func (self *Negation) GetKind() string { return self.Kind }
 
 func (self *Negation) ToSexp() string {
 	if _isNilInterfaceRef(self.Pipeline) {
@@ -4473,13 +4563,15 @@ func (self *Negation) ToSexp() string {
 	return "(negation " + self.Pipeline.ToSexp() + ")"
 }
 
+func (self *Negation) GetKind() string {
+	return self.Kind
+}
+
 type Time struct {
 	Pipeline Node
 	Posix    bool
 	Kind     string
 }
-
-func (self *Time) GetKind() string { return self.Kind }
 
 func (self *Time) ToSexp() string {
 	if _isNilInterfaceRef(self.Pipeline) {
@@ -4495,13 +4587,15 @@ func (self *Time) ToSexp() string {
 	return "(time " + self.Pipeline.ToSexp() + ")"
 }
 
+func (self *Time) GetKind() string {
+	return self.Kind
+}
+
 type ConditionalExpr struct {
 	Body      interface{}
 	Redirects []Node
 	Kind      string
 }
-
-func (self *ConditionalExpr) GetKind() string { return self.Kind }
 
 func (self *ConditionalExpr) ToSexp() string {
 	body := self.Body
@@ -4527,17 +4621,23 @@ func (self *ConditionalExpr) ToSexp() string {
 	return result
 }
 
+func (self *ConditionalExpr) GetKind() string {
+	return self.Kind
+}
+
 type UnaryTest struct {
 	Op      string
 	Operand Node
 	Kind    string
 }
 
-func (self *UnaryTest) GetKind() string { return self.Kind }
-
 func (self *UnaryTest) ToSexp() string {
 	operandVal := self.Operand.(*Word).GetCondFormattedValue()
 	return "(cond-unary \"" + self.Op + "\" (cond-term \"" + operandVal + "\"))"
+}
+
+func (self *UnaryTest) GetKind() string {
+	return self.Kind
 }
 
 type BinaryTest struct {
@@ -4547,12 +4647,14 @@ type BinaryTest struct {
 	Kind  string
 }
 
-func (self *BinaryTest) GetKind() string { return self.Kind }
-
 func (self *BinaryTest) ToSexp() string {
 	leftVal := self.Left.(*Word).GetCondFormattedValue()
 	rightVal := self.Right.(*Word).GetCondFormattedValue()
 	return "(cond-binary \"" + self.Op + "\" (cond-term \"" + leftVal + "\") (cond-term \"" + rightVal + "\"))"
+}
+
+func (self *BinaryTest) GetKind() string {
+	return self.Kind
 }
 
 type CondAnd struct {
@@ -4561,10 +4663,12 @@ type CondAnd struct {
 	Kind  string
 }
 
-func (self *CondAnd) GetKind() string { return self.Kind }
-
 func (self *CondAnd) ToSexp() string {
 	return "(cond-and " + self.Left.ToSexp() + " " + self.Right.ToSexp() + ")"
+}
+
+func (self *CondAnd) GetKind() string {
+	return self.Kind
 }
 
 type CondOr struct {
@@ -4573,10 +4677,12 @@ type CondOr struct {
 	Kind  string
 }
 
-func (self *CondOr) GetKind() string { return self.Kind }
-
 func (self *CondOr) ToSexp() string {
 	return "(cond-or " + self.Left.ToSexp() + " " + self.Right.ToSexp() + ")"
+}
+
+func (self *CondOr) GetKind() string {
+	return self.Kind
 }
 
 type CondNot struct {
@@ -4584,10 +4690,12 @@ type CondNot struct {
 	Kind    string
 }
 
-func (self *CondNot) GetKind() string { return self.Kind }
-
 func (self *CondNot) ToSexp() string {
 	return self.Operand.ToSexp()
+}
+
+func (self *CondNot) GetKind() string {
+	return self.Kind
 }
 
 type CondParen struct {
@@ -4595,18 +4703,18 @@ type CondParen struct {
 	Kind  string
 }
 
-func (self *CondParen) GetKind() string { return self.Kind }
-
 func (self *CondParen) ToSexp() string {
 	return "(cond-expr " + self.Inner.ToSexp() + ")"
+}
+
+func (self *CondParen) GetKind() string {
+	return self.Kind
 }
 
 type Array struct {
 	Elements []*Word
 	Kind     string
 }
-
-func (self *Array) GetKind() string { return self.Kind }
 
 func (self *Array) ToSexp() string {
 	if !(len(self.Elements) > 0) {
@@ -4620,13 +4728,15 @@ func (self *Array) ToSexp() string {
 	return "(array " + inner + ")"
 }
 
+func (self *Array) GetKind() string {
+	return self.Kind
+}
+
 type Coproc struct {
 	Command Node
 	Name    string
 	Kind    string
 }
-
-func (self *Coproc) GetKind() string { return self.Kind }
 
 func (self *Coproc) ToSexp() string {
 	var name string
@@ -4636,6 +4746,10 @@ func (self *Coproc) ToSexp() string {
 		name = "COPROC"
 	}
 	return "(coproc \"" + name + "\" " + self.Command.ToSexp() + ")"
+}
+
+func (self *Coproc) GetKind() string {
+	return self.Kind
 }
 
 type Parser struct {

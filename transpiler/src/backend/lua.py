@@ -192,7 +192,6 @@ class LuaBackend:
         self._needs_set_contains = False
         self._needs_string_find = False
         self._hoisted_vars: set[str] = set()  # Variables already declared via hoisting
-        self._in_conditional = 0  # Track nesting level inside conditionals
 
     def emit(self, module: Module) -> str:
         """Emit Lua code from IR Module."""
@@ -205,7 +204,6 @@ class LuaBackend:
         self._needs_set_contains = False
         self._needs_string_find = False
         self._hoisted_vars = set()
-        self._in_conditional = 0
         # First pass to collect struct field info
         for struct in module.structs:
             self.struct_fields[struct.name] = [f.name for f in struct.fields]
@@ -213,14 +211,6 @@ class LuaBackend:
         self._scan_for_continue(module)
         self._emit_module(module)
         return "\n".join(self.lines)
-
-    def _emit_hoisted_vars(self, hoisted_vars: list[tuple[str, Type]]) -> None:
-        """Emit var declarations for hoisted variables before control structures."""
-        for name, _ in hoisted_vars:
-            lua_name = _safe_name(name)
-            if name not in self._hoisted_vars:
-                self._line(f"local {lua_name}")
-                self._hoisted_vars.add(name)
 
     def _scan_for_continue(self, module: Module) -> None:
         """Scan module for continue statements."""
@@ -345,6 +335,53 @@ class LuaBackend:
                 if self._body_has_return(stmt.default):
                     return True
         return False
+
+    def _collect_assigned_vars(self, stmts: list[Stmt]) -> set[str]:
+        """Collect all variable names assigned in statements (for hoisting)."""
+        result: set[str] = set()
+        for stmt in stmts:
+            match stmt:
+                case VarDecl(name=name):
+                    result.add(name)
+                case Assign(target=VarLV(name=name)):
+                    result.add(name)
+                case TupleAssign(new_targets=new_targets):
+                    result.update(new_targets)
+                case If(init=init, then_body=then_body, else_body=else_body):
+                    if init and isinstance(init, VarDecl):
+                        result.add(init.name)
+                    result.update(self._collect_assigned_vars(then_body))
+                    result.update(self._collect_assigned_vars(else_body))
+                case ForRange(index=index, value=value, body=body):
+                    if index:
+                        result.add(index)
+                    if value:
+                        result.add(value)
+                    result.update(self._collect_assigned_vars(body))
+                case ForClassic(init=init, body=body):
+                    if init:
+                        result.update(self._collect_assigned_vars([init]))
+                    result.update(self._collect_assigned_vars(body))
+                case While(body=body):
+                    result.update(self._collect_assigned_vars(body))
+                case Block(body=body):
+                    result.update(self._collect_assigned_vars(body))
+                case TryCatch(body=body, catch_var=catch_var, catch_body=catch_body):
+                    result.update(self._collect_assigned_vars(body))
+                    if catch_var:
+                        result.add(catch_var)
+                    result.update(self._collect_assigned_vars(catch_body))
+                case Match(cases=cases, default=default):
+                    for case in cases:
+                        result.update(self._collect_assigned_vars(case.body))
+                    result.update(self._collect_assigned_vars(default))
+                case TypeSwitch(binding=binding, cases=cases, default=default):
+                    if binding:
+                        result.add(binding)
+                    for case in cases:
+                        result.update(self._collect_assigned_vars(case.body))
+                    result.update(self._collect_assigned_vars(default))
+        return result
 
     def _line(self, text: str = "") -> None:
         if text:
@@ -559,12 +596,19 @@ class LuaBackend:
 
     def _emit_function(self, func: Function) -> None:
         saved_hoisted = self._hoisted_vars
-        self._hoisted_vars = set()
+        # Collect all variables and pre-declare them at function start
+        all_vars = self._collect_assigned_vars(func.body)
+        param_names = {p.name for p in func.params}
+        local_vars = all_vars - param_names - {"_"}  # Exclude params and _
+        self._hoisted_vars = set(local_vars)  # Mark all as already declared
         params = self._params(func.params)
         self._line(f"function {_safe_name(func.name)}({params})")
         self.indent += 1
         if func.doc:
             self._line(f"-- {func.doc}")
+        # Emit hoisted locals at function start
+        if local_vars:
+            self._line(f"local {', '.join(_safe_name(v) for v in sorted(local_vars))}")
         if _is_empty_body(func.body):
             self._line("-- empty function")
         for stmt in func.body:
@@ -575,7 +619,13 @@ class LuaBackend:
 
     def _emit_method(self, func: Function, struct_name: str) -> None:
         saved_hoisted = self._hoisted_vars
-        self._hoisted_vars = set()
+        # Collect all variables and pre-declare them at function start
+        all_vars = self._collect_assigned_vars(func.body)
+        param_names = {p.name for p in func.params}
+        if func.receiver:
+            param_names.add(func.receiver.name)
+        local_vars = all_vars - param_names - {"_"}  # Exclude params, receiver, and _
+        self._hoisted_vars = set(local_vars)  # Mark all as already declared
         params = self._params(func.params)
         self._line(f"function {struct_name}:{_safe_name(func.name)}({params})")
         self.indent += 1
@@ -583,6 +633,9 @@ class LuaBackend:
             self._line(f"-- {func.doc}")
         if func.receiver:
             self.receiver_name = func.receiver.name
+        # Emit hoisted locals at function start
+        if local_vars:
+            self._line(f"local {', '.join(_safe_name(v) for v in sorted(local_vars))}")
         if _is_empty_body(func.body):
             self._line("-- empty method")
         for stmt in func.body:
@@ -602,54 +655,17 @@ class LuaBackend:
         match stmt:
             case VarDecl(name=name, value=value):
                 safe = _safe_name(name)
-                # Check if this variable was already declared in this scope
-                already_declared = name in self._hoisted_vars
                 if value is not None:
                     val = self._expr(value)
-                    if already_declared:
-                        self._line(f"{safe} = {val}")
-                    else:
-                        self._line(f"local {safe} = {val}")
-                        self._hoisted_vars.add(name)
-                elif not already_declared:
-                    self._line(f"local {safe} = nil")
-                    self._hoisted_vars.add(name)
+                    self._line(f"{safe} = {val}")
             case Assign(target=target, value=value):
                 lv = self._lvalue(target)
                 val = self._expr(value)
-                # Get variable name from target for hoisting check
-                var_name = None
-                if isinstance(target, VarLV):
-                    var_name = target.name
-                # In Python, first assignment creates a local variable
-                # Emit `local` if variable hasn't been declared yet
-                if var_name and var_name not in self._hoisted_vars:
-                    self._line(f"local {lv} = {val}")
-                    self._hoisted_vars.add(var_name)
-                else:
-                    self._line(f"{lv} = {val}")
+                self._line(f"{lv} = {val}")
             case TupleAssign(targets=targets, value=value):
                 lvalues = ", ".join(self._lvalue(t) for t in targets)
                 val = self._expr(value)
-                # Check if all targets are already hoisted
-                all_hoisted = True
-                for t in targets:
-                    if isinstance(t, VarLV) and t.name not in self._hoisted_vars:
-                        all_hoisted = False
-                        break
-                if stmt.is_declaration and not all_hoisted:
-                    self._line(f"local {lvalues} = table.unpack({val})")
-                    # Track newly declared vars
-                    for t in targets:
-                        if isinstance(t, VarLV):
-                            self._hoisted_vars.add(t.name)
-                else:
-                    # Emit new declarations first for non-declaration case
-                    for name in stmt.new_targets:
-                        if name not in self._hoisted_vars:
-                            self._line(f"local {_safe_name(name)}")
-                            self._hoisted_vars.add(name)
-                    self._line(f"{lvalues} = table.unpack({val})")
+                self._line(f"{lvalues} = table.unpack({val})")
             case OpAssign(target=target, op=op, value=value):
                 lv = self._lvalue(target)
                 val = self._expr(value)
@@ -678,9 +694,7 @@ class LuaBackend:
                 then_body=then_body,
                 else_body=else_body,
                 init=init,
-                hoisted_vars=hoisted_vars,
             ):
-                self._emit_hoisted_vars(hoisted_vars)
                 if init is not None:
                     self._emit_stmt(init)
                 self._line(f"if {self._expr(cond)} then")
@@ -697,29 +711,20 @@ class LuaBackend:
                 binding=binding,
                 cases=cases,
                 default=default,
-                hoisted_vars=hoisted_vars,
             ):
-                self._emit_hoisted_vars(hoisted_vars)
                 self._emit_type_switch(expr, binding, cases, default)
-            case Match(expr=expr, cases=cases, default=default, hoisted_vars=hoisted_vars):
-                self._emit_hoisted_vars(hoisted_vars)
+            case Match(expr=expr, cases=cases, default=default):
                 self._emit_match(expr, cases, default)
             case ForRange(
                 index=index,
                 value=value,
                 iterable=iterable,
                 body=body,
-                hoisted_vars=hoisted_vars,
             ):
-                self._emit_hoisted_vars(hoisted_vars)
                 self._emit_for_range(index, value, iterable, body)
-            case ForClassic(
-                init=init, cond=cond, post=post, body=body, hoisted_vars=hoisted_vars
-            ):
-                self._emit_hoisted_vars(hoisted_vars)
+            case ForClassic(init=init, cond=cond, post=post, body=body):
                 self._emit_for_classic(init, cond, post, body)
-            case While(cond=cond, body=body, hoisted_vars=hoisted_vars):
-                self._emit_hoisted_vars(hoisted_vars)
+            case While(cond=cond, body=body):
                 has_continue = self._body_has_direct_continue(body)
                 self._line(f"while {self._expr(cond)} do")
                 self.indent += 1
@@ -748,9 +753,7 @@ class LuaBackend:
                 catch_type=catch_type,
                 catch_body=catch_body,
                 reraise=reraise,
-                hoisted_vars=hoisted_vars,
             ):
-                self._emit_hoisted_vars(hoisted_vars)
                 self._emit_try_catch(body, catch_var, catch_type, catch_body, reraise)
             case Raise(
                 error_type=error_type,
@@ -958,17 +961,14 @@ class LuaBackend:
         has_return = self._body_has_return(body)
         self._line("local _ok, _err = pcall(function()")
         self.indent += 1
-        self._in_conditional += 1  # pcall creates closure scope
         if _is_empty_body(body):
             self._line("-- empty try")
         for s in body:
             self._emit_stmt(s)
-        self._in_conditional -= 1
         self.indent -= 1
         self._line("end)")
         self._line("if not _ok then")
         self.indent += 1
-        self._in_conditional += 1
         if catch_var:
             self._line(f"local {var} = _err")
         if _is_empty_body(catch_body) and not reraise:
@@ -977,7 +977,6 @@ class LuaBackend:
             self._emit_stmt(s)
         if reraise:
             self._line("error(_err)")
-        self._in_conditional -= 1
         self.indent -= 1
         self._line("end")
         # If try body has return statements, propagate the return value on success

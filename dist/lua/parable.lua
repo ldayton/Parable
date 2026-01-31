@@ -292,7 +292,8 @@ function QuoteState:in_quotes()
 end
 
 function QuoteState:copy()
-  local qs = new_quote_state()
+  local qs
+  qs = new_quote_state()
   qs.single = self.single
   qs.double = self.double
   qs.stack = (function() local t = {}; for i, v in ipairs(self.stack) do t[i] = v end; return t end)()
@@ -331,7 +332,8 @@ function ParseContext:new(kind, paren_depth, brace_depth, bracket_depth, case_de
 end
 
 function ParseContext:copy()
-  local ctx = new_parse_context(self.kind)
+  local ctx
+  ctx = new_parse_context(self.kind)
   ctx.paren_depth = self.paren_depth
   ctx.brace_depth = self.brace_depth
   ctx.bracket_depth = self.bracket_depth
@@ -368,7 +370,8 @@ function ContextStack:pop()
 end
 
 function ContextStack:copy_stack()
-  local result = {}
+  local ctx, result
+  result = {}
   for _, ctx in ipairs(self.stack) do
     ;(function() table.insert(result, ctx:copy()); return result end)()
   end
@@ -376,7 +379,8 @@ function ContextStack:copy_stack()
 end
 
 function ContextStack:restore_from(saved_stack)
-  local result = {}
+  local ctx, result
+  result = {}
   for _, ctx in ipairs(saved_stack) do
     ;(function() table.insert(result, ctx:copy()); return result end)()
   end
@@ -443,10 +447,11 @@ function Lexer:peek()
 end
 
 function Lexer:advance()
+  local c
   if self.pos >= self.length then
     return ""
   end
-  local c = string.sub(self.source, self.pos + 1, self.pos + 1)
+  c = string.sub(self.source, self.pos + 1, self.pos + 1)
   self.pos = self.pos + 1
   return c
 end
@@ -464,13 +469,14 @@ function Lexer:is_metachar(c)
 end
 
 function Lexer:read_operator()
-  local start = self.pos
-  local c = self:peek()
+  local c, start, three, two
+  start = self.pos
+  c = self:peek()
   if c == "" then
     return nil
   end
-  local two = self:lookahead(2)
-  local three = self:lookahead(3)
+  two = self:lookahead(2)
+  three = self:lookahead(3)
   if three == ";;&" then
     self.pos = self.pos + 3
     return Token:new(TOKENTYPE_SEMI_SEMI_AMP, three, start, nil, nil)
@@ -583,8 +589,9 @@ function Lexer:read_operator()
 end
 
 function Lexer:skip_blanks()
+  local c
   while self.pos < self.length do
-    local c = string.sub(self.source, self.pos + 1, self.pos + 1)
+    c = string.sub(self.source, self.pos + 1, self.pos + 1)
     if c ~= " " and c ~= "\t" then
       break
     end
@@ -593,6 +600,7 @@ function Lexer:skip_blanks()
 end
 
 function Lexer:skip_comment()
+  local prev
   if self.pos >= self.length then
     return false
   end
@@ -603,7 +611,7 @@ function Lexer:skip_comment()
     return false
   end
   if self.pos > 0 then
-    local prev = string.sub(self.source, self.pos - 1 + 1, self.pos - 1 + 1)
+    prev = string.sub(self.source, self.pos - 1 + 1, self.pos - 1 + 1)
     if (not (string.find(" \t\n;|&(){}", prev, 1, true) ~= nil)) then
       return false
     end
@@ -615,10 +623,11 @@ function Lexer:skip_comment()
 end
 
 function Lexer:read_single_quote(start)
-  local chars = {"'"}
-  local saw_newline = false
+  local c, chars, saw_newline
+  chars = {"'"}
+  saw_newline = false
   while self.pos < self.length do
-    local c = string.sub(self.source, self.pos + 1, self.pos + 1)
+    c = string.sub(self.source, self.pos + 1, self.pos + 1)
     if c == "\n" then
       saw_newline = true
     end
@@ -675,17 +684,18 @@ function Lexer:is_word_terminator(ctx, ch, bracket_depth, paren_depth)
 end
 
 function Lexer:read_bracket_expression(chars, parts, for_regex, paren_depth)
+  local bracket_will_close, c, next_ch, sc, scan
   if for_regex then
-    local scan = self.pos + 1
+    scan = self.pos + 1
     if scan < self.length and string.sub(self.source, scan + 1, scan + 1) == "^" then
       scan = scan + 1
     end
     if scan < self.length and string.sub(self.source, scan + 1, scan + 1) == "]" then
       scan = scan + 1
     end
-    local bracket_will_close = false
+    bracket_will_close = false
     while scan < self.length do
-      local sc = string.sub(self.source, scan + 1, scan + 1)
+      sc = string.sub(self.source, scan + 1, scan + 1)
       if sc == "]" and scan + 1 < self.length and string.sub(self.source, scan + 1 + 1, scan + 1 + 1) == "]" then
         break
       end
@@ -719,7 +729,7 @@ function Lexer:read_bracket_expression(chars, parts, for_regex, paren_depth)
     if self.pos + 1 >= self.length then
       return false
     end
-    local next_ch = string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1)
+    next_ch = string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1)
     if is_whitespace_no_newline(next_ch) or next_ch == "&" or next_ch == "|" then
       return false
     end
@@ -732,7 +742,7 @@ function Lexer:read_bracket_expression(chars, parts, for_regex, paren_depth)
     ;(function() table.insert(chars, self:advance()); return chars end)()
   end
   while not self:at_end() do
-    local c = self:peek()
+    c = self:peek()
     if c == "]" then
       ;(function() table.insert(chars, self:advance()); return chars end)()
       break
@@ -783,17 +793,18 @@ function Lexer:read_bracket_expression(chars, parts, for_regex, paren_depth)
 end
 
 function Lexer:parse_matched_pair(open_char, close_char, flags, initial_was_dollar)
-  local start = self.pos
-  local count = 1
-  local chars = {}
-  local pass_next = false
-  local was_dollar = initial_was_dollar
-  local was_gtlt = false
+  local after_brace_pos, arith_node, arith_text, ch, chars, cmd_node, cmd_text, count, direction, in_dquote, nested, next_ch, param_node, param_text, pass_next, procsub_node, procsub_text, quote_flags, start, was_dollar, was_gtlt
+  start = self.pos
+  count = 1
+  chars = {}
+  pass_next = false
+  was_dollar = initial_was_dollar
+  was_gtlt = false
   while count > 0 do
     if self:at_end() then
       error({MatchedPairError = true, message = string.format("unexpected EOF while looking for matching `%s'", close_char), pos = start})
     end
-    local ch = self:advance()
+    ch = self:advance()
     if (flags & MATCHEDPAIRFLAGS_DOLBRACE ~= 0) and self.dolbrace_state == DOLBRACESTATE_OP then
       if (not (string.find("#%^,~:-=?+/", ch, 1, true) ~= nil)) then
         self.dolbrace_state = DOLBRACESTATE_WORD
@@ -854,10 +865,9 @@ function Lexer:parse_matched_pair(open_char, close_char, flags, initial_was_doll
       goto continue
     end
     if (((string.find("'\"`", ch, 1, true) ~= nil))) and open_char ~= close_char then
-      local nested
       if ch == "'" then
         ;(function() table.insert(chars, ch); return chars end)()
-        local quote_flags = (was_dollar and flags | MATCHEDPAIRFLAGS_ALLOWESC or flags)
+        quote_flags = (was_dollar and flags | MATCHEDPAIRFLAGS_ALLOWESC or flags)
         nested = self:parse_matched_pair("'", "'", quote_flags, false)
         ;(function() table.insert(chars, nested); return chars end)()
         ;(function() table.insert(chars, "'"); return chars end)()
@@ -883,7 +893,7 @@ function Lexer:parse_matched_pair(open_char, close_char, flags, initial_was_doll
       end
     end
     if ch == "$" and not self:at_end() and ((flags & MATCHEDPAIRFLAGS_EXTGLOB) == 0) then
-      local next_ch = self:peek()
+      next_ch = self:peek()
       if was_dollar then
         ;(function() table.insert(chars, ch); return chars end)()
         was_dollar = false
@@ -892,7 +902,7 @@ function Lexer:parse_matched_pair(open_char, close_char, flags, initial_was_doll
       end
       if next_ch == "{" then
         if (flags & MATCHEDPAIRFLAGS_ARITH ~= 0) then
-          local after_brace_pos = self.pos + 1
+          after_brace_pos = self.pos + 1
           if after_brace_pos >= self.length or not is_funsub_char(string.sub(self.source, after_brace_pos + 1, after_brace_pos + 1)) then
             ;(function() table.insert(chars, ch); return chars end)()
             was_dollar = true
@@ -902,8 +912,8 @@ function Lexer:parse_matched_pair(open_char, close_char, flags, initial_was_doll
         end
         self.pos = self.pos - 1
         self:sync_to_parser()
-        local in_dquote = flags & MATCHEDPAIRFLAGS_DQUOTE ~= 0
-        local param_node, param_text = table.unpack(self.parser:parse_param_expansion(in_dquote))
+        in_dquote = flags & MATCHEDPAIRFLAGS_DQUOTE ~= 0
+        param_node, param_text = table.unpack(self.parser:parse_param_expansion(in_dquote))
         self:sync_from_parser()
         if (param_node ~= nil) then
           ;(function() table.insert(chars, param_text); return chars end)()
@@ -918,10 +928,8 @@ function Lexer:parse_matched_pair(open_char, close_char, flags, initial_was_doll
       elseif next_ch == "(" then
         self.pos = self.pos - 1
         self:sync_to_parser()
-        local cmd_node
-        local cmd_text
         if self.pos + 2 < self.length and string.sub(self.source, self.pos + 2 + 1, self.pos + 2 + 1) == "(" then
-          local arith_node, arith_text = table.unpack(self.parser:parse_arithmetic_expansion())
+          arith_node, arith_text = table.unpack(self.parser:parse_arithmetic_expansion())
           self:sync_from_parser()
           if (arith_node ~= nil) then
             ;(function() table.insert(chars, arith_text); return chars end)()
@@ -975,11 +983,11 @@ function Lexer:parse_matched_pair(open_char, close_char, flags, initial_was_doll
       end
     end
     if ch == "(" and was_gtlt and (flags & (MATCHEDPAIRFLAGS_DOLBRACE | MATCHEDPAIRFLAGS_ARRAYSUB) ~= 0) then
-      local direction = chars[#chars - 1 + 1]
+      direction = chars[#chars - 1 + 1]
       chars = _table_slice(chars, 1, #chars - 1)
       self.pos = self.pos - 1
       self:sync_to_parser()
-      local procsub_node, procsub_text = table.unpack(self.parser:parse_process_substitution())
+      procsub_node, procsub_text = table.unpack(self.parser:parse_process_substitution())
       self:sync_from_parser()
       if (procsub_node ~= nil) then
         ;(function() table.insert(chars, procsub_text); return chars end)()
@@ -1006,15 +1014,16 @@ function Lexer:collect_param_argument(flags, was_dollar)
 end
 
 function Lexer:read_word_internal(ctx, at_command_start, in_array_literal, in_assign_builtin)
-  local start = self.pos
-  local chars = {}
-  local parts = {}
-  local bracket_depth = 0
-  local bracket_start_pos = -1
-  local seen_equals = false
-  local paren_depth = 0
+  local ansi_result0, ansi_result1, array_result0, array_result1, bracket_depth, bracket_start_pos, c, ch, chars, cmdsub_result0, cmdsub_result1, content, for_regex, handle_line_continuation, in_single_in_dquote, is_array_assign, locale_result0, locale_result1, locale_result2, next_c, next_ch, paren_depth, parts, prev_char, procsub_result0, procsub_result1, saw_newline, seen_equals, start, track_newline
+  start = self.pos
+  chars = {}
+  parts = {}
+  bracket_depth = 0
+  bracket_start_pos = -1
+  seen_equals = false
+  paren_depth = 0
   while not self:at_end() do
-    local ch = self:peek()
+    ch = self:peek()
     if ctx == WORD_CTX_REGEX then
       if ch == "\\" and self.pos + 1 < self.length and string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) == "\n" then
         self:advance()
@@ -1032,7 +1041,7 @@ function Lexer:read_word_internal(ctx, at_command_start, in_array_literal, in_as
         goto continue
       end
       if (#(chars) > 0) and at_command_start and not seen_equals and is_array_assignment_prefix(chars) then
-        local prev_char = chars[#chars - 1 + 1]
+        prev_char = chars[#chars - 1 + 1]
         if (string.match(prev_char, '^%w+$') ~= nil) or prev_char == "_" then
           bracket_start_pos = self.pos
           bracket_depth = bracket_depth + 1
@@ -1069,14 +1078,13 @@ function Lexer:read_word_internal(ctx, at_command_start, in_array_literal, in_as
       break
     end
     if (ctx == WORD_CTX_COND or ctx == WORD_CTX_REGEX) and ch == "[" then
-      local for_regex = ctx == WORD_CTX_REGEX
+      for_regex = ctx == WORD_CTX_REGEX
       if self:read_bracket_expression(chars, parts, for_regex, paren_depth) then
         goto continue
       end
       ;(function() table.insert(chars, self:advance()); return chars end)()
       goto continue
     end
-    local content
     if ctx == WORD_CTX_COND and ch == "(" then
       if self.extglob and (#(chars) > 0) and is_extglob_prefix(chars[#chars - 1 + 1]) then
         ;(function() table.insert(chars, self:advance()); return chars end)()
@@ -1094,8 +1102,7 @@ function Lexer:read_word_internal(ctx, at_command_start, in_array_literal, in_as
     end
     if ch == "'" then
       self:advance()
-      local track_newline = ctx == WORD_CTX_NORMAL
-      local saw_newline
+      track_newline = ctx == WORD_CTX_NORMAL
       content, saw_newline = table.unpack(self:read_single_quote(start))
       ;(function() table.insert(chars, content); return chars end)()
       if track_newline and saw_newline and (self.parser ~= nil) then
@@ -1103,15 +1110,13 @@ function Lexer:read_word_internal(ctx, at_command_start, in_array_literal, in_as
       end
       goto continue
     end
-    local cmdsub_result0
-    local cmdsub_result1
     if ch == "\"" then
       self:advance()
       if ctx == WORD_CTX_NORMAL then
         ;(function() table.insert(chars, "\""); return chars end)()
-        local in_single_in_dquote = false
+        in_single_in_dquote = false
         while not self:at_end() and (in_single_in_dquote or self:peek() ~= "\"") do
-          local c = self:peek()
+          c = self:peek()
           if in_single_in_dquote then
             ;(function() table.insert(chars, self:advance()); return chars end)()
             if c == "'" then
@@ -1120,7 +1125,7 @@ function Lexer:read_word_internal(ctx, at_command_start, in_array_literal, in_as
             goto continue
           end
           if c == "\\" and self.pos + 1 < self.length then
-            local next_c = string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1)
+            next_c = string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1)
             if next_c == "\n" then
               self:advance()
               self:advance()
@@ -1156,7 +1161,7 @@ function Lexer:read_word_internal(ctx, at_command_start, in_array_literal, in_as
         end
         ;(function() table.insert(chars, self:advance()); return chars end)()
       else
-        local handle_line_continuation = ctx == WORD_CTX_COND
+        handle_line_continuation = ctx == WORD_CTX_COND
         self:sync_to_parser()
         self.parser:scan_double_quote(chars, parts, start, handle_line_continuation)
         self:sync_from_parser()
@@ -1164,7 +1169,7 @@ function Lexer:read_word_internal(ctx, at_command_start, in_array_literal, in_as
       goto continue
     end
     if ch == "\\" and self.pos + 1 < self.length then
-      local next_ch = string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1)
+      next_ch = string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1)
       if ctx ~= WORD_CTX_REGEX and next_ch == "\n" then
         self:advance()
         self:advance()
@@ -1175,7 +1180,7 @@ function Lexer:read_word_internal(ctx, at_command_start, in_array_literal, in_as
       goto continue
     end
     if ctx ~= WORD_CTX_REGEX and ch == "$" and self.pos + 1 < self.length and string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) == "'" then
-      local ansi_result0, ansi_result1 = table.unpack(self:read_ansi_c_quote())
+      ansi_result0, ansi_result1 = table.unpack(self:read_ansi_c_quote())
       if (ansi_result0 ~= nil) then
         ;(function() table.insert(parts, ansi_result0); return parts end)()
         ;(function() table.insert(chars, ansi_result1); return chars end)()
@@ -1185,7 +1190,7 @@ function Lexer:read_word_internal(ctx, at_command_start, in_array_literal, in_as
       goto continue
     end
     if ctx ~= WORD_CTX_REGEX and ch == "$" and self.pos + 1 < self.length and string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) == "\"" then
-      local locale_result0, locale_result1, locale_result2 = table.unpack(self:read_locale_string())
+      locale_result0, locale_result1, locale_result2 = table.unpack(self:read_locale_string())
       if (locale_result0 ~= nil) then
         ;(function() table.insert(parts, locale_result0); return parts end)()
         ;(function() for _, v in ipairs(locale_result2) do table.insert(parts, v) end; return parts end)()
@@ -1225,7 +1230,7 @@ function Lexer:read_word_internal(ctx, at_command_start, in_array_literal, in_as
     end
     if ctx ~= WORD_CTX_REGEX and is_redirect_char(ch) and self.pos + 1 < self.length and string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) == "(" then
       self:sync_to_parser()
-      local procsub_result0, procsub_result1 = table.unpack(self.parser:parse_process_substitution())
+      procsub_result0, procsub_result1 = table.unpack(self.parser:parse_process_substitution())
       self:sync_from_parser()
       if (procsub_result0 ~= nil) then
         ;(function() table.insert(parts, procsub_result0); return parts end)()
@@ -1241,7 +1246,7 @@ function Lexer:read_word_internal(ctx, at_command_start, in_array_literal, in_as
       goto continue
     end
     if ctx == WORD_CTX_NORMAL and ch == "(" and (#(chars) > 0) and bracket_depth == 0 then
-      local is_array_assign = false
+      is_array_assign = false
       if #chars >= 3 and chars[#chars - 2 + 1] == "+" and chars[#chars - 1 + 1] == "=" then
         is_array_assign = is_array_assignment_prefix(_table_slice(chars, 1, #chars - 2))
       elseif chars[#chars - 1 + 1] == "=" and #chars >= 2 then
@@ -1249,7 +1254,7 @@ function Lexer:read_word_internal(ctx, at_command_start, in_array_literal, in_as
       end
       if is_array_assign and (at_command_start or in_assign_builtin) then
         self:sync_to_parser()
-        local array_result0, array_result1 = table.unpack(self.parser:parse_array_literal())
+        array_result0, array_result1 = table.unpack(self.parser:parse_array_literal())
         self:sync_from_parser()
         if (array_result0 ~= nil) then
           ;(function() table.insert(parts, array_result0); return parts end)()
@@ -1293,20 +1298,21 @@ function Lexer:read_word_internal(ctx, at_command_start, in_array_literal, in_as
 end
 
 function Lexer:read_word()
-  local start = self.pos
+  local c, is_procsub, is_regex_paren, start, word
+  start = self.pos
   if self.pos >= self.length then
     return nil
   end
-  local c = self:peek()
+  c = self:peek()
   if c == "" then
     return nil
   end
-  local is_procsub = (c == "<" or c == ">") and self.pos + 1 < self.length and string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) == "("
-  local is_regex_paren = self.word_context == WORD_CTX_REGEX and (c == "(" or c == ")")
+  is_procsub = (c == "<" or c == ">") and self.pos + 1 < self.length and string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) == "("
+  is_regex_paren = self.word_context == WORD_CTX_REGEX and (c == "(" or c == ")")
   if self:is_metachar(c) and not is_procsub and not is_regex_paren then
     return nil
   end
-  local word = self:read_word_internal(self.word_context, self.at_command_start, self.in_array_literal, self.in_assign_builtin)
+  word = self:read_word_internal(self.word_context, self.at_command_start, self.in_array_literal, self.in_assign_builtin)
   if (word == nil) then
     return nil
   end
@@ -1361,8 +1367,9 @@ function Lexer:next_token()
 end
 
 function Lexer:peek_token()
+  local saved_last
   if (self.token_cache == nil) then
-    local saved_last = self.last_read_token
+    saved_last = self.last_read_token
     self.token_cache = self:next_token()
     self.last_read_token = saved_last
   end
@@ -1370,19 +1377,20 @@ function Lexer:peek_token()
 end
 
 function Lexer:read_ansi_c_quote()
+  local ch, content, content_chars, found_close, node, start, text
   if self:at_end() or self:peek() ~= "$" then
     return {nil, ""}
   end
   if self.pos + 1 >= self.length or string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) ~= "'" then
     return {nil, ""}
   end
-  local start = self.pos
+  start = self.pos
   self:advance()
   self:advance()
-  local content_chars = {}
-  local found_close = false
+  content_chars = {}
+  found_close = false
   while not self:at_end() do
-    local ch = self:peek()
+    ch = self:peek()
     if ch == "'" then
       self:advance()
       found_close = true
@@ -1399,9 +1407,9 @@ function Lexer:read_ansi_c_quote()
   if not found_close then
     error({MatchedPairError = true, message = "unexpected EOF while looking for matching `''", pos = start})
   end
-  local text = substring(self.source, start, self.pos)
-  local content = table.concat(content_chars, "")
-  local node = AnsiCQuote:new(content, "ansi-c")
+  text = substring(self.source, start, self.pos)
+  content = table.concat(content_chars, "")
+  node = AnsiCQuote:new(content, "ansi-c")
   return {node, text}
 end
 
@@ -1418,26 +1426,27 @@ function Lexer:sync_from_parser()
 end
 
 function Lexer:read_locale_string()
+  local arith_node, arith_text, ch, cmdsub_node, cmdsub_text, content, content_chars, found_close, inner_parts, next_ch, param_node, param_text, start, text
   if self:at_end() or self:peek() ~= "$" then
     return {nil, "", {}}
   end
   if self.pos + 1 >= self.length or string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) ~= "\"" then
     return {nil, "", {}}
   end
-  local start = self.pos
+  start = self.pos
   self:advance()
   self:advance()
-  local content_chars = {}
-  local inner_parts = {}
-  local found_close = false
+  content_chars = {}
+  inner_parts = {}
+  found_close = false
   while not self:at_end() do
-    local ch = self:peek()
+    ch = self:peek()
     if ch == "\"" then
       self:advance()
       found_close = true
       break
     elseif ch == "\\" and self.pos + 1 < self.length then
-      local next_ch = string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1)
+      next_ch = string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1)
       if next_ch == "\n" then
         self:advance()
         self:advance()
@@ -1447,14 +1456,14 @@ function Lexer:read_locale_string()
       end
     elseif ch == "$" and self.pos + 2 < self.length and string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) == "(" and string.sub(self.source, self.pos + 2 + 1, self.pos + 2 + 1) == "(" then
       self:sync_to_parser()
-      local arith_node, arith_text = table.unpack(self.parser:parse_arithmetic_expansion())
+      arith_node, arith_text = table.unpack(self.parser:parse_arithmetic_expansion())
       self:sync_from_parser()
       if (arith_node ~= nil) then
         ;(function() table.insert(inner_parts, arith_node); return inner_parts end)()
         ;(function() table.insert(content_chars, arith_text); return content_chars end)()
       else
         self:sync_to_parser()
-        local cmdsub_node, cmdsub_text = table.unpack(self.parser:parse_command_substitution())
+        cmdsub_node, cmdsub_text = table.unpack(self.parser:parse_command_substitution())
         self:sync_from_parser()
         if (cmdsub_node ~= nil) then
           ;(function() table.insert(inner_parts, cmdsub_node); return inner_parts end)()
@@ -1475,7 +1484,7 @@ function Lexer:read_locale_string()
       end
     elseif ch == "$" then
       self:sync_to_parser()
-      local param_node, param_text = table.unpack(self.parser:parse_param_expansion(false))
+      param_node, param_text = table.unpack(self.parser:parse_param_expansion(false))
       self:sync_from_parser()
       if (param_node ~= nil) then
         ;(function() table.insert(inner_parts, param_node); return inner_parts end)()
@@ -1501,19 +1510,20 @@ function Lexer:read_locale_string()
     self.pos = start
     return {nil, "", {}}
   end
-  local content = table.concat(content_chars, "")
-  local text = "$\"" .. content .. "\""
+  content = table.concat(content_chars, "")
+  text = "$\"" .. content .. "\""
   return {LocaleString:new(content, "locale"), text, inner_parts}
 end
 
 function Lexer:update_dolbrace_for_op(op, has_param)
+  local first_char
   if self.dolbrace_state == DOLBRACESTATE_NONE then
     return
   end
   if op == "" or #op == 0 then
     return
   end
-  local first_char = string.sub(op, 0 + 1, 0 + 1)
+  first_char = string.sub(op, 0 + 1, 0 + 1)
   if self.dolbrace_state == DOLBRACESTATE_PARAM and has_param then
     if ((string.find("%#^,", first_char, 1, true) ~= nil)) then
       self.dolbrace_state = DOLBRACESTATE_QUOTE
@@ -1532,11 +1542,11 @@ function Lexer:update_dolbrace_for_op(op, has_param)
 end
 
 function Lexer:consume_param_operator()
+  local ch, next_ch
   if self:at_end() then
     return ""
   end
-  local ch = self:peek()
-  local next_ch
+  ch = self:peek()
   if ch == ":" then
     self:advance()
     if self:at_end() then
@@ -1610,11 +1620,12 @@ function Lexer:consume_param_operator()
 end
 
 function Lexer:param_subscript_has_close(start_pos)
-  local depth = 1
-  local i = start_pos + 1
-  local quote = new_quote_state()
+  local c, depth, i, quote
+  depth = 1
+  i = start_pos + 1
+  quote = new_quote_state()
   while i < self.length do
-    local c = string.sub(self.source, i + 1, i + 1)
+    c = string.sub(self.source, i + 1, i + 1)
     if quote.single then
       if c == "'" then
         quote.single = false
@@ -1665,10 +1676,11 @@ function Lexer:param_subscript_has_close(start_pos)
 end
 
 function Lexer:consume_param_name()
+  local c, ch, content, name_chars
   if self:at_end() then
     return ""
   end
-  local ch = self:peek()
+  ch = self:peek()
   if is_special_param(ch) then
     if ch == "$" and self.pos + 1 < self.length and (((string.find("{'\"", string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1), 1, true) ~= nil))) then
       return ""
@@ -1677,7 +1689,7 @@ function Lexer:consume_param_name()
     return ch
   end
   if (string.match(ch, '^%d+$') ~= nil) then
-    local name_chars = {}
+    name_chars = {}
     while not self:at_end() and (string.match(self:peek(), '^%d+$') ~= nil) do
       ;(function() table.insert(name_chars, self:advance()); return name_chars end)()
     end
@@ -1686,7 +1698,7 @@ function Lexer:consume_param_name()
   if (string.match(ch, '^%a+$') ~= nil) or ch == "_" then
     name_chars = {}
     while not self:at_end() do
-      local c = self:peek()
+      c = self:peek()
       if (string.match(c, '^%w+$') ~= nil) or c == "_" then
         ;(function() table.insert(name_chars, self:advance()); return name_chars end)()
       elseif c == "[" then
@@ -1694,7 +1706,7 @@ function Lexer:consume_param_name()
           break
         end
         ;(function() table.insert(name_chars, self:advance()); return name_chars end)()
-        local content = self:parse_matched_pair("[", "]", MATCHEDPAIRFLAGS_ARRAYSUB, false)
+        content = self:parse_matched_pair("[", "]", MATCHEDPAIRFLAGS_ARRAYSUB, false)
         ;(function() table.insert(name_chars, content); return name_chars end)()
         ;(function() table.insert(name_chars, "]"); return name_chars end)()
         break
@@ -1712,37 +1724,37 @@ function Lexer:consume_param_name()
 end
 
 function Lexer:read_param_expansion(in_dquote)
+  local c, ch, name, name_start, start, text
   if self:at_end() or self:peek() ~= "$" then
     return {nil, ""}
   end
-  local start = self.pos
+  start = self.pos
   self:advance()
   if self:at_end() then
     self.pos = start
     return {nil, ""}
   end
-  local ch = self:peek()
+  ch = self:peek()
   if ch == "{" then
     self:advance()
     return self:read_braced_param(start, in_dquote)
   end
-  local text
   if is_special_param_unbraced(ch) or is_digit(ch) or ch == "#" then
     self:advance()
     text = substring(self.source, start, self.pos)
     return {ParamExpansion:new(ch, nil, nil, "param"), text}
   end
   if (string.match(ch, '^%a+$') ~= nil) or ch == "_" then
-    local name_start = self.pos
+    name_start = self.pos
     while not self:at_end() do
-      local c = self:peek()
+      c = self:peek()
       if (string.match(c, '^%w+$') ~= nil) or c == "_" then
         self:advance()
       else
         break
       end
     end
-    local name = substring(self.source, name_start, self.pos)
+    name = substring(self.source, name_start, self.pos)
     text = substring(self.source, start, self.pos)
     return {ParamExpansion:new(name, nil, nil, "param"), text}
   end
@@ -1751,18 +1763,17 @@ function Lexer:read_param_expansion(in_dquote)
 end
 
 function Lexer:read_braced_param(start, in_dquote)
+  local arg_, backtick_pos, bc, ch, content, dollar_count, e, flags, formatted, inner, next_c, op, param, param_ends_with_dollar, parsed, saved_dolbrace, sub_parser, suffix, text, trailing
   if self:at_end() then
     error({MatchedPairError = true, message = "unexpected EOF looking for `}'", pos = start})
   end
-  local saved_dolbrace = self.dolbrace_state
+  saved_dolbrace = self.dolbrace_state
   self.dolbrace_state = DOLBRACESTATE_PARAM
-  local ch = self:peek()
+  ch = self:peek()
   if is_funsub_char(ch) then
     self.dolbrace_state = saved_dolbrace
     return self:read_funsub(start)
   end
-  local param
-  local text
   if ch == "#" then
     self:advance()
     param = self:consume_param_name()
@@ -1774,8 +1785,6 @@ function Lexer:read_braced_param(start, in_dquote)
     end
     self.pos = start + 2
   end
-  local op
-  local arg_
   if ch == "!" then
     self:advance()
     while not self:at_end() and is_whitespace_no_newline(self:peek()) do
@@ -1793,8 +1802,8 @@ function Lexer:read_braced_param(start, in_dquote)
         return {ParamIndirect:new(param, nil, nil, "param-indirect"), text}
       end
       if not self:at_end() and is_at_or_star(self:peek()) then
-        local suffix = self:advance()
-        local trailing = self:parse_matched_pair("{", "}", MATCHEDPAIRFLAGS_DOLBRACE, false)
+        suffix = self:advance()
+        trailing = self:parse_matched_pair("{", "}", MATCHEDPAIRFLAGS_DOLBRACE, false)
         text = substring(self.source, start, self.pos)
         self.dolbrace_state = saved_dolbrace
         return {ParamIndirect:new(param .. suffix .. trailing, nil, nil, "param-indirect"), text}
@@ -1823,7 +1832,7 @@ function Lexer:read_braced_param(start, in_dquote)
     if not self:at_end() and ((((string.find("-=+?", self:peek(), 1, true) ~= nil))) or self:peek() == ":" and self.pos + 1 < self.length and is_simple_param_op(string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1))) then
       param = ""
     else
-      local content = self:parse_matched_pair("{", "}", MATCHEDPAIRFLAGS_DOLBRACE, false)
+      content = self:parse_matched_pair("{", "}", MATCHEDPAIRFLAGS_DOLBRACE, false)
       text = "${" .. content .. "}"
       self.dolbrace_state = saved_dolbrace
       return {ParamExpansion:new(content, nil, nil, "param"), text}
@@ -1842,19 +1851,19 @@ function Lexer:read_braced_param(start, in_dquote)
   op = self:consume_param_operator()
   if op == "" then
     if not self:at_end() and self:peek() == "$" and self.pos + 1 < self.length and (string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) == "\"" or string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) == "'") then
-      local dollar_count = 1 + count_consecutive_dollars_before(self.source, self.pos)
+      dollar_count = 1 + count_consecutive_dollars_before(self.source, self.pos)
       if dollar_count % 2 == 1 then
         op = ""
       else
         op = self:advance()
       end
     elseif not self:at_end() and self:peek() == "`" then
-      local backtick_pos = self.pos
+      backtick_pos = self.pos
       self:advance()
       while not self:at_end() and self:peek() ~= "`" do
-        local bc = self:peek()
+        bc = self:peek()
         if bc == "\\" and self.pos + 1 < self.length then
-          local next_c = string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1)
+          next_c = string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1)
           if is_escape_char_in_backtick(next_c) then
             self:advance()
           end
@@ -1882,8 +1891,8 @@ function Lexer:read_braced_param(start, in_dquote)
   end
   self:update_dolbrace_for_op(op, #param > 0)
   local _ok, _err = pcall(function()
-    local flags = (in_dquote and MATCHEDPAIRFLAGS_DQUOTE or MATCHEDPAIRFLAGS_NONE)
-    local param_ends_with_dollar = param ~= "" and (string.sub(param, -#"$") == "$")
+    flags = (in_dquote and MATCHEDPAIRFLAGS_DQUOTE or MATCHEDPAIRFLAGS_NONE)
+    param_ends_with_dollar = param ~= "" and (string.sub(param, -#"$") == "$")
     arg_ = self:collect_param_argument(flags, param_ends_with_dollar)
   end)
   if not _ok then
@@ -1892,12 +1901,12 @@ function Lexer:read_braced_param(start, in_dquote)
     error(e)
   end
   if (op == "<" or op == ">") and (string.sub(arg_, 1, #"(") == "(") and (string.sub(arg_, -#")") == ")") then
-    local inner = string.sub(arg_, (1) + 1, #arg_ - 1)
+    inner = string.sub(arg_, (1) + 1, #arg_ - 1)
     local _ok, _err = pcall(function()
-      local sub_parser = new_parser(inner, true, self.parser.extglob)
-      local parsed = sub_parser:parse_list(true)
+      sub_parser = new_parser(inner, true, self.parser.extglob)
+      parsed = sub_parser:parse_list(true)
       if (parsed ~= nil) and sub_parser:at_end() then
-        local formatted = format_cmdsub_node(parsed, 0, true, false, true)
+        formatted = format_cmdsub_node(parsed, 0, true, false, true)
         arg_ = "(" .. formatted .. ")"
       end
     end)
@@ -1929,7 +1938,8 @@ function Word:new(value, parts, kind)
 end
 
 function Word:to_sexp()
-  local value = self.value
+  local escaped, value
+  value = self.value
   value = self:expand_all_ansi_c_quotes(value)
   value = self:strip_locale_string_dollars(value)
   value = self:normalize_array_whitespace(value)
@@ -1942,7 +1952,7 @@ function Word:to_sexp()
   if (string.sub(value, -#"\\\\") == "\\\\") and not (string.sub(value, -#"\\\\\\\\") == "\\\\\\\\") then
     value = value .. "\\\\"
   end
-  local escaped = (string.gsub((string.gsub((string.gsub(value, "\"", "\\\"")), "\n", "\\n")), "\t", "\\t"))
+  escaped = (string.gsub((string.gsub((string.gsub(value, "\"", "\\\"")), "\n", "\\n")), "\t", "\\t"))
   return "(word \"" .. escaped .. "\")"
 end
 
@@ -1951,8 +1961,9 @@ function Word:append_with_ctlesc(result, byte_val)
 end
 
 function Word:double_ctlesc_smart(value)
-  local result = {}
-  local quote = new_quote_state()
+  local bs_count, c, j, quote, result
+  result = {}
+  quote = new_quote_state()
   for _ = 1, #value do
     local c = string.sub(value, _, _)
     if c == "'" and not quote.double then
@@ -1963,8 +1974,8 @@ function Word:double_ctlesc_smart(value)
     ;(function() table.insert(result, c); return result end)()
     if c == "" then
       if quote.double then
-        local bs_count = 0
-        local j = #result - 2
+        bs_count = 0
+        j = #result - 2
         while j > -1 do
           if result[j + 1] == "\\" then
             bs_count = bs_count + 1
@@ -1985,11 +1996,12 @@ function Word:double_ctlesc_smart(value)
 end
 
 function Word:normalize_param_expansion_newlines(value)
-  local result = {}
-  local i = 0
-  local quote = new_quote_state()
+  local c, ch, depth, had_leading_newline, i, quote, result
+  result = {}
+  i = 0
+  quote = new_quote_state()
   while i < #value do
-    local c = string.sub(value, i + 1, i + 1)
+    c = string.sub(value, i + 1, i + 1)
     if c == "'" and not quote.double then
       quote.single = not quote.single
       ;(function() table.insert(result, c); return result end)()
@@ -2002,14 +2014,14 @@ function Word:normalize_param_expansion_newlines(value)
       ;(function() table.insert(result, "$"); return result end)()
       ;(function() table.insert(result, "{"); return result end)()
       i = i + 2
-      local had_leading_newline = i < #value and string.sub(value, i + 1, i + 1) == "\n"
+      had_leading_newline = i < #value and string.sub(value, i + 1, i + 1) == "\n"
       if had_leading_newline then
         ;(function() table.insert(result, " "); return result end)()
         i = i + 1
       end
-      local depth = 1
+      depth = 1
       while i < #value and depth > 0 do
-        local ch = string.sub(value, i + 1, i + 1)
+        ch = string.sub(value, i + 1, i + 1)
         if ch == "\\" and i + 1 < #value and not quote.single then
           if string.sub(value, i + 1 + 1, i + 1 + 1) == "\n" then
             i = i + 2
@@ -2052,13 +2064,14 @@ function Word:normalize_param_expansion_newlines(value)
 end
 
 function Word:sh_single_quote(s)
+  local c, result
   if not (s ~= nil and #(s) > 0) then
     return "''"
   end
   if s == "'" then
     return "\\'"
   end
-  local result = {"'"}
+  result = {"'"}
   for _ = 1, #s do
     local c = string.sub(s, _, _)
     if c == "'" then
@@ -2072,12 +2085,13 @@ function Word:sh_single_quote(s)
 end
 
 function Word:ansi_c_to_bytes(inner)
-  local result = {}
-  local i = 0
+  local byte_val, c, codepoint, ctrl_char, ctrl_val, hex_str, i, j, result, simple, skip_extra
+  result = {}
+  i = 0
   while i < #inner do
     if string.sub(inner, i + 1, i + 1) == "\\" and i + 1 < #inner then
-      local c = string.sub(inner, i + 1 + 1, i + 1 + 1)
-      local simple = get_ansi_escape(c)
+      c = string.sub(inner, i + 1 + 1, i + 1 + 1)
+      simple = get_ansi_escape(c)
       if simple >= 0 then
         ;(function() table.insert(result, simple); return result end)()
         i = i + 2
@@ -2086,18 +2100,18 @@ function Word:ansi_c_to_bytes(inner)
         i = i + 2
       elseif c == "x" then
         if i + 2 < #inner and string.sub(inner, i + 2 + 1, i + 2 + 1) == "{" then
-          local j = i + 3
+          j = i + 3
           while j < #inner and is_hex_digit(string.sub(inner, j + 1, j + 1)) do
             j = j + 1
           end
-          local hex_str = substring(inner, i + 3, j)
+          hex_str = substring(inner, i + 3, j)
           if j < #inner and string.sub(inner, j + 1, j + 1) == "}" then
             j = j + 1
           end
           if not (hex_str ~= nil and #(hex_str) > 0) then
             return result
           end
-          local byte_val = tonumber(hex_str, 16) & 255
+          byte_val = tonumber(hex_str, 16) & 255
           if byte_val == 0 then
             return result
           end
@@ -2126,7 +2140,7 @@ function Word:ansi_c_to_bytes(inner)
           j = j + 1
         end
         if j > i + 2 then
-          local codepoint = tonumber(substring(inner, i + 2, j), 16)
+          codepoint = tonumber(substring(inner, i + 2, j), 16)
           if codepoint == 0 then
             return result
           end
@@ -2154,12 +2168,12 @@ function Word:ansi_c_to_bytes(inner)
         end
       elseif c == "c" then
         if i + 3 <= #inner then
-          local ctrl_char = string.sub(inner, i + 2 + 1, i + 2 + 1)
-          local skip_extra = 0
+          ctrl_char = string.sub(inner, i + 2 + 1, i + 2 + 1)
+          skip_extra = 0
           if ctrl_char == "\\" and i + 4 <= #inner and string.sub(inner, i + 3 + 1, i + 3 + 1) == "\\" then
             skip_extra = 1
           end
-          local ctrl_val = string.byte(string.sub(ctrl_char, 0 + 1, 0 + 1)) & 31
+          ctrl_val = string.byte(string.sub(ctrl_char, 0 + 1, 0 + 1)) & 31
           if ctrl_val == 0 then
             return result
           end
@@ -2209,23 +2223,25 @@ function Word:ansi_c_to_bytes(inner)
 end
 
 function Word:expand_ansi_c_escapes(value)
+  local inner, literal_bytes, literal_str
   if not ((string.sub(value, 1, #"'") == "'") and (string.sub(value, -#"'") == "'")) then
     return value
   end
-  local inner = substring(value, 1, #value - 1)
-  local literal_bytes = self:ansi_c_to_bytes(inner)
-  local literal_str = _bytes_to_string(literal_bytes)
+  inner = substring(value, 1, #value - 1)
+  literal_bytes = self:ansi_c_to_bytes(inner)
+  literal_str = _bytes_to_string(literal_bytes)
   return self:sh_single_quote(literal_str)
 end
 
 function Word:expand_all_ansi_c_quotes(value)
-  local result = {}
-  local i = 0
-  local quote = new_quote_state()
-  local in_backtick = false
-  local brace_depth = 0
+  local after_brace, ansi_str, brace_depth, c, ch, effective_in_dquote, expanded, first_char, i, in_backtick, in_pattern, inner, is_ansi_c, j, last_brace_idx, op, op_start, outer_in_dquote, quote, rest, result, result_str, var_name_len
+  result = {}
+  i = 0
+  quote = new_quote_state()
+  in_backtick = false
+  brace_depth = 0
   while i < #value do
-    local ch = string.sub(value, i + 1, i + 1)
+    ch = string.sub(value, i + 1, i + 1)
     if ch == "`" and not quote.single then
       in_backtick = not in_backtick
       ;(function() table.insert(result, ch); return result end)()
@@ -2258,9 +2274,9 @@ function Word:expand_all_ansi_c_quotes(value)
         goto continue
       end
     end
-    local effective_in_dquote = quote.double
+    effective_in_dquote = quote.double
     if ch == "'" and not effective_in_dquote then
-      local is_ansi_c = not quote.single and i > 0 and string.sub(value, i - 1 + 1, i - 1 + 1) == "$" and count_consecutive_dollars_before(value, i - 1) % 2 == 0
+      is_ansi_c = not quote.single and i > 0 and string.sub(value, i - 1 + 1, i - 1 + 1) == "$" and count_consecutive_dollars_before(value, i - 1) % 2 == 0
       if not is_ansi_c then
         quote.single = not quote.single
       end
@@ -2275,7 +2291,7 @@ function Word:expand_all_ansi_c_quotes(value)
       ;(function() table.insert(result, string.sub(value, i + 1 + 1, i + 1 + 1)); return result end)()
       i = i + 2
     elseif starts_with_at(value, i, "$'") and not quote.single and not effective_in_dquote and count_consecutive_dollars_before(value, i) % 2 == 0 then
-      local j = i + 2
+      j = i + 2
       while j < #value do
         if string.sub(value, j + 1, j + 1) == "\\" and j + 1 < #value then
           j = j + 2
@@ -2286,24 +2302,24 @@ function Word:expand_all_ansi_c_quotes(value)
           j = j + 1
         end
       end
-      local ansi_str = substring(value, i, j)
-      local expanded = self:expand_ansi_c_escapes(substring(ansi_str, 1, #ansi_str))
-      local outer_in_dquote = quote:outer_double()
+      ansi_str = substring(value, i, j)
+      expanded = self:expand_ansi_c_escapes(substring(ansi_str, 1, #ansi_str))
+      outer_in_dquote = quote:outer_double()
       if brace_depth > 0 and outer_in_dquote and (string.sub(expanded, 1, #"'") == "'") and (string.sub(expanded, -#"'") == "'") then
-        local inner = substring(expanded, 1, #expanded - 1)
+        inner = substring(expanded, 1, #expanded - 1)
         if _string_find(inner, "") == -1 then
-          local result_str = table.concat(result, "")
-          local in_pattern = false
-          local last_brace_idx = _string_rfind(result_str, "${")
+          result_str = table.concat(result, "")
+          in_pattern = false
+          last_brace_idx = _string_rfind(result_str, "${")
           if last_brace_idx >= 0 then
-            local after_brace = string.sub(result_str, (last_brace_idx + 2) + 1, #result_str)
-            local var_name_len = 0
+            after_brace = string.sub(result_str, (last_brace_idx + 2) + 1, #result_str)
+            var_name_len = 0
             if (after_brace ~= nil and #(after_brace) > 0) then
               if ((string.find("@*#?-$!0123456789_", string.sub(after_brace, 0 + 1, 0 + 1), 1, true) ~= nil)) then
                 var_name_len = 1
               elseif (string.match(string.sub(after_brace, 0 + 1, 0 + 1), '^%a+$') ~= nil) or string.sub(after_brace, 0 + 1, 0 + 1) == "_" then
                 while var_name_len < #after_brace do
-                  local c = string.sub(after_brace, var_name_len + 1, var_name_len + 1)
+                  c = string.sub(after_brace, var_name_len + 1, var_name_len + 1)
                   if not ((string.match(c, '^%w+$') ~= nil) or c == "_") then
                     break
                   end
@@ -2312,7 +2328,7 @@ function Word:expand_all_ansi_c_quotes(value)
               end
             end
             if var_name_len > 0 and var_name_len < #after_brace and ((not (string.find("#?-", string.sub(after_brace, 0 + 1, 0 + 1), 1, true) ~= nil))) then
-              local op_start = string.sub(after_brace, (var_name_len) + 1, #after_brace)
+              op_start = string.sub(after_brace, (var_name_len) + 1, #after_brace)
               if (string.sub(op_start, 1, #"@") == "@") and #op_start > 1 then
                 op_start = string.sub(op_start, (1) + 1, #op_start)
               end
@@ -2331,9 +2347,9 @@ function Word:expand_all_ansi_c_quotes(value)
                 end
               end
             elseif var_name_len == 0 and #after_brace > 1 then
-              local first_char = string.sub(after_brace, 0 + 1, 0 + 1)
+              first_char = string.sub(after_brace, 0 + 1, 0 + 1)
               if (not (string.find("%#/^,", first_char, 1, true) ~= nil)) then
-                local rest = string.sub(after_brace, (1) + 1, #after_brace)
+                rest = string.sub(after_brace, (1) + 1, #after_brace)
                 for _, op in ipairs({"//", "%%", "##", "/", "%", "#", "^", "^^", ",", ",,"}) do
                   if ((string.find(rest, op, 1, true) ~= nil)) then
                     in_pattern = true
@@ -2360,15 +2376,16 @@ function Word:expand_all_ansi_c_quotes(value)
 end
 
 function Word:strip_locale_string_dollars(value)
-  local result = {}
-  local i = 0
-  local brace_depth = 0
-  local bracket_depth = 0
-  local quote = new_quote_state()
-  local brace_quote = new_quote_state()
-  local bracket_in_double_quote = false
+  local brace_depth, brace_quote, bracket_depth, bracket_in_double_quote, ch, dollar_count, i, quote, result
+  result = {}
+  i = 0
+  brace_depth = 0
+  bracket_depth = 0
+  quote = new_quote_state()
+  brace_quote = new_quote_state()
+  bracket_in_double_quote = false
   while i < #value do
-    local ch = string.sub(value, i + 1, i + 1)
+    ch = string.sub(value, i + 1, i + 1)
     if ch == "\\" and i + 1 < #value and not quote.single and not brace_quote.single then
       ;(function() table.insert(result, ch); return result end)()
       ;(function() table.insert(result, string.sub(value, i + 1 + 1, i + 1 + 1)); return result end)()
@@ -2414,7 +2431,7 @@ function Word:strip_locale_string_dollars(value)
       ;(function() table.insert(result, ch); return result end)()
       i = i + 1
     elseif starts_with_at(value, i, "$\"") and not quote.single and not brace_quote.single and (brace_depth > 0 or bracket_depth > 0 or not quote.double) and not brace_quote.double and not bracket_in_double_quote then
-      local dollar_count = 1 + count_consecutive_dollars_before(value, i)
+      dollar_count = 1 + count_consecutive_dollars_before(value, i)
       if dollar_count % 2 == 1 then
         ;(function() table.insert(result, "\""); return result end)()
         if bracket_depth > 0 then
@@ -2438,7 +2455,8 @@ function Word:strip_locale_string_dollars(value)
 end
 
 function Word:normalize_array_whitespace(value)
-  local i = 0
+  local close_paren_pos, depth, i, inner, open_paren_pos, prefix, result, suffix
+  i = 0
   if not (i < #value and ((string.match(string.sub(value, i + 1, i + 1), '^%a+$') ~= nil) or string.sub(value, i + 1, i + 1) == "_")) then
     return value
   end
@@ -2447,7 +2465,7 @@ function Word:normalize_array_whitespace(value)
     i = i + 1
   end
   while i < #value and string.sub(value, i + 1, i + 1) == "[" do
-    local depth = 1
+    depth = 1
     i = i + 1
     while i < #value and depth > 0 do
       if string.sub(value, i + 1, i + 1) == "[" then
@@ -2467,9 +2485,8 @@ function Word:normalize_array_whitespace(value)
   if not (i + 1 < #value and string.sub(value, i + 1, i + 1) == "=" and string.sub(value, i + 1 + 1, i + 1 + 1) == "(") then
     return value
   end
-  local prefix = substring(value, 0, i + 1)
-  local open_paren_pos = i + 1
-  local close_paren_pos
+  prefix = substring(value, 0, i + 1)
+  open_paren_pos = i + 1
   if (string.sub(value, -#")") == ")") then
     close_paren_pos = #value - 1
   else
@@ -2478,21 +2495,22 @@ function Word:normalize_array_whitespace(value)
       return value
     end
   end
-  local inner = substring(value, open_paren_pos + 1, close_paren_pos)
-  local suffix = substring(value, close_paren_pos + 1, #value)
-  local result = self:normalize_array_inner(inner)
+  inner = substring(value, open_paren_pos + 1, close_paren_pos)
+  suffix = substring(value, close_paren_pos + 1, #value)
+  result = self:normalize_array_inner(inner)
   return prefix .. "(" .. result .. ")" .. suffix
 end
 
 function Word:find_matching_paren(value, open_pos)
+  local ch, depth, i, quote
   if open_pos >= #value or string.sub(value, open_pos + 1, open_pos + 1) ~= "(" then
     return -1
   end
-  local i = open_pos + 1
-  local depth = 1
-  local quote = new_quote_state()
+  i = open_pos + 1
+  depth = 1
+  quote = new_quote_state()
   while i < #value and depth > 0 do
-    local ch = string.sub(value, i + 1, i + 1)
+    ch = string.sub(value, i + 1, i + 1)
     if ch == "\\" and i + 1 < #value and not quote.single then
       i = i + 2
       goto continue
@@ -2532,13 +2550,14 @@ function Word:find_matching_paren(value, open_pos)
 end
 
 function Word:normalize_array_inner(inner)
-  local normalized = {}
-  local i = 0
-  local in_whitespace = true
-  local brace_depth = 0
-  local bracket_depth = 0
+  local brace_depth, bracket_depth, ch, depth, dq_brace_depth, dq_content, i, in_whitespace, j, normalized
+  normalized = {}
+  i = 0
+  in_whitespace = true
+  brace_depth = 0
+  bracket_depth = 0
   while i < #inner do
-    local ch = string.sub(inner, i + 1, i + 1)
+    ch = string.sub(inner, i + 1, i + 1)
     if is_whitespace(ch) then
       if not in_whitespace and (#(normalized) > 0) and brace_depth == 0 and bracket_depth == 0 then
         ;(function() table.insert(normalized, " "); return normalized end)()
@@ -2550,7 +2569,7 @@ function Word:normalize_array_inner(inner)
       i = i + 1
     elseif ch == "'" then
       in_whitespace = false
-      local j = i + 1
+      j = i + 1
       while j < #inner and string.sub(inner, j + 1, j + 1) ~= "'" do
         j = j + 1
       end
@@ -2559,8 +2578,8 @@ function Word:normalize_array_inner(inner)
     elseif ch == "\"" then
       in_whitespace = false
       j = i + 1
-      local dq_content = {"\""}
-      local dq_brace_depth = 0
+      dq_content = {"\""}
+      dq_brace_depth = 0
       while j < #inner do
         if string.sub(inner, j + 1, j + 1) == "\\" and j + 1 < #inner then
           if string.sub(inner, j + 1 + 1, j + 1 + 1) == "\n" then
@@ -2600,7 +2619,7 @@ function Word:normalize_array_inner(inner)
     elseif is_expansion_start(inner, i, "$((") then
       in_whitespace = false
       j = i + 3
-      local depth = 1
+      depth = 1
       while j < #inner and depth > 0 do
         if j + 1 < #inner and string.sub(inner, j + 1, j + 1) == "(" and string.sub(inner, j + 1 + 1, j + 1 + 1) == "(" then
           depth = depth + 1
@@ -2716,15 +2735,16 @@ function Word:normalize_array_inner(inner)
 end
 
 function Word:strip_arith_line_continuations(value)
-  local result = {}
-  local i = 0
+  local arith_content, closing, content, depth, first_close_idx, i, j, num_backslashes, result, start
+  result = {}
+  i = 0
   while i < #value do
     if is_expansion_start(value, i, "$((") then
-      local start = i
+      start = i
       i = i + 3
-      local depth = 2
-      local arith_content = {}
-      local first_close_idx = -1
+      depth = 2
+      arith_content = {}
+      first_close_idx = -1
       while i < #value and depth > 0 do
         if string.sub(value, i + 1, i + 1) == "(" then
           ;(function() table.insert(arith_content, "("); return arith_content end)()
@@ -2743,8 +2763,8 @@ function Word:strip_arith_line_continuations(value)
           end
           i = i + 1
         elseif string.sub(value, i + 1, i + 1) == "\\" and i + 1 < #value and string.sub(value, i + 1 + 1, i + 1 + 1) == "\n" then
-          local num_backslashes = 0
-          local j = #arith_content - 1
+          num_backslashes = 0
+          j = #arith_content - 1
           while j >= 0 and arith_content[j + 1] == "\n" do
             j = j - 1
           end
@@ -2771,10 +2791,10 @@ function Word:strip_arith_line_continuations(value)
         end
       end
       if depth == 0 or depth == 1 and first_close_idx ~= -1 then
-        local content = table.concat(arith_content, "")
+        content = table.concat(arith_content, "")
         if first_close_idx ~= -1 then
           content = string.sub(content, 1, first_close_idx)
-          local closing = (depth == 0 and "))" or ")")
+          closing = (depth == 0 and "))" or ")")
           ;(function() table.insert(result, "$((" .. content .. closing); return result end)()
         else
           ;(function() table.insert(result, "$((" .. content .. ")"); return result end)()
@@ -2791,7 +2811,8 @@ function Word:strip_arith_line_continuations(value)
 end
 
 function Word:collect_cmdsubs(node)
-  local result = {}
+  local elem, p, result
+  result = {}
   if (type(node) == 'table' and getmetatable(node) == CommandSubstitution) then
     local node = node
     ;(function() table.insert(result, node); return result end)()
@@ -2849,7 +2870,8 @@ function Word:collect_cmdsubs(node)
 end
 
 function Word:collect_procsubs(node)
-  local result = {}
+  local elem, p, result
+  result = {}
   if (type(node) == 'table' and getmetatable(node) == ProcessSubstitution) then
     local node = node
     ;(function() table.insert(result, node); return result end)()
@@ -2870,9 +2892,10 @@ function Word:collect_procsubs(node)
 end
 
 function Word:format_command_substitutions(value, in_arith)
-  local cmdsub_parts = {}
-  local procsub_parts = {}
-  local has_arith = false
+  local arith_depth, arith_paren_depth, brace_quote, c, cmdsub_idx, cmdsub_node, cmdsub_parts, compact, deprecated_arith_depth, depth, direction, ends_with_newline, extglob_depth, final_output, formatted, formatted_inner, has_arith, has_brace_cmdsub, has_param_with_procsub_pattern, has_pipe, has_untracked_cmdsub, has_untracked_procsub, i, idx, inner, is_procsub, j, leading_ws, leading_ws_end, main_quote, node, normalized_ws, orig_inner, p, parsed, parser, prefix, procsub_idx, procsub_parts, raw_content, raw_stripped, result, scan_quote, spaced, stripped, suffix, terminator
+  cmdsub_parts = {}
+  procsub_parts = {}
+  has_arith = false
   for _, p in ipairs(self.parts) do
     if (type(p) == 'table' and getmetatable(p) == CommandSubstitution) then
       local p = p
@@ -2888,11 +2911,11 @@ function Word:format_command_substitutions(value, in_arith)
       ;(function() for _, v in ipairs(self:collect_procsubs(p)) do table.insert(procsub_parts, v) end; return procsub_parts end)()
     end
   end
-  local has_brace_cmdsub = _string_find(value, "${ ") ~= -1 or _string_find(value, "${\t") ~= -1 or _string_find(value, "${\n") ~= -1 or _string_find(value, "${|") ~= -1
-  local has_untracked_cmdsub = false
-  local has_untracked_procsub = false
-  local idx = 0
-  local scan_quote = new_quote_state()
+  has_brace_cmdsub = _string_find(value, "${ ") ~= -1 or _string_find(value, "${\t") ~= -1 or _string_find(value, "${\n") ~= -1 or _string_find(value, "${|") ~= -1
+  has_untracked_cmdsub = false
+  has_untracked_procsub = false
+  idx = 0
+  scan_quote = new_quote_state()
   while idx < #value do
     if string.sub(value, idx + 1, idx + 1) == "\"" then
       scan_quote.double = not scan_quote.double
@@ -2918,19 +2941,19 @@ function Word:format_command_substitutions(value, in_arith)
       idx = idx + 1
     end
   end
-  local has_param_with_procsub_pattern = (((string.find(value, "${", 1, true) ~= nil))) and ((((string.find(value, "<(", 1, true) ~= nil))) or (((string.find(value, ">(", 1, true) ~= nil))))
+  has_param_with_procsub_pattern = (((string.find(value, "${", 1, true) ~= nil))) and ((((string.find(value, "<(", 1, true) ~= nil))) or (((string.find(value, ">(", 1, true) ~= nil))))
   if not (#(cmdsub_parts) > 0) and not (#(procsub_parts) > 0) and not has_brace_cmdsub and not has_untracked_cmdsub and not has_untracked_procsub and not has_param_with_procsub_pattern then
     return value
   end
-  local result = {}
-  local i = 0
-  local cmdsub_idx = 0
-  local procsub_idx = 0
-  local main_quote = new_quote_state()
-  local extglob_depth = 0
-  local deprecated_arith_depth = 0
-  local arith_depth = 0
-  local arith_paren_depth = 0
+  result = {}
+  i = 0
+  cmdsub_idx = 0
+  procsub_idx = 0
+  main_quote = new_quote_state()
+  extglob_depth = 0
+  deprecated_arith_depth = 0
+  arith_depth = 0
+  arith_paren_depth = 0
   while i < #value do
     if i > 0 and is_extglob_prefix(string.sub(value, i - 1 + 1, i - 1 + 1)) and string.sub(value, i + 1, i + 1) == "(" and not is_backslash_escaped(value, i - 1) then
       extglob_depth = extglob_depth + 1
@@ -2983,7 +3006,6 @@ function Word:format_command_substitutions(value, in_arith)
         goto continue
       end
     end
-    local j
     if is_expansion_start(value, i, "$((") and not has_arith then
       j = find_cmdsub_end(value, i + 2)
       ;(function() table.insert(result, substring(value, i, j)); return result end)()
@@ -2993,11 +3015,6 @@ function Word:format_command_substitutions(value, in_arith)
       i = j
       goto continue
     end
-    local inner
-    local node
-    local formatted
-    local parser
-    local parsed
     if starts_with_at(value, i, "$(") and not starts_with_at(value, i, "$((") and not is_backslash_escaped(value, i) and not is_dollar_dollar_paren(value, i) then
       j = find_cmdsub_end(value, i + 2)
       if extglob_depth > 0 then
@@ -3048,15 +3065,14 @@ function Word:format_command_substitutions(value, in_arith)
       i = j
     elseif is_expansion_start(value, i, "${") and i + 2 < #value and is_funsub_char(string.sub(value, i + 2 + 1, i + 2 + 1)) and not is_backslash_escaped(value, i) then
       j = find_funsub_end(value, i + 2)
-      local cmdsub_node = (cmdsub_idx < #cmdsub_parts and cmdsub_parts[cmdsub_idx + 1] or nil)
+      cmdsub_node = (cmdsub_idx < #cmdsub_parts and cmdsub_parts[cmdsub_idx + 1] or nil)
       if (type(cmdsub_node) == 'table' and getmetatable(cmdsub_node) == CommandSubstitution) and cmdsub_node.brace then
         node = cmdsub_node
         formatted = format_cmdsub_node(node.command, 0, false, false, false)
-        local has_pipe = string.sub(value, i + 2 + 1, i + 2 + 1) == "|"
-        local prefix = (has_pipe and "${|" or "${ ")
-        local orig_inner = substring(value, i + 2, j - 1)
-        local ends_with_newline = (string.sub(orig_inner, -#"\n") == "\n")
-        local suffix
+        has_pipe = string.sub(value, i + 2 + 1, i + 2 + 1) == "|"
+        prefix = (has_pipe and "${|" or "${ ")
+        orig_inner = substring(value, i + 2, j - 1)
+        ends_with_newline = (string.sub(orig_inner, -#"\n") == "\n")
         if not (formatted ~= nil and #(formatted) > 0) or (string.match(formatted, '^%s+$') ~= nil) then
           suffix = "}"
         elseif (string.sub(formatted, -#"&") == "&") or (string.sub(formatted, -#"& ") == "& ") then
@@ -3073,7 +3089,7 @@ function Word:format_command_substitutions(value, in_arith)
       end
       i = j
     elseif (starts_with_at(value, i, ">(") or starts_with_at(value, i, "<(")) and not main_quote.double and deprecated_arith_depth == 0 and arith_depth == 0 then
-      local is_procsub = i == 0 or not (string.match(string.sub(value, i - 1 + 1, i - 1 + 1), '^%w+$') ~= nil) and ((not (string.find("\"'", string.sub(value, i - 1 + 1, i - 1 + 1), 1, true) ~= nil)))
+      is_procsub = i == 0 or not (string.match(string.sub(value, i - 1 + 1, i - 1 + 1), '^%w+$') ~= nil) and ((not (string.find("\"'", string.sub(value, i - 1 + 1, i - 1 + 1), 1, true) ~= nil)))
       if extglob_depth > 0 then
         j = find_cmdsub_end(value, i + 2)
         ;(function() table.insert(result, substring(value, i, j)); return result end)()
@@ -3083,27 +3099,24 @@ function Word:format_command_substitutions(value, in_arith)
         i = j
         goto continue
       end
-      local direction
-      local compact
-      local stripped
       if procsub_idx < #procsub_parts then
         direction = string.sub(value, i + 1, i + 1)
         j = find_cmdsub_end(value, i + 2)
         node = procsub_parts[procsub_idx + 1]
         compact = starts_with_subshell(node.command)
         formatted = format_cmdsub_node(node.command, 0, true, compact, true)
-        local raw_content = substring(value, i + 2, j - 1)
+        raw_content = substring(value, i + 2, j - 1)
         if node.command.kind == "subshell" then
-          local leading_ws_end = 0
+          leading_ws_end = 0
           while leading_ws_end < #raw_content and (((string.find(" \t\n", string.sub(raw_content, leading_ws_end + 1, leading_ws_end + 1), 1, true) ~= nil))) do
             leading_ws_end = leading_ws_end + 1
           end
-          local leading_ws = string.sub(raw_content, 1, leading_ws_end)
+          leading_ws = string.sub(raw_content, 1, leading_ws_end)
           stripped = string.sub(raw_content, (leading_ws_end) + 1, #raw_content)
           if (string.sub(stripped, 1, #"(") == "(") then
             if (leading_ws ~= nil and #(leading_ws) > 0) then
-              local normalized_ws = (string.gsub((string.gsub(leading_ws, "\n", " ")), "\t", " "))
-              local spaced = format_cmdsub_node(node.command, 0, false, false, false)
+              normalized_ws = (string.gsub((string.gsub(leading_ws, "\n", " ")), "\t", " "))
+              spaced = format_cmdsub_node(node.command, 0, false, false, false)
               ;(function() table.insert(result, direction .. "(" .. normalized_ws .. spaced .. ")"); return result end)()
             else
               raw_content = (string.gsub(raw_content, "\\\n", ""))
@@ -3115,11 +3128,11 @@ function Word:format_command_substitutions(value, in_arith)
           end
         end
         raw_content = substring(value, i + 2, j - 1)
-        local raw_stripped = (string.gsub(raw_content, "\\\n", ""))
+        raw_stripped = (string.gsub(raw_content, "\\\n", ""))
         if starts_with_subshell(node.command) and formatted ~= raw_stripped then
           ;(function() table.insert(result, direction .. "(" .. raw_stripped .. ")"); return result end)()
         else
-          local final_output = direction .. "(" .. formatted .. ")"
+          final_output = direction .. "(" .. formatted .. ")"
           ;(function() table.insert(result, final_output); return result end)()
         end
         procsub_idx = procsub_idx + 1
@@ -3173,7 +3186,7 @@ function Word:format_command_substitutions(value, in_arith)
     elseif (is_expansion_start(value, i, "${ ") or is_expansion_start(value, i, "${\t") or is_expansion_start(value, i, "${\n") or is_expansion_start(value, i, "${|")) and not is_backslash_escaped(value, i) then
       prefix = (string.gsub((string.gsub(substring(value, i, i + 3), "\t", " ")), "\n", " "))
       j = i + 3
-      local depth = 1
+      depth = 1
       while j < #value and depth > 0 do
         if string.sub(value, j + 1, j + 1) == "{" then
           depth = depth + 1
@@ -3192,7 +3205,6 @@ function Word:format_command_substitutions(value, in_arith)
           if (parsed ~= nil) then
             formatted = format_cmdsub_node(parsed, 0, false, false, false)
             formatted = (string.gsub(formatted, '[' .. ";" .. ']+$', ''))
-            local terminator
             if (string.sub((string.gsub(inner, '[' .. " \t" .. ']+$', '')), -#"\n") == "\n") then
               terminator = "\n }"
             elseif (string.sub(formatted, -#" &") == " &") then
@@ -3213,9 +3225,9 @@ function Word:format_command_substitutions(value, in_arith)
     elseif is_expansion_start(value, i, "${") and not is_backslash_escaped(value, i) then
       j = i + 2
       depth = 1
-      local brace_quote = new_quote_state()
+      brace_quote = new_quote_state()
       while j < #value and depth > 0 do
-        local c = string.sub(value, j + 1, j + 1)
+        c = string.sub(value, j + 1, j + 1)
         if c == "\\" and j + 1 < #value and not brace_quote.single then
           j = j + 2
           goto continue
@@ -3243,7 +3255,7 @@ function Word:format_command_substitutions(value, in_arith)
       else
         inner = substring(value, i + 2, j - 1)
       end
-      local formatted_inner = self:format_command_substitutions(inner, false)
+      formatted_inner = self:format_command_substitutions(inner, false)
       formatted_inner = self:normalize_extglob_whitespace(formatted_inner)
       if depth == 0 then
         ;(function() table.insert(result, "${" .. formatted_inner .. "}"); return result end)()
@@ -3275,10 +3287,11 @@ function Word:format_command_substitutions(value, in_arith)
 end
 
 function Word:normalize_extglob_whitespace(value)
-  local result = {}
-  local i = 0
-  local extglob_quote = new_quote_state()
-  local deprecated_arith_depth = 0
+  local current_part, deprecated_arith_depth, depth, extglob_quote, has_pipe, i, part_content, pattern_parts, prefix_char, result
+  result = {}
+  i = 0
+  extglob_quote = new_quote_state()
+  deprecated_arith_depth = 0
   while i < #value do
     if string.sub(value, i + 1, i + 1) == "\"" then
       extglob_quote.double = not extglob_quote.double
@@ -3299,15 +3312,15 @@ function Word:normalize_extglob_whitespace(value)
       goto continue
     end
     if i + 1 < #value and string.sub(value, i + 1 + 1, i + 1 + 1) == "(" then
-      local prefix_char = string.sub(value, i + 1, i + 1)
+      prefix_char = string.sub(value, i + 1, i + 1)
       if (((string.find("><", prefix_char, 1, true) ~= nil))) and not extglob_quote.double and deprecated_arith_depth == 0 then
         ;(function() table.insert(result, prefix_char); return result end)()
         ;(function() table.insert(result, "("); return result end)()
         i = i + 2
-        local depth = 1
-        local pattern_parts = {}
-        local current_part = {}
-        local has_pipe = false
+        depth = 1
+        pattern_parts = {}
+        current_part = {}
+        has_pipe = false
         while i < #value and depth > 0 do
           if string.sub(value, i + 1, i + 1) == "\\" and i + 1 < #value then
             ;(function() table.insert(current_part, string.sub(value, (i) + 1, i + 2)); return current_part end)()
@@ -3320,7 +3333,7 @@ function Word:normalize_extglob_whitespace(value)
           elseif string.sub(value, i + 1, i + 1) == ")" then
             depth = depth - 1
             if depth == 0 then
-              local part_content = table.concat(current_part, "")
+              part_content = table.concat(current_part, "")
               if ((string.find(part_content, "<<", 1, true) ~= nil)) then
                 ;(function() table.insert(pattern_parts, part_content); return pattern_parts end)()
               elseif has_pipe then
@@ -3369,7 +3382,8 @@ function Word:normalize_extglob_whitespace(value)
 end
 
 function Word:get_cond_formatted_value()
-  local value = self:expand_all_ansi_c_quotes(self.value)
+  local value
+  value = self:expand_all_ansi_c_quotes(self.value)
   value = self:strip_locale_string_dollars(value)
   value = self:format_command_substitutions(value, false)
   value = self:normalize_extglob_whitespace(value)
@@ -3396,14 +3410,15 @@ function Command:new(words, redirects, kind)
 end
 
 function Command:to_sexp()
-  local parts = {}
+  local inner, parts, r, w
+  parts = {}
   for _, w in ipairs(self.words) do
     ;(function() table.insert(parts, w:to_sexp()); return parts end)()
   end
   for _, r in ipairs(self.redirects) do
     ;(function() table.insert(parts, r:to_sexp()); return parts end)()
   end
-  local inner = table.concat(parts, " ")
+  inner = table.concat(parts, " ")
   if not (inner ~= nil and #(inner) > 0) then
     return "(command)"
   end
@@ -3427,12 +3442,12 @@ function Pipeline:new(commands, kind)
 end
 
 function Pipeline:to_sexp()
+  local cmd, cmds, i, j, last_cmd, last_needs, last_pair, needs, needs_redirect, pair, result
   if #self.commands == 1 then
     return self.commands[0 + 1]:to_sexp()
   end
-  local cmds = {}
-  local i = 0
-  local cmd
+  cmds = {}
+  i = 0
   while i < #self.commands do
     cmd = self.commands[i + 1]
     if (type(cmd) == 'table' and getmetatable(cmd) == PipeBoth) then
@@ -3440,24 +3455,22 @@ function Pipeline:to_sexp()
       i = i + 1
       goto continue
     end
-    local needs_redirect = i + 1 < #self.commands and self.commands[i + 1 + 1].kind == "pipe-both"
+    needs_redirect = i + 1 < #self.commands and self.commands[i + 1 + 1].kind == "pipe-both"
     ;(function() table.insert(cmds, {cmd, needs_redirect}); return cmds end)()
     i = i + 1
     ::continue::
   end
-  local pair
-  local needs
   if #cmds == 1 then
     pair = cmds[0 + 1]
     cmd = pair[1]
     needs = pair[2]
     return self:cmd_sexp(cmd, needs)
   end
-  local last_pair = cmds[#cmds - 1 + 1]
-  local last_cmd = last_pair[1]
-  local last_needs = last_pair[2]
-  local result = self:cmd_sexp(last_cmd, last_needs)
-  local j = #cmds - 2
+  last_pair = cmds[#cmds - 1 + 1]
+  last_cmd = last_pair[1]
+  last_needs = last_pair[2]
+  result = self:cmd_sexp(last_cmd, last_needs)
+  j = #cmds - 2
   while j >= 0 do
     pair = cmds[j + 1]
     cmd = pair[1]
@@ -3473,12 +3486,13 @@ function Pipeline:to_sexp()
 end
 
 function Pipeline:cmd_sexp(cmd, needs_redirect)
+  local parts, r, w
   if not needs_redirect then
     return cmd:to_sexp()
   end
   if (type(cmd) == 'table' and getmetatable(cmd) == Command) then
     local cmd = cmd
-    local parts = {}
+    parts = {}
     for _, w in ipairs(cmd.words) do
       ;(function() table.insert(parts, w:to_sexp()); return parts end)()
     end
@@ -3508,8 +3522,9 @@ function List:new(parts, kind)
 end
 
 function List:to_sexp()
-  local parts = (function() local t = {}; for i, v in ipairs(self.parts) do t[i] = v end; return t end)()
-  local op_names = {["&&"] = "and", ["||"] = "or", [";"] = "semi", ["\n"] = "semi", ["&"] = "background"}
+  local i, inner_list, inner_parts, left, left_sexp, op_names, parts, right, right_sexp
+  parts = (function() local t = {}; for i, v in ipairs(self.parts) do t[i] = v end; return t end)()
+  op_names = {["&&"] = "and", ["||"] = "or", [";"] = "semi", ["\n"] = "semi", ["&"] = "background"}
   while #parts > 1 and parts[#parts - 1 + 1].kind == "operator" and (parts[#parts - 1 + 1].op == ";" or parts[#parts - 1 + 1].op == "\n") do
     parts = sublist(parts, 0, #parts - 1)
   end
@@ -3517,18 +3532,16 @@ function List:to_sexp()
     return parts[0 + 1]:to_sexp()
   end
   if parts[#parts - 1 + 1].kind == "operator" and parts[#parts - 1 + 1].op == "&" then
-    local i = #parts - 3
+    i = #parts - 3
     while i > 0 do
       if parts[i + 1].kind == "operator" and (parts[i + 1].op == ";" or parts[i + 1].op == "\n") then
-        local left = sublist(parts, 0, i)
-        local right = sublist(parts, i + 1, #parts - 1)
-        local left_sexp
+        left = sublist(parts, 0, i)
+        right = sublist(parts, i + 1, #parts - 1)
         if #left > 1 then
           left_sexp = List:new(left, "list"):to_sexp()
         else
           left_sexp = left[0 + 1]:to_sexp()
         end
-        local right_sexp
         if #right > 1 then
           right_sexp = List:new(right, "list"):to_sexp()
         else
@@ -3538,27 +3551,27 @@ function List:to_sexp()
       end
       i = i + -2
     end
-    local inner_parts = sublist(parts, 0, #parts - 1)
+    inner_parts = sublist(parts, 0, #parts - 1)
     if #inner_parts == 1 then
       return "(background " .. inner_parts[0 + 1]:to_sexp() .. ")"
     end
-    local inner_list = List:new(inner_parts, "list")
+    inner_list = List:new(inner_parts, "list")
     return "(background " .. inner_list:to_sexp() .. ")"
   end
   return self:to_sexp_with_precedence(parts, op_names)
 end
 
 function List:to_sexp_with_precedence(parts, op_names)
-  local semi_positions = {}
+  local i, pos, result, seg, segments, semi_positions, start
+  semi_positions = {}
   for i = 0, #parts - 1 do
     if parts[i + 1].kind == "operator" and (parts[i + 1].op == ";" or parts[i + 1].op == "\n") then
       ;(function() table.insert(semi_positions, i); return semi_positions end)()
     end
   end
   if (#(semi_positions) > 0) then
-    local segments = {}
-    local start = 0
-    local seg
+    segments = {}
+    start = 0
     for _, pos in ipairs(semi_positions) do
       seg = sublist(parts, start, pos)
       if (#(seg) > 0) and seg[0 + 1].kind ~= "operator" then
@@ -3573,8 +3586,8 @@ function List:to_sexp_with_precedence(parts, op_names)
     if not (#(segments) > 0) then
       return "()"
     end
-    local result = self:to_sexp_amp_and_higher(segments[0 + 1], op_names)
-    local i = 1
+    result = self:to_sexp_amp_and_higher(segments[0 + 1], op_names)
+    i = 1
     while i < #segments do
       result = "(semi " .. result .. " " .. self:to_sexp_amp_and_higher(segments[i + 1], op_names) .. ")"
       i = i + 1
@@ -3585,11 +3598,12 @@ function List:to_sexp_with_precedence(parts, op_names)
 end
 
 function List:to_sexp_amp_and_higher(parts, op_names)
+  local amp_positions, i, pos, result, segments, start
   if #parts == 1 then
     return parts[0 + 1]:to_sexp()
   end
-  local amp_positions = {}
-  local i = 1
+  amp_positions = {}
+  i = 1
   while i < #parts - 1 do
     if parts[i + 1].kind == "operator" and parts[i + 1].op == "&" then
       ;(function() table.insert(amp_positions, i); return amp_positions end)()
@@ -3597,14 +3611,14 @@ function List:to_sexp_amp_and_higher(parts, op_names)
     i = i + 2
   end
   if (#(amp_positions) > 0) then
-    local segments = {}
-    local start = 0
+    segments = {}
+    start = 0
     for _, pos in ipairs(amp_positions) do
       ;(function() table.insert(segments, sublist(parts, start, pos)); return segments end)()
       start = pos + 1
     end
     ;(function() table.insert(segments, sublist(parts, start, #parts)); return segments end)()
-    local result = self:to_sexp_and_or(segments[0 + 1], op_names)
+    result = self:to_sexp_and_or(segments[0 + 1], op_names)
     i = 1
     while i < #segments do
       result = "(background " .. result .. " " .. self:to_sexp_and_or(segments[i + 1], op_names) .. ")"
@@ -3616,15 +3630,16 @@ function List:to_sexp_amp_and_higher(parts, op_names)
 end
 
 function List:to_sexp_and_or(parts, op_names)
+  local cmd, i, op, op_name, result
   if #parts == 1 then
     return parts[0 + 1]:to_sexp()
   end
-  local result = parts[0 + 1]:to_sexp()
-  local i = 1
+  result = parts[0 + 1]:to_sexp()
+  i = 1
   while i < #parts - 1 do
-    local op = parts[i + 1]
-    local cmd = parts[i + 1 + 1]
-    local op_name = _map_get(op_names, op.op, op.op)
+    op = parts[i + 1]
+    cmd = parts[i + 1 + 1]
+    op_name = _map_get(op_names, op.op, op.op)
     result = "(" .. op_name .. " " .. result .. " " .. cmd:to_sexp() .. ")"
     i = i + 2
   end
@@ -3648,7 +3663,8 @@ function Operator:new(op, kind)
 end
 
 function Operator:to_sexp()
-  local names = {["&&"] = "and", ["||"] = "or", [";"] = "semi", ["&"] = "bg", ["|"] = "pipe"}
+  local names
+  names = {["&&"] = "and", ["||"] = "or", [";"] = "semi", ["&"] = "bg", ["|"] = "pipe"}
   return "(" .. _map_get(names, self.op, self.op) .. ")"
 end
 
@@ -3729,9 +3745,10 @@ function Redirect:new(op, target, fd, kind)
 end
 
 function Redirect:to_sexp()
-  local op = (string.gsub(self.op, '^[' .. "0123456789" .. ']+', ''))
+  local fd_target, j, op, out_val, raw, target_val
+  op = (string.gsub(self.op, '^[' .. "0123456789" .. ']+', ''))
   if (string.sub(op, 1, #"{") == "{") then
-    local j = 1
+    j = 1
     if j < #op and ((string.match(string.sub(op, j + 1, j + 1), '^%a+$') ~= nil) or string.sub(op, j + 1, j + 1) == "_") then
       j = j + 1
       while j < #op and ((string.match(string.sub(op, j + 1, j + 1), '^%w+$') ~= nil) or string.sub(op, j + 1, j + 1) == "_") do
@@ -3751,7 +3768,7 @@ function Redirect:to_sexp()
       end
     end
   end
-  local target_val = self.target.value
+  target_val = self.target.value
   target_val = self.target:expand_all_ansi_c_quotes(target_val)
   target_val = self.target:strip_locale_string_dollars(target_val)
   target_val = self.target:format_command_substitutions(target_val, false)
@@ -3765,7 +3782,7 @@ function Redirect:to_sexp()
     elseif op == "<" then
       op = "<&"
     end
-    local raw = substring(target_val, 1, #target_val)
+    raw = substring(target_val, 1, #target_val)
     if (string.match(raw, '^%d+$') ~= nil) and tonumber(raw) <= 2147483647 then
       return "(redirect \"" .. op .. "\" " .. tostring(tonumber(raw)) .. ")"
     end
@@ -3775,7 +3792,7 @@ function Redirect:to_sexp()
     if target_val == "&-" then
       return "(redirect \">&-\" 0)"
     end
-    local fd_target = ((string.sub(raw, -#"-") == "-") and string.sub(raw, 1, #raw - 1) or raw)
+    fd_target = ((string.sub(raw, -#"-") == "-") and string.sub(raw, 1, #raw - 1) or raw)
     return "(redirect \"" .. op .. "\" \"" .. fd_target .. "\")"
   end
   if op == ">&" or op == "<&" then
@@ -3788,7 +3805,7 @@ function Redirect:to_sexp()
     if (string.sub(target_val, -#"-") == "-") and (string.match(string.sub(target_val, 1, #target_val - 1), '^%d+$') ~= nil) and tonumber(string.sub(target_val, 1, #target_val - 1)) <= 2147483647 then
       return "(redirect \"" .. op .. "\" " .. tostring(tonumber(string.sub(target_val, 1, #target_val - 1))) .. ")"
     end
-    local out_val = ((string.sub(target_val, -#"-") == "-") and string.sub(target_val, 1, #target_val - 1) or target_val)
+    out_val = ((string.sub(target_val, -#"-") == "-") and string.sub(target_val, 1, #target_val - 1) or target_val)
     return "(redirect \"" .. op .. "\" \"" .. out_val .. "\")"
   end
   return "(redirect \"" .. op .. "\" \"" .. target_val .. "\")"
@@ -3823,8 +3840,9 @@ function HereDoc:new(delimiter, content, strip_tabs, quoted, fd, complete, start
 end
 
 function HereDoc:to_sexp()
-  local op = (self.strip_tabs and "<<-" or "<<")
-  local content = self.content
+  local content, op
+  op = (self.strip_tabs and "<<-" or "<<")
+  content = self.content
   if (string.sub(content, -#"\\") == "\\") and not (string.sub(content, -#"\\\\") == "\\\\") then
     content = content .. "\\"
   end
@@ -3850,7 +3868,8 @@ function Subshell:new(body, redirects, kind)
 end
 
 function Subshell:to_sexp()
-  local base = "(subshell " .. self.body:to_sexp() .. ")"
+  local base
+  base = "(subshell " .. self.body:to_sexp() .. ")"
   return append_redirects(base, self.redirects)
 end
 
@@ -3873,7 +3892,8 @@ function BraceGroup:new(body, redirects, kind)
 end
 
 function BraceGroup:to_sexp()
-  local base = "(brace-group " .. self.body:to_sexp() .. ")"
+  local base
+  base = "(brace-group " .. self.body:to_sexp() .. ")"
   return append_redirects(base, self.redirects)
 end
 
@@ -3900,7 +3920,8 @@ function If:new(condition, then_body, else_body, redirects, kind)
 end
 
 function If:to_sexp()
-  local result = "(if " .. self.condition:to_sexp() .. " " .. self.then_body:to_sexp()
+  local r, result
+  result = "(if " .. self.condition:to_sexp() .. " " .. self.then_body:to_sexp()
   if (self.else_body ~= nil) then
     result = result .. " " .. self.else_body:to_sexp()
   end
@@ -3932,7 +3953,8 @@ function While:new(condition, body, redirects, kind)
 end
 
 function While:to_sexp()
-  local base = "(while " .. self.condition:to_sexp() .. " " .. self.body:to_sexp() .. ")"
+  local base
+  base = "(while " .. self.condition:to_sexp() .. " " .. self.body:to_sexp() .. ")"
   return append_redirects(base, self.redirects)
 end
 
@@ -3957,7 +3979,8 @@ function Until:new(condition, body, redirects, kind)
 end
 
 function Until:to_sexp()
-  local base = "(until " .. self.condition:to_sexp() .. " " .. self.body:to_sexp() .. ")"
+  local base
+  base = "(until " .. self.condition:to_sexp() .. " " .. self.body:to_sexp() .. ")"
   return append_redirects(base, self.redirects)
 end
 
@@ -3984,27 +4007,28 @@ function For:new(var, words, body, redirects, kind)
 end
 
 function For:to_sexp()
-  local suffix = ""
+  local r, redirect_parts, suffix, temp_word, var_escaped, var_formatted, w, word_parts, word_strs
+  suffix = ""
   if (#(self.redirects) > 0) then
-    local redirect_parts = {}
+    redirect_parts = {}
     for _, r in ipairs(self.redirects) do
       ;(function() table.insert(redirect_parts, r:to_sexp()); return redirect_parts end)()
     end
     suffix = " " .. table.concat(redirect_parts, " ")
   end
-  local temp_word = Word:new(self.var, {}, "word")
-  local var_formatted = temp_word:format_command_substitutions(self.var, false)
-  local var_escaped = (string.gsub((string.gsub(var_formatted, "\\", "\\\\")), "\"", "\\\""))
+  temp_word = Word:new(self.var, {}, "word")
+  var_formatted = temp_word:format_command_substitutions(self.var, false)
+  var_escaped = (string.gsub((string.gsub(var_formatted, "\\", "\\\\")), "\"", "\\\""))
   if (self.words == nil) then
     return "(for (word \"" .. var_escaped .. "\") (in (word \"\\\"$@\\\"\")) " .. self.body:to_sexp() .. ")" .. suffix
   elseif #self.words == 0 then
     return "(for (word \"" .. var_escaped .. "\") (in) " .. self.body:to_sexp() .. ")" .. suffix
   else
-    local word_parts = {}
+    word_parts = {}
     for _, w in ipairs(self.words) do
       ;(function() table.insert(word_parts, w:to_sexp()); return word_parts end)()
     end
-    local word_strs = table.concat(word_parts, " ")
+    word_strs = table.concat(word_parts, " ")
     return "(for (word \"" .. var_escaped .. "\") (in " .. word_strs .. ") " .. self.body:to_sexp() .. ")" .. suffix
   end
 end
@@ -4034,21 +4058,22 @@ function ForArith:new(init, cond, incr, body, redirects, kind)
 end
 
 function ForArith:to_sexp()
-  local suffix = ""
+  local body_str, cond_str, cond_val, incr_str, incr_val, init_str, init_val, r, redirect_parts, suffix
+  suffix = ""
   if (#(self.redirects) > 0) then
-    local redirect_parts = {}
+    redirect_parts = {}
     for _, r in ipairs(self.redirects) do
       ;(function() table.insert(redirect_parts, r:to_sexp()); return redirect_parts end)()
     end
     suffix = " " .. table.concat(redirect_parts, " ")
   end
-  local init_val = ((self.init ~= nil and #(self.init) > 0) and self.init or "1")
-  local cond_val = ((self.cond ~= nil and #(self.cond) > 0) and self.cond or "1")
-  local incr_val = ((self.incr ~= nil and #(self.incr) > 0) and self.incr or "1")
-  local init_str = format_arith_val(init_val)
-  local cond_str = format_arith_val(cond_val)
-  local incr_str = format_arith_val(incr_val)
-  local body_str = self.body:to_sexp()
+  init_val = ((self.init ~= nil and #(self.init) > 0) and self.init or "1")
+  cond_val = ((self.cond ~= nil and #(self.cond) > 0) and self.cond or "1")
+  incr_val = ((self.incr ~= nil and #(self.incr) > 0) and self.incr or "1")
+  init_str = format_arith_val(init_val)
+  cond_str = format_arith_val(cond_val)
+  incr_str = format_arith_val(incr_val)
+  body_str = self.body:to_sexp()
   return string.format("(arith-for (init (word \"%s\")) (test (word \"%s\")) (step (word \"%s\")) %s)%s", init_str, cond_str, incr_str, body_str, suffix)
 end
 
@@ -4075,22 +4100,22 @@ function Select:new(var, words, body, redirects, kind)
 end
 
 function Select:to_sexp()
-  local suffix = ""
+  local in_clause, r, redirect_parts, suffix, var_escaped, w, word_parts, word_strs
+  suffix = ""
   if (#(self.redirects) > 0) then
-    local redirect_parts = {}
+    redirect_parts = {}
     for _, r in ipairs(self.redirects) do
       ;(function() table.insert(redirect_parts, r:to_sexp()); return redirect_parts end)()
     end
     suffix = " " .. table.concat(redirect_parts, " ")
   end
-  local var_escaped = (string.gsub((string.gsub(self.var, "\\", "\\\\")), "\"", "\\\""))
-  local in_clause
+  var_escaped = (string.gsub((string.gsub(self.var, "\\", "\\\\")), "\"", "\\\""))
   if (self.words ~= nil) then
-    local word_parts = {}
+    word_parts = {}
     for _, w in ipairs(self.words) do
       ;(function() table.insert(word_parts, w:to_sexp()); return word_parts end)()
     end
-    local word_strs = table.concat(word_parts, " ")
+    word_strs = table.concat(word_parts, " ")
     if (self.words ~= nil and #(self.words) > 0) then
       in_clause = "(in " .. word_strs .. ")"
     else
@@ -4123,12 +4148,13 @@ function Case:new(word, patterns, redirects, kind)
 end
 
 function Case:to_sexp()
-  local parts = {}
+  local base, p, parts
+  parts = {}
   ;(function() table.insert(parts, "(case " .. self.word:to_sexp()); return parts end)()
   for _, p in ipairs(self.patterns) do
     ;(function() table.insert(parts, p:to_sexp()); return parts end)()
   end
-  local base = table.concat(parts, " ") .. ")"
+  base = table.concat(parts, " ") .. ")"
   return append_redirects(base, self.redirects)
 end
 
@@ -4153,12 +4179,13 @@ function CasePattern:new(pattern, body, terminator, kind)
 end
 
 function CasePattern:to_sexp()
-  local alternatives = {}
-  local current = {}
-  local i = 0
-  local depth = 0
+  local alt, alternatives, ch, current, depth, i, parts, pattern_str, result0, result1, result2, word_list
+  alternatives = {}
+  current = {}
+  i = 0
+  depth = 0
   while i < #self.pattern do
-    local ch = string.sub(self.pattern, i + 1, i + 1)
+    ch = string.sub(self.pattern, i + 1, i + 1)
     if ch == "\\" and i + 1 < #self.pattern then
       ;(function() table.insert(current, substring(self.pattern, i, i + 2)); return current end)()
       i = i + 2
@@ -4181,7 +4208,7 @@ function CasePattern:to_sexp()
       depth = depth - 1
       i = i + 1
     elseif ch == "[" then
-      local result0, result1, result2 = table.unpack(consume_bracket_class(self.pattern, i, depth))
+      result0, result1, result2 = table.unpack(consume_bracket_class(self.pattern, i, depth))
       i = result0
       ;(function() for _, v in ipairs(result1) do table.insert(current, v) end; return current end)()
     elseif ch == "'" and depth == 0 then
@@ -4202,12 +4229,12 @@ function CasePattern:to_sexp()
     end
   end
   ;(function() table.insert(alternatives, table.concat(current, "")); return alternatives end)()
-  local word_list = {}
+  word_list = {}
   for _, alt in ipairs(alternatives) do
     ;(function() table.insert(word_list, Word:new(alt, nil, "word"):to_sexp()); return word_list end)()
   end
-  local pattern_str = table.concat(word_list, " ")
-  local parts = {"(pattern (" .. pattern_str .. ")"}
+  pattern_str = table.concat(word_list, " ")
+  parts = {"(pattern (" .. pattern_str .. ")"}
   if (self.body ~= nil) then
     ;(function() table.insert(parts, " " .. self.body:to_sexp()); return parts end)()
   else
@@ -4260,16 +4287,16 @@ function ParamExpansion:new(param, op, arg_, kind)
 end
 
 function ParamExpansion:to_sexp()
-  local escaped_param = (string.gsub((string.gsub(self.param, "\\", "\\\\")), "\"", "\\\""))
+  local arg_val, escaped_arg, escaped_op, escaped_param
+  escaped_param = (string.gsub((string.gsub(self.param, "\\", "\\\\")), "\"", "\\\""))
   if self.op ~= "" then
-    local escaped_op = (string.gsub((string.gsub(self.op, "\\", "\\\\")), "\"", "\\\""))
-    local arg_val
+    escaped_op = (string.gsub((string.gsub(self.op, "\\", "\\\\")), "\"", "\\\""))
     if self.arg_ ~= "" then
       arg_val = self.arg_
     else
       arg_val = ""
     end
-    local escaped_arg = (string.gsub((string.gsub(arg_val, "\\", "\\\\")), "\"", "\\\""))
+    escaped_arg = (string.gsub((string.gsub(arg_val, "\\", "\\\\")), "\"", "\\\""))
     return "(param \"" .. escaped_param .. "\" \"" .. escaped_op .. "\" \"" .. escaped_arg .. "\")"
   end
   return "(param \"" .. escaped_param .. "\")"
@@ -4292,7 +4319,8 @@ function ParamLength:new(param, kind)
 end
 
 function ParamLength:to_sexp()
-  local escaped = (string.gsub((string.gsub(self.param, "\\", "\\\\")), "\"", "\\\""))
+  local escaped
+  escaped = (string.gsub((string.gsub(self.param, "\\", "\\\\")), "\"", "\\\""))
   return "(param-len \"" .. escaped .. "\")"
 end
 
@@ -4317,16 +4345,16 @@ function ParamIndirect:new(param, op, arg_, kind)
 end
 
 function ParamIndirect:to_sexp()
-  local escaped = (string.gsub((string.gsub(self.param, "\\", "\\\\")), "\"", "\\\""))
+  local arg_val, escaped, escaped_arg, escaped_op
+  escaped = (string.gsub((string.gsub(self.param, "\\", "\\\\")), "\"", "\\\""))
   if self.op ~= "" then
-    local escaped_op = (string.gsub((string.gsub(self.op, "\\", "\\\\")), "\"", "\\\""))
-    local arg_val
+    escaped_op = (string.gsub((string.gsub(self.op, "\\", "\\\\")), "\"", "\\\""))
     if self.arg_ ~= "" then
       arg_val = self.arg_
     else
       arg_val = ""
     end
-    local escaped_arg = (string.gsub((string.gsub(arg_val, "\\", "\\\\")), "\"", "\\\""))
+    escaped_arg = (string.gsub((string.gsub(arg_val, "\\", "\\\\")), "\"", "\\\""))
     return "(param-indirect \"" .. escaped .. "\" \"" .. escaped_op .. "\" \"" .. escaped_arg .. "\")"
   end
   return "(param-indirect \"" .. escaped .. "\")"
@@ -4401,15 +4429,16 @@ function ArithmeticCommand:new(expression, redirects, raw_content, kind)
 end
 
 function ArithmeticCommand:to_sexp()
-  local formatted = Word:new(self.raw_content, nil, "word"):format_command_substitutions(self.raw_content, true)
-  local escaped = (string.gsub((string.gsub((string.gsub((string.gsub(formatted, "\\", "\\\\")), "\"", "\\\"")), "\n", "\\n")), "\t", "\\t"))
-  local result = "(arith (word \"" .. escaped .. "\"))"
+  local escaped, formatted, r, redirect_parts, redirect_sexps, result
+  formatted = Word:new(self.raw_content, nil, "word"):format_command_substitutions(self.raw_content, true)
+  escaped = (string.gsub((string.gsub((string.gsub((string.gsub(formatted, "\\", "\\\\")), "\"", "\\\"")), "\n", "\\n")), "\t", "\\t"))
+  result = "(arith (word \"" .. escaped .. "\"))"
   if (#(self.redirects) > 0) then
-    local redirect_parts = {}
+    redirect_parts = {}
     for _, r in ipairs(self.redirects) do
       ;(function() table.insert(redirect_parts, r:to_sexp()); return redirect_parts end)()
     end
-    local redirect_sexps = table.concat(redirect_parts, " ")
+    redirect_sexps = table.concat(redirect_parts, " ")
     return result .. " " .. redirect_sexps
   end
   return result
@@ -4728,7 +4757,8 @@ function ArithDeprecated:new(expression, kind)
 end
 
 function ArithDeprecated:to_sexp()
-  local escaped = (string.gsub((string.gsub((string.gsub(self.expression, "\\", "\\\\")), "\"", "\\\"")), "\n", "\\n"))
+  local escaped
+  escaped = (string.gsub((string.gsub((string.gsub(self.expression, "\\", "\\\\")), "\"", "\\\"")), "\n", "\\n"))
   return "(arith-deprecated \"" .. escaped .. "\")"
 end
 
@@ -4749,7 +4779,8 @@ function ArithConcat:new(parts, kind)
 end
 
 function ArithConcat:to_sexp()
-  local sexps = {}
+  local p, sexps
+  sexps = {}
   for _, p in ipairs(self.parts) do
     ;(function() table.insert(sexps, p:to_sexp()); return sexps end)()
   end
@@ -4773,7 +4804,8 @@ function AnsiCQuote:new(content, kind)
 end
 
 function AnsiCQuote:to_sexp()
-  local escaped = (string.gsub((string.gsub((string.gsub(self.content, "\\", "\\\\")), "\"", "\\\"")), "\n", "\\n"))
+  local escaped
+  escaped = (string.gsub((string.gsub((string.gsub(self.content, "\\", "\\\\")), "\"", "\\\"")), "\n", "\\n"))
   return "(ansi-c \"" .. escaped .. "\")"
 end
 
@@ -4794,7 +4826,8 @@ function LocaleString:new(content, kind)
 end
 
 function LocaleString:to_sexp()
-  local escaped = (string.gsub((string.gsub((string.gsub(self.content, "\\", "\\\\")), "\"", "\\\"")), "\n", "\\n"))
+  local escaped
+  escaped = (string.gsub((string.gsub((string.gsub(self.content, "\\", "\\\\")), "\"", "\\\"")), "\n", "\\n"))
   return "(locale \"" .. escaped .. "\")"
 end
 
@@ -4894,21 +4927,21 @@ function ConditionalExpr:new(body, redirects, kind)
 end
 
 function ConditionalExpr:to_sexp()
-  local body = self.body
-  local result
+  local body, escaped, r, redirect_parts, redirect_sexps, result
+  body = self.body
   if type(body) == 'string' then
     local body = body
-    local escaped = (string.gsub((string.gsub((string.gsub(body, "\\", "\\\\")), "\"", "\\\"")), "\n", "\\n"))
+    escaped = (string.gsub((string.gsub((string.gsub(body, "\\", "\\\\")), "\"", "\\\"")), "\n", "\\n"))
     result = "(cond \"" .. escaped .. "\")"
   else
     result = "(cond " .. body:to_sexp() .. ")"
   end
   if (#(self.redirects) > 0) then
-    local redirect_parts = {}
+    redirect_parts = {}
     for _, r in ipairs(self.redirects) do
       ;(function() table.insert(redirect_parts, r:to_sexp()); return redirect_parts end)()
     end
-    local redirect_sexps = table.concat(redirect_parts, " ")
+    redirect_sexps = table.concat(redirect_parts, " ")
     return result .. " " .. redirect_sexps
   end
   return result
@@ -4933,7 +4966,8 @@ function UnaryTest:new(op, operand, kind)
 end
 
 function UnaryTest:to_sexp()
-  local operand_val = self.operand:get_cond_formatted_value()
+  local operand_val
+  operand_val = self.operand:get_cond_formatted_value()
   return "(cond-unary \"" .. self.op .. "\" (cond-term \"" .. operand_val .. "\"))"
 end
 
@@ -4958,8 +4992,9 @@ function BinaryTest:new(op, left, right, kind)
 end
 
 function BinaryTest:to_sexp()
-  local left_val = self.left:get_cond_formatted_value()
-  local right_val = self.right:get_cond_formatted_value()
+  local left_val, right_val
+  left_val = self.left:get_cond_formatted_value()
+  right_val = self.right:get_cond_formatted_value()
   return "(cond-binary \"" .. self.op .. "\" (cond-term \"" .. left_val .. "\") (cond-term \"" .. right_val .. "\"))"
 end
 
@@ -5064,14 +5099,15 @@ function Array:new(elements, kind)
 end
 
 function Array:to_sexp()
+  local e, inner, parts
   if not (#(self.elements) > 0) then
     return "(array)"
   end
-  local parts = {}
+  parts = {}
   for _, e in ipairs(self.elements) do
     ;(function() table.insert(parts, e:to_sexp()); return parts end)()
   end
-  local inner = table.concat(parts, " ")
+  inner = table.concat(parts, " ")
   return "(array " .. inner .. ")"
 end
 
@@ -5185,13 +5221,14 @@ function Parser:record_token(tok)
 end
 
 function Parser:update_dolbrace_for_op(op, has_param)
+  local first_char
   if self.dolbrace_state == DOLBRACESTATE_NONE then
     return
   end
   if op == "" or #op == 0 then
     return
   end
-  local first_char = string.sub(op, 0 + 1, 0 + 1)
+  first_char = string.sub(op, 0 + 1, 0 + 1)
   if self.dolbrace_state == DOLBRACESTATE_PARAM and has_param then
     if ((string.find("%#^,", first_char, 1, true) ~= nil)) then
       self.dolbrace_state = DOLBRACESTATE_QUOTE
@@ -5232,12 +5269,13 @@ function Parser:sync_parser()
 end
 
 function Parser:lex_peek_token()
+  local result, saved_pos
   if (self.lexer.token_cache ~= nil) and self.lexer.token_cache.pos == self.pos and self.lexer.cached_word_context == self.word_context and self.lexer.cached_at_command_start == self.at_command_start and self.lexer.cached_in_array_literal == self.in_array_literal and self.lexer.cached_in_assign_builtin == self.in_assign_builtin then
     return self.lexer.token_cache
   end
-  local saved_pos = self.pos
+  saved_pos = self.pos
   self:sync_lexer()
-  local result = self.lexer:peek_token()
+  result = self.lexer:peek_token()
   self.lexer.cached_word_context = self.word_context
   self.lexer.cached_at_command_start = self.at_command_start
   self.lexer.cached_in_array_literal = self.in_array_literal
@@ -5273,21 +5311,24 @@ function Parser:lex_skip_blanks()
 end
 
 function Parser:lex_skip_comment()
+  local result
   self:sync_lexer()
-  local result = self.lexer:skip_comment()
+  result = self.lexer:skip_comment()
   self:sync_parser()
   return result
 end
 
 function Parser:lex_is_command_terminator()
-  local tok = self:lex_peek_token()
-  local t = tok.type_
+  local t, tok
+  tok = self:lex_peek_token()
+  t = tok.type_
   return t == TOKENTYPE_EOF or t == TOKENTYPE_NEWLINE or t == TOKENTYPE_PIPE or t == TOKENTYPE_SEMI or t == TOKENTYPE_LPAREN or t == TOKENTYPE_RPAREN or t == TOKENTYPE_AMP
 end
 
 function Parser:lex_peek_operator()
-  local tok = self:lex_peek_token()
-  local t = tok.type_
+  local t, tok
+  tok = self:lex_peek_token()
+  t = tok.type_
   if t >= TOKENTYPE_SEMI and t <= TOKENTYPE_GREATER or t >= TOKENTYPE_AND_AND and t <= TOKENTYPE_PIPE_AMP then
     return {t, tok.value}
   end
@@ -5295,11 +5336,12 @@ function Parser:lex_peek_operator()
 end
 
 function Parser:lex_peek_reserved_word()
-  local tok = self:lex_peek_token()
+  local tok, word
+  tok = self:lex_peek_token()
   if tok.type_ ~= TOKENTYPE_WORD then
     return ""
   end
-  local word = tok.value
+  word = tok.value
   if (string.sub(word, -#"\\\n") == "\\\n") then
     word = string.sub(word, 1, #word - 2)
   end
@@ -5310,16 +5352,18 @@ function Parser:lex_peek_reserved_word()
 end
 
 function Parser:lex_is_at_reserved_word(word)
-  local reserved = self:lex_peek_reserved_word()
+  local reserved
+  reserved = self:lex_peek_reserved_word()
   return reserved == word
 end
 
 function Parser:lex_consume_word(expected)
-  local tok = self:lex_peek_token()
+  local tok, word
+  tok = self:lex_peek_token()
   if tok.type_ ~= TOKENTYPE_WORD then
     return false
   end
-  local word = tok.value
+  word = tok.value
   if (string.sub(word, -#"\\\n") == "\\\n") then
     word = string.sub(word, 1, #word - 2)
   end
@@ -5331,8 +5375,9 @@ function Parser:lex_consume_word(expected)
 end
 
 function Parser:lex_peek_case_terminator()
-  local tok = self:lex_peek_token()
-  local t = tok.type_
+  local t, tok
+  tok = self:lex_peek_token()
+  t = tok.type_
   if t == TOKENTYPE_SEMI_SEMI then
     return ";;"
   end
@@ -5357,16 +5402,18 @@ function Parser:peek()
 end
 
 function Parser:advance()
+  local ch
   if self:at_end() then
     return ""
   end
-  local ch = string.sub(self.source, self.pos + 1, self.pos + 1)
+  ch = string.sub(self.source, self.pos + 1, self.pos + 1)
   self.pos = self.pos + 1
   return ch
 end
 
 function Parser:peek_at(offset)
-  local pos = self.pos + offset
+  local pos
+  pos = self.pos + offset
   if pos < 0 or pos >= self.length then
     return ""
   end
@@ -5378,10 +5425,11 @@ function Parser:lookahead(n)
 end
 
 function Parser:is_bang_followed_by_procsub()
+  local next_char
   if self.pos + 2 >= self.length then
     return false
   end
-  local next_char = string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1)
+  next_char = string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1)
   if next_char ~= ">" and next_char ~= "<" then
     return false
   end
@@ -5389,12 +5437,13 @@ function Parser:is_bang_followed_by_procsub()
 end
 
 function Parser:skip_whitespace()
+  local ch
   while not self:at_end() do
     self:lex_skip_blanks()
     if self:at_end() then
       break
     end
-    local ch = self:peek()
+    ch = self:peek()
     if ch == "#" then
       self:lex_skip_comment()
     elseif ch == "\\" and self:peek_at(1) == "\n" then
@@ -5407,8 +5456,9 @@ function Parser:skip_whitespace()
 end
 
 function Parser:skip_whitespace_and_newlines()
+  local ch
   while not self:at_end() do
-    local ch = self:peek()
+    ch = self:peek()
     if is_whitespace(ch) then
       self:advance()
       if ch == "\n" then
@@ -5432,10 +5482,11 @@ function Parser:skip_whitespace_and_newlines()
 end
 
 function Parser:at_list_terminating_bracket()
+  local ch, next_pos
   if self:at_end() then
     return false
   end
-  local ch = self:peek()
+  ch = self:peek()
   if self.eof_token ~= "" and ch == self.eof_token then
     return true
   end
@@ -5443,7 +5494,7 @@ function Parser:at_list_terminating_bracket()
     return true
   end
   if ch == "}" then
-    local next_pos = self.pos + 1
+    next_pos = self.pos + 1
     if next_pos >= self.length then
       return true
     end
@@ -5453,10 +5504,11 @@ function Parser:at_list_terminating_bracket()
 end
 
 function Parser:at_eof_token()
+  local tok
   if self.eof_token == "" then
     return false
   end
-  local tok = self:lex_peek_token()
+  tok = self:lex_peek_token()
   if self.eof_token == ")" then
     return tok.type_ == TOKENTYPE_RPAREN
   end
@@ -5467,10 +5519,11 @@ function Parser:at_eof_token()
 end
 
 function Parser:collect_redirects()
-  local redirects = {}
+  local redirect, redirects
+  redirects = {}
   while true do
     self:skip_whitespace()
-    local redirect = self:parse_redirect()
+    redirect = self:parse_redirect()
     if (redirect == nil) then
       break
     end
@@ -5480,15 +5533,16 @@ function Parser:collect_redirects()
 end
 
 function Parser:parse_loop_body(context)
+  local body, brace
   if self:peek() == "{" then
-    local brace = self:parse_brace_group()
+    brace = self:parse_brace_group()
     if (brace == nil) then
       error({ParseError = true, message = string.format("Expected brace group body in %s", context), pos = self:lex_peek_token().pos})
     end
     return brace.body
   end
   if self:lex_consume_word("do") then
-    local body = self:parse_list_until({["done"] = true})
+    body = self:parse_list_until({["done"] = true})
     if (body == nil) then
       error({ParseError = true, message = "Expected commands after 'do'", pos = self:lex_peek_token().pos})
     end
@@ -5502,15 +5556,16 @@ function Parser:parse_loop_body(context)
 end
 
 function Parser:peek_word()
-  local saved_pos = self.pos
+  local ch, chars, saved_pos, word
+  saved_pos = self.pos
   self:skip_whitespace()
   if self:at_end() or is_metachar(self:peek()) then
     self.pos = saved_pos
     return ""
   end
-  local chars = {}
+  chars = {}
   while not self:at_end() and not is_metachar(self:peek()) do
-    local ch = self:peek()
+    ch = self:peek()
     if is_quote(ch) then
       break
     end
@@ -5525,7 +5580,6 @@ function Parser:peek_word()
     ;(function() table.insert(chars, self:advance()); return chars end)()
     ::continue::
   end
-  local word
   if (#(chars) > 0) then
     word = table.concat(chars, "")
   else
@@ -5536,11 +5590,12 @@ function Parser:peek_word()
 end
 
 function Parser:consume_word(expected)
-  local saved_pos = self.pos
+  local has_leading_brace, keyword_word, saved_pos, word
+  saved_pos = self.pos
   self:skip_whitespace()
-  local word = self:peek_word()
-  local keyword_word = word
-  local has_leading_brace = false
+  word = self:peek_word()
+  keyword_word = word
+  has_leading_brace = false
   if word ~= "" and self.in_process_sub and #word > 1 and string.sub(word, 0 + 1, 0 + 1) == "}" then
     keyword_word = string.sub(word, (1) + 1, #word)
     has_leading_brace = true
@@ -5569,11 +5624,12 @@ function Parser:is_word_terminator(ctx, ch, bracket_depth, paren_depth)
 end
 
 function Parser:scan_double_quote(chars, parts, start, handle_line_continuation)
+  local c, next_c
   ;(function() table.insert(chars, "\""); return chars end)()
   while not self:at_end() and self:peek() ~= "\"" do
-    local c = self:peek()
+    c = self:peek()
     if c == "\\" and self.pos + 1 < self.length then
-      local next_c = string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1)
+      next_c = string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1)
       if handle_line_continuation and next_c == "\n" then
         self:advance()
         self:advance()
@@ -5596,8 +5652,7 @@ function Parser:scan_double_quote(chars, parts, start, handle_line_continuation)
 end
 
 function Parser:parse_dollar_expansion(chars, parts, in_dquote)
-  local result0
-  local result1
+  local result0, result1
   if self.pos + 2 < self.length and string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) == "(" and string.sub(self.source, self.pos + 2 + 1, self.pos + 2 + 1) == "(" then
     result0, result1 = table.unpack(self:parse_arithmetic_expansion())
     if (result0 ~= nil) then
@@ -5646,6 +5701,7 @@ function Parser:parse_word_internal(ctx, at_command_start, in_array_literal)
 end
 
 function Parser:parse_word(at_command_start, in_array_literal, in_assign_builtin)
+  local tok
   self:skip_whitespace()
   if self:at_end() then
     return nil
@@ -5653,7 +5709,7 @@ function Parser:parse_word(at_command_start, in_array_literal, in_assign_builtin
   self.at_command_start = at_command_start
   self.in_array_literal = in_array_literal
   self.in_assign_builtin = in_assign_builtin
-  local tok = self:lex_peek_token()
+  tok = self:lex_peek_token()
   if tok.type_ ~= TOKENTYPE_WORD then
     self.at_command_start = false
     self.in_array_literal = false
@@ -5668,20 +5724,21 @@ function Parser:parse_word(at_command_start, in_array_literal, in_assign_builtin
 end
 
 function Parser:parse_command_substitution()
+  local cmd, saved, start, text, text_end
   if self:at_end() or self:peek() ~= "$" then
     return {nil, ""}
   end
-  local start = self.pos
+  start = self.pos
   self:advance()
   if self:at_end() or self:peek() ~= "(" then
     self.pos = start
     return {nil, ""}
   end
   self:advance()
-  local saved = self:save_parser_state()
+  saved = self:save_parser_state()
   self:set_state(PARSERSTATEFLAGS_PST_CMDSUBST | PARSERSTATEFLAGS_PST_EOFTOKEN)
   self.eof_token = ")"
-  local cmd = self:parse_list(true)
+  cmd = self:parse_list(true)
   if (cmd == nil) then
     cmd = Empty:new("empty")
   end
@@ -5692,21 +5749,22 @@ function Parser:parse_command_substitution()
     return {nil, ""}
   end
   self:advance()
-  local text_end = self.pos
-  local text = substring(self.source, start, text_end)
+  text_end = self.pos
+  text = substring(self.source, start, text_end)
   self:restore_parser_state(saved)
   return {CommandSubstitution:new(cmd, nil, "cmdsub"), text}
 end
 
 function Parser:parse_funsub(start)
+  local cmd, saved, text
   self:sync_parser()
   if not self:at_end() and self:peek() == "|" then
     self:advance()
   end
-  local saved = self:save_parser_state()
+  saved = self:save_parser_state()
   self:set_state(PARSERSTATEFLAGS_PST_CMDSUBST | PARSERSTATEFLAGS_PST_EOFTOKEN)
   self.eof_token = "}"
-  local cmd = self:parse_list(true)
+  cmd = self:parse_list(true)
   if (cmd == nil) then
     cmd = Empty:new("empty")
   end
@@ -5716,7 +5774,7 @@ function Parser:parse_funsub(start)
     error({MatchedPairError = true, message = "unexpected EOF looking for `}'", pos = start})
   end
   self:advance()
-  local text = substring(self.source, start, self.pos)
+  text = substring(self.source, start, self.pos)
   self:restore_parser_state(saved)
   self:sync_lexer()
   return {CommandSubstitution:new(cmd, true, "cmdsub"), text}
@@ -5727,27 +5785,27 @@ function Parser:is_assignment_word(word)
 end
 
 function Parser:parse_backtick_substitution()
+  local c, ch, check_line, closing, cmd, content, content_chars, current_heredoc_delim, current_heredoc_strip, dch, delimiter, delimiter_chars, end_pos, esc, escaped, heredoc_end, heredoc_start, i, in_heredoc_body, line, line_end, line_start, next_c, pending_heredocs, quote, start, strip_tabs, sub_parser, tabs_stripped, text, text_chars
   if self:at_end() or self:peek() ~= "`" then
     return {nil, ""}
   end
-  local start = self.pos
+  start = self.pos
   self:advance()
-  local content_chars = {}
-  local text_chars = {"`"}
-  local pending_heredocs = {}
-  local in_heredoc_body = false
-  local current_heredoc_delim = ""
-  local current_heredoc_strip = false
-  local ch
+  content_chars = {}
+  text_chars = {"`"}
+  pending_heredocs = {}
+  in_heredoc_body = false
+  current_heredoc_delim = ""
+  current_heredoc_strip = false
   while not self:at_end() and (in_heredoc_body or self:peek() ~= "`") do
     if in_heredoc_body then
-      local line_start = self.pos
-      local line_end = line_start
+      line_start = self.pos
+      line_end = line_start
       while line_end < self.length and string.sub(self.source, line_end + 1, line_end + 1) ~= "\n" do
         line_end = line_end + 1
       end
-      local line = substring(self.source, line_start, line_end)
-      local check_line = (current_heredoc_strip and (string.gsub(line, '^[' .. "\t" .. ']+', '')) or line)
+      line = substring(self.source, line_start, line_end)
+      check_line = (current_heredoc_strip and (string.gsub(line, '^[' .. "\t" .. ']+', '')) or line)
       if check_line == current_heredoc_delim then
         for _ = 1, #line do
           local ch = string.sub(line, _, _)
@@ -5766,8 +5824,8 @@ function Parser:parse_backtick_substitution()
           in_heredoc_body = true
         end
       elseif (string.sub(check_line, 1, #current_heredoc_delim) == current_heredoc_delim) and #check_line > #current_heredoc_delim then
-        local tabs_stripped = #line - #check_line
-        local end_pos = tabs_stripped + #current_heredoc_delim
+        tabs_stripped = #line - #check_line
+        end_pos = tabs_stripped + #current_heredoc_delim
         for i = 0, end_pos - 1 do
           ;(function() table.insert(content_chars, string.sub(line, i + 1, i + 1)); return content_chars end)()
           ;(function() table.insert(text_chars, string.sub(line, i + 1, i + 1)); return text_chars end)()
@@ -5793,15 +5851,15 @@ function Parser:parse_backtick_substitution()
       end
       goto continue
     end
-    local c = self:peek()
+    c = self:peek()
     if c == "\\" and self.pos + 1 < self.length then
-      local next_c = string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1)
+      next_c = string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1)
       if next_c == "\n" then
         self:advance()
         self:advance()
       elseif is_escape_char_in_backtick(next_c) then
         self:advance()
-        local escaped = self:advance()
+        escaped = self:advance()
         ;(function() table.insert(content_chars, escaped); return content_chars end)()
         ;(function() table.insert(text_chars, "\\"); return text_chars end)()
         ;(function() table.insert(text_chars, escaped); return text_chars end)()
@@ -5813,7 +5871,6 @@ function Parser:parse_backtick_substitution()
       goto continue
     end
     if c == "<" and self.pos + 1 < self.length and string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) == "<" then
-      local quote
       if self.pos + 2 < self.length and string.sub(self.source, self.pos + 2 + 1, self.pos + 2 + 1) == "<" then
         ;(function() table.insert(content_chars, self:advance()); return content_chars end)()
         ;(function() table.insert(text_chars, "<"); return text_chars end)()
@@ -5866,7 +5923,7 @@ function Parser:parse_backtick_substitution()
       ;(function() table.insert(text_chars, "<"); return text_chars end)()
       ;(function() table.insert(content_chars, self:advance()); return content_chars end)()
       ;(function() table.insert(text_chars, "<"); return text_chars end)()
-      local strip_tabs = false
+      strip_tabs = false
       if not self:at_end() and self:peek() == "-" then
         strip_tabs = true
         ;(function() table.insert(content_chars, self:advance()); return content_chars end)()
@@ -5877,11 +5934,9 @@ function Parser:parse_backtick_substitution()
         ;(function() table.insert(content_chars, ch); return content_chars end)()
         ;(function() table.insert(text_chars, ch); return text_chars end)()
       end
-      local delimiter_chars = {}
+      delimiter_chars = {}
       if not self:at_end() then
         ch = self:peek()
-        local dch
-        local closing
         if is_quote(ch) then
           quote = self:advance()
           ;(function() table.insert(content_chars, quote); return content_chars end)()
@@ -5898,7 +5953,7 @@ function Parser:parse_backtick_substitution()
             ;(function() table.insert(text_chars, closing); return text_chars end)()
           end
         elseif ch == "\\" then
-          local esc = self:advance()
+          esc = self:advance()
           ;(function() table.insert(content_chars, esc); return content_chars end)()
           ;(function() table.insert(text_chars, esc); return text_chars end)()
           if not self:at_end() then
@@ -5950,7 +6005,7 @@ function Parser:parse_backtick_substitution()
           end
         end
       end
-      local delimiter = table.concat(delimiter_chars, "")
+      delimiter = table.concat(delimiter_chars, "")
       if (delimiter ~= nil and #(delimiter) > 0) then
         ;(function() table.insert(pending_heredocs, {delimiter, strip_tabs}); return pending_heredocs end)()
       end
@@ -5976,10 +6031,10 @@ function Parser:parse_backtick_substitution()
   end
   self:advance()
   ;(function() table.insert(text_chars, "`"); return text_chars end)()
-  local text = table.concat(text_chars, "")
-  local content = table.concat(content_chars, "")
+  text = table.concat(text_chars, "")
+  content = table.concat(content_chars, "")
   if #pending_heredocs > 0 then
-    local heredoc_start, heredoc_end = table.unpack(find_heredoc_content_end(self.source, self.pos, pending_heredocs))
+    heredoc_start, heredoc_end = table.unpack(find_heredoc_content_end(self.source, self.pos, pending_heredocs))
     if heredoc_end > heredoc_start then
       content = content .. substring(self.source, heredoc_start, heredoc_end)
       if self.cmdsub_heredoc_end == -1 then
@@ -5989,8 +6044,8 @@ function Parser:parse_backtick_substitution()
       end
     end
   end
-  local sub_parser = new_parser(content, false, self.extglob)
-  local cmd = sub_parser:parse_list(true)
+  sub_parser = new_parser(content, false, self.extglob)
+  cmd = sub_parser:parse_list(true)
   if (cmd == nil) then
     cmd = Empty:new("empty")
   end
@@ -5998,23 +6053,24 @@ function Parser:parse_backtick_substitution()
 end
 
 function Parser:parse_process_substitution()
+  local cmd, content_start_char, direction, e, old_in_process_sub, saved, start, text, text_end
   if self:at_end() or not is_redirect_char(self:peek()) then
     return {nil, ""}
   end
-  local start = self.pos
-  local direction = self:advance()
+  start = self.pos
+  direction = self:advance()
   if self:at_end() or self:peek() ~= "(" then
     self.pos = start
     return {nil, ""}
   end
   self:advance()
-  local saved = self:save_parser_state()
-  local old_in_process_sub = self.in_process_sub
+  saved = self:save_parser_state()
+  old_in_process_sub = self.in_process_sub
   self.in_process_sub = true
   self:set_state(PARSERSTATEFLAGS_PST_EOFTOKEN)
   self.eof_token = ")"
   local _ok, _err = pcall(function()
-    local cmd = self:parse_list(true)
+    cmd = self:parse_list(true)
     if (cmd == nil) then
       cmd = Empty:new("empty")
     end
@@ -6023,8 +6079,8 @@ function Parser:parse_process_substitution()
       error({ParseError = true, message = "Invalid process substitution", pos = start})
     end
     self:advance()
-    local text_end = self.pos
-    local text = substring(self.source, start, text_end)
+    text_end = self.pos
+    text = substring(self.source, start, text_end)
     text = strip_line_continuations_comment_aware(text)
     self:restore_parser_state(saved)
     self.in_process_sub = old_in_process_sub
@@ -6034,7 +6090,7 @@ function Parser:parse_process_substitution()
     local e = _err
     self:restore_parser_state(saved)
     self.in_process_sub = old_in_process_sub
-    local content_start_char = (start + 2 < self.length and string.sub(self.source, start + 2 + 1, start + 2 + 1) or "")
+    content_start_char = (start + 2 < self.length and string.sub(self.source, start + 2 + 1, start + 2 + 1) or "")
     if ((string.find(" \t\n", content_start_char, 1, true) ~= nil)) then
       error(e)
     end
@@ -6050,13 +6106,14 @@ function Parser:parse_process_substitution()
 end
 
 function Parser:parse_array_literal()
+  local elements, start, text, word
   if self:at_end() or self:peek() ~= "(" then
     return {nil, ""}
   end
-  local start = self.pos
+  start = self.pos
   self:advance()
   self:set_state(PARSERSTATEFLAGS_PST_COMPASSIGN)
-  local elements = {}
+  elements = {}
   while true do
     self:skip_whitespace_and_newlines()
     if self:at_end() then
@@ -6066,7 +6123,7 @@ function Parser:parse_array_literal()
     if self:peek() == ")" then
       break
     end
-    local word = self:parse_word(false, true, false)
+    word = self:parse_word(false, true, false)
     if (word == nil) then
       if self:peek() == ")" then
         break
@@ -6081,27 +6138,28 @@ function Parser:parse_array_literal()
     error({ParseError = true, message = "Expected ) to close array literal", pos = self.pos})
   end
   self:advance()
-  local text = substring(self.source, start, self.pos)
+  text = substring(self.source, start, self.pos)
   self:clear_state(PARSERSTATEFLAGS_PST_COMPASSIGN)
   return {Array:new(elements, "array"), text}
 end
 
 function Parser:parse_arithmetic_expansion()
+  local c, content, content_start, depth, expr, first_close_pos, start, text
   if self:at_end() or self:peek() ~= "$" then
     return {nil, ""}
   end
-  local start = self.pos
+  start = self.pos
   if self.pos + 2 >= self.length or string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) ~= "(" or string.sub(self.source, self.pos + 2 + 1, self.pos + 2 + 1) ~= "(" then
     return {nil, ""}
   end
   self:advance()
   self:advance()
   self:advance()
-  local content_start = self.pos
-  local depth = 2
-  local first_close_pos = -1
+  content_start = self.pos
+  depth = 2
+  first_close_pos = -1
   while not self:at_end() and depth > 0 do
-    local c = self:peek()
+    c = self:peek()
     if c == "'" then
       self:advance()
       while not self:at_end() and self:peek() ~= "'" do
@@ -6152,15 +6210,13 @@ function Parser:parse_arithmetic_expansion()
     self.pos = start
     return {nil, ""}
   end
-  local content
   if first_close_pos ~= -1 then
     content = substring(self.source, content_start, first_close_pos)
   else
     content = substring(self.source, content_start, self.pos)
   end
   self:advance()
-  local text = substring(self.source, start, self.pos)
-  local expr
+  text = substring(self.source, start, self.pos)
   local _ok, _err = pcall(function()
     expr = self:parse_arith_expr(content)
   end)
@@ -6172,16 +6228,16 @@ function Parser:parse_arithmetic_expansion()
 end
 
 function Parser:parse_arith_expr(content)
-  local saved_arith_src = self.arith_src
-  local saved_arith_pos = self.arith_pos
-  local saved_arith_len = self.arith_len
-  local saved_parser_state = self.parser_state
+  local result, saved_arith_len, saved_arith_pos, saved_arith_src, saved_parser_state
+  saved_arith_src = self.arith_src
+  saved_arith_pos = self.arith_pos
+  saved_arith_len = self.arith_len
+  saved_parser_state = self.parser_state
   self:set_state(PARSERSTATEFLAGS_PST_ARITH)
   self.arith_src = content
   self.arith_pos = 0
   self.arith_len = #content
   self:arith_skip_ws()
-  local result
   if self:arith_at_end() then
     result = nil
   else
@@ -6201,7 +6257,8 @@ function Parser:arith_at_end()
 end
 
 function Parser:arith_peek(offset)
-  local pos = self.arith_pos + offset
+  local pos
+  pos = self.arith_pos + offset
   if pos >= self.arith_len then
     return ""
   end
@@ -6209,17 +6266,19 @@ function Parser:arith_peek(offset)
 end
 
 function Parser:arith_advance()
+  local c
   if self:arith_at_end() then
     return ""
   end
-  local c = string.sub(self.arith_src, self.arith_pos + 1, self.arith_pos + 1)
+  c = string.sub(self.arith_src, self.arith_pos + 1, self.arith_pos + 1)
   self.arith_pos = self.arith_pos + 1
   return c
 end
 
 function Parser:arith_skip_ws()
+  local c
   while not self:arith_at_end() do
-    local c = string.sub(self.arith_src, self.arith_pos + 1, self.arith_pos + 1)
+    c = string.sub(self.arith_src, self.arith_pos + 1, self.arith_pos + 1)
     if is_whitespace(c) then
       self.arith_pos = self.arith_pos + 1
     elseif c == "\\" and self.arith_pos + 1 < self.arith_len and string.sub(self.arith_src, self.arith_pos + 1 + 1, self.arith_pos + 1 + 1) == "\n" then
@@ -6243,12 +6302,13 @@ function Parser:arith_consume(s)
 end
 
 function Parser:arith_parse_comma()
-  local left = self:arith_parse_assign()
+  local left, right
+  left = self:arith_parse_assign()
   while true do
     self:arith_skip_ws()
     if self:arith_consume(",") then
       self:arith_skip_ws()
-      local right = self:arith_parse_assign()
+      right = self:arith_parse_assign()
       left = ArithComma:new(left, right, "comma")
     else
       break
@@ -6258,9 +6318,10 @@ function Parser:arith_parse_comma()
 end
 
 function Parser:arith_parse_assign()
-  local left = self:arith_parse_ternary()
+  local assign_ops, left, op, right
+  left = self:arith_parse_ternary()
   self:arith_skip_ws()
-  local assign_ops = {"<<=", ">>=", "+=", "-=", "*=", "/=", "%=", "&=", "^=", "|=", "="}
+  assign_ops = {"<<=", ">>=", "+=", "-=", "*=", "/=", "%=", "&=", "^=", "|=", "="}
   for _, op in ipairs(assign_ops) do
     if self:arith_match(op) then
       if op == "=" and self:arith_peek(1) == "=" then
@@ -6268,7 +6329,7 @@ function Parser:arith_parse_assign()
       end
       self:arith_consume(op)
       self:arith_skip_ws()
-      local right = self:arith_parse_assign()
+      right = self:arith_parse_assign()
       return ArithAssign:new(op, left, right, "assign")
     end
   end
@@ -6276,18 +6337,17 @@ function Parser:arith_parse_assign()
 end
 
 function Parser:arith_parse_ternary()
-  local cond = self:arith_parse_logical_or()
+  local cond, if_false, if_true
+  cond = self:arith_parse_logical_or()
   self:arith_skip_ws()
   if self:arith_consume("?") then
     self:arith_skip_ws()
-    local if_true
     if self:arith_match(":") then
       if_true = nil
     else
       if_true = self:arith_parse_assign()
     end
     self:arith_skip_ws()
-    local if_false
     if self:arith_consume(":") then
       self:arith_skip_ws()
       if self:arith_at_end() or self:arith_peek(0) == ")" then
@@ -6304,10 +6364,11 @@ function Parser:arith_parse_ternary()
 end
 
 function Parser:arith_parse_left_assoc(ops, parsefn)
-  local left = parsefn()
+  local left, matched, op
+  left = parsefn()
   while true do
     self:arith_skip_ws()
-    local matched = false
+    matched = false
     for _, op in ipairs(ops) do
       if self:arith_match(op) then
         self:arith_consume(op)
@@ -6333,13 +6394,14 @@ function Parser:arith_parse_logical_and()
 end
 
 function Parser:arith_parse_bitwise_or()
-  local left = self:arith_parse_bitwise_xor()
+  local left, right
+  left = self:arith_parse_bitwise_xor()
   while true do
     self:arith_skip_ws()
     if self:arith_peek(0) == "|" and self:arith_peek(1) ~= "|" and self:arith_peek(1) ~= "=" then
       self:arith_advance()
       self:arith_skip_ws()
-      local right = self:arith_parse_bitwise_xor()
+      right = self:arith_parse_bitwise_xor()
       left = ArithBinaryOp:new("|", left, right, "binary-op")
     else
       break
@@ -6349,13 +6411,14 @@ function Parser:arith_parse_bitwise_or()
 end
 
 function Parser:arith_parse_bitwise_xor()
-  local left = self:arith_parse_bitwise_and()
+  local left, right
+  left = self:arith_parse_bitwise_and()
   while true do
     self:arith_skip_ws()
     if self:arith_peek(0) == "^" and self:arith_peek(1) ~= "=" then
       self:arith_advance()
       self:arith_skip_ws()
-      local right = self:arith_parse_bitwise_and()
+      right = self:arith_parse_bitwise_and()
       left = ArithBinaryOp:new("^", left, right, "binary-op")
     else
       break
@@ -6365,13 +6428,14 @@ function Parser:arith_parse_bitwise_xor()
 end
 
 function Parser:arith_parse_bitwise_and()
-  local left = self:arith_parse_equality()
+  local left, right
+  left = self:arith_parse_equality()
   while true do
     self:arith_skip_ws()
     if self:arith_peek(0) == "&" and self:arith_peek(1) ~= "&" and self:arith_peek(1) ~= "=" then
       self:arith_advance()
       self:arith_skip_ws()
-      local right = self:arith_parse_equality()
+      right = self:arith_parse_equality()
       left = ArithBinaryOp:new("&", left, right, "binary-op")
     else
       break
@@ -6385,10 +6449,10 @@ function Parser:arith_parse_equality()
 end
 
 function Parser:arith_parse_comparison()
-  local left = self:arith_parse_shift()
+  local left, right
+  left = self:arith_parse_shift()
   while true do
     self:arith_skip_ws()
-    local right
     if self:arith_match("<=") then
       self:arith_consume("<=")
       self:arith_skip_ws()
@@ -6417,7 +6481,8 @@ function Parser:arith_parse_comparison()
 end
 
 function Parser:arith_parse_shift()
-  local left = self:arith_parse_additive()
+  local left, right
+  left = self:arith_parse_additive()
   while true do
     self:arith_skip_ws()
     if self:arith_match("<<=") then
@@ -6426,7 +6491,6 @@ function Parser:arith_parse_shift()
     if self:arith_match(">>=") then
       break
     end
-    local right
     if self:arith_match("<<") then
       self:arith_consume("<<")
       self:arith_skip_ws()
@@ -6445,12 +6509,12 @@ function Parser:arith_parse_shift()
 end
 
 function Parser:arith_parse_additive()
-  local left = self:arith_parse_multiplicative()
+  local c, c2, left, right
+  left = self:arith_parse_multiplicative()
   while true do
     self:arith_skip_ws()
-    local c = self:arith_peek(0)
-    local c2 = self:arith_peek(1)
-    local right
+    c = self:arith_peek(0)
+    c2 = self:arith_peek(1)
     if c == "+" and c2 ~= "+" and c2 ~= "=" then
       self:arith_advance()
       self:arith_skip_ws()
@@ -6469,12 +6533,12 @@ function Parser:arith_parse_additive()
 end
 
 function Parser:arith_parse_multiplicative()
-  local left = self:arith_parse_exponentiation()
+  local c, c2, left, right
+  left = self:arith_parse_exponentiation()
   while true do
     self:arith_skip_ws()
-    local c = self:arith_peek(0)
-    local c2 = self:arith_peek(1)
-    local right
+    c = self:arith_peek(0)
+    c2 = self:arith_peek(1)
     if c == "*" and c2 ~= "*" and c2 ~= "=" then
       self:arith_advance()
       self:arith_skip_ws()
@@ -6498,20 +6562,21 @@ function Parser:arith_parse_multiplicative()
 end
 
 function Parser:arith_parse_exponentiation()
-  local left = self:arith_parse_unary()
+  local left, right
+  left = self:arith_parse_unary()
   self:arith_skip_ws()
   if self:arith_match("**") then
     self:arith_consume("**")
     self:arith_skip_ws()
-    local right = self:arith_parse_exponentiation()
+    right = self:arith_parse_exponentiation()
     return ArithBinaryOp:new("**", left, right, "binary-op")
   end
   return left
 end
 
 function Parser:arith_parse_unary()
+  local c, operand
   self:arith_skip_ws()
-  local operand
   if self:arith_match("++") then
     self:arith_consume("++")
     self:arith_skip_ws()
@@ -6524,7 +6589,7 @@ function Parser:arith_parse_unary()
     operand = self:arith_parse_unary()
     return ArithPreDecr:new(operand, "pre-decr")
   end
-  local c = self:arith_peek(0)
+  c = self:arith_peek(0)
   if c == "!" then
     self:arith_advance()
     self:arith_skip_ws()
@@ -6553,7 +6618,8 @@ function Parser:arith_parse_unary()
 end
 
 function Parser:arith_parse_postfix()
-  local left = self:arith_parse_primary()
+  local index, left
+  left = self:arith_parse_primary()
   while true do
     self:arith_skip_ws()
     if self:arith_match("++") then
@@ -6567,7 +6633,7 @@ function Parser:arith_parse_postfix()
         local left = left
         self:arith_advance()
         self:arith_skip_ws()
-        local index = self:arith_parse_comma()
+        index = self:arith_parse_comma()
         self:arith_skip_ws()
         if not self:arith_consume("]") then
           error({ParseError = true, message = "Expected ']' in array subscript", pos = self.arith_pos})
@@ -6584,12 +6650,13 @@ function Parser:arith_parse_postfix()
 end
 
 function Parser:arith_parse_primary()
+  local c, escaped_char, expr
   self:arith_skip_ws()
-  local c = self:arith_peek(0)
+  c = self:arith_peek(0)
   if c == "(" then
     self:arith_advance()
     self:arith_skip_ws()
-    local expr = self:arith_parse_comma()
+    expr = self:arith_parse_comma()
     self:arith_skip_ws()
     if not self:arith_consume(")") then
       error({ParseError = true, message = "Expected ')' in arithmetic expression", pos = self.arith_pos})
@@ -6617,7 +6684,7 @@ function Parser:arith_parse_primary()
     if self:arith_at_end() then
       error({ParseError = true, message = "Unexpected end after backslash in arithmetic", pos = self.arith_pos})
     end
-    local escaped_char = self:arith_advance()
+    escaped_char = self:arith_advance()
     return ArithEscape:new(escaped_char, "escape")
   end
   if self:arith_at_end() or (((string.find(")]:,;?|&<>=!+-*/%^~#{}", c, 1, true) ~= nil))) then
@@ -6627,19 +6694,20 @@ function Parser:arith_parse_primary()
 end
 
 function Parser:arith_parse_expansion()
+  local c, ch, name_chars
   if not self:arith_consume("$") then
     error({ParseError = true, message = "Expected '$'", pos = self.arith_pos})
   end
-  local c = self:arith_peek(0)
+  c = self:arith_peek(0)
   if c == "(" then
     return self:arith_parse_cmdsub()
   end
   if c == "{" then
     return self:arith_parse_braced_param()
   end
-  local name_chars = {}
+  name_chars = {}
   while not self:arith_at_end() do
-    local ch = self:arith_peek(0)
+    ch = self:arith_peek(0)
     if (string.match(ch, '^%w+$') ~= nil) or ch == "_" then
       ;(function() table.insert(name_chars, self:arith_advance()); return name_chars end)()
     elseif (is_special_param_or_digit(ch) or ch == "#") and not (#(name_chars) > 0) then
@@ -6656,11 +6724,8 @@ function Parser:arith_parse_expansion()
 end
 
 function Parser:arith_parse_cmdsub()
+  local ch, cmd, content, content_start, depth, inner_expr, sub_parser
   self:arith_advance()
-  local depth
-  local content_start
-  local ch
-  local content
   if self:arith_peek(0) == "(" then
     self:arith_advance()
     depth = 1
@@ -6683,7 +6748,7 @@ function Parser:arith_parse_cmdsub()
     content = substring(self.arith_src, content_start, self.arith_pos)
     self:arith_advance()
     self:arith_advance()
-    local inner_expr = self:parse_arith_expr(content)
+    inner_expr = self:parse_arith_expr(content)
     return ArithmeticExpansion:new(inner_expr, "arith")
   end
   depth = 1
@@ -6705,14 +6770,14 @@ function Parser:arith_parse_cmdsub()
   end
   content = substring(self.arith_src, content_start, self.arith_pos)
   self:arith_advance()
-  local sub_parser = new_parser(content, false, self.extglob)
-  local cmd = sub_parser:parse_list(true)
+  sub_parser = new_parser(content, false, self.extglob)
+  cmd = sub_parser:parse_list(true)
   return CommandSubstitution:new(cmd, nil, "cmdsub")
 end
 
 function Parser:arith_parse_braced_param()
+  local ch, depth, name, name_chars, op_chars, op_str
   self:arith_advance()
-  local name_chars
   if self:arith_peek(0) == "!" then
     self:arith_advance()
     name_chars = {}
@@ -6732,7 +6797,6 @@ function Parser:arith_parse_braced_param()
     return ParamLength:new(table.concat(name_chars, ""), "param-len")
   end
   name_chars = {}
-  local ch
   while not self:arith_at_end() do
     ch = self:arith_peek(0)
     if ch == "}" then
@@ -6744,9 +6808,9 @@ function Parser:arith_parse_braced_param()
     end
     ;(function() table.insert(name_chars, self:arith_advance()); return name_chars end)()
   end
-  local name = table.concat(name_chars, "")
-  local op_chars = {}
-  local depth = 1
+  name = table.concat(name_chars, "")
+  op_chars = {}
+  depth = 1
   while not self:arith_at_end() and depth > 0 do
     ch = self:arith_peek(0)
     if ch == "{" then
@@ -6763,7 +6827,7 @@ function Parser:arith_parse_braced_param()
     end
   end
   self:arith_consume("}")
-  local op_str = table.concat(op_chars, "")
+  op_str = table.concat(op_chars, "")
   if (string.sub(op_str, 1, #":-") == ":-") then
     return ParamExpansion:new(name, ":-", substring(op_str, 2, #op_str), "param")
   end
@@ -6801,12 +6865,13 @@ function Parser:arith_parse_braced_param()
 end
 
 function Parser:arith_parse_single_quote()
+  local content, content_start
   self:arith_advance()
-  local content_start = self.arith_pos
+  content_start = self.arith_pos
   while not self:arith_at_end() and self:arith_peek(0) ~= "'" do
     self:arith_advance()
   end
-  local content = substring(self.arith_src, content_start, self.arith_pos)
+  content = substring(self.arith_src, content_start, self.arith_pos)
   if not self:arith_consume("'") then
     error({ParseError = true, message = "Unterminated single quote in arithmetic", pos = self.arith_pos})
   end
@@ -6814,10 +6879,11 @@ function Parser:arith_parse_single_quote()
 end
 
 function Parser:arith_parse_double_quote()
+  local c, content, content_start
   self:arith_advance()
-  local content_start = self.arith_pos
+  content_start = self.arith_pos
   while not self:arith_at_end() and self:arith_peek(0) ~= "\"" do
-    local c = self:arith_peek(0)
+    c = self:arith_peek(0)
     if c == "\\" and not self:arith_at_end() then
       self:arith_advance()
       self:arith_advance()
@@ -6825,7 +6891,7 @@ function Parser:arith_parse_double_quote()
       self:arith_advance()
     end
   end
-  local content = substring(self.arith_src, content_start, self.arith_pos)
+  content = substring(self.arith_src, content_start, self.arith_pos)
   if not self:arith_consume("\"") then
     error({ParseError = true, message = "Unterminated double quote in arithmetic", pos = self.arith_pos})
   end
@@ -6833,10 +6899,11 @@ function Parser:arith_parse_double_quote()
 end
 
 function Parser:arith_parse_backtick()
+  local c, cmd, content, content_start, sub_parser
   self:arith_advance()
-  local content_start = self.arith_pos
+  content_start = self.arith_pos
   while not self:arith_at_end() and self:arith_peek(0) ~= "`" do
-    local c = self:arith_peek(0)
+    c = self:arith_peek(0)
     if c == "\\" and not self:arith_at_end() then
       self:arith_advance()
       self:arith_advance()
@@ -6844,20 +6911,20 @@ function Parser:arith_parse_backtick()
       self:arith_advance()
     end
   end
-  local content = substring(self.arith_src, content_start, self.arith_pos)
+  content = substring(self.arith_src, content_start, self.arith_pos)
   if not self:arith_consume("`") then
     error({ParseError = true, message = "Unterminated backtick in arithmetic", pos = self.arith_pos})
   end
-  local sub_parser = new_parser(content, false, self.extglob)
-  local cmd = sub_parser:parse_list(true)
+  sub_parser = new_parser(content, false, self.extglob)
+  cmd = sub_parser:parse_list(true)
   return CommandSubstitution:new(cmd, nil, "cmdsub")
 end
 
 function Parser:arith_parse_number_or_var()
+  local c, ch, chars, expansion, prefix
   self:arith_skip_ws()
-  local chars = {}
-  local c = self:arith_peek(0)
-  local ch
+  chars = {}
+  c = self:arith_peek(0)
   if (string.match(c, '^%d+$') ~= nil) then
     while not self:arith_at_end() do
       ch = self:arith_peek(0)
@@ -6867,9 +6934,9 @@ function Parser:arith_parse_number_or_var()
         break
       end
     end
-    local prefix = table.concat(chars, "")
+    prefix = table.concat(chars, "")
     if not self:arith_at_end() and self:arith_peek(0) == "$" then
-      local expansion = self:arith_parse_expansion()
+      expansion = self:arith_parse_expansion()
       return ArithConcat:new({ArithNumber:new(prefix, "number"), expansion}, "arith-concat")
     end
     return ArithNumber:new(prefix, "number")
@@ -6889,43 +6956,45 @@ function Parser:arith_parse_number_or_var()
 end
 
 function Parser:parse_deprecated_arithmetic()
+  local content, start, text
   if self:at_end() or self:peek() ~= "$" then
     return {nil, ""}
   end
-  local start = self.pos
+  start = self.pos
   if self.pos + 1 >= self.length or string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) ~= "[" then
     return {nil, ""}
   end
   self:advance()
   self:advance()
   self.lexer.pos = self.pos
-  local content = self.lexer:parse_matched_pair("[", "]", MATCHEDPAIRFLAGS_ARITH, false)
+  content = self.lexer:parse_matched_pair("[", "]", MATCHEDPAIRFLAGS_ARITH, false)
   self.pos = self.lexer.pos
-  local text = substring(self.source, start, self.pos)
+  text = substring(self.source, start, self.pos)
   return {ArithDeprecated:new(content, "arith-deprecated"), text}
 end
 
 function Parser:parse_param_expansion(in_dquote)
+  local result0, result1
   self:sync_lexer()
-  local result0, result1 = table.unpack(self.lexer:read_param_expansion(in_dquote))
+  result0, result1 = table.unpack(self.lexer:read_param_expansion(in_dquote))
   self:sync_parser()
   return {result0, result1}
 end
 
 function Parser:parse_redirect()
+  local base, c, ch, fd, fd_chars, fd_target, in_bracket, inner_word, is_valid_varfd, left, next_ch, op, right, saved, start, strip_tabs, target, varfd, varname, varname_chars, word_start
   self:skip_whitespace()
   if self:at_end() then
     return nil
   end
-  local start = self.pos
-  local fd = -1
-  local varfd = ""
-  local ch
+  start = self.pos
+  fd = -1
+  varfd = ""
   if self:peek() == "{" then
-    local saved = self.pos
+    saved = self.pos
     self:advance()
-    local varname_chars = {}
-    local in_bracket = false
+    varname_chars = {}
+    in_bracket = false
     while not self:at_end() and not is_redirect_char(self:peek()) do
       ch = self:peek()
       if ch == "}" and not in_bracket then
@@ -6944,15 +7013,15 @@ function Parser:parse_redirect()
         break
       end
     end
-    local varname = table.concat(varname_chars, "")
-    local is_valid_varfd = false
+    varname = table.concat(varname_chars, "")
+    is_valid_varfd = false
     if (varname ~= nil and #(varname) > 0) then
       if (string.match(string.sub(varname, 0 + 1, 0 + 1), '^%a+$') ~= nil) or string.sub(varname, 0 + 1, 0 + 1) == "_" then
         if (((string.find(varname, "[", 1, true) ~= nil))) or (((string.find(varname, "]", 1, true) ~= nil))) then
-          local left = _string_find(varname, "[")
-          local right = _string_rfind(varname, "]")
+          left = _string_find(varname, "[")
+          right = _string_rfind(varname, "]")
           if left ~= -1 and right == #varname - 1 and right > left + 1 then
-            local base = string.sub(varname, 1, left)
+            base = string.sub(varname, 1, left)
             if (base ~= nil and #(base) > 0) and ((string.match(string.sub(base, 0 + 1, 0 + 1), '^%a+$') ~= nil) or string.sub(base, 0 + 1, 0 + 1) == "_") then
               is_valid_varfd = true
               for _ = 1, #string.sub(base, (1) + 1, #base) do
@@ -6983,7 +7052,6 @@ function Parser:parse_redirect()
       self.pos = saved
     end
   end
-  local fd_chars
   if varfd == "" and (self:peek() ~= nil and #(self:peek()) > 0) and (string.match(self:peek(), '^%d+$') ~= nil) then
     fd_chars = {}
     while not self:at_end() and (string.match(self:peek(), '^%d+$') ~= nil) do
@@ -6992,8 +7060,6 @@ function Parser:parse_redirect()
     fd = tonumber(table.concat(fd_chars, ""))
   end
   ch = self:peek()
-  local op
-  local target
   if ch == "&" and self.pos + 1 < self.length and string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) == ">" then
     if fd ~= -1 or varfd ~= "" then
       self.pos = start
@@ -7023,9 +7089,9 @@ function Parser:parse_redirect()
     return nil
   end
   op = self:advance()
-  local strip_tabs = false
+  strip_tabs = false
   if not self:at_end() then
-    local next_ch = self:peek()
+    next_ch = self:peek()
     if op == ">" and next_ch == ">" then
       self:advance()
       op = ">>"
@@ -7081,14 +7147,12 @@ function Parser:parse_redirect()
       target = nil
     end
     if (target == nil) then
-      local inner_word
       if not self:at_end() and ((string.match(self:peek(), '^%d+$') ~= nil) or self:peek() == "-") then
-        local word_start = self.pos
+        word_start = self.pos
         fd_chars = {}
         while not self:at_end() and (string.match(self:peek(), '^%d+$') ~= nil) do
           ;(function() table.insert(fd_chars, self:advance()); return fd_chars end)()
         end
-        local fd_target
         if (#(fd_chars) > 0) then
           fd_target = table.concat(fd_chars, "")
         else
@@ -7139,14 +7203,13 @@ function Parser:parse_redirect()
 end
 
 function Parser:parse_heredoc_delimiter()
+  local c, ch, delimiter_chars, depth, dollar_count, esc, esc_val, j, next_ch, quoted
   self:skip_whitespace()
-  local quoted = false
-  local delimiter_chars = {}
+  quoted = false
+  delimiter_chars = {}
   while true do
-    local c
-    local depth
     while not self:at_end() and not is_metachar(self:peek()) do
-      local ch = self:peek()
+      ch = self:peek()
       if ch == "\"" then
         quoted = true
         self:advance()
@@ -7172,7 +7235,7 @@ function Parser:parse_heredoc_delimiter()
       elseif ch == "\\" then
         self:advance()
         if not self:at_end() then
-          local next_ch = self:peek()
+          next_ch = self:peek()
           if next_ch == "\n" then
             self:advance()
           else
@@ -7188,8 +7251,8 @@ function Parser:parse_heredoc_delimiter()
           c = self:peek()
           if c == "\\" and self.pos + 1 < self.length then
             self:advance()
-            local esc = self:peek()
-            local esc_val = get_ansi_escape(esc)
+            esc = self:peek()
+            esc_val = get_ansi_escape(esc)
             if esc_val >= 0 then
               ;(function() table.insert(delimiter_chars, utf8.char(esc_val)); return delimiter_chars end)()
               self:advance()
@@ -7219,8 +7282,8 @@ function Parser:parse_heredoc_delimiter()
           ;(function() table.insert(delimiter_chars, self:advance()); return delimiter_chars end)()
         end
       elseif ch == "$" and self.pos + 1 < self.length and string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) == "{" then
-        local dollar_count = 0
-        local j = self.pos - 1
+        dollar_count = 0
+        j = self.pos - 1
         while j >= 0 and string.sub(self.source, j + 1, j + 1) == "$" do
           dollar_count = dollar_count + 1
           j = j - 1
@@ -7338,21 +7401,22 @@ function Parser:parse_heredoc_delimiter()
 end
 
 function Parser:read_heredoc_line(quoted)
-  local line_start = self.pos
-  local line_end = self.pos
+  local line, line_end, line_start, next_line_start, trailing_bs
+  line_start = self.pos
+  line_end = self.pos
   while line_end < self.length and string.sub(self.source, line_end + 1, line_end + 1) ~= "\n" do
     line_end = line_end + 1
   end
-  local line = substring(self.source, line_start, line_end)
+  line = substring(self.source, line_start, line_end)
   if not quoted then
     while line_end < self.length do
-      local trailing_bs = count_trailing_backslashes(line)
+      trailing_bs = count_trailing_backslashes(line)
       if trailing_bs % 2 == 0 then
         break
       end
       line = substring(line, 0, #line - 1)
       line_end = line_end + 1
-      local next_line_start = line_end
+      next_line_start = line_end
       while line_end < self.length and string.sub(self.source, line_end + 1, line_end + 1) ~= "\n" do
         line_end = line_end + 1
       end
@@ -7363,27 +7427,28 @@ function Parser:read_heredoc_line(quoted)
 end
 
 function Parser:line_matches_delimiter(line, delimiter, strip_tabs)
-  local check_line = (strip_tabs and (string.gsub(line, '^[' .. "\t" .. ']+', '')) or line)
-  local normalized_check = normalize_heredoc_delimiter(check_line)
-  local normalized_delim = normalize_heredoc_delimiter(delimiter)
+  local check_line, normalized_check, normalized_delim
+  check_line = (strip_tabs and (string.gsub(line, '^[' .. "\t" .. ']+', '')) or line)
+  normalized_check = normalize_heredoc_delimiter(check_line)
+  normalized_delim = normalize_heredoc_delimiter(delimiter)
   return {normalized_check == normalized_delim, check_line}
 end
 
 function Parser:gather_heredoc_bodies()
+  local add_newline, check_line, content_lines, heredoc, line, line_end, line_start, matches, normalized_check, normalized_delim, tabs_stripped
   for _, heredoc in ipairs(self.pending_heredocs) do
-    local content_lines = {}
-    local line_start = self.pos
+    content_lines = {}
+    line_start = self.pos
     while self.pos < self.length do
       line_start = self.pos
-      local line, line_end = table.unpack(self:read_heredoc_line(heredoc.quoted))
-      local matches, check_line = table.unpack(self:line_matches_delimiter(line, heredoc.delimiter, heredoc.strip_tabs))
+      line, line_end = table.unpack(self:read_heredoc_line(heredoc.quoted))
+      matches, check_line = table.unpack(self:line_matches_delimiter(line, heredoc.delimiter, heredoc.strip_tabs))
       if matches then
         self.pos = (line_end < self.length and line_end + 1 or line_end)
         break
       end
-      local normalized_check = normalize_heredoc_delimiter(check_line)
-      local normalized_delim = normalize_heredoc_delimiter(heredoc.delimiter)
-      local tabs_stripped
+      normalized_check = normalize_heredoc_delimiter(check_line)
+      normalized_delim = normalize_heredoc_delimiter(heredoc.delimiter)
       if self.eof_token == ")" and (string.sub(normalized_check, 1, #normalized_delim) == normalized_delim) then
         tabs_stripped = #line - #check_line
         self.pos = line_start + tabs_stripped + #heredoc.delimiter
@@ -7401,7 +7466,7 @@ function Parser:gather_heredoc_bodies()
         ;(function() table.insert(content_lines, line .. "\n"); return content_lines end)()
         self.pos = line_end + 1
       else
-        local add_newline = true
+        add_newline = true
         if not heredoc.quoted and count_trailing_backslashes(line) % 2 == 1 then
           add_newline = false
         end
@@ -7415,16 +7480,17 @@ function Parser:gather_heredoc_bodies()
 end
 
 function Parser:parse_heredoc(fd, strip_tabs)
-  local start_pos = self.pos
+  local delimiter, existing, heredoc, quoted, start_pos
+  start_pos = self.pos
   self:set_state(PARSERSTATEFLAGS_PST_HEREDOC)
-  local delimiter, quoted = table.unpack(self:parse_heredoc_delimiter())
+  delimiter, quoted = table.unpack(self:parse_heredoc_delimiter())
   for _, existing in ipairs(self.pending_heredocs) do
     if existing.start_pos == start_pos and existing.delimiter == delimiter then
       self:clear_state(PARSERSTATEFLAGS_PST_HEREDOC)
       return existing
     end
   end
-  local heredoc = HereDoc:new(delimiter, "", strip_tabs, quoted, fd, false, nil, "heredoc")
+  heredoc = HereDoc:new(delimiter, "", strip_tabs, quoted, fd, false, nil, "heredoc")
   heredoc.start_pos = start_pos
   ;(function() table.insert(self.pending_heredocs, heredoc); return self.pending_heredocs end)()
   self:clear_state(PARSERSTATEFLAGS_PST_HEREDOC)
@@ -7432,33 +7498,34 @@ function Parser:parse_heredoc(fd, strip_tabs)
 end
 
 function Parser:parse_command()
-  local words = {}
-  local redirects = {}
+  local all_assignments, in_assign_builtin, redirect, redirects, reserved, w, word, words
+  words = {}
+  redirects = {}
   while true do
     self:skip_whitespace()
     if self:lex_is_command_terminator() then
       break
     end
     if #words == 0 then
-      local reserved = self:lex_peek_reserved_word()
+      reserved = self:lex_peek_reserved_word()
       if reserved == "}" or reserved == "]]" then
         break
       end
     end
-    local redirect = self:parse_redirect()
+    redirect = self:parse_redirect()
     if (redirect ~= nil) then
       ;(function() table.insert(redirects, redirect); return redirects end)()
       goto continue
     end
-    local all_assignments = true
+    all_assignments = true
     for _, w in ipairs(words) do
       if not self:is_assignment_word(w) then
         all_assignments = false
         break
       end
     end
-    local in_assign_builtin = #words > 0 and (_set_contains(ASSIGNMENT_BUILTINS, words[0 + 1].value))
-    local word = self:parse_word(not (#(words) > 0) or all_assignments and #redirects == 0, false, in_assign_builtin)
+    in_assign_builtin = #words > 0 and (_set_contains(ASSIGNMENT_BUILTINS, words[0 + 1].value))
+    word = self:parse_word(not (#(words) > 0) or all_assignments and #redirects == 0, false, in_assign_builtin)
     if (word == nil) then
       break
     end
@@ -7472,13 +7539,14 @@ function Parser:parse_command()
 end
 
 function Parser:parse_subshell()
+  local body
   self:skip_whitespace()
   if self:at_end() or self:peek() ~= "(" then
     return nil
   end
   self:advance()
   self:set_state(PARSERSTATEFLAGS_PST_SUBSHELL)
-  local body = self:parse_list(true)
+  body = self:parse_list(true)
   if (body == nil) then
     self:clear_state(PARSERSTATEFLAGS_PST_SUBSHELL)
     error({ParseError = true, message = "Expected command in subshell", pos = self.pos})
@@ -7494,17 +7562,18 @@ function Parser:parse_subshell()
 end
 
 function Parser:parse_arithmetic_command()
+  local c, content, content_start, depth, expr, saved_pos
   self:skip_whitespace()
   if self:at_end() or self:peek() ~= "(" or self.pos + 1 >= self.length or string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) ~= "(" then
     return nil
   end
-  local saved_pos = self.pos
+  saved_pos = self.pos
   self:advance()
   self:advance()
-  local content_start = self.pos
-  local depth = 1
+  content_start = self.pos
+  depth = 1
   while not self:at_end() and depth > 0 do
-    local c = self:peek()
+    c = self:peek()
     if c == "'" then
       self:advance()
       while not self:at_end() and self:peek() ~= "'" do
@@ -7553,20 +7622,21 @@ function Parser:parse_arithmetic_command()
     self.pos = saved_pos
     return nil
   end
-  local content = substring(self.source, content_start, self.pos)
+  content = substring(self.source, content_start, self.pos)
   content = (string.gsub(content, "\\\n", ""))
   self:advance()
   self:advance()
-  local expr = self:parse_arith_expr(content)
+  expr = self:parse_arith_expr(content)
   return ArithmeticCommand:new(expr, self:collect_redirects(), content, "arith-cmd")
 end
 
 function Parser:parse_conditional_expr()
+  local body, next_pos
   self:skip_whitespace()
   if self:at_end() or self:peek() ~= "[" or self.pos + 1 >= self.length or string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) ~= "[" then
     return nil
   end
-  local next_pos = self.pos + 2
+  next_pos = self.pos + 2
   if next_pos < self.length and not (is_whitespace(string.sub(self.source, next_pos + 1, next_pos + 1)) or string.sub(self.source, next_pos + 1, next_pos + 1) == "\\" and next_pos + 1 < self.length and string.sub(self.source, next_pos + 1 + 1, next_pos + 1 + 1) == "\n") then
     return nil
   end
@@ -7574,7 +7644,7 @@ function Parser:parse_conditional_expr()
   self:advance()
   self:set_state(PARSERSTATEFLAGS_PST_CONDEXPR)
   self.word_context = WORD_CTX_COND
-  local body = self:parse_cond_or()
+  body = self:parse_cond_or()
   while not self:at_end() and is_whitespace_no_newline(self:peek()) do
     self:advance()
   end
@@ -7610,37 +7680,39 @@ function Parser:cond_at_end()
 end
 
 function Parser:parse_cond_or()
+  local left, right
   self:cond_skip_whitespace()
-  local left = self:parse_cond_and()
+  left = self:parse_cond_and()
   self:cond_skip_whitespace()
   if not self:cond_at_end() and self:peek() == "|" and self.pos + 1 < self.length and string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) == "|" then
     self:advance()
     self:advance()
-    local right = self:parse_cond_or()
+    right = self:parse_cond_or()
     return CondOr:new(left, right, "cond-or")
   end
   return left
 end
 
 function Parser:parse_cond_and()
+  local left, right
   self:cond_skip_whitespace()
-  local left = self:parse_cond_term()
+  left = self:parse_cond_term()
   self:cond_skip_whitespace()
   if not self:cond_at_end() and self:peek() == "&" and self.pos + 1 < self.length and string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) == "&" then
     self:advance()
     self:advance()
-    local right = self:parse_cond_and()
+    right = self:parse_cond_and()
     return CondAnd:new(left, right, "cond-and")
   end
   return left
 end
 
 function Parser:parse_cond_term()
+  local inner, op, op_word, operand, saved_pos, word1, word2
   self:cond_skip_whitespace()
   if self:cond_at_end() then
     error({ParseError = true, message = "Unexpected end of conditional expression", pos = self.pos})
   end
-  local operand
   if self:peek() == "!" then
     if self.pos + 1 < self.length and not is_whitespace_no_newline(string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1)) then
       -- empty then
@@ -7652,7 +7724,7 @@ function Parser:parse_cond_term()
   end
   if self:peek() == "(" then
     self:advance()
-    local inner = self:parse_cond_or()
+    inner = self:parse_cond_or()
     self:cond_skip_whitespace()
     if self:at_end() or self:peek() ~= ")" then
       error({ParseError = true, message = "Expected ) in conditional expression", pos = self.pos})
@@ -7660,7 +7732,7 @@ function Parser:parse_cond_term()
     self:advance()
     return CondParen:new(inner, "cond-paren")
   end
-  local word1 = self:parse_cond_word()
+  word1 = self:parse_cond_word()
   if (word1 == nil) then
     error({ParseError = true, message = "Expected word in conditional expression", pos = self.pos})
   end
@@ -7673,9 +7745,8 @@ function Parser:parse_cond_term()
     return UnaryTest:new(word1.value, operand, "unary-test")
   end
   if not self:cond_at_end() and self:peek() ~= "&" and self:peek() ~= "|" and self:peek() ~= ")" then
-    local word2
     if is_redirect_char(self:peek()) and not (self.pos + 1 < self.length and string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) == "(") then
-      local op = self:advance()
+      op = self:advance()
       self:cond_skip_whitespace()
       word2 = self:parse_cond_word()
       if (word2 == nil) then
@@ -7683,8 +7754,8 @@ function Parser:parse_cond_term()
       end
       return BinaryTest:new(op, word1, word2, "binary-test")
     end
-    local saved_pos = self.pos
-    local op_word = self:parse_cond_word()
+    saved_pos = self.pos
+    op_word = self:parse_cond_word()
     if (op_word ~= nil) and (_set_contains(COND_BINARY_OPS, op_word.value)) then
       self:cond_skip_whitespace()
       if op_word.value == "=~" then
@@ -7704,11 +7775,12 @@ function Parser:parse_cond_term()
 end
 
 function Parser:parse_cond_word()
+  local c
   self:cond_skip_whitespace()
   if self:cond_at_end() then
     return nil
   end
-  local c = self:peek()
+  c = self:peek()
   if is_paren(c) then
     return nil
   end
@@ -7722,24 +7794,26 @@ function Parser:parse_cond_word()
 end
 
 function Parser:parse_cond_regex_word()
+  local result
   self:cond_skip_whitespace()
   if self:cond_at_end() then
     return nil
   end
   self:set_state(PARSERSTATEFLAGS_PST_REGEXP)
-  local result = self:parse_word_internal(WORD_CTX_REGEX, false, false)
+  result = self:parse_word_internal(WORD_CTX_REGEX, false, false)
   self:clear_state(PARSERSTATEFLAGS_PST_REGEXP)
   self.word_context = WORD_CTX_COND
   return result
 end
 
 function Parser:parse_brace_group()
+  local body
   self:skip_whitespace()
   if not self:lex_consume_word("{") then
     return nil
   end
   self:skip_whitespace_and_newlines()
-  local body = self:parse_list(true)
+  body = self:parse_list(true)
   if (body == nil) then
     error({ParseError = true, message = "Expected command in brace group", pos = self:lex_peek_token().pos})
   end
@@ -7751,11 +7825,12 @@ function Parser:parse_brace_group()
 end
 
 function Parser:parse_if()
+  local condition, elif_condition, elif_then_body, else_body, inner_else, then_body
   self:skip_whitespace()
   if not self:lex_consume_word("if") then
     return nil
   end
-  local condition = self:parse_list_until({["then"] = true})
+  condition = self:parse_list_until({["then"] = true})
   if (condition == nil) then
     error({ParseError = true, message = "Expected condition after 'if'", pos = self:lex_peek_token().pos})
   end
@@ -7763,15 +7838,15 @@ function Parser:parse_if()
   if not self:lex_consume_word("then") then
     error({ParseError = true, message = "Expected 'then' after if condition", pos = self:lex_peek_token().pos})
   end
-  local then_body = self:parse_list_until({["elif"] = true, ["else"] = true, ["fi"] = true})
+  then_body = self:parse_list_until({["elif"] = true, ["else"] = true, ["fi"] = true})
   if (then_body == nil) then
     error({ParseError = true, message = "Expected commands after 'then'", pos = self:lex_peek_token().pos})
   end
   self:skip_whitespace_and_newlines()
-  local else_body = nil
+  else_body = nil
   if self:lex_is_at_reserved_word("elif") then
     self:lex_consume_word("elif")
-    local elif_condition = self:parse_list_until({["then"] = true})
+    elif_condition = self:parse_list_until({["then"] = true})
     if (elif_condition == nil) then
       error({ParseError = true, message = "Expected condition after 'elif'", pos = self:lex_peek_token().pos})
     end
@@ -7779,12 +7854,12 @@ function Parser:parse_if()
     if not self:lex_consume_word("then") then
       error({ParseError = true, message = "Expected 'then' after elif condition", pos = self:lex_peek_token().pos})
     end
-    local elif_then_body = self:parse_list_until({["elif"] = true, ["else"] = true, ["fi"] = true})
+    elif_then_body = self:parse_list_until({["elif"] = true, ["else"] = true, ["fi"] = true})
     if (elif_then_body == nil) then
       error({ParseError = true, message = "Expected commands after 'then'", pos = self:lex_peek_token().pos})
     end
     self:skip_whitespace_and_newlines()
-    local inner_else = nil
+    inner_else = nil
     if self:lex_is_at_reserved_word("elif") then
       inner_else = self:parse_elif_chain()
     elseif self:lex_is_at_reserved_word("else") then
@@ -7810,8 +7885,9 @@ function Parser:parse_if()
 end
 
 function Parser:parse_elif_chain()
+  local condition, else_body, then_body
   self:lex_consume_word("elif")
-  local condition = self:parse_list_until({["then"] = true})
+  condition = self:parse_list_until({["then"] = true})
   if (condition == nil) then
     error({ParseError = true, message = "Expected condition after 'elif'", pos = self:lex_peek_token().pos})
   end
@@ -7819,12 +7895,12 @@ function Parser:parse_elif_chain()
   if not self:lex_consume_word("then") then
     error({ParseError = true, message = "Expected 'then' after elif condition", pos = self:lex_peek_token().pos})
   end
-  local then_body = self:parse_list_until({["elif"] = true, ["else"] = true, ["fi"] = true})
+  then_body = self:parse_list_until({["elif"] = true, ["else"] = true, ["fi"] = true})
   if (then_body == nil) then
     error({ParseError = true, message = "Expected commands after 'then'", pos = self:lex_peek_token().pos})
   end
   self:skip_whitespace_and_newlines()
-  local else_body = nil
+  else_body = nil
   if self:lex_is_at_reserved_word("elif") then
     else_body = self:parse_elif_chain()
   elseif self:lex_is_at_reserved_word("else") then
@@ -7838,11 +7914,12 @@ function Parser:parse_elif_chain()
 end
 
 function Parser:parse_while()
+  local body, condition
   self:skip_whitespace()
   if not self:lex_consume_word("while") then
     return nil
   end
-  local condition = self:parse_list_until({["do"] = true})
+  condition = self:parse_list_until({["do"] = true})
   if (condition == nil) then
     error({ParseError = true, message = "Expected condition after 'while'", pos = self:lex_peek_token().pos})
   end
@@ -7850,7 +7927,7 @@ function Parser:parse_while()
   if not self:lex_consume_word("do") then
     error({ParseError = true, message = "Expected 'do' after while condition", pos = self:lex_peek_token().pos})
   end
-  local body = self:parse_list_until({["done"] = true})
+  body = self:parse_list_until({["done"] = true})
   if (body == nil) then
     error({ParseError = true, message = "Expected commands after 'do'", pos = self:lex_peek_token().pos})
   end
@@ -7862,11 +7939,12 @@ function Parser:parse_while()
 end
 
 function Parser:parse_until()
+  local body, condition
   self:skip_whitespace()
   if not self:lex_consume_word("until") then
     return nil
   end
-  local condition = self:parse_list_until({["do"] = true})
+  condition = self:parse_list_until({["do"] = true})
   if (condition == nil) then
     error({ParseError = true, message = "Expected condition after 'until'", pos = self:lex_peek_token().pos})
   end
@@ -7874,7 +7952,7 @@ function Parser:parse_until()
   if not self:lex_consume_word("do") then
     error({ParseError = true, message = "Expected 'do' after until condition", pos = self:lex_peek_token().pos})
   end
-  local body = self:parse_list_until({["done"] = true})
+  body = self:parse_list_until({["done"] = true})
   if (body == nil) then
     error({ParseError = true, message = "Expected commands after 'do'", pos = self:lex_peek_token().pos})
   end
@@ -7886,6 +7964,7 @@ function Parser:parse_until()
 end
 
 function Parser:parse_for()
+  local body, brace_group, saw_delimiter, var_name, var_word, word, words
   self:skip_whitespace()
   if not self:lex_consume_word("for") then
     return nil
@@ -7894,9 +7973,8 @@ function Parser:parse_for()
   if self:peek() == "(" and self.pos + 1 < self.length and string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) == "(" then
     return self:parse_for_arith()
   end
-  local var_name
   if self:peek() == "$" then
-    local var_word = self:parse_word(false, false, false)
+    var_word = self:parse_word(false, false, false)
     if (var_word == nil) then
       error({ParseError = true, message = "Expected variable name after 'for'", pos = self:lex_peek_token().pos})
     end
@@ -7913,11 +7991,11 @@ function Parser:parse_for()
     self:advance()
   end
   self:skip_whitespace_and_newlines()
-  local words = nil
+  words = nil
   if self:lex_is_at_reserved_word("in") then
     self:lex_consume_word("in")
     self:skip_whitespace()
-    local saw_delimiter = is_semicolon_or_newline(self:peek())
+    saw_delimiter = is_semicolon_or_newline(self:peek())
     if self:peek() == ";" then
       self:advance()
     end
@@ -7941,7 +8019,7 @@ function Parser:parse_for()
         end
         error({ParseError = true, message = "Expected ';' or newline before 'do'", pos = self:lex_peek_token().pos})
       end
-      local word = self:parse_word(false, false, false)
+      word = self:parse_word(false, false, false)
       if (word == nil) then
         break
       end
@@ -7950,7 +8028,7 @@ function Parser:parse_for()
   end
   self:skip_whitespace_and_newlines()
   if self:peek() == "{" then
-    local brace_group = self:parse_brace_group()
+    brace_group = self:parse_brace_group()
     if (brace_group == nil) then
       error({ParseError = true, message = "Expected brace group in for loop", pos = self:lex_peek_token().pos})
     end
@@ -7959,7 +8037,7 @@ function Parser:parse_for()
   if not self:lex_consume_word("do") then
     error({ParseError = true, message = "Expected 'do' in for loop", pos = self:lex_peek_token().pos})
   end
-  local body = self:parse_list_until({["done"] = true})
+  body = self:parse_list_until({["done"] = true})
   if (body == nil) then
     error({ParseError = true, message = "Expected commands after 'do'", pos = self:lex_peek_token().pos})
   end
@@ -7971,13 +8049,14 @@ function Parser:parse_for()
 end
 
 function Parser:parse_for_arith()
+  local body, ch, cond, current, incr, init, paren_depth, parts
   self:advance()
   self:advance()
-  local parts = {}
-  local current = {}
-  local paren_depth = 0
+  parts = {}
+  current = {}
+  paren_depth = 0
   while not self:at_end() do
-    local ch = self:peek()
+    ch = self:peek()
     if ch == "(" then
       paren_depth = paren_depth + 1
       ;(function() table.insert(current, self:advance()); return current end)()
@@ -8004,25 +8083,26 @@ function Parser:parse_for_arith()
   if #parts ~= 3 then
     error({ParseError = true, message = "Expected three expressions in for ((;;))", pos = self.pos})
   end
-  local init = parts[0 + 1]
-  local cond = parts[1 + 1]
-  local incr = parts[2 + 1]
+  init = parts[0 + 1]
+  cond = parts[1 + 1]
+  incr = parts[2 + 1]
   self:skip_whitespace()
   if not self:at_end() and self:peek() == ";" then
     self:advance()
   end
   self:skip_whitespace_and_newlines()
-  local body = self:parse_loop_body("for loop")
+  body = self:parse_loop_body("for loop")
   return ForArith:new(init, cond, incr, body, self:collect_redirects(), "for-arith")
 end
 
 function Parser:parse_select()
+  local body, var_name, word, words
   self:skip_whitespace()
   if not self:lex_consume_word("select") then
     return nil
   end
   self:skip_whitespace()
-  local var_name = self:peek_word()
+  var_name = self:peek_word()
   if var_name == "" then
     error({ParseError = true, message = "Expected variable name after 'select'", pos = self:lex_peek_token().pos})
   end
@@ -8032,7 +8112,7 @@ function Parser:parse_select()
     self:advance()
   end
   self:skip_whitespace_and_newlines()
-  local words = nil
+  words = nil
   if self:lex_is_at_reserved_word("in") then
     self:lex_consume_word("in")
     self:skip_whitespace_and_newlines()
@@ -8051,7 +8131,7 @@ function Parser:parse_select()
       if self:lex_is_at_reserved_word("do") then
         break
       end
-      local word = self:parse_word(false, false, false)
+      word = self:parse_word(false, false, false)
       if (word == nil) then
         break
       end
@@ -8059,12 +8139,13 @@ function Parser:parse_select()
     end
   end
   self:skip_whitespace_and_newlines()
-  local body = self:parse_loop_body("select")
+  body = self:parse_loop_body("select")
   return Select:new(var_name, words, body, self:collect_redirects(), "select")
 end
 
 function Parser:consume_case_terminator()
-  local term = self:lex_peek_case_terminator()
+  local term
+  term = self:lex_peek_case_terminator()
   if term ~= "" then
     self:lex_next_token()
     return term
@@ -8073,12 +8154,13 @@ function Parser:consume_case_terminator()
 end
 
 function Parser:parse_case()
+  local body, c, ch, extglob_depth, has_first_bracket_literal, is_at_terminator, is_char_class, is_empty_body, is_pattern, next_ch, paren_depth, pattern, pattern_chars, patterns, saved, sc, scan_depth, scan_pos, terminator, word
   if not self:consume_word("case") then
     return nil
   end
   self:set_state(PARSERSTATEFLAGS_PST_CASESTMT)
   self:skip_whitespace()
-  local word = self:parse_word(false, false, false)
+  word = self:parse_word(false, false, false)
   if (word == nil) then
     error({ParseError = true, message = "Expected word after 'case'", pos = self:lex_peek_token().pos})
   end
@@ -8087,18 +8169,18 @@ function Parser:parse_case()
     error({ParseError = true, message = "Expected 'in' after case word", pos = self:lex_peek_token().pos})
   end
   self:skip_whitespace_and_newlines()
-  local patterns = {}
+  patterns = {}
   self:set_state(PARSERSTATEFLAGS_PST_CASEPAT)
   while true do
     self:skip_whitespace_and_newlines()
     if self:lex_is_at_reserved_word("esac") then
-      local saved = self.pos
+      saved = self.pos
       self:skip_whitespace()
       while not self:at_end() and not is_metachar(self:peek()) and not is_quote(self:peek()) do
         self:advance()
       end
       self:skip_whitespace()
-      local is_pattern = false
+      is_pattern = false
       if not self:at_end() and self:peek() == ")" then
         if self.eof_token == ")" then
           is_pattern = false
@@ -8106,7 +8188,7 @@ function Parser:parse_case()
           self:advance()
           self:skip_whitespace()
           if not self:at_end() then
-            local next_ch = self:peek()
+            next_ch = self:peek()
             if next_ch == ";" then
               is_pattern = true
             elseif not is_newline_or_right_paren(next_ch) then
@@ -8125,10 +8207,10 @@ function Parser:parse_case()
       self:advance()
       self:skip_whitespace_and_newlines()
     end
-    local pattern_chars = {}
-    local extglob_depth = 0
+    pattern_chars = {}
+    extglob_depth = 0
     while not self:at_end() do
-      local ch = self:peek()
+      ch = self:peek()
       if ch == ")" then
         if extglob_depth > 0 then
           ;(function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
@@ -8152,9 +8234,9 @@ function Parser:parse_case()
         ;(function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
         if not self:at_end() and self:peek() == "(" then
           ;(function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
-          local paren_depth = 2
+          paren_depth = 2
           while not self:at_end() and paren_depth > 0 do
-            local c = self:peek()
+            c = self:peek()
             if c == "(" then
               paren_depth = paren_depth + 1
             elseif c == ")" then
@@ -8173,10 +8255,10 @@ function Parser:parse_case()
         ;(function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
         extglob_depth = extglob_depth + 1
       elseif ch == "[" then
-        local is_char_class = false
-        local scan_pos = self.pos + 1
-        local scan_depth = 0
-        local has_first_bracket_literal = false
+        is_char_class = false
+        scan_pos = self.pos + 1
+        scan_depth = 0
+        has_first_bracket_literal = false
         if scan_pos < self.length and is_caret_or_bang(string.sub(self.source, scan_pos + 1, scan_pos + 1)) then
           scan_pos = scan_pos + 1
         end
@@ -8187,7 +8269,7 @@ function Parser:parse_case()
           end
         end
         while scan_pos < self.length do
-          local sc = string.sub(self.source, scan_pos + 1, scan_pos + 1)
+          sc = string.sub(self.source, scan_pos + 1, scan_pos + 1)
           if sc == "]" and scan_depth == 0 then
             is_char_class = true
             break
@@ -8246,24 +8328,24 @@ function Parser:parse_case()
         ;(function() table.insert(pattern_chars, self:advance()); return pattern_chars end)()
       end
     end
-    local pattern = table.concat(pattern_chars, "")
+    pattern = table.concat(pattern_chars, "")
     if not (pattern ~= nil and #(pattern) > 0) then
       error({ParseError = true, message = "Expected pattern in case statement", pos = self:lex_peek_token().pos})
     end
     self:skip_whitespace()
-    local body = nil
-    local is_empty_body = self:lex_peek_case_terminator() ~= ""
+    body = nil
+    is_empty_body = self:lex_peek_case_terminator() ~= ""
     if not is_empty_body then
       self:skip_whitespace_and_newlines()
       if not self:at_end() and not self:lex_is_at_reserved_word("esac") then
-        local is_at_terminator = self:lex_peek_case_terminator() ~= ""
+        is_at_terminator = self:lex_peek_case_terminator() ~= ""
         if not is_at_terminator then
           body = self:parse_list_until({["esac"] = true})
           self:skip_whitespace()
         end
       end
     end
-    local terminator = self:consume_case_terminator()
+    terminator = self:consume_case_terminator()
     self:skip_whitespace_and_newlines()
     ;(function() table.insert(patterns, CasePattern:new(pattern, body, terminator, "pattern")); return patterns end)()
   end
@@ -8278,17 +8360,17 @@ function Parser:parse_case()
 end
 
 function Parser:parse_coproc()
+  local body, ch, name, next_word, potential_name, word_start
   self:skip_whitespace()
   if not self:lex_consume_word("coproc") then
     return nil
   end
   self:skip_whitespace()
-  local name = ""
-  local ch = ""
+  name = ""
+  ch = ""
   if not self:at_end() then
     ch = self:peek()
   end
-  local body
   if ch == "{" then
     body = self:parse_brace_group()
     if (body ~= nil) then
@@ -8307,15 +8389,15 @@ function Parser:parse_coproc()
       return Coproc:new(body, name, "coproc")
     end
   end
-  local next_word = self:lex_peek_reserved_word()
+  next_word = self:lex_peek_reserved_word()
   if next_word ~= "" and (_set_contains(COMPOUND_KEYWORDS, next_word)) then
     body = self:parse_compound_command()
     if (body ~= nil) then
       return Coproc:new(body, name, "coproc")
     end
   end
-  local word_start = self.pos
-  local potential_name = self:peek_word()
+  word_start = self.pos
+  potential_name = self:peek_word()
   if (potential_name ~= nil and #(potential_name) > 0) then
     while not self:at_end() and not is_metachar(self:peek()) and not is_quote(self:peek()) do
       self:advance()
@@ -8361,13 +8443,12 @@ function Parser:parse_coproc()
 end
 
 function Parser:parse_function()
+  local body, brace_depth, has_whitespace, i, name, name_start, pos_after_name, saved_pos
   self:skip_whitespace()
   if self:at_end() then
     return nil
   end
-  local saved_pos = self.pos
-  local name
-  local body
+  saved_pos = self.pos
   if self:lex_is_at_reserved_word("function") then
     self:lex_consume_word("function")
     self:skip_whitespace()
@@ -8399,7 +8480,7 @@ function Parser:parse_function()
     return nil
   end
   self:skip_whitespace()
-  local name_start = self.pos
+  name_start = self.pos
   while not self:at_end() and not is_metachar(self:peek()) and not is_quote(self:peek()) and not is_paren(self:peek()) do
     self:advance()
   end
@@ -8408,8 +8489,8 @@ function Parser:parse_function()
     self.pos = saved_pos
     return nil
   end
-  local brace_depth = 0
-  local i = 0
+  brace_depth = 0
+  i = 0
   while i < #name do
     if is_expansion_start(name, i, "${") then
       brace_depth = brace_depth + 1
@@ -8426,9 +8507,9 @@ function Parser:parse_function()
     self.pos = saved_pos
     return nil
   end
-  local pos_after_name = self.pos
+  pos_after_name = self.pos
   self:skip_whitespace()
-  local has_whitespace = self.pos > pos_after_name
+  has_whitespace = self.pos > pos_after_name
   if not has_whitespace and (name ~= nil and #(name) > 0) and (((string.find("*?@+!$", string.sub(name, #name - 1 + 1, #name - 1 + 1), 1, true) ~= nil))) then
     self.pos = saved_pos
     return nil
@@ -8453,7 +8534,8 @@ function Parser:parse_function()
 end
 
 function Parser:parse_compound_command()
-  local result = self:parse_brace_group()
+  local result
+  result = self:parse_brace_group()
   if (result ~= nil) then
     return result
   end
@@ -8499,6 +8581,7 @@ function Parser:parse_compound_command()
 end
 
 function Parser:at_list_until_terminator(stop_words)
+  local next_pos, reserved
   if self:at_end() then
     return true
   end
@@ -8506,12 +8589,12 @@ function Parser:at_list_until_terminator(stop_words)
     return true
   end
   if self:peek() == "}" then
-    local next_pos = self.pos + 1
+    next_pos = self.pos + 1
     if next_pos >= self.length or is_word_end_context(string.sub(self.source, next_pos + 1, next_pos + 1)) then
       return true
     end
   end
-  local reserved = self:lex_peek_reserved_word()
+  reserved = self:lex_peek_reserved_word()
   if reserved ~= "" and (_set_contains(stop_words, reserved)) then
     return true
   end
@@ -8522,19 +8605,20 @@ function Parser:at_list_until_terminator(stop_words)
 end
 
 function Parser:parse_list_until(stop_words)
+  local next_op, op, parts, pipeline, reserved
   self:skip_whitespace_and_newlines()
-  local reserved = self:lex_peek_reserved_word()
+  reserved = self:lex_peek_reserved_word()
   if reserved ~= "" and (_set_contains(stop_words, reserved)) then
     return nil
   end
-  local pipeline = self:parse_pipeline()
+  pipeline = self:parse_pipeline()
   if (pipeline == nil) then
     return nil
   end
-  local parts = {pipeline}
+  parts = {pipeline}
   while true do
     self:skip_whitespace()
-    local op = self:parse_list_operator()
+    op = self:parse_list_operator()
     if op == "" then
       if not self:at_end() and self:peek() == "\n" then
         self:advance()
@@ -8547,7 +8631,7 @@ function Parser:parse_list_until(stop_words)
         if self:at_list_until_terminator(stop_words) then
           break
         end
-        local next_op = self:peek_list_operator()
+        next_op = self:peek_list_operator()
         if next_op == "&" or next_op == ";" then
           break
         end
@@ -8593,12 +8677,12 @@ function Parser:parse_list_until(stop_words)
 end
 
 function Parser:parse_compound_command()
+  local ch, func, keyword_word, reserved, result, word
   self:skip_whitespace()
   if self:at_end() then
     return nil
   end
-  local ch = self:peek()
-  local result
+  ch = self:peek()
   if ch == "(" and self.pos + 1 < self.length and string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) == "(" then
     result = self:parse_arithmetic_command()
     if (result ~= nil) then
@@ -8620,11 +8704,11 @@ function Parser:parse_compound_command()
       return result
     end
   end
-  local reserved = self:lex_peek_reserved_word()
+  reserved = self:lex_peek_reserved_word()
   if reserved == "" and self.in_process_sub then
-    local word = self:peek_word()
+    word = self:peek_word()
     if word ~= "" and #word > 1 and string.sub(word, 0 + 1, 0 + 1) == "}" then
-      local keyword_word = string.sub(word, (1) + 1, #word)
+      keyword_word = string.sub(word, (1) + 1, #word)
       if (_set_contains(RESERVED_WORDS, keyword_word)) or keyword_word == "{" or keyword_word == "}" or keyword_word == "[[" or keyword_word == "]]" or keyword_word == "!" or keyword_word == "time" then
         reserved = keyword_word
       end
@@ -8657,7 +8741,7 @@ function Parser:parse_compound_command()
   if reserved == "coproc" then
     return self:parse_coproc()
   end
-  local func = self:parse_function()
+  func = self:parse_function()
   if (func ~= nil) then
     return func
   end
@@ -8665,14 +8749,14 @@ function Parser:parse_compound_command()
 end
 
 function Parser:parse_pipeline()
+  local inner, prefix_order, result, saved, time_posix
   self:skip_whitespace()
-  local prefix_order = ""
-  local time_posix = false
+  prefix_order = ""
+  time_posix = false
   if self:lex_is_at_reserved_word("time") then
     self:lex_consume_word("time")
     prefix_order = "time"
     self:skip_whitespace()
-    local saved
     if not self:at_end() and self:peek() == "-" then
       saved = self.pos
       self:advance()
@@ -8726,7 +8810,7 @@ function Parser:parse_pipeline()
     if (self.pos + 1 >= self.length or is_negation_boundary(string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1))) and not self:is_bang_followed_by_procsub() then
       self:advance()
       self:skip_whitespace()
-      local inner = self:parse_pipeline()
+      inner = self:parse_pipeline()
       if (inner ~= nil) and inner.kind == "negation" then
         if (inner.pipeline ~= nil) then
           return inner.pipeline
@@ -8737,7 +8821,7 @@ function Parser:parse_pipeline()
       return Negation:new(inner, "negation")
     end
   end
-  local result = self:parse_simple_pipeline()
+  result = self:parse_simple_pipeline()
   if prefix_order == "time" then
     result = Time:new(result, time_posix, "time")
   elseif prefix_order == "negation" then
@@ -8755,14 +8839,15 @@ function Parser:parse_pipeline()
 end
 
 function Parser:parse_simple_pipeline()
-  local cmd = self:parse_compound_command()
+  local cmd, commands, is_pipe_both, token_type, value
+  cmd = self:parse_compound_command()
   if (cmd == nil) then
     return nil
   end
-  local commands = {cmd}
+  commands = {cmd}
   while true do
     self:skip_whitespace()
-    local token_type, value = table.unpack(self:lex_peek_operator())
+    token_type, value = table.unpack(self:lex_peek_operator())
     if token_type == 0 then
       break
     end
@@ -8770,7 +8855,7 @@ function Parser:parse_simple_pipeline()
       break
     end
     self:lex_next_token()
-    local is_pipe_both = token_type == TOKENTYPE_PIPE_AMP
+    is_pipe_both = token_type == TOKENTYPE_PIPE_AMP
     self:skip_whitespace_and_newlines()
     if is_pipe_both then
       ;(function() table.insert(commands, PipeBoth:new("pipe-both")); return commands end)()
@@ -8788,8 +8873,9 @@ function Parser:parse_simple_pipeline()
 end
 
 function Parser:parse_list_operator()
+  local token_type
   self:skip_whitespace()
-  local token_type, _ = table.unpack(self:lex_peek_operator())
+  token_type, _ = table.unpack(self:lex_peek_operator())
   if token_type == 0 then
     return ""
   end
@@ -8813,29 +8899,31 @@ function Parser:parse_list_operator()
 end
 
 function Parser:peek_list_operator()
-  local saved_pos = self.pos
-  local op = self:parse_list_operator()
+  local op, saved_pos
+  saved_pos = self.pos
+  op = self:parse_list_operator()
   self.pos = saved_pos
   return op
 end
 
 function Parser:parse_list(newline_as_separator)
+  local next_op, op, parts, pipeline
   if newline_as_separator then
     self:skip_whitespace_and_newlines()
   else
     self:skip_whitespace()
   end
-  local pipeline = self:parse_pipeline()
+  pipeline = self:parse_pipeline()
   if (pipeline == nil) then
     return nil
   end
-  local parts = {pipeline}
+  parts = {pipeline}
   if self:in_state(PARSERSTATEFLAGS_PST_EOFTOKEN) and self:at_eof_token() then
     return (#parts == 1 and parts[0 + 1] or List:new(parts, "list"))
   end
   while true do
     self:skip_whitespace()
-    local op = self:parse_list_operator()
+    op = self:parse_list_operator()
     if op == "" then
       if not self:at_end() and self:peek() == "\n" then
         if not newline_as_separator then
@@ -8851,7 +8939,7 @@ function Parser:parse_list(newline_as_separator)
         if self:at_end() or self:at_list_terminating_bracket() then
           break
         end
-        local next_op = self:peek_list_operator()
+        next_op = self:peek_list_operator()
         if next_op == "&" or next_op == ";" then
           break
         end
@@ -8913,23 +9001,25 @@ function Parser:parse_list(newline_as_separator)
 end
 
 function Parser:parse_comment()
+  local start, text
   if self:at_end() or self:peek() ~= "#" then
     return nil
   end
-  local start = self.pos
+  start = self.pos
   while not self:at_end() and self:peek() ~= "\n" do
     self:advance()
   end
-  local text = substring(self.source, start, self.pos)
+  text = substring(self.source, start, self.pos)
   return Comment:new(text, "comment")
 end
 
 function Parser:parse()
-  local source = (string.gsub((string.gsub(self.source, '^[' .. " \t\n\r" .. ']+', '')), '[' .. " \t\n\r" .. ']+$', ''))
+  local comment, found_newline, result, results, source
+  source = (string.gsub((string.gsub(self.source, '^[' .. " \t\n\r" .. ']+', '')), '[' .. " \t\n\r" .. ']+$', ''))
   if not (source ~= nil and #(source) > 0) then
     return {Empty:new("empty")}
   end
-  local results = {}
+  results = {}
   while true do
     self:skip_whitespace()
     while not self:at_end() and self:peek() == "\n" do
@@ -8938,18 +9028,18 @@ function Parser:parse()
     if self:at_end() then
       break
     end
-    local comment = self:parse_comment()
+    comment = self:parse_comment()
     if not (comment ~= nil) then
       break
     end
   end
   while not self:at_end() do
-    local result = self:parse_list(false)
+    result = self:parse_list(false)
     if (result ~= nil) then
       ;(function() table.insert(results, result); return results end)()
     end
     self:skip_whitespace()
-    local found_newline = false
+    found_newline = false
     while not self:at_end() and self:peek() == "\n" do
       found_newline = true
       self:advance()
@@ -8980,11 +9070,12 @@ function Parser:last_word_on_own_line(nodes)
 end
 
 function Parser:strip_trailing_backslash_from_last_word(nodes)
+  local last_node, last_word
   if not (#(nodes) > 0) then
     return
   end
-  local last_node = nodes[#nodes - 1 + 1]
-  local last_word = self:find_last_word(last_node)
+  last_node = nodes[#nodes - 1 + 1]
+  last_word = self:find_last_word(last_node)
   if (last_word ~= nil) and (string.sub(last_word.value, -#"\\") == "\\") then
     last_word.value = substring(last_word.value, 0, #last_word.value - 1)
     if not (last_word.value ~= nil and #(last_word.value) > 0) and (type(last_node) == 'table' and getmetatable(last_node) == Command) and (#(last_node.words) > 0) then
@@ -8994,6 +9085,7 @@ function Parser:strip_trailing_backslash_from_last_word(nodes)
 end
 
 function Parser:find_last_word(node)
+  local last_redirect, last_word
   if (type(node) == 'table' and getmetatable(node) == Word) then
     local node = node
     return node
@@ -9001,13 +9093,13 @@ function Parser:find_last_word(node)
   if (type(node) == 'table' and getmetatable(node) == Command) then
     local node = node
     if (#(node.words) > 0) then
-      local last_word = node.words[#node.words - 1 + 1]
+      last_word = node.words[#node.words - 1 + 1]
       if (string.sub(last_word.value, -#"\\") == "\\") then
         return last_word
       end
     end
     if (#(node.redirects) > 0) then
-      local last_redirect = node.redirects[#node.redirects - 1 + 1]
+      last_redirect = node.redirects[#node.redirects - 1 + 1]
       if (type(last_redirect) == 'table' and getmetatable(last_redirect) == Redirect) then
         local last_redirect = last_redirect
         return last_redirect.target
@@ -9065,11 +9157,12 @@ function starts_with_at(s, pos, prefix)
 end
 
 function count_consecutive_dollars_before(s, pos)
-  local count = 0
-  local k = pos - 1
+  local bs_count, count, j, k
+  count = 0
+  k = pos - 1
   while k >= 0 and string.sub(s, k + 1, k + 1) == "$" do
-    local bs_count = 0
-    local j = k - 1
+    bs_count = 0
+    j = k - 1
     while j >= 0 and string.sub(s, j + 1, j + 1) == "\\" do
       bs_count = bs_count + 1
       j = j - 1
@@ -9095,8 +9188,9 @@ function sublist(lst, start, end_)
 end
 
 function repeat_str(s, n)
-  local result = {}
-  local i = 0
+  local i, result
+  result = {}
+  i = 0
   while i < n do
     ;(function() table.insert(result, s); return result end)()
     i = i + 1
@@ -9105,15 +9199,16 @@ function repeat_str(s, n)
 end
 
 function strip_line_continuations_comment_aware(text)
-  local result = {}
-  local i = 0
-  local in_comment = false
-  local quote = new_quote_state()
+  local c, i, in_comment, j, num_preceding_backslashes, quote, result
+  result = {}
+  i = 0
+  in_comment = false
+  quote = new_quote_state()
   while i < #text do
-    local c = string.sub(text, i + 1, i + 1)
+    c = string.sub(text, i + 1, i + 1)
     if c == "\\" and i + 1 < #text and string.sub(text, i + 1 + 1, i + 1 + 1) == "\n" then
-      local num_preceding_backslashes = 0
-      local j = i - 1
+      num_preceding_backslashes = 0
+      j = i - 1
       while j >= 0 and string.sub(text, j + 1, j + 1) == "\\" do
         num_preceding_backslashes = num_preceding_backslashes + 1
         j = j - 1
@@ -9148,8 +9243,9 @@ function strip_line_continuations_comment_aware(text)
 end
 
 function append_redirects(base, redirects)
+  local parts, r
   if (#(redirects) > 0) then
-    local parts = {}
+    parts = {}
     for _, r in ipairs(redirects) do
       ;(function() table.insert(parts, r:to_sexp()); return parts end)()
     end
@@ -9159,8 +9255,9 @@ function append_redirects(base, redirects)
 end
 
 function format_arith_val(s)
-  local w = Word:new(s, {}, "word")
-  local val = w:expand_all_ansi_c_quotes(s)
+  local val, w
+  w = Word:new(s, {}, "word")
+  val = w:expand_all_ansi_c_quotes(s)
   val = w:strip_locale_string_dollars(val)
   val = w:format_command_substitutions(val, false)
   val = (string.gsub((string.gsub(val, "\\", "\\\\")), "\"", "\\\""))
@@ -9169,8 +9266,9 @@ function format_arith_val(s)
 end
 
 function consume_single_quote(s, start)
-  local chars = {"'"}
-  local i = start + 1
+  local chars, i
+  chars = {"'"}
+  i = start + 1
   while i < #s and string.sub(s, i + 1, i + 1) ~= "'" do
     ;(function() table.insert(chars, string.sub(s, i + 1, i + 1)); return chars end)()
     i = i + 1
@@ -9183,8 +9281,9 @@ function consume_single_quote(s, start)
 end
 
 function consume_double_quote(s, start)
-  local chars = {"\""}
-  local i = start + 1
+  local chars, i
+  chars = {"\""}
+  i = start + 1
   while i < #s and string.sub(s, i + 1, i + 1) ~= "\"" do
     if string.sub(s, i + 1, i + 1) == "\\" and i + 1 < #s then
       ;(function() table.insert(chars, string.sub(s, i + 1, i + 1)); return chars end)()
@@ -9201,7 +9300,8 @@ function consume_double_quote(s, start)
 end
 
 function has_bracket_close(s, start, depth)
-  local i = start
+  local i
+  i = start
   while i < #s do
     if string.sub(s, i + 1, i + 1) == "]" then
       return true
@@ -9215,7 +9315,8 @@ function has_bracket_close(s, start, depth)
 end
 
 function consume_bracket_class(s, start, depth)
-  local scan_pos = start + 1
+  local chars, i, is_bracket, scan_pos
+  scan_pos = start + 1
   if scan_pos < #s and (string.sub(s, scan_pos + 1, scan_pos + 1) == "!" or string.sub(s, scan_pos + 1, scan_pos + 1) == "^") then
     scan_pos = scan_pos + 1
   end
@@ -9224,7 +9325,7 @@ function consume_bracket_class(s, start, depth)
       scan_pos = scan_pos + 1
     end
   end
-  local is_bracket = false
+  is_bracket = false
   while scan_pos < #s do
     if string.sub(s, scan_pos + 1, scan_pos + 1) == "]" then
       is_bracket = true
@@ -9241,8 +9342,8 @@ function consume_bracket_class(s, start, depth)
   if not is_bracket then
     return {start + 1, {"["}, false}
   end
-  local chars = {"["}
-  local i = start + 1
+  chars = {"["}
+  i = start + 1
   if i < #s and (string.sub(s, i + 1, i + 1) == "!" or string.sub(s, i + 1, i + 1) == "^") then
     ;(function() table.insert(chars, string.sub(s, i + 1, i + 1)); return chars end)()
     i = i + 1
@@ -9265,14 +9366,15 @@ function consume_bracket_class(s, start, depth)
 end
 
 function format_cond_body(node)
-  local kind = node.kind
+  local kind, left_val, operand_val, right_val
+  kind = node.kind
   if kind == "unary-test" then
-    local operand_val = node.operand:get_cond_formatted_value()
+    operand_val = node.operand:get_cond_formatted_value()
     return node.op .. " " .. operand_val
   end
   if kind == "binary-test" then
-    local left_val = node.left:get_cond_formatted_value()
-    local right_val = node.right:get_cond_formatted_value()
+    left_val = node.left:get_cond_formatted_value()
+    right_val = node.right:get_cond_formatted_value()
     return left_val .. " " .. node.op .. " " .. right_val
   end
   if kind == "cond-and" then
@@ -9291,6 +9393,7 @@ function format_cond_body(node)
 end
 
 function starts_with_subshell(node)
+  local p
   if (type(node) == 'table' and getmetatable(node) == Subshell) then
     local node = node
     return true
@@ -9315,26 +9418,27 @@ function starts_with_subshell(node)
 end
 
 function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub_first)
+  local entry, body, body_part, cmd, cmd_count, cmds, compact_pipe, cond, else_body, first_nl, formatted, formatted_cmd, h, has_heredoc, heredocs, i, idx, inner_body, inner_sp, is_last, last, name, needs_redirect, p, part, parts, pat, pat_indent, pattern_str, patterns, prefix, r, redirect_parts, redirects, result, result_parts, s, skipped_semi, sp, term, term_indent, terminator, then_body, val, var, w, word, word_parts, word_vals, words
   if (node == nil) then
     return ""
   end
-  local sp = repeat_str(" ", indent)
-  local inner_sp = repeat_str(" ", indent + 4)
+  sp = repeat_str(" ", indent)
+  inner_sp = repeat_str(" ", indent + 4)
   if (type(node) == 'table' and getmetatable(node) == ArithEmpty) then
     local node = node
     return ""
   end
   if (type(node) == 'table' and getmetatable(node) == Command) then
     local node = node
-    local parts = {}
+    parts = {}
     for _, w in ipairs(node.words) do
-      local val = w:expand_all_ansi_c_quotes(w.value)
+      val = w:expand_all_ansi_c_quotes(w.value)
       val = w:strip_locale_string_dollars(val)
       val = w:normalize_array_whitespace(val)
       val = w:format_command_substitutions(val, false)
       ;(function() table.insert(parts, val); return parts end)()
     end
-    local heredocs = {}
+    heredocs = {}
     for _, r in ipairs(node.redirects) do
       if (type(r) == 'table' and getmetatable(r) == HereDoc) then
         local r = r
@@ -9344,10 +9448,9 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
     for _, r in ipairs(node.redirects) do
       ;(function() table.insert(parts, format_redirect(r, compact_redirects, true)); return parts end)()
     end
-    local result
     if compact_redirects and (#(node.words) > 0) and (#(node.redirects) > 0) then
-      local word_parts = _table_slice(parts, 1, #node.words)
-      local redirect_parts = _table_slice(parts, (#node.words) + 1, #parts)
+      word_parts = _table_slice(parts, 1, #node.words)
+      redirect_parts = _table_slice(parts, (#node.words) + 1, #parts)
       result = table.concat(word_parts, " ") .. table.concat(redirect_parts, "")
     else
       result = table.concat(parts, " ")
@@ -9359,10 +9462,8 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
   end
   if (type(node) == 'table' and getmetatable(node) == Pipeline) then
     local node = node
-    local cmds = {}
-    local i = 0
-    local cmd
-    local needs_redirect
+    cmds = {}
+    i = 0
     while i < #node.commands do
       cmd = node.commands[i + 1]
       if (type(cmd) == 'table' and getmetatable(cmd) == PipeBoth) then
@@ -9375,15 +9476,15 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
       i = i + 1
       ::continue::
     end
-    local result_parts = {}
-    local idx = 0
+    result_parts = {}
+    idx = 0
     while idx < #cmds do
-      local entry = cmds[idx + 1]
+      entry = cmds[idx + 1]
       cmd = entry[1]
       needs_redirect = entry[2]
-      local formatted = format_cmdsub_node(cmd, indent, in_procsub, false, procsub_first and idx == 0)
-      local is_last = idx == #cmds - 1
-      local has_heredoc = false
+      formatted = format_cmdsub_node(cmd, indent, in_procsub, false, procsub_first and idx == 0)
+      is_last = idx == #cmds - 1
+      has_heredoc = false
       if cmd.kind == "command" and (#(cmd.redirects) > 0) then
         for _, r in ipairs(cmd.redirects) do
           if (type(r) == 'table' and getmetatable(r) == HereDoc) then
@@ -9393,7 +9494,6 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
           end
         end
       end
-      local first_nl
       if needs_redirect then
         if has_heredoc then
           first_nl = _string_find(formatted, "\n")
@@ -9417,11 +9517,11 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
       end
       idx = idx + 1
     end
-    local compact_pipe = in_procsub and (#(cmds) > 0) and cmds[0 + 1][1].kind == "subshell"
+    compact_pipe = in_procsub and (#(cmds) > 0) and cmds[0 + 1][1].kind == "subshell"
     result = ""
     idx = 0
     while idx < #result_parts do
-      local part = result_parts[idx + 1]
+      part = result_parts[idx + 1]
       if idx > 0 then
         if (string.sub(result, -#"\n") == "\n") then
           result = result .. "  " .. part
@@ -9470,8 +9570,8 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
       end
     end
     result = {}
-    local skipped_semi = false
-    local cmd_count = 0
+    skipped_semi = false
+    cmd_count = 0
     for _, p in ipairs(node.parts) do
       if (type(p) == 'table' and getmetatable(p) == Operator) then
         local p = p
@@ -9500,7 +9600,7 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
           skipped_semi = false
         elseif p.op == "&" then
           if (#(result) > 0) and (((string.find(result[#result - 1 + 1], "<<", 1, true) ~= nil))) and (((string.find(result[#result - 1 + 1], "\n", 1, true) ~= nil))) then
-            local last = result[#result - 1 + 1]
+            last = result[#result - 1 + 1]
             if (((string.find(last, " |", 1, true) ~= nil))) or (string.sub(last, 1, #"|") == "|") then
               result[#result - 1 + 1] = last .. " &"
             else
@@ -9521,7 +9621,7 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
         if (#(result) > 0) and not (string.sub(result[#result - 1 + 1], -#" ") == " " or string.sub(result[#result - 1 + 1], -#"\n") == "\n") then
           ;(function() table.insert(result, " "); return result end)()
         end
-        local formatted_cmd = format_cmdsub_node(p, indent, in_procsub, compact_redirects, procsub_first and cmd_count == 0)
+        formatted_cmd = format_cmdsub_node(p, indent, in_procsub, compact_redirects, procsub_first and cmd_count == 0)
         if #result > 0 then
           last = result[#result - 1 + 1]
           if (((string.find(last, " || \n", 1, true) ~= nil))) or (((string.find(last, " && \n", 1, true) ~= nil))) then
@@ -9537,7 +9637,7 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
       end
       ::continue::
     end
-    local s = table.concat(result, "")
+    s = table.concat(result, "")
     if (((string.find(s, " &\n", 1, true) ~= nil))) and (string.sub(s, -#"\n") == "\n") then
       return s .. " "
     end
@@ -9553,11 +9653,11 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
   end
   if (type(node) == 'table' and getmetatable(node) == If) then
     local node = node
-    local cond = format_cmdsub_node(node.condition, indent, false, false, false)
-    local then_body = format_cmdsub_node(node.then_body, indent + 4, false, false, false)
+    cond = format_cmdsub_node(node.condition, indent, false, false, false)
+    then_body = format_cmdsub_node(node.then_body, indent + 4, false, false, false)
     result = "if " .. cond .. "; then\n" .. inner_sp .. then_body .. ";"
     if (node.else_body ~= nil) then
-      local else_body = format_cmdsub_node(node.else_body, indent + 4, false, false, false)
+      else_body = format_cmdsub_node(node.else_body, indent + 4, false, false, false)
       result = result .. "\n" .. sp .. "else\n" .. inner_sp .. else_body .. ";"
     end
     result = result .. "\n" .. sp .. "fi"
@@ -9566,7 +9666,7 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
   if (type(node) == 'table' and getmetatable(node) == While) then
     local node = node
     cond = format_cmdsub_node(node.condition, indent, false, false, false)
-    local body = format_cmdsub_node(node.body, indent + 4, false, false, false)
+    body = format_cmdsub_node(node.body, indent + 4, false, false, false)
     result = "while " .. cond .. "; do\n" .. inner_sp .. body .. ";\n" .. sp .. "done"
     if (#(node.redirects) > 0) then
       for _, r in ipairs(node.redirects) do
@@ -9589,14 +9689,14 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
   end
   if (type(node) == 'table' and getmetatable(node) == For) then
     local node = node
-    local var = node.var
+    var = node.var
     body = format_cmdsub_node(node.body, indent + 4, false, false, false)
     if (node.words ~= nil) then
-      local word_vals = {}
+      word_vals = {}
       for _, w in ipairs(node.words) do
         ;(function() table.insert(word_vals, w.value); return word_vals end)()
       end
-      local words = table.concat(word_vals, " ")
+      words = table.concat(word_vals, " ")
       if (words ~= nil and #(words) > 0) then
         result = "for " .. var .. " in " .. words .. ";\n" .. sp .. "do\n" .. inner_sp .. body .. ";\n" .. sp .. "done"
       else
@@ -9625,21 +9725,21 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
   end
   if (type(node) == 'table' and getmetatable(node) == Case) then
     local node = node
-    local word = node.word.value
-    local patterns = {}
+    word = node.word.value
+    patterns = {}
     i = 0
     while i < #node.patterns do
-      local p = node.patterns[i + 1]
-      local pat = (string.gsub(p.pattern, "|", " | "))
+      p = node.patterns[i + 1]
+      pat = (string.gsub(p.pattern, "|", " | "))
       if (p.body ~= nil) then
         body = format_cmdsub_node(p.body, indent + 8, false, false, false)
       else
         body = ""
       end
-      local term = p.terminator
-      local pat_indent = repeat_str(" ", indent + 8)
-      local term_indent = repeat_str(" ", indent + 4)
-      local body_part = ((body ~= nil and #(body) > 0) and pat_indent .. body .. "\n" or "\n")
+      term = p.terminator
+      pat_indent = repeat_str(" ", indent + 8)
+      term_indent = repeat_str(" ", indent + 4)
+      body_part = ((body ~= nil and #(body) > 0) and pat_indent .. body .. "\n" or "\n")
       if i == 0 then
         ;(function() table.insert(patterns, " " .. pat .. ")\n" .. body_part .. term_indent .. term); return patterns end)()
       else
@@ -9647,8 +9747,8 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
       end
       i = i + 1
     end
-    local pattern_str = table.concat(patterns, "\n" .. repeat_str(" ", indent + 4))
-    local redirects = ""
+    pattern_str = table.concat(patterns, "\n" .. repeat_str(" ", indent + 4))
+    redirects = ""
     if (#(node.redirects) > 0) then
       redirect_parts = {}
       for _, r in ipairs(node.redirects) do
@@ -9660,8 +9760,8 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
   end
   if (type(node) == 'table' and getmetatable(node) == Function) then
     local node = node
-    local name = node.name
-    local inner_body = (node.body.kind == "brace-group" and node.body.body or node.body)
+    name = node.name
+    inner_body = (node.body.kind == "brace-group" and node.body.body or node.body)
     body = (string.gsub(format_cmdsub_node(inner_body, indent + 4, false, false, false), '[' .. ";" .. ']+$', ''))
     return string.format("function %s () \n{ \n%s%s\n}", name, inner_sp, body)
   end
@@ -9691,7 +9791,7 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
     local node = node
     body = format_cmdsub_node(node.body, indent, false, false, false)
     body = (string.gsub(body, '[' .. ";" .. ']+$', ''))
-    local terminator = ((string.sub(body, -#" &") == " &") and " }" or "; }")
+    terminator = ((string.sub(body, -#" &") == " &") and " }" or "; }")
     redirects = ""
     if (#(node.redirects) > 0) then
       redirect_parts = {}
@@ -9723,7 +9823,7 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
   end
   if (type(node) == 'table' and getmetatable(node) == Time) then
     local node = node
-    local prefix = (node.posix and "time -p " or "time ")
+    prefix = (node.posix and "time -p " or "time ")
     if (node.pipeline ~= nil) then
       return prefix .. format_cmdsub_node(node.pipeline, indent, false, false, false)
     end
@@ -9733,7 +9833,7 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
 end
 
 function format_redirect(r, compact, heredoc_op_only)
-  local op
+  local after_amp, delim, is_literal_fd, op, target, was_input_close
   if (type(r) == 'table' and getmetatable(r) == HereDoc) then
     local r = r
     if r.strip_tabs then
@@ -9744,7 +9844,6 @@ function format_redirect(r, compact, heredoc_op_only)
     if (r.fd ~= nil) and r.fd > 0 then
       op = tostring(r.fd) .. op
     end
-    local delim
     if r.quoted then
       delim = "'" .. r.delimiter .. "'"
     else
@@ -9761,18 +9860,18 @@ function format_redirect(r, compact, heredoc_op_only)
   elseif op == "0<" then
     op = "<"
   end
-  local target = r.target.value
+  target = r.target.value
   target = r.target:expand_all_ansi_c_quotes(target)
   target = r.target:strip_locale_string_dollars(target)
   target = r.target:format_command_substitutions(target, false)
   if (string.sub(target, 1, #"&") == "&") then
-    local was_input_close = false
+    was_input_close = false
     if target == "&-" and (string.sub(op, -#"<") == "<") then
       was_input_close = true
       op = substring(op, 0, #op - 1) .. ">"
     end
-    local after_amp = substring(target, 1, #target)
-    local is_literal_fd = after_amp == "-" or #after_amp > 0 and (string.match(string.sub(after_amp, 0 + 1, 0 + 1), '^%d+$') ~= nil)
+    after_amp = substring(target, 1, #target)
+    is_literal_fd = after_amp == "-" or #after_amp > 0 and (string.match(string.sub(after_amp, 0 + 1, 0 + 1), '^%d+$') ~= nil)
     if is_literal_fd then
       if op == ">" or op == ">&" then
         op = (was_input_close and "0>" or "1>")
@@ -9800,11 +9899,12 @@ function format_heredoc_body(r)
 end
 
 function lookahead_for_esac(value, start, case_depth)
-  local i = start
-  local depth = case_depth
-  local quote = new_quote_state()
+  local c, depth, i, quote
+  i = start
+  depth = case_depth
+  quote = new_quote_state()
   while i < #value do
-    local c = string.sub(value, i + 1, i + 1)
+    c = string.sub(value, i + 1, i + 1)
     if c == "\\" and i + 1 < #value and quote.double then
       i = i + 2
       goto continue
@@ -9849,7 +9949,8 @@ function lookahead_for_esac(value, start, case_depth)
 end
 
 function skip_backtick(value, start)
-  local i = start + 1
+  local i
+  i = start + 1
   while i < #value and string.sub(value, i + 1, i + 1) ~= "`" do
     if string.sub(value, i + 1, i + 1) == "\\" and i + 1 < #value then
       i = i + 2
@@ -9864,7 +9965,8 @@ function skip_backtick(value, start)
 end
 
 function skip_single_quoted(s, start)
-  local i = start
+  local i
+  i = start
   while i < #s and string.sub(s, i + 1, i + 1) ~= "'" do
     i = i + 1
   end
@@ -9872,12 +9974,13 @@ function skip_single_quoted(s, start)
 end
 
 function skip_double_quoted(s, start)
-  local i = start
-  local n = #s
-  local pass_next = false
-  local backq = false
+  local backq, c, i, n, pass_next
+  i = start
+  n = #s
+  pass_next = false
+  backq = false
   while i < n do
-    local c = string.sub(s, i + 1, i + 1)
+    c = string.sub(s, i + 1, i + 1)
     if pass_next then
       pass_next = false
       i = i + 1
@@ -9920,10 +10023,11 @@ function skip_double_quoted(s, start)
 end
 
 function is_valid_arithmetic_start(value, start)
-  local scan_paren = 0
-  local scan_i = start + 3
+  local scan_c, scan_i, scan_paren
+  scan_paren = 0
+  scan_i = start + 3
   while scan_i < #value do
-    local scan_c = string.sub(value, scan_i + 1, scan_i + 1)
+    scan_c = string.sub(value, scan_i + 1, scan_i + 1)
     if is_expansion_start(value, scan_i, "$(") then
       scan_i = find_cmdsub_end(value, scan_i + 2)
       goto continue
@@ -9946,11 +10050,12 @@ function is_valid_arithmetic_start(value, start)
 end
 
 function find_funsub_end(value, start)
-  local depth = 1
-  local i = start
-  local quote = new_quote_state()
+  local c, depth, i, quote
+  depth = 1
+  i = start
+  quote = new_quote_state()
   while i < #value and depth > 0 do
-    local c = string.sub(value, i + 1, i + 1)
+    c = string.sub(value, i + 1, i + 1)
     if c == "\\" and i + 1 < #value and not quote.single then
       i = i + 2
       goto continue
@@ -9984,14 +10089,15 @@ function find_funsub_end(value, start)
 end
 
 function find_cmdsub_end(value, start)
-  local depth = 1
-  local i = start
-  local case_depth = 0
-  local in_case_patterns = false
-  local arith_depth = 0
-  local arith_paren_depth = 0
+  local arith_depth, arith_paren_depth, c, case_depth, depth, i, in_case_patterns, j
+  depth = 1
+  i = start
+  case_depth = 0
+  in_case_patterns = false
+  arith_depth = 0
+  arith_paren_depth = 0
   while i < #value and depth > 0 do
-    local c = string.sub(value, i + 1, i + 1)
+    c = string.sub(value, i + 1, i + 1)
     if c == "\\" and i + 1 < #value then
       i = i + 2
       goto continue
@@ -10048,7 +10154,7 @@ function find_cmdsub_end(value, start)
         i = i + 3
         goto continue
       end
-      local j = find_cmdsub_end(value, i + 2)
+      j = find_cmdsub_end(value, i + 2)
       i = j
       goto continue
     end
@@ -10116,12 +10222,13 @@ function find_cmdsub_end(value, start)
 end
 
 function find_braced_param_end(value, start)
-  local depth = 1
-  local i = start
-  local in_double = false
-  local dolbrace_state = DOLBRACESTATE_PARAM
+  local c, depth, dolbrace_state, end_, i, in_double
+  depth = 1
+  i = start
+  in_double = false
+  dolbrace_state = DOLBRACESTATE_PARAM
   while i < #value and depth > 0 do
-    local c = string.sub(value, i + 1, i + 1)
+    c = string.sub(value, i + 1, i + 1)
     if c == "\\" and i + 1 < #value then
       i = i + 2
       goto continue
@@ -10145,7 +10252,7 @@ function find_braced_param_end(value, start)
       dolbrace_state = DOLBRACESTATE_WORD
     end
     if c == "[" and dolbrace_state == DOLBRACESTATE_PARAM and not in_double then
-      local end_ = skip_subscript(value, i, 0)
+      end_ = skip_subscript(value, i, 0)
       if end_ ~= -1 then
         i = end_
         goto continue
@@ -10178,16 +10285,16 @@ function find_braced_param_end(value, start)
 end
 
 function skip_heredoc(value, start)
-  local i = start + 2
+  local c, delim_start, delimiter, i, in_backtick, j, line, line_end, line_start, next_line_start, paren_depth, quote, quote_char, stripped, tabs_stripped, trailing_bs
+  i = start + 2
   if i < #value and string.sub(value, i + 1, i + 1) == "-" then
     i = i + 1
   end
   while i < #value and is_whitespace_no_newline(string.sub(value, i + 1, i + 1)) do
     i = i + 1
   end
-  local delim_start = i
-  local quote_char = nil
-  local delimiter
+  delim_start = i
+  quote_char = nil
   if i < #value and (string.sub(value, i + 1, i + 1) == "\"" or string.sub(value, i + 1, i + 1) == "'") then
     quote_char = string.sub(value, i + 1, i + 1)
     i = i + 1
@@ -10215,11 +10322,11 @@ function skip_heredoc(value, start)
     end
     delimiter = substring(value, delim_start, i)
   end
-  local paren_depth = 0
-  local quote = new_quote_state()
-  local in_backtick = false
+  paren_depth = 0
+  quote = new_quote_state()
+  in_backtick = false
   while i < #value and string.sub(value, i + 1, i + 1) ~= "\n" do
-    local c = string.sub(value, i + 1, i + 1)
+    c = string.sub(value, i + 1, i + 1)
     if c == "\\" and i + 1 < #value and (quote.double or in_backtick) then
       i = i + 2
       goto continue
@@ -10261,15 +10368,15 @@ function skip_heredoc(value, start)
     i = i + 1
   end
   while i < #value do
-    local line_start = i
-    local line_end = i
+    line_start = i
+    line_end = i
     while line_end < #value and string.sub(value, line_end + 1, line_end + 1) ~= "\n" do
       line_end = line_end + 1
     end
-    local line = substring(value, line_start, line_end)
+    line = substring(value, line_start, line_end)
     while line_end < #value do
-      local trailing_bs = 0
-      local j = #line - 1
+      trailing_bs = 0
+      j = #line - 1
       while j > -1 do
         if string.sub(line, j + 1, j + 1) == "\\" then
           trailing_bs = trailing_bs + 1
@@ -10283,13 +10390,12 @@ function skip_heredoc(value, start)
       end
       line = string.sub(line, 1, #line - 1)
       line_end = line_end + 1
-      local next_line_start = line_end
+      next_line_start = line_end
       while line_end < #value and string.sub(value, line_end + 1, line_end + 1) ~= "\n" do
         line_end = line_end + 1
       end
       line = line .. substring(value, next_line_start, line_end)
     end
-    local stripped
     if start + 2 < #value and string.sub(value, start + 2 + 1, start + 2 + 1) == "-" then
       stripped = (string.gsub(line, '^[' .. "\t" .. ']+', ''))
     else
@@ -10303,7 +10409,7 @@ function skip_heredoc(value, start)
       end
     end
     if (string.sub(stripped, 1, #delimiter) == delimiter) and #stripped > #delimiter then
-      local tabs_stripped = #line - #stripped
+      tabs_stripped = #line - #stripped
       return line_start + tabs_stripped + #delimiter
     end
     if line_end < #value then
@@ -10316,31 +10422,32 @@ function skip_heredoc(value, start)
 end
 
 function find_heredoc_content_end(source, start, delimiters)
+  local item, content_start, delimiter, j, line, line_end, line_start, line_stripped, next_line_start, pos, strip_tabs, tabs_stripped, trailing_bs
   if not (#(delimiters) > 0) then
     return {start, start}
   end
-  local pos = start
+  pos = start
   while pos < #source and string.sub(source, pos + 1, pos + 1) ~= "\n" do
     pos = pos + 1
   end
   if pos >= #source then
     return {start, start}
   end
-  local content_start = pos
+  content_start = pos
   pos = pos + 1
   for _, item in ipairs(delimiters) do
-    local delimiter = item[1]
-    local strip_tabs = item[2]
+    delimiter = item[1]
+    strip_tabs = item[2]
     while pos < #source do
-      local line_start = pos
-      local line_end = pos
+      line_start = pos
+      line_end = pos
       while line_end < #source and string.sub(source, line_end + 1, line_end + 1) ~= "\n" do
         line_end = line_end + 1
       end
-      local line = substring(source, line_start, line_end)
+      line = substring(source, line_start, line_end)
       while line_end < #source do
-        local trailing_bs = 0
-        local j = #line - 1
+        trailing_bs = 0
+        j = #line - 1
         while j > -1 do
           if string.sub(line, j + 1, j + 1) == "\\" then
             trailing_bs = trailing_bs + 1
@@ -10354,13 +10461,12 @@ function find_heredoc_content_end(source, start, delimiters)
         end
         line = string.sub(line, 1, #line - 1)
         line_end = line_end + 1
-        local next_line_start = line_end
+        next_line_start = line_end
         while line_end < #source and string.sub(source, line_end + 1, line_end + 1) ~= "\n" do
           line_end = line_end + 1
         end
         line = line .. substring(source, next_line_start, line_end)
       end
-      local line_stripped
       if strip_tabs then
         line_stripped = (string.gsub(line, '^[' .. "\t" .. ']+', ''))
       else
@@ -10371,7 +10477,7 @@ function find_heredoc_content_end(source, start, delimiters)
         break
       end
       if (string.sub(line_stripped, 1, #delimiter) == delimiter) and #line_stripped > #delimiter then
-        local tabs_stripped = #line - #line_stripped
+        tabs_stripped = #line - #line_stripped
         pos = line_start + tabs_stripped + #delimiter
         break
       end
@@ -10382,8 +10488,9 @@ function find_heredoc_content_end(source, start, delimiters)
 end
 
 function is_word_boundary(s, pos, word_len)
+  local end_, prev
   if pos > 0 then
-    local prev = string.sub(s, pos - 1 + 1, pos - 1 + 1)
+    prev = string.sub(s, pos - 1 + 1, pos - 1 + 1)
     if (string.match(prev, '^%w+$') ~= nil) or prev == "_" then
       return false
     end
@@ -10391,7 +10498,7 @@ function is_word_boundary(s, pos, word_len)
       return false
     end
   end
-  local end_ = pos + word_len
+  end_ = pos + word_len
   if end_ < #s and ((string.match(string.sub(s, end_ + 1, end_ + 1), '^%w+$') ~= nil) or string.sub(s, end_ + 1, end_ + 1) == "_") then
     return false
   end
@@ -10403,8 +10510,9 @@ function is_quote(c)
 end
 
 function collapse_whitespace(s)
-  local result = {}
-  local prev_was_ws = false
+  local c, joined, prev_was_ws, result
+  result = {}
+  prev_was_ws = false
   for _ = 1, #s do
     local c = string.sub(s, _, _)
     if c == " " or c == "\t" then
@@ -10417,13 +10525,14 @@ function collapse_whitespace(s)
       prev_was_ws = false
     end
   end
-  local joined = table.concat(result, "")
+  joined = table.concat(result, "")
   return (string.gsub((string.gsub(joined, '^[' .. " \t" .. ']+', '')), '[' .. " \t" .. ']+$', ''))
 end
 
 function count_trailing_backslashes(s)
-  local count = 0
-  local i = #s - 1
+  local count, i
+  count = 0
+  i = #s - 1
   while i > -1 do
     if string.sub(s, i + 1, i + 1) == "\\" then
       count = count + 1
@@ -10436,12 +10545,10 @@ function count_trailing_backslashes(s)
 end
 
 function normalize_heredoc_delimiter(delimiter)
-  local result = {}
-  local i = 0
+  local depth, i, inner, inner_str, result
+  result = {}
+  i = 0
   while i < #delimiter do
-    local depth
-    local inner
-    local inner_str
     if i + 1 < #delimiter and string.sub(delimiter, (i) + 1, i + 2) == "$(" then
       ;(function() table.insert(result, "$("); return result end)()
       i = i + 2
@@ -10560,8 +10667,8 @@ function is_word_end_context(c)
 end
 
 function skip_matched_pair(s, start, open, close, flags)
-  local n = #s
-  local i
+  local backq, c, depth, i, literal, n, pass_next
+  n = #s
   if (flags & SMP_PAST_OPEN ~= 0) then
     i = start
   else
@@ -10570,17 +10677,17 @@ function skip_matched_pair(s, start, open, close, flags)
     end
     i = start + 1
   end
-  local depth = 1
-  local pass_next = false
-  local backq = false
+  depth = 1
+  pass_next = false
+  backq = false
   while i < n and depth > 0 do
-    local c = string.sub(s, i + 1, i + 1)
+    c = string.sub(s, i + 1, i + 1)
     if pass_next then
       pass_next = false
       i = i + 1
       goto continue
     end
-    local literal = flags & SMP_LITERAL
+    literal = flags & SMP_LITERAL
     if (literal == 0) and c == "\\" then
       pass_next = true
       i = i + 1
@@ -10630,21 +10737,22 @@ function skip_subscript(s, start, flags)
 end
 
 function assignment(s, flags)
+  local c, end_, i, sub_flags
   if not (s ~= nil and #(s) > 0) then
     return -1
   end
   if not ((string.match(string.sub(s, 0 + 1, 0 + 1), '^%a+$') ~= nil) or string.sub(s, 0 + 1, 0 + 1) == "_") then
     return -1
   end
-  local i = 1
+  i = 1
   while i < #s do
-    local c = string.sub(s, i + 1, i + 1)
+    c = string.sub(s, i + 1, i + 1)
     if c == "=" then
       return i
     end
     if c == "[" then
-      local sub_flags = ((flags & 2 ~= 0) and SMP_LITERAL or 0)
-      local end_ = skip_subscript(s, i, sub_flags)
+      sub_flags = ((flags & 2 ~= 0) and SMP_LITERAL or 0)
+      end_ = skip_subscript(s, i, sub_flags)
       if end_ == -1 then
         return -1
       end
@@ -10672,14 +10780,15 @@ function assignment(s, flags)
 end
 
 function is_array_assignment_prefix(chars)
+  local end_, i, s
   if not (#(chars) > 0) then
     return false
   end
   if not ((string.match(chars[0 + 1], '^%a+$') ~= nil) or chars[0 + 1] == "_") then
     return false
   end
-  local s = table.concat(chars, "")
-  local i = 1
+  s = table.concat(chars, "")
+  i = 1
   while i < #s and ((string.match(string.sub(s, i + 1, i + 1), '^%w+$') ~= nil) or string.sub(s, i + 1, i + 1) == "_") do
     i = i + 1
   end
@@ -10687,7 +10796,7 @@ function is_array_assignment_prefix(chars)
     if string.sub(s, i + 1, i + 1) ~= "[" then
       return false
     end
-    local end_ = skip_subscript(s, i, SMP_LITERAL)
+    end_ = skip_subscript(s, i, SMP_LITERAL)
     if end_ == -1 then
       return false
     end
@@ -10717,8 +10826,9 @@ function is_negation_boundary(c)
 end
 
 function is_backslash_escaped(value, idx)
-  local bs_count = 0
-  local j = idx - 1
+  local bs_count, j
+  bs_count = 0
+  j = idx - 1
   while j >= 0 and string.sub(value, j + 1, j + 1) == "\\" do
     bs_count = bs_count + 1
     j = j - 1
@@ -10727,8 +10837,9 @@ function is_backslash_escaped(value, idx)
 end
 
 function is_dollar_dollar_paren(value, idx)
-  local dollar_count = 0
-  local j = idx - 1
+  local dollar_count, j
+  dollar_count = 0
+  j = idx - 1
   while j >= 0 and string.sub(value, j + 1, j + 1) == "$" do
     dollar_count = dollar_count + 1
     j = j - 1
@@ -10765,6 +10876,7 @@ function looks_like_assignment(s)
 end
 
 function is_valid_identifier(name)
+  local c
   if not (name ~= nil and #(name) > 0) then
     return false
   end
@@ -10781,12 +10893,14 @@ function is_valid_identifier(name)
 end
 
 function parse(source, extglob)
-  local parser = new_parser(source, false, extglob)
+  local parser
+  parser = new_parser(source, false, extglob)
   return parser:parse()
 end
 
 function new_parse_error(message, pos, line)
-  local self = ParseError:new(nil, nil, nil)
+  local self
+  self = ParseError:new(nil, nil, nil)
   self.message = message
   self.pos = pos
   self.line = line
@@ -10798,7 +10912,8 @@ function new_matched_pair_error(message, pos, line)
 end
 
 function new_quote_state()
-  local self = QuoteState:new(nil, nil, nil)
+  local self
+  self = QuoteState:new(nil, nil, nil)
   self.single = false
   self.double = false
   self.stack = {}
@@ -10806,7 +10921,8 @@ function new_quote_state()
 end
 
 function new_parse_context(kind)
-  local self = ParseContext:new(nil, nil, nil, nil, nil, nil, nil, nil)
+  local self
+  self = ParseContext:new(nil, nil, nil, nil, nil, nil, nil, nil)
   self.kind = kind
   self.paren_depth = 0
   self.brace_depth = 0
@@ -10819,13 +10935,15 @@ function new_parse_context(kind)
 end
 
 function new_context_stack()
-  local self = ContextStack:new(nil)
+  local self
+  self = ContextStack:new(nil)
   self.stack = {new_parse_context(0)}
   return self
 end
 
 function new_lexer(source, extglob)
-  local self = Lexer:new(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+  local self
+  self = Lexer:new(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
   self.source = source
   self.pos = 0
   self.length = #source
@@ -10851,7 +10969,8 @@ function new_lexer(source, extglob)
 end
 
 function new_parser(source, in_process_sub, extglob)
-  local self = Parser:new(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
+  local self
+  self = Parser:new(nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil, nil)
   self.source = source
   self.pos = 0
   self.length = #source

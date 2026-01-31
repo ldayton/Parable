@@ -8,7 +8,7 @@
 </pre>
 </div>
 
-Parse bash exactly as bash does. Python, Typescript, Go, or Java—your choice. One file, zero dependencies. This is the only complete bash parser for these languages. Extensively validated against bash itself.
+Parse bash exactly as bash does. One file, zero dependencies, in your language. This is the only complete bash parser for most languages. Extensively validated against bash itself.
 
 ---
 
@@ -18,11 +18,25 @@ Parse bash exactly as bash does. Python, Typescript, Go, or Java—your choice. 
 
 **Match bash exactly.** Bash is the oracle. We [patched](https://github.com/ldayton/bash-oracle) GNU Bash 5.3 so it reveals its internal parse tree, then test against it. No spec interpretation, no "close enough"—if bash parses it one way, so do we. Bash always tells the truth, even when it's lying.
 
-**Portable performance.** Hand-written recursive descent—no generators, no native extensions, no imports. Pure Python transpiles to Go, TypeScript, and Java. All run the same tests.
+**Portable performance.** Hand-written recursive descent—no generators, no native extensions, no imports. Pure Python transpiles to other target languages. All run the same tests.
 
-## Transpiled Outputs
+## Transpiler
 
-The Python implementation transpiles to Go, TypeScript, Java, and Python via a custom IR-based transpiler. All outputs are validated the same way—same tests, same bash AST comparisons, same edge cases.
+The transpiler supports these target languages:
+
+| Language   | Reference    | Homebrew      | GitHub Actions    |
+| ---------- | ------------ | ------------- | ----------------- |
+| C#         | .NET 9       | `dotnet`      | `setup-dotnet@v4` |
+| Go         | Go 1.24      | `go@1.24`     | `setup-go@v5`     |
+| Java       | Temurin 21   | `temurin@21`  | `setup-java@v4`   |
+| Javascript | Node.js 22   | `node@22`     | `setup-node@v4`   |
+| Perl       | Perl 5.40    | `perl`        | `setup-perl@v1`   |
+| PHP        | PHP 8.4      | `php`         | `setup-php@v2`    |
+| Python     | CPython 3.12 | `python@3.12` | `setup-uv@v4`     |
+| Ruby       | Ruby 3.4     | `ruby`        | `setup-ruby@v1`   |
+| Typescript | tsc 5.9      | `node@22`     | `setup-node@v4`   |
+
+Output code quality is a work in progress. Currently the transpiler prioritizes correctness over readability; generated code may not yet match hand-written idioms.
 
 ## Why Parable?
 
@@ -103,8 +117,6 @@ Every test validated against real bash 5.3 ASTs.
 
 ## Usage
 
-### Python
-
 ```python
 from parable import parse
 
@@ -121,35 +133,11 @@ print(ast[0].to_sexp())
 # (command (word "cat") (redirect "<<" "heredoc content\n"))
 ```
 
-## Installation
-
-```bash
-git clone https://github.com/ldayton/Parable.git
-cd Parable && uv pip install -e .
-```
-
-## Tests
-
-```bash
-just src-test             # Python
-just backend-test go      # Go
-just backend-test ts      # TypeScript
-just backend-test java    # Java
-```
-
-See [tests/README.md](tests/README.md) for options and coverage details.
-
 ## Project Structure
 
 ```
 src/
 └── parable.py                   # Single-file Python parser
-
-dist/                            # Transpiled outputs
-├── go/parable.go
-├── java/Parable.java
-├── python/parable.py
-└── ts/parable.ts
 
 tests/
 ├── bin/                         # Test runners + corpus utilities
@@ -163,20 +151,17 @@ transpiler/                      # Python → multi-language transpiler
 ├── src/frontend/                # Parser and type inference
 ├── src/middleend/               # Analysis passes
 └── src/backend/                 # Code generators
+
+dist/                            # Transpiled outputs
+├── csharp/Parable.cs
+├── go/parable.go
+├── java/Parable.java
+├── perl/parable.pl
+├── php/parable.php
+├── python/parable.py
+├── ruby/parable.rb
+└── ts/parable.ts
 ```
-
-## Transpiler
-
-The transpiler uses an intermediate representation (IR) to generate code for multiple target languages:
-
-| Language   | Reference    | Homebrew      | GitHub Actions  |
-| ---------- | ------------ | ------------- | --------------- |
-| Go         | Go 1.24      | `go@1.24`     | `setup-go@v5`   |
-| Java       | Temurin 21   | `temurin@21`  | `setup-java@v4` |
-| Python     | CPython 3.12 | `python@3.12` | `setup-uv@v4`   |
-| TypeScript | Node.js 22   | `node@22`     | `setup-node@v4` |
-
-Output code quality is a work in progress. The transpiler prioritizes correctness over readability; generated code may not yet match hand-written idioms.
 
 ## License
 

@@ -4,8 +4,8 @@ set shell := ["bash", "-o", "pipefail", "-cu"]
 source := "../src/parable.py"
 tests := "../tests"
 dist := "../dist/go"
-backends := "csharp go java php perl python ruby typescript"
-testable := "go perl php python ruby typescript"
+backends := "csharp go java javascript php perl python ruby typescript"
+testable := "go javascript perl php python ruby typescript"
 
 # Transpile source to stdout
 emit backend:
@@ -29,6 +29,11 @@ prep backend:
         java)
             uv run python -m src.tongues --target java < {{source}} > /tmp/Output.java
             javac /tmp/Output.java -d /tmp
+            ;;
+        javascript)
+            rm -rf /tmp/transpile-js && mkdir -p /tmp/transpile-js
+            uv run python -m src.tongues --target javascript < {{source}} > /tmp/transpile-js/parable.js
+            node --check /tmp/transpile-js/parable.js
             ;;
         python)
             uv run python -m src.tongues --target python < {{source}} > /tmp/transpile.py
@@ -66,6 +71,10 @@ test backend:
         go)
             just prep go
             go run -C {{dist}} ./cmd/run-tests "$tests_abs"
+            ;;
+        javascript)
+            just prep javascript
+            node {{tests}}/bin/run-js-tests.js /tmp/transpile-js
             ;;
         python)
             rm -rf /tmp/transpile-test && mkdir /tmp/transpile-test

@@ -14,7 +14,14 @@ deny-redirect * "Redirects only allowed to /tmp/* or to stdin/stderr"
 allow-redirect /tmp/**
 
 #---- Langs ----#
-allow node
+allow dotnet
 allow go
+allow java
+allow javac
+allow node
 allow python
 allow python3
+allow ruby
+allow php
+allow perl
+allow tsc

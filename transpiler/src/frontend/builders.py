@@ -26,7 +26,7 @@ from ..ir import (
     VOID,
     loc_unknown,
 )
-from ..type_overrides import MODULE_CONSTANTS, PARAM_TYPE_OVERRIDES
+from ..type_overrides import MODULE_CONSTANTS
 
 if TYPE_CHECKING:
     from .. import ir
@@ -70,21 +70,11 @@ def build_forwarding_constructor(
     # Build parameters from parent's __init__ params
     params: list[Param] = []
     for param_name in parent_info.init_params:
-        # Check for parameter type overrides
+        # Get from parent's field type
         typ = INT  # Default
-        override_key = (f"New{class_name}", param_name)
-        if override_key in PARAM_TYPE_OVERRIDES:
-            typ = PARAM_TYPE_OVERRIDES[override_key]
-        else:
-            # Try parent constructor override
-            parent_key = (f"New{parent_class}", param_name)
-            if parent_key in PARAM_TYPE_OVERRIDES:
-                typ = PARAM_TYPE_OVERRIDES[parent_key]
-            else:
-                # Get from parent's field type
-                field_info = parent_info.fields.get(param_name)
-                if field_info:
-                    typ = field_info.typ
+        field_info = parent_info.fields.get(param_name)
+        if field_info:
+            typ = field_info.typ
         params.append(Param(name=param_name, typ=typ, loc=loc_unknown()))
     # Build body: return &ClassName{ParentClass{...}}
     # Use StructLit with embedded type
@@ -139,15 +129,6 @@ def build_constructor(
         arg_annotation = arg.get("annotation")
         py_type = callbacks.annotation_to_str(arg_annotation) if arg_annotation else ""
         typ = callbacks.py_type_to_ir(py_type, False) if py_type else InterfaceRef("any")
-        # Check for parameter type overrides
-        override_key = (f"New{class_name}", arg_name)
-        if override_key in PARAM_TYPE_OVERRIDES:
-            typ = PARAM_TYPE_OVERRIDES[override_key]
-        else:
-            # Try __init__ param overrides
-            override_key = ("__init__", arg_name)
-            if override_key in PARAM_TYPE_OVERRIDES:
-                typ = PARAM_TYPE_OVERRIDES[override_key]
         params.append(Param(name=arg_name, typ=typ, loc=loc_unknown()))
         param_types[arg_name] = typ
     # Handle default arguments
@@ -429,6 +410,7 @@ def build_module(
     from .. import ir
 
     module = Module(name="parable")
+    module.hierarchy_root = hierarchy_root
     # Build constants from MODULE_CONSTANTS overrides
     for const_name, (const_type, go_value) in MODULE_CONSTANTS.items():
         # Strip quotes from go_value to get the actual string content

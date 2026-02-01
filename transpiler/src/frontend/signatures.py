@@ -14,10 +14,7 @@ from ..ir import (
     Slice,
     VOID,
 )
-from ..type_overrides import (
-    PARAM_TYPE_OVERRIDES,
-    RETURN_TYPE_OVERRIDES,
-)
+from ..type_overrides import RETURN_TYPE_OVERRIDES
 
 if TYPE_CHECKING:
     from ..ir import SymbolTable
@@ -65,12 +62,8 @@ def extract_func_info(
         annotation = arg.get("annotation")
         py_type = callbacks.annotation_to_str(annotation) if annotation else ""
         typ = callbacks.py_type_to_ir(py_type, False) if py_type else InterfaceRef("any")
-        # Check for overrides first (takes precedence)
-        override_key = (node.get("name"), arg.get("arg"))
-        if override_key in PARAM_TYPE_OVERRIDES:
-            typ = PARAM_TYPE_OVERRIDES[override_key]
         # Auto-wrap mutated slice params with Pointer
-        elif arg.get("arg") in mutated_params and isinstance(typ, Slice):
+        if arg.get("arg") in mutated_params and isinstance(typ, Slice):
             typ = Pointer(typ)
         has_default = False
         default_value = None
@@ -112,6 +105,12 @@ def collect_class_methods(
             func_info.is_method = True
             func_info.receiver_type = node.get("name")
             info.methods[stmt.get("name")] = func_info
+    # Build method-to-struct mapping for Node subclasses
+    if info.is_node:
+        excluded_methods = {"to_sexp", "kind", "__init__", "__repr__", "ToSexp", "GetKind"}
+        for method_name in info.methods:
+            if method_name not in excluded_methods:
+                symbols.method_to_structs[method_name] = info.name
 
 
 def collect_signatures(

@@ -21,7 +21,6 @@ from src.ir import (
     VarLV,
     While,
 )
-from src.type_overrides import VAR_TYPE_OVERRIDES
 
 from .returns import always_returns
 from .scope import _collect_assigned_vars, _collect_used_vars
@@ -30,24 +29,27 @@ from .type_flow import join_types
 
 def analyze_hoisting(module: Module) -> None:
     """Run hoisting analysis on all functions."""
+    hierarchy_root = module.hierarchy_root
     for func in module.functions:
-        _analyze_hoisting(func)
+        _analyze_hoisting(func, hierarchy_root)
     for struct in module.structs:
         for method in struct.methods:
-            _analyze_hoisting(method)
+            _analyze_hoisting(method, hierarchy_root)
 
 
-def _merge_var_types(result: dict[str, Type | None], new_vars: dict[str, Type | None]) -> None:
+def _merge_var_types(
+    result: dict[str, Type | None], new_vars: dict[str, Type | None], hierarchy_root: str | None = None
+) -> None:
     """Merge new_vars into result, using type joining for conflicts."""
     for name, typ in new_vars.items():
         if name in result:
-            result[name] = join_types(result[name], typ)
+            result[name] = join_types(result[name], typ, hierarchy_root)
         else:
             result[name] = typ
 
 
 def _vars_first_assigned_in(
-    stmts: list[Stmt], already_declared: set[str]
+    stmts: list[Stmt], already_declared: set[str], hierarchy_root: str | None = None
 ) -> dict[str, Type | None]:
     """Find variables first assigned in these statements (not already declared)."""
     result: dict[str, Type | None] = {}
@@ -59,7 +61,7 @@ def _vars_first_assigned_in(
                     # Prefer decl_typ (unified type from frontend) over value.typ
                     new_type = stmt.decl_typ if stmt.decl_typ is not None else stmt.value.typ
                     if name in result:
-                        result[name] = join_types(result[name], new_type)
+                        result[name] = join_types(result[name], new_type, hierarchy_root)
                     else:
                         result[name] = new_type
         elif isinstance(stmt, TupleAssign) and stmt.is_declaration:
@@ -78,43 +80,29 @@ def _vars_first_assigned_in(
             # For sibling branches, use the SAME already_declared set (before processing either branch)
             # This allows the same variable to be assigned in both branches with different types
             branch_declared = already_declared | set(result.keys())
-            _merge_var_types(result, _vars_first_assigned_in(stmt.then_body, branch_declared))
-            _merge_var_types(result, _vars_first_assigned_in(stmt.else_body, branch_declared))
+            _merge_var_types(result, _vars_first_assigned_in(stmt.then_body, branch_declared, hierarchy_root), hierarchy_root)
+            _merge_var_types(result, _vars_first_assigned_in(stmt.else_body, branch_declared, hierarchy_root), hierarchy_root)
         elif isinstance(stmt, While):
             _merge_var_types(
-                result, _vars_first_assigned_in(stmt.body, already_declared | set(result.keys()))
+                result, _vars_first_assigned_in(stmt.body, already_declared | set(result.keys()), hierarchy_root), hierarchy_root
             )
         elif isinstance(stmt, ForRange):
             _merge_var_types(
-                result, _vars_first_assigned_in(stmt.body, already_declared | set(result.keys()))
+                result, _vars_first_assigned_in(stmt.body, already_declared | set(result.keys()), hierarchy_root), hierarchy_root
             )
         elif isinstance(stmt, ForClassic):
             _merge_var_types(
-                result, _vars_first_assigned_in(stmt.body, already_declared | set(result.keys()))
+                result, _vars_first_assigned_in(stmt.body, already_declared | set(result.keys()), hierarchy_root), hierarchy_root
             )
         elif isinstance(stmt, Block):
             _merge_var_types(
-                result, _vars_first_assigned_in(stmt.body, already_declared | set(result.keys()))
+                result, _vars_first_assigned_in(stmt.body, already_declared | set(result.keys()), hierarchy_root), hierarchy_root
             )
         elif isinstance(stmt, TryCatch):
             # For try/catch, use the same pattern as if/else - both branches start fresh
             branch_declared = already_declared | set(result.keys())
-            _merge_var_types(result, _vars_first_assigned_in(stmt.body, branch_declared))
-            _merge_var_types(result, _vars_first_assigned_in(stmt.catch_body, branch_declared))
-    return result
-
-
-def _apply_type_overrides(
-    func_name: str, hoisted: list[tuple[str, Type | None]]
-) -> list[tuple[str, Type | None]]:
-    """Apply VAR_TYPE_OVERRIDES to hoisted variables."""
-    result: list[tuple[str, Type | None]] = []
-    for name, typ in hoisted:
-        override_key = (func_name, name)
-        if override_key in VAR_TYPE_OVERRIDES:
-            result.append((name, VAR_TYPE_OVERRIDES[override_key]))
-        else:
-            result.append((name, typ))
+            _merge_var_types(result, _vars_first_assigned_in(stmt.body, branch_declared, hierarchy_root), hierarchy_root)
+            _merge_var_types(result, _vars_first_assigned_in(stmt.catch_body, branch_declared, hierarchy_root), hierarchy_root)
     return result
 
 
@@ -174,7 +162,11 @@ def _collect_conflicting_loop_vars(
 
 
 def _analyze_stmts(
-    func_name: str, stmts: list[Stmt], outer_declared: set[str], all_func_assigned: set[str] | None = None
+    func_name: str,
+    stmts: list[Stmt],
+    outer_declared: set[str],
+    all_func_assigned: set[str] | None = None,
+    hierarchy_root: str | None = None,
 ) -> None:
     """Analyze statements, annotating nodes that need hoisting."""
     declared = set(outer_declared)
@@ -182,17 +174,17 @@ def _analyze_stmts(
         all_func_assigned = set()
     for i, stmt in enumerate(stmts):
         if isinstance(stmt, TryCatch):
-            inner_new = _vars_first_assigned_in(stmt.body + stmt.catch_body, declared)
+            inner_new = _vars_first_assigned_in(stmt.body + stmt.catch_body, declared, hierarchy_root)
             used_after = _collect_used_vars(stmts[i + 1 :])
             needs_hoisting = _filter_hoisted_vars(inner_new, used_after)
-            stmt.hoisted_vars = _apply_type_overrides(func_name, needs_hoisting)
+            stmt.hoisted_vars = needs_hoisting
             _update_declared_from_hoisted(declared, needs_hoisting)
-            _analyze_stmts(func_name, stmt.body, declared, all_func_assigned)
-            _analyze_stmts(func_name, stmt.catch_body, declared, all_func_assigned)
+            _analyze_stmts(func_name, stmt.body, declared, all_func_assigned, hierarchy_root)
+            _analyze_stmts(func_name, stmt.catch_body, declared, all_func_assigned, hierarchy_root)
         elif isinstance(stmt, If):
-            inner_new = _vars_first_assigned_in(stmt.then_body + stmt.else_body, declared)
+            inner_new = _vars_first_assigned_in(stmt.then_body + stmt.else_body, declared, hierarchy_root)
             used_after = _collect_used_vars(stmts[i + 1 :])
-            then_new = _vars_first_assigned_in(stmt.then_body, declared)
+            then_new = _vars_first_assigned_in(stmt.then_body, declared, hierarchy_root)
             else_used = _collect_used_vars(stmt.else_body)
             needs_hoisting: list[tuple[str, Type | None]] = []
             for name, typ in inner_new.items():
@@ -200,12 +192,12 @@ def _analyze_stmts(
                     needs_hoisting.append((name, typ))
                 elif name in then_new and name in else_used:
                     needs_hoisting.append((name, typ))
-            stmt.hoisted_vars = _apply_type_overrides(func_name, needs_hoisting)
+            stmt.hoisted_vars = needs_hoisting
             _update_declared_from_hoisted(declared, needs_hoisting)
             if stmt.init:
-                _analyze_stmts(func_name, [stmt.init], declared, all_func_assigned)
-            _analyze_stmts(func_name, stmt.then_body, declared, all_func_assigned)
-            _analyze_stmts(func_name, stmt.else_body, declared, all_func_assigned)
+                _analyze_stmts(func_name, [stmt.init], declared, all_func_assigned, hierarchy_root)
+            _analyze_stmts(func_name, stmt.then_body, declared, all_func_assigned, hierarchy_root)
+            _analyze_stmts(func_name, stmt.else_body, declared, all_func_assigned, hierarchy_root)
         elif isinstance(stmt, VarDecl):
             declared.add(stmt.name)
         elif isinstance(stmt, Assign) and stmt.is_declaration:
@@ -216,7 +208,7 @@ def _analyze_stmts(
                 if isinstance(target, VarLV):
                     declared.add(target.name)
         elif isinstance(stmt, While):
-            inner_new = _vars_first_assigned_in(stmt.body, declared)
+            inner_new = _vars_first_assigned_in(stmt.body, declared, hierarchy_root)
             used_after = _collect_used_vars(stmts[i + 1 :])
             needs_hoisting = _filter_hoisted_vars(inner_new, used_after)
             # Also hoist ForRange loop variables that conflict with function-level assignments
@@ -224,24 +216,24 @@ def _analyze_stmts(
             for var_tuple in loop_var_conflicts:
                 if var_tuple not in needs_hoisting:
                     needs_hoisting.append(var_tuple)
-            stmt.hoisted_vars = _apply_type_overrides(func_name, needs_hoisting)
+            stmt.hoisted_vars = needs_hoisting
             _update_declared_from_hoisted(declared, needs_hoisting)
-            _analyze_stmts(func_name, stmt.body, declared, all_func_assigned)
+            _analyze_stmts(func_name, stmt.body, declared, all_func_assigned, hierarchy_root)
         elif isinstance(stmt, ForRange):
-            inner_new = _vars_first_assigned_in(stmt.body, declared)
+            inner_new = _vars_first_assigned_in(stmt.body, declared, hierarchy_root)
             used_after = _collect_used_vars(stmts[i + 1 :])
             needs_hoisting = _filter_hoisted_vars(inner_new, used_after)
             # Note: Loop variable hoisting is now handled at the enclosing While level
             # by _collect_conflicting_loop_vars
-            stmt.hoisted_vars = _apply_type_overrides(func_name, needs_hoisting)
+            stmt.hoisted_vars = needs_hoisting
             _update_declared_from_hoisted(declared, needs_hoisting)
-            _analyze_stmts(func_name, stmt.body, declared, all_func_assigned)
+            _analyze_stmts(func_name, stmt.body, declared, all_func_assigned, hierarchy_root)
         elif isinstance(stmt, ForClassic):
             if stmt.init:
-                _analyze_stmts(func_name, [stmt.init], declared, all_func_assigned)
-            _analyze_stmts(func_name, stmt.body, declared, all_func_assigned)
+                _analyze_stmts(func_name, [stmt.init], declared, all_func_assigned, hierarchy_root)
+            _analyze_stmts(func_name, stmt.body, declared, all_func_assigned, hierarchy_root)
         elif isinstance(stmt, Block):
-            _analyze_stmts(func_name, stmt.body, declared, all_func_assigned)
+            _analyze_stmts(func_name, stmt.body, declared, all_func_assigned, hierarchy_root)
         elif isinstance(stmt, (Match, TypeSwitch)):
             non_returning_stmts: list[Stmt] = []
             all_case_stmts: list[Stmt] = []
@@ -252,9 +244,9 @@ def _analyze_stmts(
             all_case_stmts.extend(stmt.default)
             if not always_returns(stmt.default):
                 non_returning_stmts.extend(stmt.default)
-            inner_new = _vars_first_assigned_in(non_returning_stmts, declared)
+            inner_new = _vars_first_assigned_in(non_returning_stmts, declared, hierarchy_root)
             # Also get all assignments in ALL case bodies (including returning ones)
-            all_inner = _vars_first_assigned_in(all_case_stmts, declared)
+            all_inner = _vars_first_assigned_in(all_case_stmts, declared, hierarchy_root)
             used_after = _collect_used_vars(stmts[i + 1 :])
             assigned_after = _collect_assigned_vars(stmts[i + 1 :])
             needs_hoisting: list[tuple[str, Type | None]] = []
@@ -271,14 +263,14 @@ def _analyze_stmts(
             for var_tuple in loop_var_conflicts:
                 if var_tuple not in needs_hoisting:
                     needs_hoisting.append(var_tuple)
-            stmt.hoisted_vars = _apply_type_overrides(func_name, needs_hoisting)
+            stmt.hoisted_vars = needs_hoisting
             _update_declared_from_hoisted(declared, needs_hoisting)
             for case in stmt.cases:
-                _analyze_stmts(func_name, case.body, declared, all_func_assigned)
-            _analyze_stmts(func_name, stmt.default, declared, all_func_assigned)
+                _analyze_stmts(func_name, case.body, declared, all_func_assigned, hierarchy_root)
+            _analyze_stmts(func_name, stmt.default, declared, all_func_assigned, hierarchy_root)
 
 
-def _analyze_hoisting(func: Function) -> None:
+def _analyze_hoisting(func: Function, hierarchy_root: str | None = None) -> None:
     """Annotate TryCatch and If nodes with variables needing hoisting."""
     func_name = func.name
     func_declared: set[str] = set()
@@ -289,4 +281,4 @@ def _analyze_hoisting(func: Function) -> None:
             func_declared.add(stmt.name)
     # Collect ALL variables assigned anywhere in the function
     all_func_assigned = _collect_assigned_vars(func.body)
-    _analyze_stmts(func_name, func.body, func_declared, all_func_assigned)
+    _analyze_stmts(func_name, func.body, func_declared, all_func_assigned, hierarchy_root)

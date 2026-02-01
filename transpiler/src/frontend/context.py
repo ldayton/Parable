@@ -37,6 +37,7 @@ class FrontendContext:
     current_func_info: "FuncInfo | None"
     current_class_name: str
     node_types: set[str]
+    hierarchy_root: str | None
     kind_to_struct: dict[str, str]
     kind_to_class: dict[str, str]
     current_catch_var: str | None

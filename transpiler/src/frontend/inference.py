@@ -296,6 +296,7 @@ def infer_attr_chain_type(
     var_types: dict[str, "Type"],
     symbols: "SymbolTable",
     current_class_name: str,
+    current_func_info: FuncInfo | None = None,
 ) -> "Type":
     """Recursively infer type of chained attribute access like self.target.value."""
     if is_type(node, ["Name"]):
@@ -304,10 +305,15 @@ def infer_attr_chain_type(
             return Pointer(StructRef(current_class_name))
         if name_id in var_types:
             return var_types[name_id]
+        # Check function parameters
+        if current_func_info:
+            for p in current_func_info.params:
+                if p.name == name_id:
+                    return p.typ
         return InterfaceRef("any")
     if is_type(node, ["Attribute"]):
         obj_type = infer_attr_chain_type(
-            node.get("value", {}), var_types, symbols, current_class_name
+            node.get("value", {}), var_types, symbols, current_class_name, current_func_info
         )
         struct_name = extract_struct_name(obj_type)
         if struct_name and struct_name in symbols.structs:
@@ -431,6 +437,7 @@ def infer_element_type_from_append_arg(
     current_class_name: str,
     current_func_info: FuncInfo | None,
     callbacks: InferenceCallbacks,
+    hierarchy_root: str | None = None,
 ) -> "Type":
     """Infer slice element type from what's being appended."""
     # Constant literals
@@ -484,7 +491,7 @@ def infer_element_type_from_append_arg(
         for elt in arg.get("elts", []):
             elem_types.append(
                 infer_element_type_from_append_arg(
-                    elt, var_types, symbols, current_class_name, current_func_info, callbacks
+                    elt, var_types, symbols, current_class_name, current_func_info, callbacks, hierarchy_root
                 )
             )
         return Tuple(tuple(elem_types))
@@ -523,7 +530,7 @@ def infer_element_type_from_append_arg(
         if func_name in symbols.structs:
             info = symbols.structs[func_name]
             if info.is_node:
-                return InterfaceRef("Node")
+                return InterfaceRef(hierarchy_root) if hierarchy_root else InterfaceRef("any")
             return Pointer(StructRef(func_name))
         # Function return types
         if func_name in symbols.functions:
@@ -558,6 +565,7 @@ def collect_var_types(
     current_func_info: FuncInfo | None,
     node_types: set[str],
     callbacks: InferenceCallbacks,
+    hierarchy_root: str | None = None,
 ) -> tuple[dict[str, "Type"], dict[str, list[str]], set[str], dict[str, list[str]]]:
     """Pre-scan function body to collect variable types, tuple var mappings, and sentinel ints."""
     var_types: dict[str, "Type"] = {}
@@ -632,9 +640,11 @@ def collect_var_types(
             vars_concrete_type[var_name] = unique_types[0]
         else:
             # Multiple types - check if all are Node-related
-            all_node = all(
-                t == InterfaceRef("Node")
-                or t == StructRef("Node")
+            hierarchy_root_iface = InterfaceRef(hierarchy_root) if hierarchy_root else None
+            hierarchy_root_struct = StructRef(hierarchy_root) if hierarchy_root else None
+            all_node = hierarchy_root and all(
+                t == hierarchy_root_iface
+                or t == hierarchy_root_struct
                 or (
                     isinstance(t, Pointer)
                     and isinstance(t.target, StructRef)
@@ -642,8 +652,8 @@ def collect_var_types(
                 )
                 for t in unique_types
             )
-            if all_node:
-                vars_concrete_type[var_name] = InterfaceRef("Node")
+            if all_node and hierarchy_root:
+                vars_concrete_type[var_name] = InterfaceRef(hierarchy_root)
             # Otherwise, no unified type (will fall back to default inference)
     # First pass: collect For loop variable types (needed for append inference)
     for stmt in dict_walk({"_type": "Module", "body": stmts}):
@@ -768,7 +778,7 @@ def collect_var_types(
                 # Handles chained access like self.target.value
                 elif is_type(value, ["Attribute"]):
                     field_type = infer_attr_chain_type(
-                        value, var_types, symbols, current_class_name
+                        value, var_types, symbols, current_class_name, current_func_info
                     )
                     if field_type != InterfaceRef("any"):
                         var_types[var_name] = field_type
@@ -921,6 +931,7 @@ def collect_var_types(
                         current_class_name,
                         current_func_info,
                         callbacks,
+                        hierarchy_root,
                     )
                     if elem_type != InterfaceRef("any"):
                         var_types[var_name] = Slice(elem_type)
@@ -1027,18 +1038,19 @@ def collect_var_types(
                 # Int with None -> use sentinel (-1 = None)
                 var_types[var_name] = INT
                 sentinel_ints.add(var_name)
-            elif concrete_type == InterfaceRef("Node"):
+            elif hierarchy_root and concrete_type == InterfaceRef(hierarchy_root):
                 # Node with None -> use Node interface (nilable in Go)
-                var_types[var_name] = InterfaceRef("Node")
+                var_types[var_name] = InterfaceRef(hierarchy_root)
             else:
                 # Other types -> use Optional (pointer)
                 var_types[var_name] = Optional(concrete_type)
     # Seventh pass: variables with multiple Node types (not assigned None)
     # These are variables assigned different Node subtypes in branches or sequentially
     # The unified Node type takes precedence over any single assignment's type
+    hierarchy_root_iface = InterfaceRef(hierarchy_root) if hierarchy_root else None
     for var_name, concrete_type in vars_concrete_type.items():
-        if var_name not in vars_assigned_none and concrete_type == InterfaceRef("Node"):
-            var_types[var_name] = InterfaceRef("Node")
+        if var_name not in vars_assigned_none and hierarchy_root_iface and concrete_type == hierarchy_root_iface:
+            var_types[var_name] = hierarchy_root_iface
     return var_types, tuple_vars, sentinel_ints, list_element_unions
 
 
@@ -1050,6 +1062,7 @@ class _ExprTypeCtx:
     current_class_name: str
     current_func_info: FuncInfo | None
     node_types: set[str]
+    hierarchy_root: str | None
     kind_to_struct: dict[str, str]
     kind_source_vars: dict[str, str]  # Maps kind var -> source node var
     narrowed_attr_paths: dict[tuple[str, ...], str]  # Maps attr path -> struct name
@@ -1098,6 +1111,7 @@ def _compute_expr_in_stmt(
                 ctx.current_func_info,
                 ctx.current_class_name,
                 ctx.node_types,
+                ctx.hierarchy_root,
             )
             subnode["_expr_type"] = typ
 
@@ -1202,6 +1216,7 @@ def compute_expr_types(
     current_func_info: FuncInfo | None,
     node_types: set[str],
     kind_to_struct: dict[str, str] | None = None,
+    hierarchy_root: str | None = None,
 ) -> None:
     """Compute types for all expressions in statements.
 
@@ -1215,6 +1230,7 @@ def compute_expr_types(
         current_class_name=current_class_name,
         current_func_info=current_func_info,
         node_types=node_types,
+        hierarchy_root=hierarchy_root,
         kind_to_struct=kind_to_struct,
         kind_source_vars={},
         narrowed_attr_paths={},

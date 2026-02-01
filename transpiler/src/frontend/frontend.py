@@ -136,7 +136,7 @@ class Frontend:
             setup_context=self._setup_context,
             setup_and_lower_stmts=self._setup_and_lower_stmts,
         )
-        return builders.build_module(tree, self.symbols, callbacks)
+        return builders.build_module(tree, self.symbols, callbacks, self._hierarchy.hierarchy_root)
 
     def _setup_context(self, class_name: str, func_info: FuncInfo | None) -> None:
         """Set up class context for var type collection."""
@@ -167,6 +167,7 @@ class Frontend:
             func_info,
             self._hierarchy.node_types,
             self._kind_to_struct,
+            self._hierarchy.hierarchy_root,
         )
         self._type_ctx = type_ctx
         return self._lower_stmts(stmts)
@@ -210,16 +211,16 @@ class Frontend:
 
     def _py_type_to_ir(self, py_type: str, concrete_nodes: bool = False) -> Type:
         """Convert Python type string to IR Type."""
-        return type_inference.py_type_to_ir(py_type, self.symbols, self._hierarchy.node_types, concrete_nodes)
+        return type_inference.py_type_to_ir(py_type, self.symbols, self._hierarchy.node_types, concrete_nodes, self._hierarchy.hierarchy_root)
 
     def _py_return_type_to_ir(self, py_type: str) -> Type:
         """Convert Python return type to IR, handling tuples as multiple returns."""
-        return type_inference.py_return_type_to_ir(py_type, self.symbols, self._hierarchy.node_types)
+        return type_inference.py_return_type_to_ir(py_type, self.symbols, self._hierarchy.node_types, self._hierarchy.hierarchy_root)
 
     def _infer_type_from_value(self, node: ASTNode, param_types: dict[str, str]) -> Type:
         """Infer IR type from an expression."""
         return type_inference.infer_type_from_value(
-            node, param_types, self.symbols, self._hierarchy.node_types
+            node, param_types, self.symbols, self._hierarchy.node_types, self._hierarchy.hierarchy_root
         )
 
     def _collect_var_types(
@@ -243,6 +244,7 @@ class Frontend:
             self._current_func_info,
             self._hierarchy.node_types,
             cb,
+            self._hierarchy.hierarchy_root,
         )
 
     def _infer_iterable_type(self, node: ASTNode, var_types: dict[str, Type]) -> Type:
@@ -359,6 +361,7 @@ class Frontend:
             current_func_info=self._current_func_info,
             current_class_name=self._current_class_name,
             node_types=self._hierarchy.node_types,
+            hierarchy_root=self._hierarchy.hierarchy_root,
             kind_to_struct=self._kind_to_struct,
             kind_to_class=self._kind_to_class,
             current_catch_var=self._current_catch_var,
@@ -409,6 +412,7 @@ class Frontend:
             self._current_func_info,
             self._current_class_name,
             self._hierarchy.node_types,
+            self._hierarchy.hierarchy_root,
         )
 
     def _lower_expr_List(self, node: ASTNode, expected_type: Type | None = None) -> "ir.Expr":

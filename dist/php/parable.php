@@ -2824,7 +2824,7 @@ class Word implements Node
         }
         $inner = _substring($value, 1, mb_strlen($value) - 1);
         $literalBytes = $this->_ansiCToBytes($inner);
-        $literalStr = pack('C*', ...$literalBytes);
+        $literalStr = UConverter::transcode(pack('C*', ...$literalBytes), 'UTF-8', 'UTF-8');
         return $this->_shSingleQuote($literalStr);
     }
 

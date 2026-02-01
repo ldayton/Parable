@@ -934,6 +934,10 @@ class PhpBackend:
                 return f"array_splice({obj_str}, {idx}, 1)[0]"
             if method == "copy":
                 return obj_str
+            if method == "decode":
+                # bytearray.decode("utf-8", errors="replace") -> UConverter::transcode
+                # UConverter replaces invalid UTF-8 bytes with U+FFFD replacement char
+                return f"UConverter::transcode(pack('C*', ...{obj_str}), 'UTF-8', 'UTF-8')"
         if isinstance(receiver_type, Primitive) and receiver_type.kind == "string":
             if method == "startswith":
                 if len(args) == 1:
@@ -1070,8 +1074,9 @@ class PhpBackend:
                 if isinstance(inner_type, Slice):
                     elem = inner_type.element
                     if isinstance(elem, Primitive) and elem.kind == "byte":
-                        # pack('C*', ...) converts byte values to string
-                        return f"pack('C*', ...{inner_str})"
+                        # UConverter::transcode replaces invalid UTF-8 with U+FFFD
+                        # This matches Python's bytes.decode("utf-8", errors="replace")
+                        return f"UConverter::transcode(pack('C*', ...{inner_str}), 'UTF-8', 'UTF-8')"
                 # rune (codepoint) to string: use mb_chr to get the character
                 if isinstance(inner_type, Primitive) and inner_type.kind == "rune":
                     return f"mb_chr({inner_str})"

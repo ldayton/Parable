@@ -371,21 +371,18 @@ class Lexer
     public bool $_cachedInArrayLiteral;
     public bool $_cachedInAssignBuiltin;
 
-    public function __construct(array $reservedWords, string $source, int $pos, int $length, ?Quotestate $quote, ?Token $_tokenCache = null, int $_parserState, int $_dolbraceState, ?array $_pendingHeredocs, bool $_extglob, ?Parser $_parser = null, string $_eofToken, ?Token $_lastReadToken = null, int $_wordContext, bool $_atCommandStart, bool $_inArrayLiteral, bool $_inAssignBuiltin, int $_postReadPos, int $_cachedWordContext, bool $_cachedAtCommandStart, bool $_cachedInArrayLiteral, bool $_cachedInAssignBuiltin)
+    public function __construct(array $reservedWords, string $source, int $pos, int $length, ?Quotestate $quote, int $_parserState, int $_dolbraceState, ?array $_pendingHeredocs, bool $_extglob, string $_eofToken, int $_wordContext, bool $_atCommandStart, bool $_inArrayLiteral, bool $_inAssignBuiltin, int $_postReadPos, int $_cachedWordContext, bool $_cachedAtCommandStart, bool $_cachedInArrayLiteral, bool $_cachedInAssignBuiltin, ?Token $_tokenCache = null, ?Parser $_parser = null, ?Token $_lastReadToken = null)
     {
         $this->reservedWords = $reservedWords;
         $this->source = $source;
         $this->pos = $pos;
         $this->length = $length;
         $this->quote = $quote;
-        $this->_tokenCache = $_tokenCache;
         $this->_parserState = $_parserState;
         $this->_dolbraceState = $_dolbraceState;
         $this->_pendingHeredocs = $_pendingHeredocs ?? [];
         $this->_extglob = $_extglob;
-        $this->_parser = $_parser;
         $this->_eofToken = $_eofToken;
-        $this->_lastReadToken = $_lastReadToken;
         $this->_wordContext = $_wordContext;
         $this->_atCommandStart = $_atCommandStart;
         $this->_inArrayLiteral = $_inArrayLiteral;
@@ -395,6 +392,9 @@ class Lexer
         $this->_cachedAtCommandStart = $_cachedAtCommandStart;
         $this->_cachedInArrayLiteral = $_cachedInArrayLiteral;
         $this->_cachedInAssignBuiltin = $_cachedInAssignBuiltin;
+        $this->_tokenCache = $_tokenCache;
+        $this->_parser = $_parser;
+        $this->_lastReadToken = $_lastReadToken;
     }
 
     public function peek(): string
@@ -701,7 +701,7 @@ class Lexer
         return _isMetachar($ch) && $bracketDepth === 0;
     }
 
-    public function _readBracketExpression(?array $chars, ?array $parts, bool $forRegex, int $parenDepth): bool
+    public function _readBracketExpression(?array &$chars, ?array $parts, bool $forRegex, int $parenDepth): bool
     {
         if ($forRegex)
         {
@@ -2416,7 +2416,7 @@ class Word implements Node
         return "(word \"" . $escaped . "\")";
     }
 
-    public function _appendWithCtlesc(?array $result, int $byteVal): void
+    public function _appendWithCtlesc(?array &$result, int $byteVal): void
     {
         array_push($result, $byteVal);
     }
@@ -2692,7 +2692,7 @@ class Word implements Node
                                     {
                                         return $result;
                                     }
-                                    array_push($result, ...str_split((string)($codepoint)));
+                                    array_push($result, ...array_values(unpack('C*', mb_chr($codepoint))));
                                     $i = $j;
                                 }
                                 else
@@ -2717,7 +2717,7 @@ class Word implements Node
                                         {
                                             return $result;
                                         }
-                                        array_push($result, ...str_split((string)($codepoint)));
+                                        array_push($result, ...array_values(unpack('C*', mb_chr($codepoint))));
                                         $i = $j;
                                     }
                                     else
@@ -2809,7 +2809,7 @@ class Word implements Node
             }
             else
             {
-                array_push($result, ...str_split((string)(mb_substr($inner, $i, 1))));
+                array_push($result, ...array_values(unpack('C*', (string)(mb_substr($inner, $i, 1)))));
                 $i += 1;
             }
         }
@@ -2824,7 +2824,7 @@ class Word implements Node
         }
         $inner = _substring($value, 1, mb_strlen($value) - 1);
         $literalBytes = $this->_ansiCToBytes($inner);
-        $literalStr = implode('', $literalBytes);
+        $literalStr = pack('C*', ...$literalBytes);
         return $this->_shSingleQuote($literalStr);
     }
 
@@ -4991,12 +4991,12 @@ class Redirect implements Node
     public ?int $fd;
     public string $kind;
 
-    public function __construct(string $op, ?Word $target, ?int $fd = null, string $kind)
+    public function __construct(string $op, ?Word $target, string $kind, ?int $fd = null)
     {
         $this->op = $op;
         $this->target = $target;
-        $this->fd = $fd;
         $this->kind = $kind;
+        $this->fd = $fd;
     }
 
     public function toSexp(): string
@@ -5105,16 +5105,16 @@ class Heredoc implements Node
     public int $_startPos;
     public string $kind;
 
-    public function __construct(string $delimiter, string $content, bool $stripTabs, bool $quoted, ?int $fd = null, bool $complete, int $_startPos, string $kind)
+    public function __construct(string $delimiter, string $content, bool $stripTabs, bool $quoted, bool $complete, int $_startPos, string $kind, ?int $fd = null)
     {
         $this->delimiter = $delimiter;
         $this->content = $content;
         $this->stripTabs = $stripTabs;
         $this->quoted = $quoted;
-        $this->fd = $fd;
         $this->complete = $complete;
         $this->_startPos = $_startPos;
         $this->kind = $kind;
+        $this->fd = $fd;
     }
 
     public function toSexp(): string
@@ -5284,13 +5284,13 @@ class For_ implements Node
     public ?array $redirects;
     public string $kind;
 
-    public function __construct(string $var_, ?array $words = null, ?Node $body, ?array $redirects, string $kind)
+    public function __construct(string $var_, ?Node $body, ?array $redirects, string $kind, ?array $words = null)
     {
         $this->var_ = $var_;
-        $this->words = $words;
         $this->body = $body;
         $this->redirects = $redirects ?? [];
         $this->kind = $kind;
+        $this->words = $words;
     }
 
     public function toSexp(): string
@@ -5392,13 +5392,13 @@ class Select implements Node
     public ?array $redirects;
     public string $kind;
 
-    public function __construct(string $var_, ?array $words = null, ?Node $body, ?array $redirects, string $kind)
+    public function __construct(string $var_, ?Node $body, ?array $redirects, string $kind, ?array $words = null)
     {
         $this->var_ = $var_;
-        $this->words = $words;
         $this->body = $body;
         $this->redirects = $redirects ?? [];
         $this->kind = $kind;
+        $this->words = $words;
     }
 
     public function toSexp(): string
@@ -5779,10 +5779,10 @@ class Arithmeticexpansion implements Node
     public ?Node $expression;
     public string $kind;
 
-    public function __construct(?Node $expression = null, string $kind)
+    public function __construct(string $kind, ?Node $expression = null)
     {
-        $this->expression = $expression;
         $this->kind = $kind;
+        $this->expression = $expression;
     }
 
     public function toSexp(): string
@@ -5807,12 +5807,12 @@ class Arithmeticcommand implements Node
     public string $rawContent;
     public string $kind;
 
-    public function __construct(?Node $expression = null, ?array $redirects, string $rawContent, string $kind)
+    public function __construct(?array $redirects, string $rawContent, string $kind, ?Node $expression = null)
     {
-        $this->expression = $expression;
         $this->redirects = $redirects ?? [];
         $this->rawContent = $rawContent;
         $this->kind = $kind;
+        $this->expression = $expression;
     }
 
     public function toSexp(): string
@@ -7180,7 +7180,7 @@ class Parser
         return $this->_lexer->_isWordTerminator($ctx, $ch, $bracketDepth, $parenDepth);
     }
 
-    public function _scanDoubleQuote(?array $chars, ?array $parts, int $start, bool $handleLineContinuation): void
+    public function _scanDoubleQuote(?array &$chars, ?array $parts, int $start, bool $handleLineContinuation): void
     {
         array_push($chars, "\"");
         while (!$this->atEnd() && $this->peek() !== "\"")
@@ -7222,7 +7222,7 @@ class Parser
         array_push($chars, $this->advance());
     }
 
-    public function _parseDollarExpansion(?array $chars, ?array $parts, bool $inDquote): bool
+    public function _parseDollarExpansion(?array &$chars, ?array &$parts, bool $inDquote): bool
     {
         $result0 = null;
         $result1 = "";
@@ -7957,7 +7957,7 @@ class Parser
             $this->pos = $start;
             return [null, ""];
         }
-        return [new Arithmeticexpansion($expr, "arith"), $text];
+        return [new Arithmeticexpansion("arith", $expr), $text];
     }
 
     public function _parseArithExpr(string $content): ?Node
@@ -8660,7 +8660,7 @@ class Parser
             $this->_arithAdvance();
             $this->_arithAdvance();
             $innerExpr = $this->_parseArithExpr($content);
-            return new Arithmeticexpansion($innerExpr, "arith");
+            return new Arithmeticexpansion("arith", $innerExpr);
         }
         $depth = 1;
         $contentStart = $this->_arithPos;
@@ -9105,7 +9105,7 @@ class Parser
             {
                 throw new Parseerror_("Expected target for redirect " . $op);
             }
-            return new Redirect($op, $target, null, "redirect");
+            return new Redirect($op, $target, "redirect", null);
         }
         if ($ch === "" || !_isRedirectChar($ch))
         {
@@ -9308,7 +9308,7 @@ class Parser
         {
             throw new Parseerror_("Expected target for redirect " . $op);
         }
-        return new Redirect($op, $target, null, "redirect");
+        return new Redirect($op, $target, "redirect", null);
     }
 
     public function _parseHeredocDelimiter(): array
@@ -9392,7 +9392,7 @@ class Parser
                                         $escVal = _getAnsiEscape($esc);
                                         if ($escVal >= 0)
                                         {
-                                            array_push($delimiterChars, (string)($escVal));
+                                            array_push($delimiterChars, mb_chr($escVal));
                                             $this->advance();
                                         }
                                         else
@@ -9742,7 +9742,7 @@ class Parser
                 return $existing;
             }
         }
-        $heredoc = new Heredoc($delimiter, "", $stripTabs, $quoted, $fd, false, 0, "heredoc");
+        $heredoc = new Heredoc($delimiter, "", $stripTabs, $quoted, false, 0, "heredoc", $fd);
         $heredoc->_startPos = $startPos;
         array_push($this->_pendingHeredocs, $heredoc);
         $this->_clearState(PARSERSTATEFLAGS_PST_HEREDOC);
@@ -9930,7 +9930,7 @@ class Parser
         $this->advance();
         $this->advance();
         $expr = $this->_parseArithExpr($content);
-        return new Arithmeticcommand($expr, $this->_collectRedirects(), $content, "arith-cmd");
+        return new Arithmeticcommand($this->_collectRedirects(), $content, "arith-cmd", $expr);
     }
 
     public function parseConditionalExpr(): ?Conditionalexpr
@@ -10448,7 +10448,7 @@ class Parser
             {
                 throw new Parseerror_("Expected brace group in for loop");
             }
-            return new For_($varName, $words, $braceGroup->body, $this->_collectRedirects(), "for");
+            return new For_($varName, $braceGroup->body, $this->_collectRedirects(), "for", $words);
         }
         if (!$this->_lexConsumeWord("do"))
         {
@@ -10464,7 +10464,7 @@ class Parser
         {
             throw new Parseerror_("Expected 'done' to close for loop");
         }
-        return new For_($varName, $words, $body, $this->_collectRedirects(), "for");
+        return new For_($varName, $body, $this->_collectRedirects(), "for", $words);
     }
 
     public function _parseForArith(): ?Forarith
@@ -10593,7 +10593,7 @@ class Parser
         }
         $this->skipWhitespaceAndNewlines();
         $body = $this->_parseLoopBody("select");
-        return new Select($varName, $words, $body, $this->_collectRedirects(), "select");
+        return new Select($varName, $body, $this->_collectRedirects(), "select", $words);
     }
 
     public function _consumeCaseTerminator(): string
@@ -11971,7 +11971,7 @@ function _isWhitespace(string $c): bool
 
 function _stringToBytes(string $s): ?array
 {
-    return $s;
+    return array_values(unpack('C*', $s));
 }
 
 function _isWhitespaceNoNewline(string $c): bool
@@ -14332,7 +14332,7 @@ function newContextStack(): ?Contextstack
 
 function newLexer(string $source, bool $extglob): ?Lexer
 {
-    $self = new Lexer([], "", 0, 0, null, null, 0, 0, [], false, null, "", null, 0, false, false, false, 0, 0, false, false, false);
+    $self = new Lexer([], "", 0, 0, null, 0, 0, [], false, "", 0, false, false, false, 0, 0, false, false, false, null, null, null);
     $self->source = $source;
     $self->pos = 0;
     $self->length = mb_strlen($source);

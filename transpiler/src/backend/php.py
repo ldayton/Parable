@@ -218,6 +218,7 @@ class PhpBackend:
         self.receiver_name: str | None = None
         self.current_class: str = ""
         self.struct_fields: dict[str, list[tuple[str, Type]]] = {}
+        self.sorted_struct_fields: dict[str, list[tuple[str, Type]]] = {}
         self._hoisted_vars: set[str] = set()
         self._module_name: str = ""
         self._callable_params: set[str] = set()
@@ -227,6 +228,7 @@ class PhpBackend:
         self.indent = 0
         self.lines = []
         self.struct_fields = {}
+        self.sorted_struct_fields = {}
         self._hoisted_vars = set()
         self._module_name = module.name
         self._collect_struct_fields(module)
@@ -237,6 +239,17 @@ class PhpBackend:
         """Collect field information for all structs."""
         for struct in module.structs:
             self.struct_fields[struct.name] = [(f.name, f.typ) for f in struct.fields]
+            # Also store sorted order (required first, optional last) for struct literal generation
+            required = []
+            optional = []
+            for f in struct.fields:
+                if f.default is not None or isinstance(f.typ, Optional):
+                    optional.append((f.name, f.typ))
+                elif struct.is_exception and _safe_name(f.name) in ("pos", "line"):
+                    optional.append((f.name, f.typ))
+                else:
+                    required.append((f.name, f.typ))
+            self.sorted_struct_fields[struct.name] = required + optional
 
     def _line(self, text: str = "") -> None:
         if text:
@@ -325,8 +338,19 @@ class PhpBackend:
                 self.indent -= 1
                 self._line("}")
             return
-        param_parts = []
+        # Sort fields: required first, optional last (PHP 8.1+ deprecates optional before required)
+        required_fields = []
+        optional_fields = []
         for f in struct.fields:
+            if f.default is not None or isinstance(f.typ, Optional):
+                optional_fields.append(f)
+            elif struct.is_exception and _safe_name(f.name) in ("pos", "line"):
+                optional_fields.append(f)
+            else:
+                required_fields.append(f)
+        sorted_fields = required_fields + optional_fields
+        param_parts = []
+        for f in sorted_fields:
             typ = self._param_type(f.typ)
             name = _safe_name(f.name)
             if f.default is not None:
@@ -343,7 +367,7 @@ class PhpBackend:
         self._line(f"public function __construct({params})")
         self._line("{")
         self.indent += 1
-        for f in struct.fields:
+        for f in sorted_fields:
             param_name = _safe_name(f.name)
             if struct.is_exception and f.name == "message":
                 self._line(f"parent::__construct(${param_name});")
@@ -395,7 +419,18 @@ class PhpBackend:
         parts = []
         for p in params:
             typ = self._param_type(p.typ)
-            parts.append(f"{typ} ${_safe_name(p.name)}")
+            name = _safe_name(p.name)
+            # PHP passes arrays by value; use & for Pointer to Slice since
+            # these indicate intentional mutation (vs plain Slice which may
+            # receive literals that can't be by-reference)
+            if isinstance(p.typ, Pointer):
+                inner = p.typ.target
+                if isinstance(inner, Optional):
+                    inner = inner.inner
+                if isinstance(inner, Slice):
+                    parts.append(f"{typ} &${name}")
+                    continue
+            parts.append(f"{typ} ${name}")
         return ", ".join(parts)
 
     def _emit_hoisted_vars(
@@ -931,9 +966,7 @@ class PhpBackend:
         if method == "extend":
             arg_type = args[0].typ if args else None
             if isinstance(arg_type, Slice):
-                elem_type = arg_type.element
-                if isinstance(elem_type, Primitive) and elem_type.kind == "byte":
-                    return f"array_push({obj_str}, ...str_split({args_str}))"
+                # Byte slice is already properly converted, just spread it
                 return f"array_push({obj_str}, ...{args_str})"
             return f"array_push({obj_str}, {args_str})"
         if method == "remove":
@@ -1003,6 +1036,15 @@ class PhpBackend:
 
     def _cast(self, inner: Expr, to_type: Type) -> str:
         inner_str = self._expr(inner)
+        # Handle string to byte slice: unpack to get array of byte values
+        if (
+            isinstance(to_type, Slice)
+            and isinstance(to_type.element, Primitive)
+            and to_type.element.kind == "byte"
+            and isinstance(inner.typ, Primitive)
+            and inner.typ.kind == "string"
+        ):
+            return f"array_values(unpack('C*', {inner_str}))"
         if isinstance(to_type, Primitive):
             if to_type.kind == "int":
                 return f"(int)({inner_str})"
@@ -1015,7 +1057,11 @@ class PhpBackend:
                 if isinstance(inner_type, Slice):
                     elem = inner_type.element
                     if isinstance(elem, Primitive) and elem.kind == "byte":
-                        return f"implode('', {inner_str})"
+                        # pack('C*', ...) converts byte values to string
+                        return f"pack('C*', ...{inner_str})"
+                # rune (codepoint) to string: use mb_chr to get the character
+                if isinstance(inner_type, Primitive) and inner_type.kind == "rune":
+                    return f"mb_chr({inner_str})"
                 return f"(string)({inner_str})"
         return inner_str
 
@@ -1030,7 +1076,8 @@ class PhpBackend:
         return f'"{escaped}"'
 
     def _struct_lit(self, struct_name: str, fields: dict[str, Expr], embedded_value: Expr | None) -> str:
-        field_info = self.struct_fields.get(struct_name, [])
+        # Use sorted field order to match constructor parameter order
+        field_info = self.sorted_struct_fields.get(struct_name, [])
         safe_name = _safe_pascal(struct_name)
         if field_info:
             ordered_args = []

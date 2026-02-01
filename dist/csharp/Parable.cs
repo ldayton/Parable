@@ -2362,7 +2362,7 @@ public class Lexer
         }
         if ((op == "<" || op == ">") && arg.StartsWith("(") && arg.EndsWith(")"))
         {
-            string inner = arg.Substring(1, arg.Length - 1 - 1);
+            string inner = arg.Substring(1, (arg.Length - 1) - (1));
             try
             {
                 Parser subParser = ParableFunctions.NewParser(inner, true, this._Parser._Extglob);
@@ -2410,7 +2410,7 @@ public class Word : INode
         value = this._NormalizeParamExpansionNewlines(value);
         value = this._StripArithLineContinuations(value);
         value = this._DoubleCtlescSmart(value);
-        value = value.Replace("", "");
+        value = value.Replace("\u007f", "\u0001\u007f");
         value = value.Replace("\\", "\\\\");
         if (value.EndsWith("\\\\") && !(value.EndsWith("\\\\\\\\")))
         {
@@ -2444,7 +2444,7 @@ public class Word : INode
                 }
             }
             result.Add(c);
-            if (c == "")
+            if (c == "\u0001")
             {
                 if (quote.Double)
                 {
@@ -2462,12 +2462,12 @@ public class Word : INode
                     }
                     if (bsCount % 2 == 0)
                     {
-                        result.Add("");
+                        result.Add("\u0001");
                     }
                 }
                 else
                 {
-                    result.Add("");
+                    result.Add("\u0001");
                 }
             }
         }
@@ -2649,7 +2649,7 @@ public class Word : INode
                                 {
                                     return result;
                                 }
-                                byteVal = (Convert.ToInt32(hexStr, 16) & 255);
+                                byteVal = (((int)Convert.ToInt64(hexStr, 16)) & 255);
                                 if (byteVal == 0)
                                 {
                                     return result;
@@ -2666,7 +2666,7 @@ public class Word : INode
                                 }
                                 if (j > i + 2)
                                 {
-                                    byteVal = Convert.ToInt32(ParableFunctions._Substring(inner, i + 2, j), 16);
+                                    byteVal = ((int)Convert.ToInt64(ParableFunctions._Substring(inner, i + 2, j), 16));
                                     if (byteVal == 0)
                                     {
                                         return result;
@@ -2693,7 +2693,7 @@ public class Word : INode
                                 }
                                 if (j > i + 2)
                                 {
-                                    codepoint = Convert.ToInt32(ParableFunctions._Substring(inner, i + 2, j), 16);
+                                    codepoint = ((int)Convert.ToInt64(ParableFunctions._Substring(inner, i + 2, j), 16));
                                     if (codepoint == 0)
                                     {
                                         return result;
@@ -2718,7 +2718,7 @@ public class Word : INode
                                     }
                                     if (j > i + 2)
                                     {
-                                        codepoint = Convert.ToInt32(ParableFunctions._Substring(inner, i + 2, j), 16);
+                                        codepoint = ((int)Convert.ToInt64(ParableFunctions._Substring(inner, i + 2, j), 16));
                                         if (codepoint == 0)
                                         {
                                             return result;
@@ -2769,7 +2769,7 @@ public class Word : INode
                                             }
                                             if (j > i + 2)
                                             {
-                                                byteVal = (Convert.ToInt32(ParableFunctions._Substring(inner, i + 1, j), 8) & 255);
+                                                byteVal = (((int)Convert.ToInt64(ParableFunctions._Substring(inner, i + 1, j), 8)) & 255);
                                                 if (byteVal == 0)
                                                 {
                                                     return result;
@@ -2791,7 +2791,7 @@ public class Word : INode
                                                 {
                                                     j += 1;
                                                 }
-                                                byteVal = (Convert.ToInt32(ParableFunctions._Substring(inner, i + 1, j), 8) & 255);
+                                                byteVal = (((int)Convert.ToInt64(ParableFunctions._Substring(inner, i + 1, j), 8)) & 255);
                                                 if (byteVal == 0)
                                                 {
                                                     return result;
@@ -2945,7 +2945,7 @@ public class Word : INode
                             if (braceDepth > 0 && outerInDquote && expanded.StartsWith("'") && expanded.EndsWith("'"))
                             {
                                 string inner = ParableFunctions._Substring(expanded, 1, expanded.Length - 1);
-                                if (inner.IndexOf("") == -1)
+                                if (inner.IndexOf("\u0001") == -1)
                                 {
                                     string resultStr = string.Join("", result);
                                     bool inPattern = false;
@@ -4498,7 +4498,7 @@ public class Word : INode
                     {
                         if ((value[i]).ToString() == "\\" && i + 1 < value.Length)
                         {
-                            currentPart.Add(value.Substring(i, i + 2 - i));
+                            currentPart.Add(value.Substring(i, (i + 2) - (i)));
                             i += 2;
                             continue;
                         }
@@ -4594,7 +4594,7 @@ public class Word : INode
         value = this._StripLocaleStringDollars(value);
         value = this._FormatCommandSubstitutions(value, false);
         value = this._NormalizeExtglobWhitespace(value);
-        value = value.Replace("", "");
+        value = value.Replace("\u0001", "\u0001\u0001");
         return value.TrimEnd("\n".ToCharArray());
     }
 
@@ -5054,13 +5054,13 @@ public class Redirect : INode
                 }
             }
             string raw = ParableFunctions._Substring(targetVal, 1, targetVal.Length);
-            if ((raw.Length > 0 && raw.All(char.IsDigit)) && Convert.ToInt32(raw, 10) <= 2147483647)
+            if ((raw.Length > 0 && raw.All(char.IsDigit)) && Convert.ToInt64(raw, 10) <= 2147483647)
             {
-                return "(redirect \"" + op + "\" " + Convert.ToInt32(raw, 10).ToString() + ")";
+                return "(redirect \"" + op + "\" " + ((int)Convert.ToInt64(raw, 10)).ToString() + ")";
             }
-            if (raw.EndsWith("-") && (raw.Substring(0, raw.Length - 1).Length > 0 && raw.Substring(0, raw.Length - 1).All(char.IsDigit)) && Convert.ToInt32(raw.Substring(0, raw.Length - 1), 10) <= 2147483647)
+            if (raw.EndsWith("-") && (raw.Substring(0, raw.Length - 1).Length > 0 && raw.Substring(0, raw.Length - 1).All(char.IsDigit)) && Convert.ToInt64(raw.Substring(0, raw.Length - 1), 10) <= 2147483647)
             {
-                return "(redirect \"" + op + "\" " + Convert.ToInt32(raw.Substring(0, raw.Length - 1), 10).ToString() + ")";
+                return "(redirect \"" + op + "\" " + ((int)Convert.ToInt64(raw.Substring(0, raw.Length - 1), 10)).ToString() + ")";
             }
             if (targetVal == "&-")
             {
@@ -5071,17 +5071,17 @@ public class Redirect : INode
         }
         if (op == ">&" || op == "<&")
         {
-            if ((targetVal.Length > 0 && targetVal.All(char.IsDigit)) && Convert.ToInt32(targetVal, 10) <= 2147483647)
+            if ((targetVal.Length > 0 && targetVal.All(char.IsDigit)) && Convert.ToInt64(targetVal, 10) <= 2147483647)
             {
-                return "(redirect \"" + op + "\" " + Convert.ToInt32(targetVal, 10).ToString() + ")";
+                return "(redirect \"" + op + "\" " + ((int)Convert.ToInt64(targetVal, 10)).ToString() + ")";
             }
             if (targetVal == "-")
             {
                 return "(redirect \">&-\" 0)";
             }
-            if (targetVal.EndsWith("-") && (targetVal.Substring(0, targetVal.Length - 1).Length > 0 && targetVal.Substring(0, targetVal.Length - 1).All(char.IsDigit)) && Convert.ToInt32(targetVal.Substring(0, targetVal.Length - 1), 10) <= 2147483647)
+            if (targetVal.EndsWith("-") && (targetVal.Substring(0, targetVal.Length - 1).Length > 0 && targetVal.Substring(0, targetVal.Length - 1).All(char.IsDigit)) && Convert.ToInt64(targetVal.Substring(0, targetVal.Length - 1), 10) <= 2147483647)
             {
-                return "(redirect \"" + op + "\" " + Convert.ToInt32(targetVal.Substring(0, targetVal.Length - 1), 10).ToString() + ")";
+                return "(redirect \"" + op + "\" " + ((int)Convert.ToInt64(targetVal.Substring(0, targetVal.Length - 1), 10)).ToString() + ")";
             }
             string outVal = (targetVal.EndsWith("-") ? targetVal.Substring(0, targetVal.Length - 1) : targetVal);
             return "(redirect \"" + op + "\" \"" + outVal + "\")";
@@ -8508,6 +8508,7 @@ public class Parser
                 {
                     if (this._ArithPeek(0) == "[")
                     {
+                        bool _breakLoop5 = false;
                         switch (left)
                         {
                             case ArithVar leftArithVar:
@@ -8522,8 +8523,10 @@ public class Parser
                                 left = new ArithSubscript(leftArithVar.Name, index, "subscript");
                                 break;
                             default:
+                                _breakLoop5 = true;
                                 break;
                         }
+                        if (_breakLoop5) break;
                     }
                     else
                     {
@@ -9091,7 +9094,7 @@ public class Parser
             {
                 fdChars.Add(this.Advance());
             }
-            fd = Convert.ToInt32(string.Join("", fdChars), 10);
+            fd = ((int)Convert.ToInt64(string.Join("", fdChars), 10));
         }
         ch = this.Peek();
         string op = "";
@@ -11884,7 +11887,7 @@ public class Parser
         {
             return new List<INode> { new Empty("empty") };
         }
-        if (this._SawNewlineInSingleQuote && (!string.IsNullOrEmpty(this.Source)) && (this.Source[this.Source.Length - 1]).ToString() == "\\" && !(this.Source.Length >= 3 && this.Source.Substring(this.Source.Length - 3, this.Source.Length - 1 - this.Source.Length - 3) == "\\\n"))
+        if (this._SawNewlineInSingleQuote && (!string.IsNullOrEmpty(this.Source)) && (this.Source[this.Source.Length - 1]).ToString() == "\\" && !(this.Source.Length >= 3 && this.Source.Substring(this.Source.Length - 3, (this.Source.Length - 1) - (this.Source.Length - 3)) == "\\\n"))
         {
             if (!(this._LastWordOnOwnLine(results)))
             {
@@ -12051,7 +12054,7 @@ public static class ParableFunctions
 
     public static List<INode> _Sublist(List<INode> lst, int start, int end)
     {
-        return lst.GetRange(start, end - start);
+        return lst.GetRange(start, (end) - (start));
     }
 
     public static string _RepeatStr(string s, int n)
@@ -12428,12 +12431,15 @@ public static class ParableFunctions
                     {
                         foreach (INode r in ((Command)cmd).Redirects)
                         {
+                            bool _breakLoop6 = false;
                             switch (r)
                             {
                                 case HereDoc rHereDoc:
                                     hasHeredoc = true;
+                                    _breakLoop6 = true;
                                     break;
                             }
+                            if (_breakLoop6) break;
                         }
                     }
                     int firstNl = 0;
@@ -12513,12 +12519,15 @@ public static class ParableFunctions
                     {
                         foreach (INode r in ((Command)p).Redirects)
                         {
+                            bool _breakLoop7 = false;
                             switch (r)
                             {
                                 case HereDoc rHereDoc:
                                     hasHeredoc = true;
+                                    _breakLoop7 = true;
                                     break;
                             }
+                            if (_breakLoop7) break;
                         }
                     }
                     else
@@ -12532,12 +12541,15 @@ public static class ParableFunctions
                                     {
                                         foreach (INode r in ((Command)cmd).Redirects)
                                         {
+                                            bool _breakLoop8 = false;
                                             switch (r)
                                             {
                                                 case HereDoc rHereDoc:
                                                     hasHeredoc = true;
+                                                    _breakLoop8 = true;
                                                     break;
                                             }
+                                            if (_breakLoop8) break;
                                         }
                                     }
                                     if (hasHeredoc)
@@ -13883,7 +13895,7 @@ public static class ParableFunctions
             int depth = 0;
             List<string> inner = new List<string>();
             string innerStr = "";
-            if (i + 1 < delimiter.Length && delimiter.Substring(i, i + 2 - i) == "$(")
+            if (i + 1 < delimiter.Length && delimiter.Substring(i, (i + 2) - (i)) == "$(")
             {
                 result.Add("$(");
                 i += 2;
@@ -13923,7 +13935,7 @@ public static class ParableFunctions
             }
             else
             {
-                if (i + 1 < delimiter.Length && delimiter.Substring(i, i + 2 - i) == "${")
+                if (i + 1 < delimiter.Length && delimiter.Substring(i, (i + 2) - (i)) == "${")
                 {
                     result.Add("${");
                     i += 2;

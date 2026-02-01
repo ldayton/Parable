@@ -1968,7 +1968,7 @@ class Word implements Node {
         value = this._normalizeParamExpansionNewlines(value);
         value = this._stripArithLineContinuations(value);
         value = this._doubleCtlescSmart(value);
-        value = value.replace("", "");
+        value = value.replace("\u007f", "\u0001\u007f");
         value = value.replace("\\", "\\\\");
         if (value.endsWith("\\\\") && !value.endsWith("\\\\\\\\")) {
             value = value + "\\\\";
@@ -1994,7 +1994,7 @@ class Word implements Node {
                 }
             }
             result.add(c);
-            if (c.equals("")) {
+            if (c.equals("\u0001")) {
                 if (quote.double_) {
                     int bsCount = 0;
                     for (int j = result.size() - 2; j > -1; j += -1) {
@@ -2005,10 +2005,10 @@ class Word implements Node {
                         }
                     }
                     if (bsCount % 2 == 0) {
-                        result.add("");
+                        result.add("\u0001");
                     }
                 } else {
-                    result.add("");
+                    result.add("\u0001");
                 }
             }
         }
@@ -2355,7 +2355,7 @@ class Word implements Node {
                             boolean outerInDquote = quote.outerDouble();
                             if (braceDepth > 0 && outerInDquote && expanded.startsWith("'") && expanded.endsWith("'")) {
                                 String inner = ParableFunctions._substring(expanded, 1, expanded.length() - 1);
-                                if (inner.indexOf("") == -1) {
+                                if (inner.indexOf("\u0001") == -1) {
                                     String resultStr = String.join("", result);
                                     boolean inPattern = false;
                                     int lastBraceIdx = resultStr.lastIndexOf("${");
@@ -3542,7 +3542,7 @@ class Word implements Node {
         value = this._stripLocaleStringDollars(value);
         value = this._formatCommandSubstitutions(value, false);
         value = this._normalizeExtglobWhitespace(value);
-        value = value.replace("", "");
+        value = value.replace("\u0001", "\u0001\u0001");
         return value.replaceFirst("[" + "\n" + "]+$", "");
     }
 

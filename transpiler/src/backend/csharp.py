@@ -221,6 +221,7 @@ class CSharpBackend:
         self._type_switch_binding_rename: dict[str, str] = {}
         self._loop_temp_counter = 0
         self._func_params: set[str] = set()
+        self._current_break_flag: str | None = None
 
     def emit(self, module: Module) -> str:
         """Emit C# code from IR Module."""
@@ -538,6 +539,8 @@ class CSharpBackend:
                 self.indent -= 1
                 self._line("}")
             case Break(label=label):
+                if self._current_break_flag:
+                    self._line(f"{self._current_break_flag} = true;")
                 self._line("break;")
             case Continue(label=label):
                 self._line("continue;")
@@ -653,12 +656,33 @@ class CSharpBackend:
         """Check if an expression is a variable declared with object type."""
         return isinstance(expr, Var) and expr.name in self._object_vars
 
+    def _type_switch_has_break(self, stmt: TypeSwitch) -> bool:
+        """Check if any case in a type switch contains a Break statement."""
+        for case in stmt.cases:
+            for s in case.body:
+                if isinstance(s, Break):
+                    return True
+        if stmt.default:
+            for s in stmt.default:
+                if isinstance(s, Break):
+                    return True
+        return False
+
     def _emit_type_switch(self, stmt: TypeSwitch) -> None:
         self._emit_hoisted_vars(stmt)
         var = self._expr(stmt.expr)
         binding = _safe_name(stmt.binding)
         cases = stmt.cases
         default = stmt.default
+        # Check if any case has a Break that needs to propagate past the switch
+        needs_break_flag = self._type_switch_has_break(stmt)
+        break_flag = None
+        old_break_flag = self._current_break_flag
+        if needs_break_flag:
+            self.temp_counter += 1
+            break_flag = f"_breakLoop{self.temp_counter}"
+            self._line(f"bool {break_flag} = false;")
+            self._current_break_flag = break_flag
         self._line(f"switch ({var})")
         self._line("{")
         self.indent += 1
@@ -688,6 +712,9 @@ class CSharpBackend:
             self.indent -= 1
         self.indent -= 1
         self._line("}")
+        self._current_break_flag = old_break_flag
+        if needs_break_flag:
+            self._line(f"if ({break_flag}) break;")
 
     def _emit_match(self, stmt: Match) -> None:
         self._emit_hoisted_vars(stmt)
@@ -912,7 +939,7 @@ class CSharpBackend:
             case SliceExpr(obj=obj, low=low, high=high):
                 return self._slice_expr(obj, low, high)
             case ParseInt(string=s, base=b):
-                return f"Convert.ToInt32({self._expr(s)}, {self._expr(b)})"
+                return f"((int)Convert.ToInt64({self._expr(s)}, {self._expr(b)}))"
             case IntToStr(value=v):
                 return f"{self._expr(v)}.ToString()"
             case CharClassify(kind=kind, char=char):
@@ -970,6 +997,9 @@ class CSharpBackend:
                 left_str = self._expr(left)
                 right_str = self._expr(right)
                 cs_op = _binary_op(op)
+                # For ParseInt in comparisons, use uncasted long to avoid overflow
+                if cs_op in ("<", "<=", ">", ">=") and isinstance(left, ParseInt):
+                    left_str = f"Convert.ToInt64({self._expr(left.string)}, {self._expr(left.base)})"
                 # Cast object-typed variables to string in string comparisons
                 if cs_op in ("==", "!="):
                     if _is_string_type(left.typ) and self._is_object_var(right):
@@ -1236,7 +1266,7 @@ class CSharpBackend:
             if low and high:
                 lo = self._expr(low)
                 hi = self._expr(high)
-                return f"{obj_str}.Substring({lo}, {hi} - {lo})"
+                return f"{obj_str}.Substring({lo}, ({hi}) - ({lo}))"
             elif low:
                 return f"{obj_str}.Substring({self._expr(low)})"
             elif high:
@@ -1245,7 +1275,7 @@ class CSharpBackend:
         if low and high:
             lo = self._expr(low)
             hi = self._expr(high)
-            return f"{obj_str}.GetRange({lo}, {hi} - {lo})"
+            return f"{obj_str}.GetRange({lo}, ({hi}) - ({lo}))"
         elif low:
             lo = self._expr(low)
             return f"{obj_str}.GetRange({lo}, {obj_str}.Count - {lo})"

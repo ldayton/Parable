@@ -83,7 +83,7 @@ function runTest(string $testInput, string $testExpected): array {
             $parts[] = $node->toSexp();
         }
         $actual = implode(' ', $parts);
-    } catch (ParseError $e) {
+    } catch (Parseerror_ $e) {
         if (normalize($testExpected) === '<error>') {
             return [true, '<error>', null];
         }

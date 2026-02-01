@@ -110,7 +110,7 @@ class Parseerror_ extends Exception
     public int $pos;
     public int $line;
 
-    public function __construct(string $message, int $pos, int $line)
+    public function __construct(string $message, int $pos = 0, int $line = 0)
     {
         parent::__construct($message);
         $this->pos = $pos;
@@ -136,6 +136,11 @@ class Parseerror_ extends Exception
 
 class Matchedpairerror extends Parseerror_
 {
+
+    public function __construct(string $message)
+    {
+        parent::__construct($message, 0, 0);
+    }
 }
 
 class Tokentype
@@ -251,7 +256,7 @@ class Quotestate
         {
             return false;
         }
-        return $this->_stack[count($this->_stack) - 1]->f1;
+        return $this->_stack[count($this->_stack) - 1][1];
     }
 }
 
@@ -366,7 +371,7 @@ class Lexer
     public bool $_cachedInArrayLiteral;
     public bool $_cachedInAssignBuiltin;
 
-    public function __construct(array $reservedWords, string $source, int $pos, int $length, ?Quotestate $quote, ?Token $_tokenCache, int $_parserState, int $_dolbraceState, ?array $_pendingHeredocs, bool $_extglob, ?Parser $_parser, string $_eofToken, ?Token $_lastReadToken, int $_wordContext, bool $_atCommandStart, bool $_inArrayLiteral, bool $_inAssignBuiltin, int $_postReadPos, int $_cachedWordContext, bool $_cachedAtCommandStart, bool $_cachedInArrayLiteral, bool $_cachedInAssignBuiltin)
+    public function __construct(array $reservedWords, string $source, int $pos, int $length, ?Quotestate $quote, ?Token $_tokenCache = null, int $_parserState, int $_dolbraceState, ?array $_pendingHeredocs, bool $_extglob, ?Parser $_parser = null, string $_eofToken, ?Token $_lastReadToken = null, int $_wordContext, bool $_atCommandStart, bool $_inArrayLiteral, bool $_inAssignBuiltin, int $_postReadPos, int $_cachedWordContext, bool $_cachedAtCommandStart, bool $_cachedInArrayLiteral, bool $_cachedInAssignBuiltin)
     {
         $this->reservedWords = $reservedWords;
         $this->source = $source;
@@ -636,7 +641,7 @@ class Lexer
                 return [implode("", $chars), $sawNewline];
             }
         }
-        throw new ParseError("Unterminated single quote");
+        throw new Parseerror_("Unterminated single quote");
     }
 
     public function _isWordTerminator(int $ctx, string $ch, int $bracketDepth, int $parenDepth): bool
@@ -863,7 +868,7 @@ class Lexer
         {
             if ($this->atEnd())
             {
-                throw new MatchedPairError(sprintf("unexpected EOF while looking for matching `%s'", $closeChar));
+                throw new Matchedpairerror(sprintf("unexpected EOF while looking for matching `%s'", $closeChar));
             }
             $ch = $this->advance();
             if ((($flags & MATCHEDPAIRFLAGS_DOLBRACE) !== 0) && $this->_dolbraceState === DOLBRACESTATE_OP)
@@ -938,7 +943,7 @@ class Lexer
                 $wasGtlt = (str_contains("<>", $ch));
                 continue;
             }
-            if ((str_contains("'\"`", $ch)) && $openChar !== $closeChar)
+            if (((str_contains("'\"`", $ch))) && $openChar !== $closeChar)
             {
                 $nested = "";
                 if ($ch === "'")
@@ -1004,7 +1009,7 @@ class Lexer
                     }
                     $this->pos -= 1;
                     $this->_syncToParser();
-                    $inDquote = (($flags & MATCHEDPAIRFLAGS_DQUOTE) !== 0);
+                    $inDquote = ((($flags & MATCHEDPAIRFLAGS_DQUOTE)) !== 0);
                     [$paramNode, $paramText] = $this->_parser->_parseParamExpansion($inDquote);
                     $this->_syncFromParser();
                     if ($paramNode !== null)
@@ -1106,7 +1111,7 @@ class Lexer
                     }
                 }
             }
-            if ($ch === "(" && $wasGtlt && (($flags & (MATCHEDPAIRFLAGS_DOLBRACE | MATCHEDPAIRFLAGS_ARRAYSUB)) !== 0))
+            if ($ch === "(" && $wasGtlt && (($flags & ((MATCHEDPAIRFLAGS_DOLBRACE | MATCHEDPAIRFLAGS_ARRAYSUB))) !== 0))
             {
                 $direction = $chars[count($chars) - 1];
                 $chars = array_slice($chars, 0, count($chars) - 1);
@@ -1219,7 +1224,7 @@ class Lexer
                 }
                 break;
             }
-            if ($ctx === WORD_CTX_COND || $ctx === WORD_CTX_REGEX && $ch === "[")
+            if (($ctx === WORD_CTX_COND || $ctx === WORD_CTX_REGEX) && $ch === "[")
             {
                 $forRegex = $ctx === WORD_CTX_REGEX;
                 if ($this->_readBracketExpression($chars, $parts, $forRegex, $parenDepth))
@@ -1271,7 +1276,7 @@ class Lexer
                 {
                     array_push($chars, "\"");
                     $inSingleInDquote = false;
-                    while (!$this->atEnd() && $inSingleInDquote || $this->peek() !== "\"")
+                    while (!$this->atEnd() && ($inSingleInDquote || $this->peek() !== "\""))
                     {
                         $c = $this->peek();
                         if ($inSingleInDquote)
@@ -1338,7 +1343,7 @@ class Lexer
                     }
                     if ($this->atEnd())
                     {
-                        throw new ParseError("Unterminated double quote");
+                        throw new Parseerror_("Unterminated double quote");
                     }
                     array_push($chars, $this->advance());
                 }
@@ -1406,7 +1411,7 @@ class Lexer
                 else
                 {
                     $this->_syncFromParser();
-                    if ($this->_extglob && $ctx === WORD_CTX_NORMAL && (count($chars) > 0) && mb_strlen($chars[count($chars) - 1]) === 2 && (string)(mb_substr($chars[count($chars) - 1], 0, 1)) === "\$" && (str_contains("?*@", (string)(mb_substr($chars[count($chars) - 1], 1, 1)))) && !$this->atEnd() && $this->peek() === "(")
+                    if ($this->_extglob && $ctx === WORD_CTX_NORMAL && (count($chars) > 0) && mb_strlen($chars[count($chars) - 1]) === 2 && (string)(mb_substr($chars[count($chars) - 1], 0, 1)) === "\$" && ((str_contains("?*@", (string)(mb_substr($chars[count($chars) - 1], 1, 1))))) && !$this->atEnd() && $this->peek() === "(")
                     {
                         array_push($chars, $this->advance());
                         $content = $this->_parseMatchedPair("(", ")", MATCHEDPAIRFLAGS_EXTGLOB, false);
@@ -1473,7 +1478,7 @@ class Lexer
                         $isArrayAssign = _isArrayAssignmentPrefix(array_slice($chars, 0, count($chars) - 1));
                     }
                 }
-                if ($isArrayAssign && $atCommandStart || $inAssignBuiltin)
+                if ($isArrayAssign && ($atCommandStart || $inAssignBuiltin))
                 {
                     $this->_syncToParser();
                     [$arrayResult0, $arrayResult1] = $this->_parser->_parseArrayLiteral();
@@ -1515,7 +1520,7 @@ class Lexer
         }
         if ($bracketDepth > 0 && $bracketStartPos !== -1 && $this->atEnd())
         {
-            throw new MatchedPairError("unexpected EOF looking for `]'");
+            throw new Matchedpairerror("unexpected EOF looking for `]'");
         }
         if (!(count($chars) > 0))
         {
@@ -1540,8 +1545,8 @@ class Lexer
         {
             return null;
         }
-        $isProcsub = $c === "<" || $c === ">" && $this->pos + 1 < $this->length && (string)(mb_substr($this->source, $this->pos + 1, 1)) === "(";
-        $isRegexParen = $this->_wordContext === WORD_CTX_REGEX && $c === "(" || $c === ")";
+        $isProcsub = ($c === "<" || $c === ">") && $this->pos + 1 < $this->length && (string)(mb_substr($this->source, $this->pos + 1, 1)) === "(";
+        $isRegexParen = $this->_wordContext === WORD_CTX_REGEX && ($c === "(" || $c === ")");
         if ($this->isMetachar($c) && !$isProcsub && !$isRegexParen)
         {
             return null;
@@ -1663,7 +1668,7 @@ class Lexer
         }
         if (!$foundClose)
         {
-            throw new MatchedPairError("unexpected EOF while looking for matching `''");
+            throw new Matchedpairerror("unexpected EOF while looking for matching `''");
         }
         $text = _substring($this->source, $start, $this->pos);
         $content = implode("", $contentChars);
@@ -2049,7 +2054,7 @@ class Lexer
         $ch = $this->peek();
         if (_isSpecialParam($ch))
         {
-            if ($ch === "\$" && $this->pos + 1 < $this->length && (str_contains("{'\"", (string)(mb_substr($this->source, $this->pos + 1, 1)))))
+            if ($ch === "\$" && $this->pos + 1 < $this->length && ((str_contains("{'\"", (string)(mb_substr($this->source, $this->pos + 1, 1))))))
             {
                 return "";
             }
@@ -2160,7 +2165,7 @@ class Lexer
     {
         if ($this->atEnd())
         {
-            throw new MatchedPairError("unexpected EOF looking for `}'");
+            throw new Matchedpairerror("unexpected EOF looking for `}'");
         }
         $savedDolbrace = $this->_dolbraceState;
         $this->_dolbraceState = DOLBRACESTATE_PARAM;
@@ -2217,11 +2222,11 @@ class Lexer
                     return [new Paramindirect($param . $suffix . $trailing, "", "", "param-indirect"), $text];
                 }
                 $op = $this->_consumeParamOperator();
-                if ($op === "" && !$this->atEnd() && (!str_contains("}\"'`", $this->peek())))
+                if ($op === "" && !$this->atEnd() && ((!str_contains("}\"'`", $this->peek()))))
                 {
                     $op = $this->advance();
                 }
-                if ($op !== "" && (!str_contains("\"'`", $op)))
+                if ($op !== "" && ((!str_contains("\"'`", $op))))
                 {
                     $arg = $this->_parseMatchedPair("{", "}", MATCHEDPAIRFLAGS_DOLBRACE, false);
                     $text = _substring($this->source, $start, $this->pos);
@@ -2231,7 +2236,7 @@ class Lexer
                 if ($this->atEnd())
                 {
                     $this->_dolbraceState = $savedDolbrace;
-                    throw new MatchedPairError("unexpected EOF looking for `}'");
+                    throw new Matchedpairerror("unexpected EOF looking for `}'");
                 }
                 $this->pos = $start + 2;
             }
@@ -2243,7 +2248,7 @@ class Lexer
         $param = $this->_consumeParamName();
         if (!($param !== ''))
         {
-            if (!$this->atEnd() && (str_contains("-=+?", $this->peek())) || $this->peek() === ":" && $this->pos + 1 < $this->length && _isSimpleParamOp((string)(mb_substr($this->source, $this->pos + 1, 1))))
+            if (!$this->atEnd() && (((str_contains("-=+?", $this->peek()))) || $this->peek() === ":" && $this->pos + 1 < $this->length && _isSimpleParamOp((string)(mb_substr($this->source, $this->pos + 1, 1)))))
             {
                 $param = "";
             }
@@ -2258,7 +2263,7 @@ class Lexer
         if ($this->atEnd())
         {
             $this->_dolbraceState = $savedDolbrace;
-            throw new MatchedPairError("unexpected EOF looking for `}'");
+            throw new Matchedpairerror("unexpected EOF looking for `}'");
         }
         if ($this->peek() === "}")
         {
@@ -2270,7 +2275,7 @@ class Lexer
         $op = $this->_consumeParamOperator();
         if ($op === "")
         {
-            if (!$this->atEnd() && $this->peek() === "\$" && $this->pos + 1 < $this->length && (string)(mb_substr($this->source, $this->pos + 1, 1)) === "\"" || (string)(mb_substr($this->source, $this->pos + 1, 1)) === "'")
+            if (!$this->atEnd() && $this->peek() === "\$" && $this->pos + 1 < $this->length && ((string)(mb_substr($this->source, $this->pos + 1, 1)) === "\"" || (string)(mb_substr($this->source, $this->pos + 1, 1)) === "'"))
             {
                 $dollarCount = 1 + _countConsecutiveDollarsBefore($this->source, $this->pos);
                 if ($dollarCount % 2 === 1)
@@ -2304,7 +2309,7 @@ class Lexer
                     if ($this->atEnd())
                     {
                         $this->_dolbraceState = $savedDolbrace;
-                        throw new ParseError("Unterminated backtick");
+                        throw new Parseerror_("Unterminated backtick");
                     }
                     $this->advance();
                     $op = "`";
@@ -2317,7 +2322,7 @@ class Lexer
                     }
                     else
                     {
-                        if (!$this->atEnd() && $this->peek() === "'" || $this->peek() === "\"")
+                        if (!$this->atEnd() && ($this->peek() === "'" || $this->peek() === "\""))
                         {
                             $op = "";
                         }
@@ -2328,7 +2333,7 @@ class Lexer
                                 $op = $this->advance();
                                 if (!$this->atEnd())
                                 {
-                                    $op += $this->advance();
+                                    $op .= $this->advance();
                                 }
                             }
                             else
@@ -2351,7 +2356,7 @@ class Lexer
             $this->_dolbraceState = $savedDolbrace;
             throw $e;
         }
-        if ($op === "<" || $op === ">" && str_starts_with($arg, "(") && str_ends_with($arg, ")"))
+        if (($op === "<" || $op === ">") && str_starts_with($arg, "(") && str_ends_with($arg, ")"))
         {
             $inner = mb_substr($arg, 1, mb_strlen($arg) - 1 - 1);
             try
@@ -2965,7 +2970,7 @@ class Word implements Node
                                                 }
                                             }
                                         }
-                                        if ($varNameLen > 0 && $varNameLen < mb_strlen($afterBrace) && (!str_contains("#?-", (string)(mb_substr($afterBrace, 0, 1)))))
+                                        if ($varNameLen > 0 && $varNameLen < mb_strlen($afterBrace) && ((!str_contains("#?-", (string)(mb_substr($afterBrace, 0, 1))))))
                                         {
                                             $opStart = mb_substr($afterBrace, $varNameLen);
                                             if (str_starts_with($opStart, "@") && mb_strlen($opStart) > 1)
@@ -2980,7 +2985,7 @@ class Word implements Node
                                                     break;
                                                 }
                                             }
-                                            if (!$inPattern && ($opStart !== '') && (!str_contains("%#/^,~:+-=?", (string)(mb_substr($opStart, 0, 1)))))
+                                            if (!$inPattern && ($opStart !== '') && ((!str_contains("%#/^,~:+-=?", (string)(mb_substr($opStart, 0, 1))))))
                                             {
                                                 foreach (["//", "%%", "##", "/", "%", "#", "^", "^^", ",", ",,"] as $op)
                                                 {
@@ -3053,7 +3058,7 @@ class Word implements Node
             }
             else
             {
-                if (_startsWithAt($value, $i, "\${") && !$quote->single && !$braceQuote->single && $i === 0 || (string)(mb_substr($value, $i - 1, 1)) !== "\$")
+                if (_startsWithAt($value, $i, "\${") && !$quote->single && !$braceQuote->single && ($i === 0 || (string)(mb_substr($value, $i - 1, 1)) !== "\$"))
                 {
                     $braceDepth += 1;
                     $braceQuote->double = false;
@@ -3129,7 +3134,7 @@ class Word implements Node
                                                 }
                                                 else
                                                 {
-                                                    if (_startsWithAt($value, $i, "\$\"") && !$quote->single && !$braceQuote->single && $braceDepth > 0 || $bracketDepth > 0 || !$quote->double && !$braceQuote->double && !$bracketInDoubleQuote)
+                                                    if (_startsWithAt($value, $i, "\$\"") && !$quote->single && !$braceQuote->single && ($braceDepth > 0 || $bracketDepth > 0 || !$quote->double) && !$braceQuote->double && !$bracketInDoubleQuote)
                                                     {
                                                         $dollarCount = 1 + _countConsecutiveDollarsBefore($value, $i);
                                                         if ($dollarCount % 2 === 1)
@@ -3180,12 +3185,12 @@ class Word implements Node
     public function _normalizeArrayWhitespace(string $value): string
     {
         $i = 0;
-        if (!$i < mb_strlen($value) && ctype_alpha((string)(mb_substr($value, $i, 1))) || (string)(mb_substr($value, $i, 1)) === "_")
+        if (!$i < mb_strlen($value) && (ctype_alpha((string)(mb_substr($value, $i, 1))) || (string)(mb_substr($value, $i, 1)) === "_"))
         {
             return $value;
         }
         $i += 1;
-        while ($i < mb_strlen($value) && ctype_alnum((string)(mb_substr($value, $i, 1))) || (string)(mb_substr($value, $i, 1)) === "_")
+        while ($i < mb_strlen($value) && (ctype_alnum((string)(mb_substr($value, $i, 1))) || (string)(mb_substr($value, $i, 1)) === "_"))
         {
             $i += 1;
         }
@@ -3504,7 +3509,7 @@ class Word implements Node
                                 }
                                 else
                                 {
-                                    if ($ch === "<" || $ch === ">" && $i + 1 < mb_strlen($inner) && (string)(mb_substr($inner, $i + 1, 1)) === "(")
+                                    if (($ch === "<" || $ch === ">") && $i + 1 < mb_strlen($inner) && (string)(mb_substr($inner, $i + 1, 1)) === "(")
                                     {
                                         $inWhitespace = false;
                                         $j = $i + 2;
@@ -3906,9 +3911,9 @@ class Word implements Node
                     }
                     else
                     {
-                        if (_startsWithAt($value, $idx, "<(") || _startsWithAt($value, $idx, ">(") && !$scanQuote->double)
+                        if ((_startsWithAt($value, $idx, "<(") || _startsWithAt($value, $idx, ">(")) && !$scanQuote->double)
                         {
-                            if ($idx === 0 || !ctype_alnum((string)(mb_substr($value, $idx - 1, 1))) && (!str_contains("\"'", (string)(mb_substr($value, $idx - 1, 1)))))
+                            if ($idx === 0 || !ctype_alnum((string)(mb_substr($value, $idx - 1, 1))) && ((!str_contains("\"'", (string)(mb_substr($value, $idx - 1, 1))))))
                             {
                                 $hasUntrackedProcsub = true;
                                 break;
@@ -3923,7 +3928,7 @@ class Word implements Node
                 }
             }
         }
-        $hasParamWithProcsubPattern = (str_contains($value, "\${")) && (str_contains($value, "<(")) || (str_contains($value, ">("));
+        $hasParamWithProcsubPattern = ((str_contains($value, "\${"))) && (((str_contains($value, "<("))) || ((str_contains($value, ">("))));
         if (!(count($cmdsubParts) > 0) && !(count($procsubParts) > 0) && !$hasBraceCmdsub && !$hasUntrackedCmdsub && !$hasUntrackedProcsub && !$hasParamWithProcsubPattern)
         {
             return $value;
@@ -4134,9 +4139,9 @@ class Word implements Node
                     }
                     else
                     {
-                        if (_startsWithAt($value, $i, ">(") || _startsWithAt($value, $i, "<(") && !$mainQuote->double && $deprecatedArithDepth === 0 && $arithDepth === 0)
+                        if ((_startsWithAt($value, $i, ">(") || _startsWithAt($value, $i, "<(")) && !$mainQuote->double && $deprecatedArithDepth === 0 && $arithDepth === 0)
                         {
-                            $isProcsub = $i === 0 || !ctype_alnum((string)(mb_substr($value, $i - 1, 1))) && (!str_contains("\"'", (string)(mb_substr($value, $i - 1, 1))));
+                            $isProcsub = $i === 0 || !ctype_alnum((string)(mb_substr($value, $i - 1, 1))) && ((!str_contains("\"'", (string)(mb_substr($value, $i - 1, 1)))));
                             if ($extglobDepth > 0)
                             {
                                 $j = _findCmdsubEnd($value, $i + 2);
@@ -4162,7 +4167,7 @@ class Word implements Node
                                 if ($node->command->kind === "subshell")
                                 {
                                     $leadingWsEnd = 0;
-                                    while ($leadingWsEnd < mb_strlen($rawContent) && (str_contains(" \t\n", (string)(mb_substr($rawContent, $leadingWsEnd, 1)))))
+                                    while ($leadingWsEnd < mb_strlen($rawContent) && ((str_contains(" \t\n", (string)(mb_substr($rawContent, $leadingWsEnd, 1))))))
                                     {
                                         $leadingWsEnd += 1;
                                     }
@@ -4217,7 +4222,7 @@ class Word implements Node
                                     {
                                         $parser = newParser($inner, false, false);
                                         $parsed = $parser->parseList(true);
-                                        if ($parsed !== null && $parser->pos === mb_strlen($inner) && (!str_contains($inner, "\n")))
+                                        if ($parsed !== null && $parser->pos === mb_strlen($inner) && ((!str_contains($inner, "\n"))))
                                         {
                                             $compact = _startsWithSubshell($parsed);
                                             $formatted = _formatCmdsubNode($parsed, 0, true, $compact, true);
@@ -4275,7 +4280,7 @@ class Word implements Node
                         else
                         {
                             $depth = 0;
-                            if (_isExpansionStart($value, $i, "\${ ") || _isExpansionStart($value, $i, "\${\t") || _isExpansionStart($value, $i, "\${\n") || _isExpansionStart($value, $i, "\${|") && !_isBackslashEscaped($value, $i))
+                            if ((_isExpansionStart($value, $i, "\${ ") || _isExpansionStart($value, $i, "\${\t") || _isExpansionStart($value, $i, "\${\n") || _isExpansionStart($value, $i, "\${|")) && !_isBackslashEscaped($value, $i))
                             {
                                 $prefix = str_replace("\n", " ", str_replace("\t", " ", _substring($value, $i, $i + 3)));
                                 $j = $i + 3;
@@ -4481,7 +4486,7 @@ class Word implements Node
             if ($i + 1 < mb_strlen($value) && (string)(mb_substr($value, $i + 1, 1)) === "(")
             {
                 $prefixChar = (string)(mb_substr($value, $i, 1));
-                if ((str_contains("><", $prefixChar)) && !$extglobQuote->double && $deprecatedArithDepth === 0)
+                if (((str_contains("><", $prefixChar))) && !$extglobQuote->double && $deprecatedArithDepth === 0)
                 {
                     array_push($result, $prefixChar);
                     array_push($result, "(");
@@ -4675,20 +4680,20 @@ class Pipeline implements Node
         if (count($cmds) === 1)
         {
             $pair = $cmds[0];
-            $cmd = $pair->f0;
-            $needs = $pair->f1;
+            $cmd = $pair[0];
+            $needs = $pair[1];
             return $this->_cmdSexp($cmd, $needs);
         }
         $lastPair = $cmds[count($cmds) - 1];
-        $lastCmd = $lastPair->f0;
-        $lastNeeds = $lastPair->f1;
+        $lastCmd = $lastPair[0];
+        $lastNeeds = $lastPair[1];
         $result = $this->_cmdSexp($lastCmd, $lastNeeds);
         $j = count($cmds) - 2;
         while ($j >= 0)
         {
             $pair = $cmds[$j];
-            $cmd = $pair->f0;
-            $needs = $pair->f1;
+            $cmd = $pair[0];
+            $needs = $pair[1];
             if ($needs && $cmd->kind !== "command")
             {
                 $result = "(pipe " . $cmd->toSexp() . " (redirect \">&\" 1) " . $result . ")";
@@ -4746,7 +4751,7 @@ class List_ implements Node
     {
         $parts = $this->parts;
         $opNames = ["&&" => "and", "||" => "or", ";" => "semi", "\n" => "semi", "&" => "background"];
-        while (count($parts) > 1 && $parts[count($parts) - 1]->kind === "operator" && $parts[count($parts) - 1]->op === ";" || $parts[count($parts) - 1]->op === "\n")
+        while (count($parts) > 1 && $parts[count($parts) - 1]->kind === "operator" && ($parts[count($parts) - 1]->op === ";" || $parts[count($parts) - 1]->op === "\n"))
         {
             $parts = _sublist($parts, 0, count($parts) - 1);
         }
@@ -4758,7 +4763,7 @@ class List_ implements Node
         {
             for ($i = count($parts) - 3; $i > 0; $i += -2)
             {
-                if ($parts[$i]->kind === "operator" && $parts[$i]->op === ";" || $parts[$i]->op === "\n")
+                if ($parts[$i]->kind === "operator" && ($parts[$i]->op === ";" || $parts[$i]->op === "\n"))
                 {
                     $left = _sublist($parts, 0, $i);
                     $right = _sublist($parts, $i + 1, count($parts) - 1);
@@ -4799,7 +4804,7 @@ class List_ implements Node
         $semiPositions = [];
         for ($i = 0; $i < count($parts); $i += 1)
         {
-            if ($parts[$i]->kind === "operator" && $parts[$i]->op === ";" || $parts[$i]->op === "\n")
+            if ($parts[$i]->kind === "operator" && ($parts[$i]->op === ";" || $parts[$i]->op === "\n"))
             {
                 array_push($semiPositions, $i);
             }
@@ -4883,7 +4888,7 @@ class List_ implements Node
             $op = $parts[$i];
             $cmd = $parts[$i + 1];
             $opName = ($opNames[$op->op] ?? $op->op);
-            $result = "(" . $opName . " " . $result + " " . $cmd->toSexp() + ")";
+            $result = "(" . $opName . " " . $result . " " . $cmd->toSexp() . ")";
         }
         return $result;
     }
@@ -4986,7 +4991,7 @@ class Redirect implements Node
     public ?int $fd;
     public string $kind;
 
-    public function __construct(string $op, ?Word $target, ?int $fd, string $kind)
+    public function __construct(string $op, ?Word $target, ?int $fd = null, string $kind)
     {
         $this->op = $op;
         $this->target = $target;
@@ -5000,10 +5005,10 @@ class Redirect implements Node
         if (str_starts_with($op, "{"))
         {
             $j = 1;
-            if ($j < mb_strlen($op) && ctype_alpha((string)(mb_substr($op, $j, 1))) || (string)(mb_substr($op, $j, 1)) === "_")
+            if ($j < mb_strlen($op) && (ctype_alpha((string)(mb_substr($op, $j, 1))) || (string)(mb_substr($op, $j, 1)) === "_"))
             {
                 $j += 1;
-                while ($j < mb_strlen($op) && ctype_alnum((string)(mb_substr($op, $j, 1))) || (string)(mb_substr($op, $j, 1)) === "_")
+                while ($j < mb_strlen($op) && (ctype_alnum((string)(mb_substr($op, $j, 1))) || (string)(mb_substr($op, $j, 1)) === "_"))
                 {
                     $j += 1;
                 }
@@ -5061,7 +5066,7 @@ class Redirect implements Node
                 return "(redirect \">&-\" 0)";
             }
             $fdTarget = (str_ends_with($raw, "-") ? mb_substr($raw, 0, mb_strlen($raw) - 1) : $raw);
-            return "(redirect \"" . $op . "\" \"" . $fdTarget + "\")";
+            return "(redirect \"" . $op . "\" \"" . $fdTarget . "\")";
         }
         if ($op === ">&" || $op === "<&")
         {
@@ -5078,7 +5083,7 @@ class Redirect implements Node
                 return "(redirect \"" . $op . "\" " . strval(intval(mb_substr($targetVal, 0, mb_strlen($targetVal) - 1), 10)) . ")";
             }
             $outVal = (str_ends_with($targetVal, "-") ? mb_substr($targetVal, 0, mb_strlen($targetVal) - 1) : $targetVal);
-            return "(redirect \"" . $op . "\" \"" . $outVal + "\")";
+            return "(redirect \"" . $op . "\" \"" . $outVal . "\")";
         }
         return "(redirect \"" . $op . "\" \"" . $targetVal . "\")";
     }
@@ -5100,7 +5105,7 @@ class Heredoc implements Node
     public int $_startPos;
     public string $kind;
 
-    public function __construct(string $delimiter, string $content, bool $stripTabs, bool $quoted, ?int $fd, bool $complete, int $_startPos, string $kind)
+    public function __construct(string $delimiter, string $content, bool $stripTabs, bool $quoted, ?int $fd = null, bool $complete, int $_startPos, string $kind)
     {
         $this->delimiter = $delimiter;
         $this->content = $content;
@@ -5279,7 +5284,7 @@ class For_ implements Node
     public ?array $redirects;
     public string $kind;
 
-    public function __construct(string $var_, ?array $words, ?Node $body, ?array $redirects, string $kind)
+    public function __construct(string $var_, ?array $words = null, ?Node $body, ?array $redirects, string $kind)
     {
         $this->var_ = $var_;
         $this->words = $words;
@@ -5387,7 +5392,7 @@ class Select implements Node
     public ?array $redirects;
     public string $kind;
 
-    public function __construct(string $var_, ?array $words, ?Node $body, ?array $redirects, string $kind)
+    public function __construct(string $var_, ?array $words = null, ?Node $body, ?array $redirects, string $kind)
     {
         $this->var_ = $var_;
         $this->words = $words;
@@ -5504,7 +5509,7 @@ class Casepattern implements Node
             }
             else
             {
-                if ($ch === "@" || $ch === "?" || $ch === "*" || $ch === "+" || $ch === "!" && $i + 1 < mb_strlen($this->pattern) && (string)(mb_substr($this->pattern, $i + 1, 1)) === "(")
+                if (($ch === "@" || $ch === "?" || $ch === "*" || $ch === "+" || $ch === "!") && $i + 1 < mb_strlen($this->pattern) && (string)(mb_substr($this->pattern, $i + 1, 1)) === "(")
                 {
                     array_push($current, $ch);
                     array_push($current, "(");
@@ -5665,7 +5670,7 @@ class Paramexpansion implements Node
                 $argVal = "";
             }
             $escapedArg = str_replace("\"", "\\\"", str_replace("\\", "\\\\", $argVal));
-            return "(param \"" . $escapedParam . "\" \"" . $escapedOp + "\" \"" . $escapedArg + "\")";
+            return "(param \"" . $escapedParam . "\" \"" . $escapedOp . "\" \"" . $escapedArg . "\")";
         }
         return "(param \"" . $escapedParam . "\")";
     }
@@ -5730,7 +5735,7 @@ class Paramindirect implements Node
                 $argVal = "";
             }
             $escapedArg = str_replace("\"", "\\\"", str_replace("\\", "\\\\", $argVal));
-            return "(param-indirect \"" . $escaped . "\" \"" . $escapedOp + "\" \"" . $escapedArg + "\")";
+            return "(param-indirect \"" . $escaped . "\" \"" . $escapedOp . "\" \"" . $escapedArg . "\")";
         }
         return "(param-indirect \"" . $escaped . "\")";
     }
@@ -5774,7 +5779,7 @@ class Arithmeticexpansion implements Node
     public ?Node $expression;
     public string $kind;
 
-    public function __construct(?Node $expression, string $kind)
+    public function __construct(?Node $expression = null, string $kind)
     {
         $this->expression = $expression;
         $this->kind = $kind;
@@ -5802,7 +5807,7 @@ class Arithmeticcommand implements Node
     public string $rawContent;
     public string $kind;
 
-    public function __construct(?Node $expression, ?array $redirects, string $rawContent, string $kind)
+    public function __construct(?Node $expression = null, ?array $redirects, string $rawContent, string $kind)
     {
         $this->expression = $expression;
         $this->redirects = $redirects ?? [];
@@ -6404,7 +6409,7 @@ class Unarytest implements Node
     public function toSexp(): string
     {
         $operandVal = $this->operand->getCondFormattedValue();
-        return "(cond-unary \"" . $this->op . "\" (cond-term \"" . $operandVal + "\"))";
+        return "(cond-unary \"" . $this->op . "\" (cond-term \"" . $operandVal . "\"))";
     }
 
     public function getKind(): string
@@ -6432,7 +6437,7 @@ class Binarytest implements Node
     {
         $leftVal = $this->left->getCondFormattedValue();
         $rightVal = $this->right->getCondFormattedValue();
-        return "(cond-binary \"" . $this->op . "\" (cond-term \"" . $leftVal + "\") (cond-term \"" . $rightVal + "\"))";
+        return "(cond-binary \"" . $this->op . "\" (cond-term \"" . $leftVal . "\") (cond-term \"" . $rightVal . "\"))";
     }
 
     public function getKind(): string
@@ -6659,7 +6664,7 @@ class Parser
 
     public function _inState(int $flag): bool
     {
-        return (($this->_parserState & $flag) !== 0);
+        return ((($this->_parserState & $flag)) !== 0);
     }
 
     public function _saveParserState(): ?Savedparserstate
@@ -6826,7 +6831,7 @@ class Parser
         {
             $word = mb_substr($word, 0, mb_strlen($word) - 2);
         }
-        if (isset(RESERVED_WORDS[$word]) || $word === "{" || $word === "}" || $word === "[[" || $word === "]]" || $word === "!" || $word === "time")
+        if ((isset(RESERVED_WORDS[$word])) || $word === "{" || $word === "}" || $word === "[[" || $word === "]]" || $word === "!" || $word === "time")
         {
             return $word;
         }
@@ -7072,7 +7077,7 @@ class Parser
             $brace = $this->parseBraceGroup();
             if ($brace === null)
             {
-                throw new ParseError(sprintf("Expected brace group body in %s", $context));
+                throw new Parseerror_(sprintf("Expected brace group body in %s", $context));
             }
             return $brace->body;
         }
@@ -7081,16 +7086,16 @@ class Parser
             $body = $this->parseListUntil(["done" => true]);
             if ($body === null)
             {
-                throw new ParseError("Expected commands after 'do'");
+                throw new Parseerror_("Expected commands after 'do'");
             }
             $this->skipWhitespaceAndNewlines();
             if (!$this->_lexConsumeWord("done"))
             {
-                throw new ParseError(sprintf("Expected 'done' to close %s", $context));
+                throw new Parseerror_(sprintf("Expected 'done' to close %s", $context));
             }
             return $body;
         }
-        throw new ParseError(sprintf("Expected 'do' or '{' in %s", $context));
+        throw new Parseerror_(sprintf("Expected 'do' or '{' in %s", $context));
     }
 
     public function peekWord(): string
@@ -7212,7 +7217,7 @@ class Parser
         }
         if ($this->atEnd())
         {
-            throw new ParseError("Unterminated double quote");
+            throw new Parseerror_("Unterminated double quote");
         }
         array_push($chars, $this->advance());
     }
@@ -7357,7 +7362,7 @@ class Parser
         if ($this->atEnd() || $this->peek() !== "}")
         {
             $this->_restoreParserState($saved);
-            throw new MatchedPairError("unexpected EOF looking for `}'");
+            throw new Matchedpairerror("unexpected EOF looking for `}'");
         }
         $this->advance();
         $text = _substring($this->source, $start, $this->pos);
@@ -7385,7 +7390,8 @@ class Parser
         $inHeredocBody = false;
         $currentHeredocDelim = "";
         $currentHeredocStrip = false;
-        while (!$this->atEnd() && $inHeredocBody || $this->peek() !== "`")
+        $ch = "";
+        while (!$this->atEnd() && ($inHeredocBody || $this->peek() !== "`"))
         {
             if ($inHeredocBody)
             {
@@ -7414,7 +7420,7 @@ class Parser
                     $inHeredocBody = false;
                     if (count($pendingHeredocs) > 0)
                     {
-                        [$currentHeredocDelim, $currentHeredocStrip] = $pendingHeredocs->pop(0);
+                        [$currentHeredocDelim, $currentHeredocStrip] = array_shift($pendingHeredocs);
                         $inHeredocBody = true;
                     }
                 }
@@ -7433,7 +7439,7 @@ class Parser
                         $inHeredocBody = false;
                         if (count($pendingHeredocs) > 0)
                         {
-                            [$currentHeredocDelim, $currentHeredocStrip] = $pendingHeredocs->pop(0);
+                            [$currentHeredocDelim, $currentHeredocStrip] = array_shift($pendingHeredocs);
                             $inHeredocBody = true;
                         }
                     }
@@ -7456,7 +7462,6 @@ class Parser
                 continue;
             }
             $c = $this->peek();
-            $ch = "";
             if ($c === "\\" && $this->pos + 1 < $this->length)
             {
                 $nextC = (string)(mb_substr($this->source, $this->pos + 1, 1));
@@ -7501,7 +7506,7 @@ class Parser
                         array_push($contentChars, $ch);
                         array_push($textChars, $ch);
                     }
-                    while (!$this->atEnd() && !_isWhitespace($this->peek()) && (!str_contains("()", $this->peek())))
+                    while (!$this->atEnd() && !_isWhitespace($this->peek()) && ((!str_contains("()", $this->peek()))))
                     {
                         if ($this->peek() === "\\" && $this->pos + 1 < $this->length)
                         {
@@ -7679,7 +7684,7 @@ class Parser
                 array_push($textChars, $ch);
                 if (count($pendingHeredocs) > 0)
                 {
-                    [$currentHeredocDelim, $currentHeredocStrip] = $pendingHeredocs->pop(0);
+                    [$currentHeredocDelim, $currentHeredocStrip] = array_shift($pendingHeredocs);
                     $inHeredocBody = true;
                 }
                 continue;
@@ -7690,7 +7695,7 @@ class Parser
         }
         if ($this->atEnd())
         {
-            throw new ParseError("Unterminated backtick");
+            throw new Parseerror_("Unterminated backtick");
         }
         $this->advance();
         array_push($textChars, "`");
@@ -7750,7 +7755,7 @@ class Parser
             $this->skipWhitespaceAndNewlines();
             if ($this->atEnd() || $this->peek() !== ")")
             {
-                throw new ParseError("Invalid process substitution");
+                throw new Parseerror_("Invalid process substitution");
             }
             $this->advance();
             $textEnd = $this->pos;
@@ -7794,7 +7799,7 @@ class Parser
             if ($this->atEnd())
             {
                 $this->_clearState(PARSERSTATEFLAGS_PST_COMPASSIGN);
-                throw new ParseError("Unterminated array literal");
+                throw new Parseerror_("Unterminated array literal");
             }
             if ($this->peek() === ")")
             {
@@ -7808,14 +7813,14 @@ class Parser
                     break;
                 }
                 $this->_clearState(PARSERSTATEFLAGS_PST_COMPASSIGN);
-                throw new ParseError("Expected word in array literal");
+                throw new Parseerror_("Expected word in array literal");
             }
             array_push($elements, $word);
         }
         if ($this->atEnd() || $this->peek() !== ")")
         {
             $this->_clearState(PARSERSTATEFLAGS_PST_COMPASSIGN);
-            throw new ParseError("Expected ) to close array literal");
+            throw new Parseerror_("Expected ) to close array literal");
         }
         $this->advance();
         $text = _substring($this->source, $start, $this->pos);
@@ -7927,7 +7932,7 @@ class Parser
         {
             if ($this->atEnd())
             {
-                throw new MatchedPairError("unexpected EOF looking for `))'");
+                throw new Matchedpairerror("unexpected EOF looking for `))'");
             }
             $this->pos = $start;
             return [null, ""];
@@ -8498,7 +8503,7 @@ class Parser
                             $this->_arithSkipWs();
                             if (!$this->_arithConsume("]"))
                             {
-                                throw new ParseError("Expected ']' in array subscript");
+                                throw new Parseerror_("Expected ']' in array subscript");
                             }
                             $left = new Arithsubscript($left->name, $index, "subscript");
                         }
@@ -8529,7 +8534,7 @@ class Parser
             $this->_arithSkipWs();
             if (!$this->_arithConsume(")"))
             {
-                throw new ParseError("Expected ')' in arithmetic expression");
+                throw new Parseerror_("Expected ')' in arithmetic expression");
             }
             return $expr;
         }
@@ -8559,12 +8564,12 @@ class Parser
             $this->_arithAdvance();
             if ($this->_arithAtEnd())
             {
-                throw new ParseError("Unexpected end after backslash in arithmetic");
+                throw new Parseerror_("Unexpected end after backslash in arithmetic");
             }
             $escapedChar = $this->_arithAdvance();
             return new Arithescape($escapedChar, "escape");
         }
-        if ($this->_arithAtEnd() || (str_contains(")]:,;?|&<>=!+-*/%^~#{}", $c)))
+        if ($this->_arithAtEnd() || ((str_contains(")]:,;?|&<>=!+-*/%^~#{}", $c))))
         {
             return new Arithempty("empty");
         }
@@ -8575,7 +8580,7 @@ class Parser
     {
         if (!$this->_arithConsume("\$"))
         {
-            throw new ParseError("Expected '\$'");
+            throw new Parseerror_("Expected '\$'");
         }
         $c = $this->_arithPeek(0);
         if ($c === "(")
@@ -8596,7 +8601,7 @@ class Parser
             }
             else
             {
-                if (_isSpecialParamOrDigit($ch) || $ch === "#" && !(count($nameChars) > 0))
+                if ((_isSpecialParamOrDigit($ch) || $ch === "#") && !(count($nameChars) > 0))
                 {
                     array_push($nameChars, $this->_arithAdvance());
                     break;
@@ -8609,7 +8614,7 @@ class Parser
         }
         if (!(count($nameChars) > 0))
         {
-            throw new ParseError("Expected variable name after \$");
+            throw new Parseerror_("Expected variable name after \$");
         }
         return new Paramexpansion(implode("", $nameChars), "", "", "param");
     }
@@ -8821,7 +8826,7 @@ class Parser
         $content = _substring($this->_arithSrc, $contentStart, $this->_arithPos);
         if (!$this->_arithConsume("'"))
         {
-            throw new ParseError("Unterminated single quote in arithmetic");
+            throw new Parseerror_("Unterminated single quote in arithmetic");
         }
         return new Arithnumber($content, "number");
     }
@@ -8846,7 +8851,7 @@ class Parser
         $content = _substring($this->_arithSrc, $contentStart, $this->_arithPos);
         if (!$this->_arithConsume("\""))
         {
-            throw new ParseError("Unterminated double quote in arithmetic");
+            throw new Parseerror_("Unterminated double quote in arithmetic");
         }
         return new Arithnumber($content, "number");
     }
@@ -8871,7 +8876,7 @@ class Parser
         $content = _substring($this->_arithSrc, $contentStart, $this->_arithPos);
         if (!$this->_arithConsume("`"))
         {
-            throw new ParseError("Unterminated backtick in arithmetic");
+            throw new Parseerror_("Unterminated backtick in arithmetic");
         }
         $subParser = newParser($content, false, $this->_extglob);
         $cmd = $subParser->parseList(true);
@@ -8922,7 +8927,7 @@ class Parser
             }
             return new Arithvar(implode("", $chars), "var");
         }
-        throw new ParseError("Unexpected character '" . $c . "' in arithmetic expression");
+        throw new Parseerror_("Unexpected character '" . $c . "' in arithmetic expression");
     }
 
     public function _parseDeprecatedArithmetic(): array
@@ -9018,14 +9023,14 @@ class Parser
             {
                 if (ctype_alpha((string)(mb_substr($varname, 0, 1))) || (string)(mb_substr($varname, 0, 1)) === "_")
                 {
-                    if ((str_contains($varname, "[")) || (str_contains($varname, "]")))
+                    if (((str_contains($varname, "["))) || ((str_contains($varname, "]"))))
                     {
                         $left = mb_strpos($varname, "[");
                         $right = mb_strrpos($varname, "]");
                         if ($left !== -1 && $right === mb_strlen($varname) - 1 && $right > $left + 1)
                         {
                             $base = mb_substr($varname, 0, $left);
-                            if (($base !== '') && ctype_alpha((string)(mb_substr($base, 0, 1))) || (string)(mb_substr($base, 0, 1)) === "_")
+                            if (($base !== '') && (ctype_alpha((string)(mb_substr($base, 0, 1))) || (string)(mb_substr($base, 0, 1)) === "_"))
                             {
                                 $isValidVarfd = true;
                                 foreach (mb_str_split(mb_substr($base, 1)) as $c)
@@ -9098,7 +9103,7 @@ class Parser
             $target = $this->parseWord(false, false, false);
             if ($target === null)
             {
-                throw new ParseError("Expected target for redirect " . $op);
+                throw new Parseerror_("Expected target for redirect " . $op);
             }
             return new Redirect($op, $target, null, "redirect");
         }
@@ -9224,7 +9229,7 @@ class Parser
             if ($target === null)
             {
                 $innerWord = null;
-                if (!$this->atEnd() && ctype_digit($this->peek()) || $this->peek() === "-")
+                if (!$this->atEnd() && (ctype_digit($this->peek()) || $this->peek() === "-"))
                 {
                     $wordStart = $this->pos;
                     $fdChars = [];
@@ -9243,7 +9248,7 @@ class Parser
                     }
                     if (!$this->atEnd() && $this->peek() === "-")
                     {
-                        $fdTarget += $this->advance();
+                        $fdTarget .= $this->advance();
                     }
                     if ($fdTarget !== "-" && !$this->atEnd() && !_isMetachar($this->peek()))
                     {
@@ -9256,7 +9261,7 @@ class Parser
                         }
                         else
                         {
-                            throw new ParseError("Expected target for redirect " . $op);
+                            throw new Parseerror_("Expected target for redirect " . $op);
                         }
                     }
                     else
@@ -9274,7 +9279,7 @@ class Parser
                     }
                     else
                     {
-                        throw new ParseError("Expected target for redirect " . $op);
+                        throw new Parseerror_("Expected target for redirect " . $op);
                     }
                 }
             }
@@ -9282,7 +9287,7 @@ class Parser
         else
         {
             $this->skipWhitespace();
-            if ($op === ">&" || $op === "<&" && !$this->atEnd() && $this->peek() === "-")
+            if (($op === ">&" || $op === "<&") && !$this->atEnd() && $this->peek() === "-")
             {
                 if ($this->pos + 1 < $this->length && !_isMetachar((string)(mb_substr($this->source, $this->pos + 1, 1))))
                 {
@@ -9301,7 +9306,7 @@ class Parser
         }
         if ($target === null)
         {
-            throw new ParseError("Expected target for redirect " . $op);
+            throw new Parseerror_("Expected target for redirect " . $op);
         }
         return new Redirect($op, $target, null, "redirect");
     }
@@ -9601,7 +9606,7 @@ class Parser
                     }
                 }
             }
-            if (!$this->atEnd() && (str_contains("<>", $this->peek())) && $this->pos + 1 < $this->length && (string)(mb_substr($this->source, $this->pos + 1, 1)) === "(")
+            if (!$this->atEnd() && ((str_contains("<>", $this->peek()))) && $this->pos + 1 < $this->length && (string)(mb_substr($this->source, $this->pos + 1, 1)) === "(")
             {
                 array_push($delimiterChars, $this->advance());
                 array_push($delimiterChars, $this->advance());
@@ -9715,7 +9720,7 @@ class Parser
                     {
                         $addNewline = false;
                     }
-                    array_push($contentLines, $line . ($addNewline ? "\n" : ""));
+                    array_push($contentLines, $line . (($addNewline ? "\n" : "")));
                     $this->pos = $this->length;
                 }
             }
@@ -9778,7 +9783,7 @@ class Parser
                     break;
                 }
             }
-            $inAssignBuiltin = count($words) > 0 && isset(ASSIGNMENT_BUILTINS[$words[0]->value]);
+            $inAssignBuiltin = count($words) > 0 && (isset(ASSIGNMENT_BUILTINS[$words[0]->value]));
             $word = $this->parseWord(!(count($words) > 0) || $allAssignments && count($redirects) === 0, false, $inAssignBuiltin);
             if ($word === null)
             {
@@ -9806,13 +9811,13 @@ class Parser
         if ($body === null)
         {
             $this->_clearState(PARSERSTATEFLAGS_PST_SUBSHELL);
-            throw new ParseError("Expected command in subshell");
+            throw new Parseerror_("Expected command in subshell");
         }
         $this->skipWhitespace();
         if ($this->atEnd() || $this->peek() !== ")")
         {
             $this->_clearState(PARSERSTATEFLAGS_PST_SUBSHELL);
-            throw new ParseError("Expected ) to close subshell");
+            throw new Parseerror_("Expected ) to close subshell");
         }
         $this->advance();
         $this->_clearState(PARSERSTATEFLAGS_PST_SUBSHELL);
@@ -9913,7 +9918,7 @@ class Parser
         }
         if ($this->atEnd())
         {
-            throw new MatchedPairError("unexpected EOF looking for `))'");
+            throw new Matchedpairerror("unexpected EOF looking for `))'");
         }
         if ($depth !== 1)
         {
@@ -9953,7 +9958,7 @@ class Parser
         {
             $this->_clearState(PARSERSTATEFLAGS_PST_CONDEXPR);
             $this->_wordContext = WORD_CTX_NORMAL;
-            throw new ParseError("Expected ]] to close conditional expression");
+            throw new Parseerror_("Expected ]] to close conditional expression");
         }
         $this->advance();
         $this->advance();
@@ -10032,7 +10037,7 @@ class Parser
         $this->_condSkipWhitespace();
         if ($this->_condAtEnd())
         {
-            throw new ParseError("Unexpected end of conditional expression");
+            throw new Parseerror_("Unexpected end of conditional expression");
         }
         $operand = null;
         if ($this->peek() === "!")
@@ -10054,7 +10059,7 @@ class Parser
             $this->_condSkipWhitespace();
             if ($this->atEnd() || $this->peek() !== ")")
             {
-                throw new ParseError("Expected ) in conditional expression");
+                throw new Parseerror_("Expected ) in conditional expression");
             }
             $this->advance();
             return new Condparen($inner, "cond-paren");
@@ -10062,7 +10067,7 @@ class Parser
         $word1 = $this->_parseCondWord();
         if ($word1 === null)
         {
-            throw new ParseError("Expected word in conditional expression");
+            throw new Parseerror_("Expected word in conditional expression");
         }
         $this->_condSkipWhitespace();
         if (isset(COND_UNARY_OPS[$word1->value]))
@@ -10070,7 +10075,7 @@ class Parser
             $operand = $this->_parseCondWord();
             if ($operand === null)
             {
-                throw new ParseError("Expected operand after " . $word1->value);
+                throw new Parseerror_("Expected operand after " . $word1->value);
             }
             return new Unarytest($word1->value, $operand, "unary-test");
         }
@@ -10084,13 +10089,13 @@ class Parser
                 $word2 = $this->_parseCondWord();
                 if ($word2 === null)
                 {
-                    throw new ParseError("Expected operand after " . $op);
+                    throw new Parseerror_("Expected operand after " . $op);
                 }
                 return new Binarytest($op, $word1, $word2, "binary-test");
             }
             $savedPos = $this->pos;
             $opWord = $this->_parseCondWord();
-            if ($opWord !== null && isset(COND_BINARY_OPS[$opWord->value]))
+            if ($opWord !== null && (isset(COND_BINARY_OPS[$opWord->value])))
             {
                 $this->_condSkipWhitespace();
                 if ($opWord->value === "=~")
@@ -10103,7 +10108,7 @@ class Parser
                 }
                 if ($word2 === null)
                 {
-                    throw new ParseError("Expected operand after " . $opWord->value);
+                    throw new Parseerror_("Expected operand after " . $opWord->value);
                 }
                 return new Binarytest($opWord->value, $word1, $word2, "binary-test");
             }
@@ -10163,12 +10168,12 @@ class Parser
         $body = $this->parseList(true);
         if ($body === null)
         {
-            throw new ParseError("Expected command in brace group");
+            throw new Parseerror_("Expected command in brace group");
         }
         $this->skipWhitespace();
         if (!$this->_lexConsumeWord("}"))
         {
-            throw new ParseError("Expected } to close brace group");
+            throw new Parseerror_("Expected } to close brace group");
         }
         return new Bracegroup($body, $this->_collectRedirects(), "brace-group");
     }
@@ -10183,17 +10188,17 @@ class Parser
         $condition = $this->parseListUntil(["then" => true]);
         if ($condition === null)
         {
-            throw new ParseError("Expected condition after 'if'");
+            throw new Parseerror_("Expected condition after 'if'");
         }
         $this->skipWhitespaceAndNewlines();
         if (!$this->_lexConsumeWord("then"))
         {
-            throw new ParseError("Expected 'then' after if condition");
+            throw new Parseerror_("Expected 'then' after if condition");
         }
         $thenBody = $this->parseListUntil(["elif" => true, "else" => true, "fi" => true]);
         if ($thenBody === null)
         {
-            throw new ParseError("Expected commands after 'then'");
+            throw new Parseerror_("Expected commands after 'then'");
         }
         $this->skipWhitespaceAndNewlines();
         $elseBody = null;
@@ -10203,17 +10208,17 @@ class Parser
             $elifCondition = $this->parseListUntil(["then" => true]);
             if ($elifCondition === null)
             {
-                throw new ParseError("Expected condition after 'elif'");
+                throw new Parseerror_("Expected condition after 'elif'");
             }
             $this->skipWhitespaceAndNewlines();
             if (!$this->_lexConsumeWord("then"))
             {
-                throw new ParseError("Expected 'then' after elif condition");
+                throw new Parseerror_("Expected 'then' after elif condition");
             }
             $elifThenBody = $this->parseListUntil(["elif" => true, "else" => true, "fi" => true]);
             if ($elifThenBody === null)
             {
-                throw new ParseError("Expected commands after 'then'");
+                throw new Parseerror_("Expected commands after 'then'");
             }
             $this->skipWhitespaceAndNewlines();
             $innerElse = null;
@@ -10229,7 +10234,7 @@ class Parser
                     $innerElse = $this->parseListUntil(["fi" => true]);
                     if ($innerElse === null)
                     {
-                        throw new ParseError("Expected commands after 'else'");
+                        throw new Parseerror_("Expected commands after 'else'");
                     }
                 }
             }
@@ -10243,14 +10248,14 @@ class Parser
                 $elseBody = $this->parseListUntil(["fi" => true]);
                 if ($elseBody === null)
                 {
-                    throw new ParseError("Expected commands after 'else'");
+                    throw new Parseerror_("Expected commands after 'else'");
                 }
             }
         }
         $this->skipWhitespaceAndNewlines();
         if (!$this->_lexConsumeWord("fi"))
         {
-            throw new ParseError("Expected 'fi' to close if statement");
+            throw new Parseerror_("Expected 'fi' to close if statement");
         }
         return new If_($condition, $thenBody, $elseBody, $this->_collectRedirects(), "if");
     }
@@ -10261,17 +10266,17 @@ class Parser
         $condition = $this->parseListUntil(["then" => true]);
         if ($condition === null)
         {
-            throw new ParseError("Expected condition after 'elif'");
+            throw new Parseerror_("Expected condition after 'elif'");
         }
         $this->skipWhitespaceAndNewlines();
         if (!$this->_lexConsumeWord("then"))
         {
-            throw new ParseError("Expected 'then' after elif condition");
+            throw new Parseerror_("Expected 'then' after elif condition");
         }
         $thenBody = $this->parseListUntil(["elif" => true, "else" => true, "fi" => true]);
         if ($thenBody === null)
         {
-            throw new ParseError("Expected commands after 'then'");
+            throw new Parseerror_("Expected commands after 'then'");
         }
         $this->skipWhitespaceAndNewlines();
         $elseBody = null;
@@ -10287,7 +10292,7 @@ class Parser
                 $elseBody = $this->parseListUntil(["fi" => true]);
                 if ($elseBody === null)
                 {
-                    throw new ParseError("Expected commands after 'else'");
+                    throw new Parseerror_("Expected commands after 'else'");
                 }
             }
         }
@@ -10304,22 +10309,22 @@ class Parser
         $condition = $this->parseListUntil(["do" => true]);
         if ($condition === null)
         {
-            throw new ParseError("Expected condition after 'while'");
+            throw new Parseerror_("Expected condition after 'while'");
         }
         $this->skipWhitespaceAndNewlines();
         if (!$this->_lexConsumeWord("do"))
         {
-            throw new ParseError("Expected 'do' after while condition");
+            throw new Parseerror_("Expected 'do' after while condition");
         }
         $body = $this->parseListUntil(["done" => true]);
         if ($body === null)
         {
-            throw new ParseError("Expected commands after 'do'");
+            throw new Parseerror_("Expected commands after 'do'");
         }
         $this->skipWhitespaceAndNewlines();
         if (!$this->_lexConsumeWord("done"))
         {
-            throw new ParseError("Expected 'done' to close while loop");
+            throw new Parseerror_("Expected 'done' to close while loop");
         }
         return new While_($condition, $body, $this->_collectRedirects(), "while");
     }
@@ -10334,22 +10339,22 @@ class Parser
         $condition = $this->parseListUntil(["do" => true]);
         if ($condition === null)
         {
-            throw new ParseError("Expected condition after 'until'");
+            throw new Parseerror_("Expected condition after 'until'");
         }
         $this->skipWhitespaceAndNewlines();
         if (!$this->_lexConsumeWord("do"))
         {
-            throw new ParseError("Expected 'do' after until condition");
+            throw new Parseerror_("Expected 'do' after until condition");
         }
         $body = $this->parseListUntil(["done" => true]);
         if ($body === null)
         {
-            throw new ParseError("Expected commands after 'do'");
+            throw new Parseerror_("Expected commands after 'do'");
         }
         $this->skipWhitespaceAndNewlines();
         if (!$this->_lexConsumeWord("done"))
         {
-            throw new ParseError("Expected 'done' to close until loop");
+            throw new Parseerror_("Expected 'done' to close until loop");
         }
         return new Until($condition, $body, $this->_collectRedirects(), "until");
     }
@@ -10372,7 +10377,7 @@ class Parser
             $varWord = $this->parseWord(false, false, false);
             if ($varWord === null)
             {
-                throw new ParseError("Expected variable name after 'for'");
+                throw new Parseerror_("Expected variable name after 'for'");
             }
             $varName = $varWord->value;
         }
@@ -10381,7 +10386,7 @@ class Parser
             $varName = $this->peekWord();
             if ($varName === "")
             {
-                throw new ParseError("Expected variable name after 'for'");
+                throw new Parseerror_("Expected variable name after 'for'");
             }
             $this->consumeWord($varName);
         }
@@ -10425,7 +10430,7 @@ class Parser
                     {
                         break;
                     }
-                    throw new ParseError("Expected ';' or newline before 'do'");
+                    throw new Parseerror_("Expected ';' or newline before 'do'");
                 }
                 $word = $this->parseWord(false, false, false);
                 if ($word === null)
@@ -10441,23 +10446,23 @@ class Parser
             $braceGroup = $this->parseBraceGroup();
             if ($braceGroup === null)
             {
-                throw new ParseError("Expected brace group in for loop");
+                throw new Parseerror_("Expected brace group in for loop");
             }
             return new For_($varName, $words, $braceGroup->body, $this->_collectRedirects(), "for");
         }
         if (!$this->_lexConsumeWord("do"))
         {
-            throw new ParseError("Expected 'do' in for loop");
+            throw new Parseerror_("Expected 'do' in for loop");
         }
         $body = $this->parseListUntil(["done" => true]);
         if ($body === null)
         {
-            throw new ParseError("Expected commands after 'do'");
+            throw new Parseerror_("Expected commands after 'do'");
         }
         $this->skipWhitespaceAndNewlines();
         if (!$this->_lexConsumeWord("done"))
         {
-            throw new ParseError("Expected 'done' to close for loop");
+            throw new Parseerror_("Expected 'done' to close for loop");
         }
         return new For_($varName, $words, $body, $this->_collectRedirects(), "for");
     }
@@ -10518,7 +10523,7 @@ class Parser
         }
         if (count($parts) !== 3)
         {
-            throw new ParseError("Expected three expressions in for ((;;))");
+            throw new Parseerror_("Expected three expressions in for ((;;))");
         }
         $init = $parts[0];
         $cond = $parts[1];
@@ -10544,7 +10549,7 @@ class Parser
         $varName = $this->peekWord();
         if ($varName === "")
         {
-            throw new ParseError("Expected variable name after 'select'");
+            throw new Parseerror_("Expected variable name after 'select'");
         }
         $this->consumeWord($varName);
         $this->skipWhitespace();
@@ -10613,12 +10618,12 @@ class Parser
         $word = $this->parseWord(false, false, false);
         if ($word === null)
         {
-            throw new ParseError("Expected word after 'case'");
+            throw new Parseerror_("Expected word after 'case'");
         }
         $this->skipWhitespaceAndNewlines();
         if (!$this->_lexConsumeWord("in"))
         {
-            throw new ParseError("Expected 'in' after case word");
+            throw new Parseerror_("Expected 'in' after case word");
         }
         $this->skipWhitespaceAndNewlines();
         $patterns = [];
@@ -10895,7 +10900,7 @@ class Parser
             $pattern = implode("", $patternChars);
             if (!($pattern !== ''))
             {
-                throw new ParseError("Expected pattern in case statement");
+                throw new Parseerror_("Expected pattern in case statement");
             }
             $this->skipWhitespace();
             $body = null;
@@ -10922,7 +10927,7 @@ class Parser
         if (!$this->_lexConsumeWord("esac"))
         {
             $this->_clearState(PARSERSTATEFLAGS_PST_CASESTMT);
-            throw new ParseError("Expected 'esac' to close case statement");
+            throw new Parseerror_("Expected 'esac' to close case statement");
         }
         $this->_clearState(PARSERSTATEFLAGS_PST_CASESTMT);
         return new Case_($word, $patterns, $this->_collectRedirects(), "case");
@@ -10968,7 +10973,7 @@ class Parser
             }
         }
         $nextWord = $this->_lexPeekReservedWord();
-        if ($nextWord !== "" && isset(COMPOUND_KEYWORDS[$nextWord]))
+        if ($nextWord !== "" && (isset(COMPOUND_KEYWORDS[$nextWord])))
         {
             $body = $this->parseCompoundCommand();
             if ($body !== null)
@@ -11022,7 +11027,7 @@ class Parser
                     }
                     else
                     {
-                        if ($nextWord !== "" && isset(COMPOUND_KEYWORDS[$nextWord]))
+                        if ($nextWord !== "" && (isset(COMPOUND_KEYWORDS[$nextWord])))
                         {
                             $name = $potentialName;
                             $body = $this->parseCompoundCommand();
@@ -11041,7 +11046,7 @@ class Parser
         {
             return new Coproc($body, $name, "coproc");
         }
-        throw new ParseError("Expected command after coproc");
+        throw new Parseerror_("Expected command after coproc");
     }
 
     public function parseFunction(): ?Function_
@@ -11078,12 +11083,12 @@ class Parser
             $body = $this->_parseCompoundCommand();
             if ($body === null)
             {
-                throw new ParseError("Expected function body");
+                throw new Parseerror_("Expected function body");
             }
             return new Function_($name, $body, "function");
         }
         $name = $this->peekWord();
-        if ($name === "" || isset(RESERVED_WORDS[$name]))
+        if ($name === "" || (isset(RESERVED_WORDS[$name])))
         {
             return null;
         }
@@ -11127,7 +11132,7 @@ class Parser
         $posAfterName = $this->pos;
         $this->skipWhitespace();
         $hasWhitespace = $this->pos > $posAfterName;
-        if (!$hasWhitespace && ($name !== '') && (str_contains("*?@+!\$", (string)(mb_substr($name, mb_strlen($name) - 1, 1)))))
+        if (!$hasWhitespace && ($name !== '') && ((str_contains("*?@+!\$", (string)(mb_substr($name, mb_strlen($name) - 1, 1))))))
         {
             $this->pos = $savedPos;
             return null;
@@ -11149,7 +11154,7 @@ class Parser
         $body = $this->_parseCompoundCommand();
         if ($body === null)
         {
-            throw new ParseError("Expected function body");
+            throw new Parseerror_("Expected function body");
         }
         return new Function_($name, $body, "function");
     }
@@ -11231,7 +11236,7 @@ class Parser
             }
         }
         $reserved = $this->_lexPeekReservedWord();
-        if ($reserved !== "" && isset($stopWords[$reserved]))
+        if ($reserved !== "" && (isset($stopWords[$reserved])))
         {
             return true;
         }
@@ -11246,7 +11251,7 @@ class Parser
     {
         $this->skipWhitespaceAndNewlines();
         $reserved = $this->_lexPeekReservedWord();
-        if ($reserved !== "" && isset($stopWords[$reserved]))
+        if ($reserved !== "" && (isset($stopWords[$reserved])))
         {
             return null;
         }
@@ -11332,7 +11337,7 @@ class Parser
             $pipeline = $this->parsePipeline();
             if ($pipeline === null)
             {
-                throw new ParseError("Expected command after " . $op);
+                throw new Parseerror_("Expected command after " . $op);
             }
             array_push($parts, $pipeline);
         }
@@ -11387,7 +11392,7 @@ class Parser
             if ($word !== "" && mb_strlen($word) > 1 && (string)(mb_substr($word, 0, 1)) === "}")
             {
                 $keywordWord = mb_substr($word, 1);
-                if (isset(RESERVED_WORDS[$keywordWord]) || $keywordWord === "{" || $keywordWord === "}" || $keywordWord === "[[" || $keywordWord === "]]" || $keywordWord === "!" || $keywordWord === "time")
+                if ((isset(RESERVED_WORDS[$keywordWord])) || $keywordWord === "{" || $keywordWord === "}" || $keywordWord === "[[" || $keywordWord === "]]" || $keywordWord === "!" || $keywordWord === "time")
                 {
                     $reserved = $keywordWord;
                 }
@@ -11395,7 +11400,7 @@ class Parser
         }
         if ($reserved === "fi" || $reserved === "then" || $reserved === "elif" || $reserved === "else" || $reserved === "done" || $reserved === "esac" || $reserved === "do" || $reserved === "in")
         {
-            throw new ParseError(sprintf("Unexpected reserved word '%s'", $reserved));
+            throw new Parseerror_(sprintf("Unexpected reserved word '%s'", $reserved));
         }
         if ($reserved === "if")
         {
@@ -11509,7 +11514,7 @@ class Parser
             $this->skipWhitespace();
             if (!$this->atEnd() && $this->peek() === "!")
             {
-                if ($this->pos + 1 >= $this->length || _isNegationBoundary((string)(mb_substr($this->source, $this->pos + 1, 1))) && !$this->_isBangFollowedByProcsub())
+                if (($this->pos + 1 >= $this->length || _isNegationBoundary((string)(mb_substr($this->source, $this->pos + 1, 1)))) && !$this->_isBangFollowedByProcsub())
                 {
                     $this->advance();
                     $prefixOrder = "time_negation";
@@ -11521,7 +11526,7 @@ class Parser
         {
             if (!$this->atEnd() && $this->peek() === "!")
             {
-                if ($this->pos + 1 >= $this->length || _isNegationBoundary((string)(mb_substr($this->source, $this->pos + 1, 1))) && !$this->_isBangFollowedByProcsub())
+                if (($this->pos + 1 >= $this->length || _isNegationBoundary((string)(mb_substr($this->source, $this->pos + 1, 1)))) && !$this->_isBangFollowedByProcsub())
                 {
                     $this->advance();
                     $this->skipWhitespace();
@@ -11609,7 +11614,7 @@ class Parser
             $cmd = $this->parseCompoundCommand();
             if ($cmd === null)
             {
-                throw new ParseError("Expected command after |");
+                throw new Parseerror_("Expected command after |");
             }
             array_push($commands, $cmd);
         }
@@ -11779,7 +11784,7 @@ class Parser
             $pipeline = $this->parsePipeline();
             if ($pipeline === null)
             {
-                throw new ParseError("Expected command after " . $op);
+                throw new Parseerror_("Expected command after " . $op);
             }
             array_push($parts, $pipeline);
             if ($this->_inState(PARSERSTATEFLAGS_PST_EOFTOKEN) && $this->_atEofToken())
@@ -11857,7 +11862,7 @@ class Parser
             }
             if (!$foundNewline && !$this->atEnd())
             {
-                throw new ParseError("Syntax error");
+                throw new Parseerror_("Syntax error");
             }
         }
         if (!(count($results) > 0))
@@ -12166,7 +12171,7 @@ function _hasBracketClose(string $s, int $start, int $depth): bool
         {
             return true;
         }
-        if ((string)(mb_substr($s, $i, 1)) === "|" || (string)(mb_substr($s, $i, 1)) === ")" && $depth === 0)
+        if (((string)(mb_substr($s, $i, 1)) === "|" || (string)(mb_substr($s, $i, 1)) === ")") && $depth === 0)
         {
             return false;
         }
@@ -12178,7 +12183,7 @@ function _hasBracketClose(string $s, int $start, int $depth): bool
 function _consumeBracketClass(string $s, int $start, int $depth): array
 {
     $scanPos = $start + 1;
-    if ($scanPos < mb_strlen($s) && (string)(mb_substr($s, $scanPos, 1)) === "!" || (string)(mb_substr($s, $scanPos, 1)) === "^")
+    if ($scanPos < mb_strlen($s) && ((string)(mb_substr($s, $scanPos, 1)) === "!" || (string)(mb_substr($s, $scanPos, 1)) === "^"))
     {
         $scanPos += 1;
     }
@@ -12213,7 +12218,7 @@ function _consumeBracketClass(string $s, int $start, int $depth): array
     }
     $chars = ["["];
     $i = $start + 1;
-    if ($i < mb_strlen($s) && (string)(mb_substr($s, $i, 1)) === "!" || (string)(mb_substr($s, $i, 1)) === "^")
+    if ($i < mb_strlen($s) && ((string)(mb_substr($s, $i, 1)) === "!" || (string)(mb_substr($s, $i, 1)) === "^"))
     {
         array_push($chars, (string)(mb_substr($s, $i, 1)));
         $i += 1;
@@ -12348,7 +12353,7 @@ function _formatCmdsubNode(?Node $node, int $indent, bool $inProcsub, bool $comp
         }
         foreach ($heredocs as $h)
         {
-            $result = $result + _formatHeredocBody($h);
+            $result = $result . _formatHeredocBody($h);
         }
         return $result;
     }
@@ -12376,8 +12381,8 @@ function _formatCmdsubNode(?Node $node, int $indent, bool $inProcsub, bool $comp
         {
             {
                 $_entry = $cmds[$idx];
-                $cmd = $_entry->f0;
-                $needsRedirect = $_entry->f1;
+                $cmd = $_entry[0];
+                $needsRedirect = $_entry[1];
             }
             $formatted = _formatCmdsubNode($cmd, $indent, $inProcsub, false, $procsubFirst && $idx === 0);
             $isLast = $idx === count($cmds) - 1;
@@ -12428,7 +12433,7 @@ function _formatCmdsubNode(?Node $node, int $indent, bool $inProcsub, bool $comp
             }
             $idx += 1;
         }
-        $compactPipe = $inProcsub && (count($cmds) > 0) && $cmds[0]->f0->kind === "subshell";
+        $compactPipe = $inProcsub && (count($cmds) > 0) && $cmds[0][0]->kind === "subshell";
         $result = "";
         $idx = 0;
         while ($idx < count($resultParts))
@@ -12436,19 +12441,19 @@ function _formatCmdsubNode(?Node $node, int $indent, bool $inProcsub, bool $comp
             $part = $resultParts[$idx];
             if ($idx > 0)
             {
-                if ($result->endswith("\n"))
+                if (str_ends_with($result, "\n"))
                 {
-                    $result = $result + "  " . $part;
+                    $result = $result . "  " . $part;
                 }
                 else
                 {
                     if ($compactPipe)
                     {
-                        $result = $result + "|" . $part;
+                        $result = $result . "|" . $part;
                     }
                     else
                     {
-                        $result = $result + " | " . $part;
+                        $result = $result . " | " . $part;
                     }
                 }
             }
@@ -12547,10 +12552,10 @@ function _formatCmdsubNode(?Node $node, int $indent, bool $inProcsub, bool $comp
                         $firstNl = 0;
                         if ($p->op === "&")
                         {
-                            if ((count($result) > 0) && (str_contains($result[count($result) - 1], "<<")) && (str_contains($result[count($result) - 1], "\n")))
+                            if ((count($result) > 0) && ((str_contains($result[count($result) - 1], "<<"))) && ((str_contains($result[count($result) - 1], "\n"))))
                             {
                                 $last = $result[count($result) - 1];
-                                if ((str_contains($last, " |")) || str_starts_with($last, "|"))
+                                if (((str_contains($last, " |"))) || str_starts_with($last, "|"))
                                 {
                                     $result[count($result) - 1] = $last . " &";
                                 }
@@ -12567,7 +12572,7 @@ function _formatCmdsubNode(?Node $node, int $indent, bool $inProcsub, bool $comp
                         }
                         else
                         {
-                            if ((count($result) > 0) && (str_contains($result[count($result) - 1], "<<")) && (str_contains($result[count($result) - 1], "\n")))
+                            if ((count($result) > 0) && ((str_contains($result[count($result) - 1], "<<"))) && ((str_contains($result[count($result) - 1], "\n"))))
                             {
                                 $last = $result[count($result) - 1];
                                 $firstNl = mb_strpos($last, "\n");
@@ -12583,7 +12588,7 @@ function _formatCmdsubNode(?Node $node, int $indent, bool $inProcsub, bool $comp
             }
             else
             {
-                if ((count($result) > 0) && !str_ends_with($result[count($result) - 1], [" ", "\n"]))
+                if ((count($result) > 0) && !(str_ends_with($result[count($result) - 1], " ") || str_ends_with($result[count($result) - 1], "\n")))
                 {
                     array_push($result, " ");
                 }
@@ -12591,7 +12596,7 @@ function _formatCmdsubNode(?Node $node, int $indent, bool $inProcsub, bool $comp
                 if (count($result) > 0)
                 {
                     $last = $result[count($result) - 1];
-                    if ((str_contains($last, " || \n")) || (str_contains($last, " && \n")))
+                    if (((str_contains($last, " || \n"))) || ((str_contains($last, " && \n"))))
                     {
                         $formattedCmd = " " . $formattedCmd;
                     }
@@ -12606,7 +12611,7 @@ function _formatCmdsubNode(?Node $node, int $indent, bool $inProcsub, bool $comp
             }
         }
         $s = implode("", $result);
-        if ((str_contains($s, " &\n")) && str_ends_with($s, "\n"))
+        if (((str_contains($s, " &\n"))) && str_ends_with($s, "\n"))
         {
             return $s . " ";
         }
@@ -12631,9 +12636,9 @@ function _formatCmdsubNode(?Node $node, int $indent, bool $inProcsub, bool $comp
         if ($node->elseBody !== null)
         {
             $elseBody = _formatCmdsubNode($node->elseBody, $indent + 4, false, false, false);
-            $result = $result + "\n" . $sp . "else\n" . $innerSp . $elseBody . ";";
+            $result = $result . "\n" . $sp . "else\n" . $innerSp . $elseBody . ";";
         }
-        $result = $result + "\n" . $sp . "fi";
+        $result = $result . "\n" . $sp . "fi";
         return $result;
     }
     if ($node instanceof While_)
@@ -12645,7 +12650,7 @@ function _formatCmdsubNode(?Node $node, int $indent, bool $inProcsub, bool $comp
         {
             foreach ($node->redirects as $r)
             {
-                $result = $result + " " . _formatRedirect($r, false, false);
+                $result = $result . " " . _formatRedirect($r, false, false);
             }
         }
         return $result;
@@ -12659,7 +12664,7 @@ function _formatCmdsubNode(?Node $node, int $indent, bool $inProcsub, bool $comp
         {
             foreach ($node->redirects as $r)
             {
-                $result = $result + " " . _formatRedirect($r, false, false);
+                $result = $result . " " . _formatRedirect($r, false, false);
             }
         }
         return $result;
@@ -12694,7 +12699,7 @@ function _formatCmdsubNode(?Node $node, int $indent, bool $inProcsub, bool $comp
         {
             foreach ($node->redirects as $r)
             {
-                $result = $result + " " . _formatRedirect($r, false, false);
+                $result = $result . " " . _formatRedirect($r, false, false);
             }
         }
         return $result;
@@ -12707,7 +12712,7 @@ function _formatCmdsubNode(?Node $node, int $indent, bool $inProcsub, bool $comp
         {
             foreach ($node->redirects as $r)
             {
-                $result = $result + " " . _formatRedirect($r, false, false);
+                $result = $result . " " . _formatRedirect($r, false, false);
             }
         }
         return $result;
@@ -12720,7 +12725,7 @@ function _formatCmdsubNode(?Node $node, int $indent, bool $inProcsub, bool $comp
         while ($i < count($node->patterns))
         {
             $p = $node->patterns[$i];
-            $pat = $p->pattern->replace("|", " | ");
+            $pat = str_replace("|", " | ", $p->pattern);
             $body = "";
             if ($p->body !== null)
             {
@@ -12736,15 +12741,15 @@ function _formatCmdsubNode(?Node $node, int $indent, bool $inProcsub, bool $comp
             $bodyPart = (($body !== '') ? $patIndent . $body . "\n" : "\n");
             if ($i === 0)
             {
-                array_push($patterns, " " . $pat . ")\n" . $bodyPart + $termIndent . $term);
+                array_push($patterns, " " . $pat . ")\n" . $bodyPart . $termIndent . $term);
             }
             else
             {
-                array_push($patterns, $pat . ")\n" . $bodyPart + $termIndent . $term);
+                array_push($patterns, $pat . ")\n" . $bodyPart . $termIndent . $term);
             }
             $i += 1;
         }
-        $patternStr = "\n" . _repeatStr(" ", $indent + 4)->join($patterns);
+        $patternStr = implode("\n" . _repeatStr(" ", $indent + 4), $patterns);
         $redirects = "";
         if ((count($node->redirects) > 0))
         {
@@ -12755,7 +12760,7 @@ function _formatCmdsubNode(?Node $node, int $indent, bool $inProcsub, bool $comp
             }
             $redirects = " " . implode(" ", $redirectParts);
         }
-        return "case " . $word . " in" . $patternStr + "\n" . $sp . "esac" . $redirects;
+        return "case " . $word . " in" . $patternStr . "\n" . $sp . "esac" . $redirects;
     }
     if ($node instanceof Function_)
     {
@@ -12808,7 +12813,7 @@ function _formatCmdsubNode(?Node $node, int $indent, bool $inProcsub, bool $comp
         }
         if (($redirects !== ''))
         {
-            return "{ " . $body . $terminator + " " . $redirects;
+            return "{ " . $body . $terminator . " " . $redirects;
         }
         return "{ " . $body . $terminator;
     }
@@ -12843,9 +12848,9 @@ function _formatCmdsubNode(?Node $node, int $indent, bool $inProcsub, bool $comp
 
 function _formatRedirect(?Node $r, bool $compact, bool $heredocOpOnly): string
 {
+    $op = "";
     if ($r instanceof Heredoc)
     {
-        $op = "";
         if ($r->stripTabs)
         {
             $op = "<<-";
@@ -12942,7 +12947,7 @@ function _formatRedirect(?Node $r, bool $compact, bool $heredocOpOnly): string
 
 function _formatHeredocBody(?Node $r): string
 {
-    return "\n" . $r->content . $r->delimiter + "\n";
+    return "\n" . $r->content . $r->delimiter . "\n";
 }
 
 function _lookaheadForEsac(string $value, int $start, int $caseDepth): bool
@@ -13228,7 +13233,7 @@ function _findCmdsubEnd(string $value, int $start): int
             $i = _skipDoubleQuoted($value, $i + 1);
             continue;
         }
-        if ($c === "#" && $arithDepth === 0 && $i === $start || (string)(mb_substr($value, $i - 1, 1)) === " " || (string)(mb_substr($value, $i - 1, 1)) === "\t" || (string)(mb_substr($value, $i - 1, 1)) === "\n" || (string)(mb_substr($value, $i - 1, 1)) === ";" || (string)(mb_substr($value, $i - 1, 1)) === "|" || (string)(mb_substr($value, $i - 1, 1)) === "&" || (string)(mb_substr($value, $i - 1, 1)) === "(" || (string)(mb_substr($value, $i - 1, 1)) === ")")
+        if ($c === "#" && $arithDepth === 0 && ($i === $start || (string)(mb_substr($value, $i - 1, 1)) === " " || (string)(mb_substr($value, $i - 1, 1)) === "\t" || (string)(mb_substr($value, $i - 1, 1)) === "\n" || (string)(mb_substr($value, $i - 1, 1)) === ";" || (string)(mb_substr($value, $i - 1, 1)) === "|" || (string)(mb_substr($value, $i - 1, 1)) === "&" || (string)(mb_substr($value, $i - 1, 1)) === "(" || (string)(mb_substr($value, $i - 1, 1)) === ")"))
         {
             while ($i < mb_strlen($value) && (string)(mb_substr($value, $i, 1)) !== "\n")
             {
@@ -13239,7 +13244,7 @@ function _findCmdsubEnd(string $value, int $start): int
         if (_startsWithAt($value, $i, "<<<"))
         {
             $i += 3;
-            while ($i < mb_strlen($value) && (string)(mb_substr($value, $i, 1)) === " " || (string)(mb_substr($value, $i, 1)) === "\t")
+            while ($i < mb_strlen($value) && ((string)(mb_substr($value, $i, 1)) === " " || (string)(mb_substr($value, $i, 1)) === "\t"))
             {
                 $i += 1;
             }
@@ -13278,7 +13283,7 @@ function _findCmdsubEnd(string $value, int $start): int
                 }
                 else
                 {
-                    while ($i < mb_strlen($value) && (!str_contains(" \t\n;|&<>()", (string)(mb_substr($value, $i, 1)))))
+                    while ($i < mb_strlen($value) && ((!str_contains(" \t\n;|&<>()", (string)(mb_substr($value, $i, 1))))))
                     {
                         $i += 1;
                     }
@@ -13418,13 +13423,13 @@ function _findBracedParamEnd(string $value, int $start): int
             $i += 1;
             continue;
         }
-        if ($dolbraceState === DOLBRACESTATE_PARAM && (str_contains("%#^,", $c)))
+        if ($dolbraceState === DOLBRACESTATE_PARAM && ((str_contains("%#^,", $c))))
         {
             $dolbraceState = DOLBRACESTATE_QUOTE;
         }
         else
         {
-            if ($dolbraceState === DOLBRACESTATE_PARAM && (str_contains(":-=?+/", $c)))
+            if ($dolbraceState === DOLBRACESTATE_PARAM && ((str_contains(":-=?+/", $c))))
             {
                 $dolbraceState = DOLBRACESTATE_WORD;
             }
@@ -13438,7 +13443,7 @@ function _findBracedParamEnd(string $value, int $start): int
                 continue;
             }
         }
-        if ($c === "<" || $c === ">" && $i + 1 < mb_strlen($value) && (string)(mb_substr($value, $i + 1, 1)) === "(")
+        if (($c === "<" || $c === ">") && $i + 1 < mb_strlen($value) && (string)(mb_substr($value, $i + 1, 1)) === "(")
         {
             $i = _findCmdsubEnd($value, $i + 2);
             continue;
@@ -13487,7 +13492,7 @@ function _skipHeredoc(string $value, int $start): int
     $delimStart = $i;
     $quoteChar = null;
     $delimiter = "";
-    if ($i < mb_strlen($value) && (string)(mb_substr($value, $i, 1)) === "\"" || (string)(mb_substr($value, $i, 1)) === "'")
+    if ($i < mb_strlen($value) && ((string)(mb_substr($value, $i, 1)) === "\"" || (string)(mb_substr($value, $i, 1)) === "'"))
     {
         $quoteChar = (string)(mb_substr($value, $i, 1));
         $i += 1;
@@ -13533,7 +13538,7 @@ function _skipHeredoc(string $value, int $start): int
     while ($i < mb_strlen($value) && (string)(mb_substr($value, $i, 1)) !== "\n")
     {
         $c = (string)(mb_substr($value, $i, 1));
-        if ($c === "\\" && $i + 1 < mb_strlen($value) && $quote->double || $inBacktick)
+        if ($c === "\\" && $i + 1 < mb_strlen($value) && ($quote->double || $inBacktick))
         {
             $i += 2;
             continue;
@@ -13678,8 +13683,8 @@ function _findHeredocContentEnd(string $source, int $start, ?array $delimiters):
     $pos += 1;
     foreach ($delimiters as $_item)
     {
-        $delimiter = $_item->f0;
-        $stripTabs = $_item->f1;
+        $delimiter = $_item[0];
+        $stripTabs = $_item[1];
         while ($pos < mb_strlen($source))
         {
             $lineStart = $pos;
@@ -13757,7 +13762,7 @@ function _isWordBoundary(string $s, int $pos, int $wordLen): bool
         }
     }
     $end = $pos + $wordLen;
-    if ($end < mb_strlen($s) && ctype_alnum((string)(mb_substr($s, $end, 1))) || (string)(mb_substr($s, $end, 1)) === "_")
+    if ($end < mb_strlen($s) && (ctype_alnum((string)(mb_substr($s, $end, 1))) || (string)(mb_substr($s, $end, 1)) === "_"))
     {
         return false;
     }
@@ -13899,7 +13904,7 @@ function _normalizeHeredocDelimiter(string $delimiter): string
             }
             else
             {
-                if ($i + 1 < mb_strlen($delimiter) && (str_contains("<>", (string)(mb_substr($delimiter, $i, 1)))) && (string)(mb_substr($delimiter, $i + 1, 1)) === "(")
+                if ($i + 1 < mb_strlen($delimiter) && ((str_contains("<>", (string)(mb_substr($delimiter, $i, 1))))) && (string)(mb_substr($delimiter, $i + 1, 1)) === "(")
                 {
                     array_push($result, (string)(mb_substr($delimiter, $i, 1)));
                     array_push($result, "(");
@@ -14151,7 +14156,7 @@ function _isArrayAssignmentPrefix(?array $chars): bool
     }
     $s = implode("", $chars);
     $i = 1;
-    while ($i < mb_strlen($s) && ctype_alnum((string)(mb_substr($s, $i, 1))) || (string)(mb_substr($s, $i, 1)) === "_")
+    while ($i < mb_strlen($s) && (ctype_alnum((string)(mb_substr($s, $i, 1))) || (string)(mb_substr($s, $i, 1)) === "_"))
     {
         $i += 1;
     }

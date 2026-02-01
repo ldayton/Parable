@@ -297,7 +297,8 @@ class PhpBackend:
         fields_to_emit = [f for f in struct.fields if not (struct.is_exception and f.name == "message")]
         for fld in fields_to_emit:
             self._emit_field(fld)
-        if struct.fields:
+        # Generate constructor for structs with fields, or exception subclasses that need to call parent
+        if struct.fields or (struct.is_exception and struct.embedded_type):
             self._line("")
             self._emit_constructor(struct)
         for method in struct.methods:
@@ -314,9 +315,31 @@ class PhpBackend:
 
     def _emit_constructor(self, struct: Struct) -> None:
         class_name = struct.name
+        # Handle exception subclasses with no fields - just call parent with message
         if not struct.fields:
+            if struct.is_exception and struct.embedded_type:
+                self._line("public function __construct(string $message)")
+                self._line("{")
+                self.indent += 1
+                self._line("parent::__construct($message, 0, 0);")
+                self.indent -= 1
+                self._line("}")
             return
-        params = ", ".join(f"{self._param_type(f.typ)} ${_safe_name(f.name)}" for f in struct.fields)
+        param_parts = []
+        for f in struct.fields:
+            typ = self._param_type(f.typ)
+            name = _safe_name(f.name)
+            if f.default is not None:
+                default_val = self._expr(f.default)
+                param_parts.append(f"{typ} ${name} = {default_val}")
+            elif isinstance(f.typ, Optional):
+                param_parts.append(f"{typ} ${name} = null")
+            elif struct.is_exception and name in ("pos", "line"):
+                # Exception pos/line fields default to 0
+                param_parts.append(f"{typ} ${name} = 0")
+            else:
+                param_parts.append(f"{typ} ${name}")
+        params = ", ".join(param_parts)
         self._line(f"public function __construct({params})")
         self._line("{")
         self.indent += 1
@@ -402,7 +425,9 @@ class PhpBackend:
             case OpAssign(target=target, op=op, value=value):
                 lv = self._lvalue(target)
                 val = self._expr(value)
-                self._line(f"{lv} {op}= {val};")
+                # String concatenation: += on strings becomes .= in PHP
+                php_op = "." if op == "+" and _is_string_type(value.typ) else op
+                self._line(f"{lv} {php_op}= {val};")
             case TupleAssign(targets=targets, value=value):
                 self._emit_tuple_assign(stmt)
             case NoOp():
@@ -472,7 +497,8 @@ class PhpBackend:
                     self._line(f"throw ${reraise_var};")
                 else:
                     msg = self._expr(message)
-                    self._line(f"throw new {error_type}({msg});")
+                    exc_type = _safe_pascal(error_type)
+                    self._line(f"throw new {exc_type}({msg});")
             case SoftFail():
                 self._line("return null;")
             case _:
@@ -627,7 +653,8 @@ class PhpBackend:
                                 return f"${_safe_name(target.name)}++"
                 return f"{self._lvalue(target)} = {self._expr(value)}"
             case OpAssign(target=target, op=op, value=value):
-                return f"{self._lvalue(target)} {op}= {self._expr(value)}"
+                php_op = "." if op == "+" and _is_string_type(value.typ) else op
+                return f"{self._lvalue(target)} {php_op}= {self._expr(value)}"
             case _:
                 return ""
 
@@ -677,9 +704,8 @@ class PhpBackend:
                 obj_type = obj.typ
                 if isinstance(obj_type, Pointer):
                     obj_type = obj_type.target
-                if isinstance(obj_type, Tuple) and field.startswith("f") and field[1:].isdigit():
-                    idx = field[1:]
-                    return f"{obj_str}[{idx}]"
+                if field.startswith("F") and field[1:].isdigit():
+                    return f"{obj_str}[{field[1:]}]"
                 return f"{obj_str}->{_safe_name(field)}"
             case FuncRef(name=name, obj=obj):
                 if obj is not None:
@@ -743,9 +769,14 @@ class PhpBackend:
             case BinaryOp(op="not in", left=left, right=right):
                 return self._containment_check(left, right, negated=True)
             case BinaryOp(op=op, left=left, right=right):
-                left_str = self._expr(left)
-                right_str = self._expr(right)
+                # String concatenation: + on strings becomes . in PHP
+                if op == "+" and (_is_string_type(left.typ) or _is_string_type(right.typ)):
+                    left_str = self._maybe_paren(left, ".", is_left=True)
+                    right_str = self._maybe_paren(right, ".", is_left=False)
+                    return f"{left_str} . {right_str}"
                 php_op = _binary_op(op, left.typ)
+                left_str = self._maybe_paren(left, php_op, is_left=True)
+                right_str = self._maybe_paren(right, php_op, is_left=False)
                 result = f"{left_str} {php_op} {right_str}"
                 if op in ("&", "|", "^") or (isinstance(left, BinaryOp) and left.op in ("&", "|", "^")):
                     return f"({result})"
@@ -854,8 +885,13 @@ class PhpBackend:
         if isinstance(receiver_type, Slice):
             if method == "append" and args:
                 return f"array_push({obj_str}, {args_str})"
-            if method == "pop" and not args:
-                return f"array_pop({obj_str})"
+            if method == "pop":
+                if not args:
+                    return f"array_pop({obj_str})"
+                idx = self._expr(args[0])
+                if idx == "0":
+                    return f"array_shift({obj_str})"
+                return f"array_splice({obj_str}, {idx}, 1)[0]"
             if method == "copy":
                 return obj_str
         if isinstance(receiver_type, Primitive) and receiver_type.kind == "string":
@@ -867,6 +903,9 @@ class PhpBackend:
                     offset = self._expr(args[1])
                     return f"str_starts_with(mb_substr({obj_str}, {offset}), {prefix})"
             if method == "endswith":
+                if args and isinstance(args[0], TupleLit):
+                    checks = " || ".join(f"str_ends_with({obj_str}, {self._expr(e)})" for e in args[0].elements)
+                    return f"({checks})"
                 return f"str_ends_with({obj_str}, {args_str})"
             if method == "find":
                 return f"mb_strpos({obj_str}, {args_str})"
@@ -903,6 +942,28 @@ class PhpBackend:
             return f"{obj_str} = []"
         if method == "insert":
             return f"array_splice({obj_str}, {self._expr(args[0])}, 0, [{self._expr(args[1])}])"
+        # Fallback string methods (when receiver type isn't detected)
+        if method == "endswith":
+            if args and isinstance(args[0], TupleLit):
+                checks = " || ".join(f"str_ends_with({obj_str}, {self._expr(e)})" for e in args[0].elements)
+                return f"({checks})"
+            return f"str_ends_with({obj_str}, {args_str})"
+        if method == "startswith":
+            return f"str_starts_with({obj_str}, {args_str})"
+        if method == "find":
+            return f"mb_strpos({obj_str}, {args_str})"
+        if method == "rfind":
+            return f"mb_strrpos({obj_str}, {args_str})"
+        if method == "replace":
+            return f"str_replace({self._expr(args[0])}, {self._expr(args[1])}, {obj_str})"
+        if method == "split":
+            return f"explode({args_str}, {obj_str})"
+        if method == "join":
+            return f"implode({obj_str}, {args_str})"
+        if method == "lower":
+            return f"mb_strtolower({obj_str})"
+        if method == "upper":
+            return f"mb_strtoupper({obj_str})"
         return f"{obj_str}->{_safe_name(method)}({args_str})"
 
     def _slice_expr(self, obj: Expr, low: Expr | None, high: Expr | None) -> str:
@@ -1086,6 +1147,16 @@ class PhpBackend:
             case _:
                 return "null"
 
+    def _maybe_paren(self, expr: Expr, parent_op: str, is_left: bool) -> str:
+        """Wrap expression in parens if needed for operator precedence."""
+        match expr:
+            case BinaryOp(op=child_op):
+                if _needs_parens(child_op, parent_op, is_left):
+                    return f"({self._expr(expr)})"
+            case Ternary():
+                return f"({self._expr(expr)})"
+        return self._expr(expr)
+
 
 def _primitive_type(kind: str) -> str:
     match kind:
@@ -1140,3 +1211,41 @@ def _escape_php_string(value: str) -> str:
 
 def _is_string_type(typ: Type) -> bool:
     return isinstance(typ, Primitive) and typ.kind in ("string", "rune")
+
+
+# PHP operator precedence (higher number = tighter binding)
+_PRECEDENCE = {
+    "or": 1,
+    "||": 2,
+    "and": 3,
+    "&&": 4,
+    "|": 5,
+    "^": 6,
+    "&": 7,
+    "==": 8,
+    "===": 8,
+    "!=": 8,
+    "!==": 8,
+    "<": 9,
+    ">": 9,
+    "<=": 9,
+    ">=": 9,
+    "+": 11,
+    "-": 11,
+    ".": 11,
+    "*": 12,
+    "/": 12,
+    "%": 12,
+    "//": 12,
+}
+
+
+def _needs_parens(child_op: str, parent_op: str, is_left: bool) -> bool:
+    """Determine if a child binary op needs parens inside a parent binary op."""
+    child_prec = _PRECEDENCE.get(child_op, 0)
+    parent_prec = _PRECEDENCE.get(parent_op, 0)
+    if child_prec < parent_prec:
+        return True
+    if child_prec == parent_prec and not is_left:
+        return child_op in ("==", "===", "!=", "!==", "<", ">", "<=", ">=")
+    return False

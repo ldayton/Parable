@@ -39,7 +39,7 @@ jobs:
         with:
           ruby-version: '3.4'
 
-      - uses: shivammathur/setup-perl@v1
+      - uses: shogo82148/actions-setup-perl@v1
         with:
           perl-version: '5.40'
 

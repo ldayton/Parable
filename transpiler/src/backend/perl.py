@@ -1096,7 +1096,13 @@ class PerlBackend:
                     if method == "rfind":
                         return f"rindex({obj_str}, {args_str})"
                     if method == "startswith":
-                        return f"(index({obj_str}, {args_str}) == 0)"
+                        # With 1 arg: index(s, prefix) == 0
+                        # With 2 args: index(s, prefix, pos) == pos
+                        if len(args) == 1:
+                            return f"(index({obj_str}, {args_str}) == 0)"
+                        prefix = self._expr(args[0])
+                        pos = self._expr(args[1])
+                        return f"(index({obj_str}, {prefix}, {pos}) == {pos})"
                     if method == "endswith":
                         return f"(substr({obj_str}, -length({args_str})) eq {args_str})"
                     if method == "split":
@@ -1122,7 +1128,13 @@ class PerlBackend:
                     if method == "endswith":
                         return f"(substr({obj_str}, -length({args_str})) eq {args_str})"
                     if method == "startswith":
-                        return f"(index({obj_str}, {args_str}) == 0)"
+                        # With 1 arg: index(s, prefix) == 0
+                        # With 2 args: index(s, prefix, pos) == pos
+                        if len(args) == 1:
+                            return f"(index({obj_str}, {args_str}) == 0)"
+                        prefix = self._expr(args[0])
+                        pos = self._expr(args[1])
+                        return f"(index({obj_str}, {prefix}, {pos}) == {pos})"
                     if method == "find":
                         return f"index({obj_str}, {args_str})"
                     if method == "rfind":

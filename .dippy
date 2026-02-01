@@ -3,6 +3,7 @@
 #---- Just targets ----#
 allow just
 deny just -C "Don't use -C, run bare targets"
+allow uv run pytest
 
 #---- Scripts ----#
 allow bin/parable-dump.py
@@ -24,6 +25,4 @@ allow php
 allow python
 allow python3
 allow ruby
-allow php
-allow perl
 allow tsc

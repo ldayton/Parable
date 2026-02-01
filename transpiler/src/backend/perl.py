@@ -367,6 +367,7 @@ class PerlBackend:
         self._hoisted_vars: set[str] = set()
         self._func_params: set[str] = set()  # Parameters with FuncType
         self.struct_fields: dict[str, list[tuple[str, Type]]] = {}  # Struct field info
+        self._in_try_with_return: bool = False  # Flag for return-from-eval workaround
 
     def emit(self, module: Module) -> str:
         """Emit Perl code from IR Module."""
@@ -485,6 +486,38 @@ class PerlBackend:
                     self._collect_undeclared_info(default, needs_predecl, declared_in_cf, True)
                 case Block(body=body):
                     self._collect_undeclared_info(body, needs_predecl, declared_in_cf, in_control_flow)
+
+    def _body_has_return(self, stmts: list[Stmt]) -> bool:
+        """Check if the body contains any Return statements (recursively)."""
+        for stmt in stmts:
+            if isinstance(stmt, Return):
+                return True
+            match stmt:
+                case If(then_body=then_body, else_body=else_body):
+                    if self._body_has_return(then_body) or self._body_has_return(else_body):
+                        return True
+                case While(body=body) | ForRange(body=body) | ForClassic(body=body):
+                    if self._body_has_return(body):
+                        return True
+                case Match(cases=cases, default=default):
+                    for case in cases:
+                        if self._body_has_return(case.body):
+                            return True
+                    if self._body_has_return(default):
+                        return True
+                case TypeSwitch(cases=cases, default=default):
+                    for case in cases:
+                        if self._body_has_return(case.body):
+                            return True
+                    if self._body_has_return(default):
+                        return True
+                case Block(body=body):
+                    if self._body_has_return(body):
+                        return True
+                case TryCatch(body=body, catch_body=catch_body):
+                    # Don't recurse into nested try-catch; they'll handle their own returns
+                    pass
+        return False
 
     def _emit_module(self, module: Module) -> None:
         self._line("use strict;")
@@ -664,7 +697,13 @@ class PerlBackend:
             case ExprStmt(expr=expr):
                 self._line(f"{self._expr(expr)};")
             case Return(value=value):
-                if value is not None:
+                if self._in_try_with_return:
+                    # Inside eval{} - can't use return, use flag pattern instead
+                    if value is not None:
+                        self._line(f"$_try_result = {self._expr(value)};")
+                    self._line("$_try_returned = 1;")
+                    self._line("last TRYBLOCK;")  # Exit the labeled for loop
+                elif value is not None:
                     self._line(f"return {self._expr(value)};")
                 else:
                     self._line("return;")
@@ -859,10 +898,23 @@ class PerlBackend:
         catch_body: list[Stmt],
         reraise: bool,
     ) -> None:
+        has_return = self._body_has_return(body)
+        if has_return:
+            self._line("my $_try_result;")
+            self._line("my $_try_returned = 0;")
         self._line("eval {")
         self.indent += 1
+        if has_return:
+            # Wrap in labeled loop so 'last' can exit when returning
+            self._line("TRYBLOCK: for (1) {")
+            self.indent += 1
+            self._in_try_with_return = True
         for s in body:
             self._emit_stmt(s)
+        if has_return:
+            self._in_try_with_return = False
+            self.indent -= 1
+            self._line("}")
         self.indent -= 1
         self._line("};")
         var = _safe_name(catch_var) if catch_var else "_e"
@@ -874,6 +926,8 @@ class PerlBackend:
             self._line(f"die ${var};")
         self.indent -= 1
         self._line("}")
+        if has_return:
+            self._line("return $_try_result if $_try_returned;")
 
     def _emit_else_body(self, else_body: list[Stmt]) -> None:
         """Emit else body, converting single-If else to elsif chains."""
@@ -1042,8 +1096,44 @@ class PerlBackend:
                     if method == "lower":
                         return f"lc({obj_str})"
                     if method == "replace":
-                        arg_list = [self._expr(a) for a in args]
-                        return f"({obj_str} =~ s/{arg_list[0]}/{arg_list[1]}/gr)"
+                        # For regex patterns, extract raw values, don't use quoted literals
+                        if isinstance(args[0], StringLit):
+                            old_val = _escape_perl_regex(args[0].value)
+                        else:
+                            # Non-literal: use expression but strip surrounding quotes if present
+                            old_val = self._expr(args[0])
+                        if isinstance(args[1], StringLit):
+                            new_val = _escape_perl_replacement(args[1].value)
+                        else:
+                            new_val = self._expr(args[1])
+                        return f"({obj_str} =~ s/{old_val}/{new_val}/gr)"
+                # Fallback: if type is unknown but method is a common string method, treat as string
+                if method in ("endswith", "startswith", "find", "rfind", "upper", "lower", "split"):
+                    if method == "endswith":
+                        return f"(substr({obj_str}, -length({args_str})) eq {args_str})"
+                    if method == "startswith":
+                        return f"(index({obj_str}, {args_str}) == 0)"
+                    if method == "find":
+                        return f"index({obj_str}, {args_str})"
+                    if method == "rfind":
+                        return f"rindex({obj_str}, {args_str})"
+                    if method == "upper":
+                        return f"uc({obj_str})"
+                    if method == "lower":
+                        return f"lc({obj_str})"
+                    if method == "split":
+                        return f"[split({args_str}, {obj_str})]"
+                if method == "replace" and len(args) == 2:
+                    # Fallback for replace with unknown type
+                    if isinstance(args[0], StringLit):
+                        old_val = _escape_perl_regex(args[0].value)
+                    else:
+                        old_val = self._expr(args[0])
+                    if isinstance(args[1], StringLit):
+                        new_val = _escape_perl_replacement(args[1].value)
+                    else:
+                        new_val = self._expr(args[1])
+                    return f"({obj_str} =~ s/{old_val}/{new_val}/gr)"
                 pl_method = _method_name(method, receiver_type)
                 if args_str:
                     return f"{obj_str}->{pl_method}({args_str})"
@@ -1424,6 +1514,52 @@ def _escape_perl_string(value: str) -> str:
         .replace("$", "\\$")
         .replace("@", "\\@")
     )
+
+
+def _escape_perl_regex(s: str) -> str:
+    """Escape special regex metacharacters for Perl s/// pattern."""
+    # Escape: . ^ $ * + ? { } [ ] \ | ( ) /
+    result = []
+    for ch in s:
+        if ch in r".^$*+?{}[]\|()/":
+            result.append("\\" + ch)
+        elif ch == "\n":
+            result.append("\\n")
+        elif ch == "\t":
+            result.append("\\t")
+        elif ch == "\r":
+            result.append("\\r")
+        elif ord(ch) < 32 or ord(ch) > 126:
+            # Use \x{XX} for control chars and non-ASCII
+            result.append(f"\\x{{{ord(ch):02x}}}")
+        else:
+            result.append(ch)
+    return "".join(result)
+
+
+def _escape_perl_replacement(s: str) -> str:
+    """Escape special chars in Perl s/// replacement string."""
+    # In replacement, $ \ and / are special
+    result = []
+    for ch in s:
+        if ch == "\\":
+            result.append("\\\\")
+        elif ch == "$":
+            result.append("\\$")
+        elif ch == "/":
+            result.append("\\/")
+        elif ch == "\n":
+            result.append("\\n")
+        elif ch == "\t":
+            result.append("\\t")
+        elif ch == "\r":
+            result.append("\\r")
+        elif ord(ch) < 32 or ord(ch) > 126:
+            # Use \x{XX} for control chars and non-ASCII
+            result.append(f"\\x{{{ord(ch):02x}}}")
+        else:
+            result.append(ch)
+    return "".join(result)
 
 
 def _string_literal(value: str) -> str:

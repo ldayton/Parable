@@ -1343,7 +1343,7 @@ class PerlBackend:
             low_str = self._expr(low) if low else "0"
             if high:
                 high_str = self._expr(high)
-                return f"substr({obj_str}, {low_str}, {high_str} - {low_str})"
+                return f"substr({obj_str}, {low_str}, ({high_str}) - ({low_str}))"
             return f"substr({obj_str}, {low_str})"
         low_str = self._expr(low) if low else "0"
         if high:

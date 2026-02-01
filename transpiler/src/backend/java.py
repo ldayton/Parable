@@ -161,7 +161,7 @@ def _java_safe_name(name: str) -> str:
 def _java_safe_class(name: str) -> str:
     """Escape class names that conflict with Java stdlib."""
     if name in _JAVA_STDLIB_CLASSES:
-        return name + "Node"
+        return name + "_"
     return name
 
 

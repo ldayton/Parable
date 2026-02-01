@@ -231,20 +231,24 @@ class RunTests
                 {
                     effectiveExpected = "<error>";
                 }
-                Console.Write($"{relPath}:{tc.LineNum} {tc.Name} ... ");
-                Console.Out.Flush();
                 var (passed, actual, errMsg) = RunTest(tc.Input, effectiveExpected);
 
                 if (passed)
                 {
                     totalPassed++;
-                    Console.WriteLine("ok");
+                    if (verbose)
+                    {
+                        Console.WriteLine($"PASS {relPath}:{tc.LineNum} {tc.Name}");
+                    }
                 }
                 else
                 {
                     totalFailed++;
                     failedTests.Add(new TestResult(relPath, tc.LineNum, tc.Name, tc.Input, tc.Expected, actual, errMsg));
-                    Console.WriteLine("FAIL");
+                    if (verbose)
+                    {
+                        Console.WriteLine($"FAIL {relPath}:{tc.LineNum} {tc.Name}");
+                    }
                 }
             }
         }

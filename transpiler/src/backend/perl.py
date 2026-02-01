@@ -1230,7 +1230,7 @@ class PerlBackend:
                     return f"scalar(keys %{{{self._expr(inner)}}})"
                 if isinstance(inner_type, Primitive) and inner_type.kind == "string":
                     return f"length({self._expr(inner)})"
-                return f"scalar(@{{{self._expr(inner)}}})"
+                return f"scalar(@{{({self._expr(inner)} // [])}})"
             case MakeSlice(element_type=element_type, length=length):
                 if length is not None:
                     zero = self._zero_value(element_type)

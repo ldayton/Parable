@@ -149,7 +149,7 @@ sub _repr__ ($self) {
         return sprintf("Token(%s, %s, %s, word=%s)", $self->{type}, $self->{value}, $self->{pos_}, $self->{word});
     }
     if ((scalar(@{($self->{parts} // [])}) > 0)) {
-        return sprintf("Token(%s, %s, %s, parts=%s)", $self->{type}, $self->{value}, $self->{pos_}, scalar(@{$self->{parts}}));
+        return sprintf("Token(%s, %s, %s, parts=%s)", $self->{type}, $self->{value}, $self->{pos_}, scalar(@{($self->{parts} // [])}));
     }
     return sprintf("Token(%s, %s, %s)", $self->{type}, $self->{value}, $self->{pos_});
 }
@@ -208,7 +208,7 @@ sub copy ($self) {
 }
 
 sub outer_double ($self) {
-    if (scalar(@{$self->{stack}}) == 0) {
+    if (scalar(@{($self->{stack} // [])}) == 0) {
         return 0;
     }
     return $self->{stack}->[-1]->[1];
@@ -262,7 +262,7 @@ sub push_ ($self, $kind) {
 }
 
 sub pop_ ($self) {
-    if (scalar(@{$self->{stack}}) > 1) {
+    if (scalar(@{($self->{stack} // [])}) > 1) {
         return pop(@{$self->{stack}});
     }
     return $self->{stack}->[0];
@@ -878,7 +878,7 @@ sub parse_matched_pair ($self, $open_char, $close_char, $flags, $initial_was_dol
         }
         if ($ch eq "(" && $was_gtlt && ($flags & main::MATCHEDPAIRFLAGS_DOLBRACE() | main::MATCHEDPAIRFLAGS_ARRAYSUB() ? 1 : 0)) {
             $direction = $chars->[-1];
-            $chars = [@{$chars}[0 .. scalar(@{$chars}) - 1 - 1]];
+            $chars = [@{$chars}[0 .. scalar(@{($chars // [])}) - 1 - 1]];
             $self->{pos_} -= 1;
             $self->sync_to_parser();
             ($procsub_node, $procsub_text) = @{$self->{parser}->parse_process_substitution()};
@@ -1164,10 +1164,10 @@ sub read_word_internal ($self, $ctx, $at_command_start, $in_array_literal, $in_a
         }
         if ($ctx == main::WORD_CTX_NORMAL() && $ch eq "(" && (scalar(@{($chars // [])}) > 0) && $bracket_depth == 0) {
             $is_array_assign = 0;
-            if (scalar(@{$chars}) >= 3 && $chars->[-2] eq "+" && $chars->[-1] eq "=") {
-                $is_array_assign = main::is_array_assignment_prefix([@{$chars}[0 .. scalar(@{$chars}) - 2 - 1]]);
-            } elsif ($chars->[-1] eq "=" && scalar(@{$chars}) >= 2) {
-                $is_array_assign = main::is_array_assignment_prefix([@{$chars}[0 .. scalar(@{$chars}) - 1 - 1]]);
+            if (scalar(@{($chars // [])}) >= 3 && $chars->[-2] eq "+" && $chars->[-1] eq "=") {
+                $is_array_assign = main::is_array_assignment_prefix([@{$chars}[0 .. scalar(@{($chars // [])}) - 2 - 1]]);
+            } elsif ($chars->[-1] eq "=" && scalar(@{($chars // [])}) >= 2) {
+                $is_array_assign = main::is_array_assignment_prefix([@{$chars}[0 .. scalar(@{($chars // [])}) - 1 - 1]]);
             }
             if ($is_array_assign && ($at_command_start || $in_assign_builtin)) {
                 $self->sync_to_parser();
@@ -1917,7 +1917,7 @@ sub double_ctlesc_smart ($self, $value) {
         if ($c eq "") {
             if ($quote->{double}) {
                 $bs_count = 0;
-                for (my $j = scalar(@{$result}) - 2; $j > -1; $j += -1) {
+                for (my $j = scalar(@{($result // [])}) - 2; $j > -1; $j += -1) {
                     if ($result->[$j] eq "\\") {
                         $bs_count += 1;
                     } else {
@@ -2728,7 +2728,7 @@ sub strip_arith_line_continuations ($self, $value) {
                     }
                 } elsif (substr($value, $i, 1) eq ")") {
                     if ($depth == 2) {
-                        $first_close_idx = scalar(@{$arith_content});
+                        $first_close_idx = scalar(@{($arith_content // [])});
                     }
                     $depth -= 1;
                     if ($depth > 0) {
@@ -2737,7 +2737,7 @@ sub strip_arith_line_continuations ($self, $value) {
                     $i += 1;
                 } elsif (substr($value, $i, 1) eq "\\" && $i + 1 < length($value) && substr($value, $i + 1, 1) eq "\n") {
                     $num_backslashes = 0;
-                    $j = scalar(@{$arith_content}) - 1;
+                    $j = scalar(@{($arith_content // [])}) - 1;
                     while ($j >= 0 && $arith_content->[$j] eq "\n") {
                         $j -= 1;
                     }
@@ -3008,7 +3008,7 @@ sub format_command_substitutions ($self, $value, $in_arith) {
         if (main::is_expansion_start($value, $i, "\$((") && !$has_arith) {
             $j = main::find_cmdsub_end($value, $i + 2);
             push(@{$result}, main::substring($value, $i, $j));
-            if ($cmdsub_idx < scalar(@{$cmdsub_parts})) {
+            if ($cmdsub_idx < scalar(@{($cmdsub_parts // [])})) {
                 $cmdsub_idx += 1;
             }
             $i = $j;
@@ -3023,14 +3023,14 @@ sub format_command_substitutions ($self, $value, $in_arith) {
             $j = main::find_cmdsub_end($value, $i + 2);
             if ($extglob_depth > 0) {
                 push(@{$result}, main::substring($value, $i, $j));
-                if ($cmdsub_idx < scalar(@{$cmdsub_parts})) {
+                if ($cmdsub_idx < scalar(@{($cmdsub_parts // [])})) {
                     $cmdsub_idx += 1;
                 }
                 $i = $j;
                 next;
             }
             $inner = main::substring($value, $i + 2, $j - 1);
-            if ($cmdsub_idx < scalar(@{$cmdsub_parts})) {
+            if ($cmdsub_idx < scalar(@{($cmdsub_parts // [])})) {
                 $node = $cmdsub_parts->[$cmdsub_idx];
                 $formatted = main::format_cmdsub_node($node->{command}, 0, 0, 0, 0);
                 $cmdsub_idx += 1;
@@ -3050,7 +3050,7 @@ sub format_command_substitutions ($self, $value, $in_arith) {
                 push(@{$result}, "\$(" . $formatted . ")");
             }
             $i = $j;
-        } elsif (substr($value, $i, 1) eq "`" && $cmdsub_idx < scalar(@{$cmdsub_parts})) {
+        } elsif (substr($value, $i, 1) eq "`" && $cmdsub_idx < scalar(@{($cmdsub_parts // [])})) {
             $j = $i + 1;
             while ($j < length($value)) {
                 if (substr($value, $j, 1) eq "\\" && $j + 1 < length($value)) {
@@ -3068,7 +3068,7 @@ sub format_command_substitutions ($self, $value, $in_arith) {
             $i = $j;
         } elsif (main::is_expansion_start($value, $i, "\${") && $i + 2 < length($value) && main::is_funsub_char(substr($value, $i + 2, 1)) && !main::is_backslash_escaped($value, $i)) {
             $j = main::find_funsub_end($value, $i + 2);
-            $cmdsub_node = ($cmdsub_idx < scalar(@{$cmdsub_parts}) ? $cmdsub_parts->[$cmdsub_idx] : undef);
+            $cmdsub_node = ($cmdsub_idx < scalar(@{($cmdsub_parts // [])}) ? $cmdsub_parts->[$cmdsub_idx] : undef);
             if ((ref($cmdsub_node) eq 'CommandSubstitution') && $cmdsub_node->{brace}) {
                 $node = $cmdsub_node;
                 $formatted = main::format_cmdsub_node($node->{command}, 0, 0, 0, 0);
@@ -3097,7 +3097,7 @@ sub format_command_substitutions ($self, $value, $in_arith) {
             if ($extglob_depth > 0) {
                 $j = main::find_cmdsub_end($value, $i + 2);
                 push(@{$result}, main::substring($value, $i, $j));
-                if ($procsub_idx < scalar(@{$procsub_parts})) {
+                if ($procsub_idx < scalar(@{($procsub_parts // [])})) {
                     $procsub_idx += 1;
                 }
                 $i = $j;
@@ -3106,7 +3106,7 @@ sub format_command_substitutions ($self, $value, $in_arith) {
             my $direction = "";
             my $compact = 0;
             my $stripped = "";
-            if ($procsub_idx < scalar(@{$procsub_parts})) {
+            if ($procsub_idx < scalar(@{($procsub_parts // [])})) {
                 $direction = substr($value, $i, 1);
                 $j = main::find_cmdsub_end($value, $i + 2);
                 $node = $procsub_parts->[$procsub_idx];
@@ -3144,7 +3144,7 @@ sub format_command_substitutions ($self, $value, $in_arith) {
                 }
                 $procsub_idx += 1;
                 $i = $j;
-            } elsif ($is_procsub && (scalar(@{$self->{parts}}) ? 1 : 0)) {
+            } elsif ($is_procsub && (scalar(@{($self->{parts} // [])}) ? 1 : 0)) {
                 $direction = substr($value, $i, 1);
                 $j = main::find_cmdsub_end($value, $i + 2);
                 if ($j > length($value) || $j > 0 && $j <= length($value) && substr($value, $j - 1, 1) ne ")") {
@@ -3450,26 +3450,26 @@ sub to_sexp ($self) {
     my $needs;
     my $needs_redirect;
     my $pair;
-    if (scalar(@{$self->{commands}}) == 1) {
+    if (scalar(@{($self->{commands} // [])}) == 1) {
         return $self->{commands}->[0]->to_sexp();
     }
     my $cmds = [];
     my $i = 0;
     my $cmd = undef;
-    while ($i < scalar(@{$self->{commands}})) {
+    while ($i < scalar(@{($self->{commands} // [])})) {
         $cmd = $self->{commands}->[$i];
         if (ref($cmd) eq 'PipeBoth') {
             my $cmd = $cmd;
             $i += 1;
             next;
         }
-        $needs_redirect = $i + 1 < scalar(@{$self->{commands}}) && $self->{commands}->[$i + 1]->{kind} eq "pipe-both";
+        $needs_redirect = $i + 1 < scalar(@{($self->{commands} // [])}) && $self->{commands}->[$i + 1]->{kind} eq "pipe-both";
         push(@{$cmds}, [$cmd, $needs_redirect]);
         $i += 1;
     }
     my $pair = undef;
     my $needs = 0;
-    if (scalar(@{$cmds}) == 1) {
+    if (scalar(@{($cmds // [])}) == 1) {
         $pair = $cmds->[0];
         $cmd = $pair->[0];
         $needs = $pair->[1];
@@ -3479,7 +3479,7 @@ sub to_sexp ($self) {
     my $last_cmd = $last_pair->[0];
     my $last_needs = $last_pair->[1];
     my $result = $self->cmd_sexp($last_cmd, $last_needs);
-    my $j = scalar(@{$cmds}) - 2;
+    my $j = scalar(@{($cmds // [])}) - 2;
     while ($j >= 0) {
         $pair = $cmds->[$j];
         $cmd = $pair->[0];
@@ -3538,25 +3538,25 @@ sub to_sexp ($self) {
     my $right_sexp;
     my $parts = [@{$self->{parts}}];
     my $op_names = {"&&" => "and", "||" => "or", ";" => "semi", "\n" => "semi", "&" => "background"};
-    while (scalar(@{$parts}) > 1 && $parts->[-1]->{kind} eq "operator" && ($parts->[-1]->{op} eq ";" || $parts->[-1]->{op} eq "\n")) {
-        $parts = main::sublist($parts, 0, scalar(@{$parts}) - 1);
+    while (scalar(@{($parts // [])}) > 1 && $parts->[-1]->{kind} eq "operator" && ($parts->[-1]->{op} eq ";" || $parts->[-1]->{op} eq "\n")) {
+        $parts = main::sublist($parts, 0, scalar(@{($parts // [])}) - 1);
     }
-    if (scalar(@{$parts}) == 1) {
+    if (scalar(@{($parts // [])}) == 1) {
         return $parts->[0]->to_sexp();
     }
     if ($parts->[-1]->{kind} eq "operator" && $parts->[-1]->{op} eq "&") {
-        for (my $i = scalar(@{$parts}) - 3; $i > 0; $i += -2) {
+        for (my $i = scalar(@{($parts // [])}) - 3; $i > 0; $i += -2) {
             if ($parts->[$i]->{kind} eq "operator" && ($parts->[$i]->{op} eq ";" || $parts->[$i]->{op} eq "\n")) {
                 $left = main::sublist($parts, 0, $i);
-                $right = main::sublist($parts, $i + 1, scalar(@{$parts}) - 1);
+                $right = main::sublist($parts, $i + 1, scalar(@{($parts // [])}) - 1);
                 my $left_sexp = "";
-                if (scalar(@{$left}) > 1) {
+                if (scalar(@{($left // [])}) > 1) {
                     $left_sexp = List->new($left, "list")->to_sexp();
                 } else {
                     $left_sexp = $left->[0]->to_sexp();
                 }
                 my $right_sexp = "";
-                if (scalar(@{$right}) > 1) {
+                if (scalar(@{($right // [])}) > 1) {
                     $right_sexp = List->new($right, "list")->to_sexp();
                 } else {
                     $right_sexp = $right->[0]->to_sexp();
@@ -3564,8 +3564,8 @@ sub to_sexp ($self) {
                 return "(semi " . $left_sexp . " (background " . $right_sexp . "))";
             }
         }
-        $inner_parts = main::sublist($parts, 0, scalar(@{$parts}) - 1);
-        if (scalar(@{$inner_parts}) == 1) {
+        $inner_parts = main::sublist($parts, 0, scalar(@{($parts // [])}) - 1);
+        if (scalar(@{($inner_parts // [])}) == 1) {
             return "(background " . $inner_parts->[0]->to_sexp() . ")";
         }
         $inner_list = List->new($inner_parts, "list");
@@ -3596,7 +3596,7 @@ sub to_sexp_with_precedence ($self, $parts, $op_names) {
             }
             $start = $pos_ + 1;
         }
-        $seg = main::sublist($parts, $start, scalar(@{$parts}));
+        $seg = main::sublist($parts, $start, scalar(@{($parts // [])}));
         if ((scalar(@{($seg // [])}) > 0) && $seg->[0]->{kind} ne "operator") {
             push(@{$segments}, $seg);
         }
@@ -3604,7 +3604,7 @@ sub to_sexp_with_precedence ($self, $parts, $op_names) {
             return "()";
         }
         $result = $self->to_sexp_amp_and_higher($segments->[0], $op_names);
-        for (my $i = 1; $i < scalar(@{$segments}); $i += 1) {
+        for (my $i = 1; $i < scalar(@{($segments // [])}); $i += 1) {
             $result = "(semi " . $result . " " . $self->to_sexp_amp_and_higher($segments->[$i], $op_names) . ")";
         }
         return $result;
@@ -3616,11 +3616,11 @@ sub to_sexp_amp_and_higher ($self, $parts, $op_names) {
     my $result;
     my $segments;
     my $start;
-    if (scalar(@{$parts}) == 1) {
+    if (scalar(@{($parts // [])}) == 1) {
         return $parts->[0]->to_sexp();
     }
     my $amp_positions = [];
-    for (my $i = 1; $i < scalar(@{$parts}) - 1; $i += 2) {
+    for (my $i = 1; $i < scalar(@{($parts // [])}) - 1; $i += 2) {
         if ($parts->[$i]->{kind} eq "operator" && $parts->[$i]->{op} eq "&") {
             push(@{$amp_positions}, $i);
         }
@@ -3632,9 +3632,9 @@ sub to_sexp_amp_and_higher ($self, $parts, $op_names) {
             push(@{$segments}, main::sublist($parts, $start, $pos_));
             $start = $pos_ + 1;
         }
-        push(@{$segments}, main::sublist($parts, $start, scalar(@{$parts})));
+        push(@{$segments}, main::sublist($parts, $start, scalar(@{($parts // [])})));
         $result = $self->to_sexp_and_or($segments->[0], $op_names);
-        for (my $i = 1; $i < scalar(@{$segments}); $i += 1) {
+        for (my $i = 1; $i < scalar(@{($segments // [])}); $i += 1) {
             $result = "(background " . $result . " " . $self->to_sexp_and_or($segments->[$i], $op_names) . ")";
         }
         return $result;
@@ -3646,11 +3646,11 @@ sub to_sexp_and_or ($self, $parts, $op_names) {
     my $cmd;
     my $op;
     my $op_name;
-    if (scalar(@{$parts}) == 1) {
+    if (scalar(@{($parts // [])}) == 1) {
         return $parts->[0]->to_sexp();
     }
     my $result = $parts->[0]->to_sexp();
-    for (my $i = 1; $i < scalar(@{$parts}) - 1; $i += 2) {
+    for (my $i = 1; $i < scalar(@{($parts // [])}) - 1; $i += 2) {
         $op = $parts->[$i];
         $cmd = $parts->[$i + 1];
         $op_name = ($op_names->{$op->{op}} // $op->{op});
@@ -4002,7 +4002,7 @@ sub to_sexp ($self) {
     my $var_escaped = (($var_formatted =~ s/\\/\\\\/gr) =~ s/"/\\"/gr);
     if (!defined($self->{words})) {
         return "(for (word \"" . $var_escaped . "\") (in (word \"\\\"\$\@\\\"\")) " . $self->{body}->to_sexp() . ")" . $suffix;
-    } elsif (scalar(@{$self->{words}}) == 0) {
+    } elsif (scalar(@{($self->{words} // [])}) == 0) {
         return "(for (word \"" . $var_escaped . "\") (in) " . $self->{body}->to_sexp() . ")" . $suffix;
     } else {
         $word_parts = [];
@@ -5720,7 +5720,7 @@ sub parse_backtick_substitution ($self) {
                     $self->advance();
                 }
                 $in_heredoc_body = 0;
-                if (scalar(@{$pending_heredocs}) > 0) {
+                if (scalar(@{($pending_heredocs // [])}) > 0) {
                     ($current_heredoc_delim, $current_heredoc_strip) = @{pop(@{$pending_heredocs})};
                     $in_heredoc_body = 1;
                 }
@@ -5733,7 +5733,7 @@ sub parse_backtick_substitution ($self) {
                 }
                 $self->{pos_} = $line_start + $end_pos;
                 $in_heredoc_body = 0;
-                if (scalar(@{$pending_heredocs}) > 0) {
+                if (scalar(@{($pending_heredocs // [])}) > 0) {
                     ($current_heredoc_delim, $current_heredoc_strip) = @{pop(@{$pending_heredocs})};
                     $in_heredoc_body = 1;
                 }
@@ -5918,7 +5918,7 @@ sub parse_backtick_substitution ($self) {
             $ch = $self->advance();
             push(@{$content_chars}, $ch);
             push(@{$text_chars}, $ch);
-            if (scalar(@{$pending_heredocs}) > 0) {
+            if (scalar(@{($pending_heredocs // [])}) > 0) {
                 ($current_heredoc_delim, $current_heredoc_strip) = @{pop(@{$pending_heredocs})};
                 $in_heredoc_body = 1;
             }
@@ -5935,7 +5935,7 @@ sub parse_backtick_substitution ($self) {
     push(@{$text_chars}, "`");
     my $text = join("", @{$text_chars});
     my $content = join("", @{$content_chars});
-    if (scalar(@{$pending_heredocs}) > 0) {
+    if (scalar(@{($pending_heredocs // [])}) > 0) {
         ($heredoc_start, $heredoc_end) = @{main::find_heredoc_content_end($self->{source}, $self->{pos_}, $pending_heredocs)};
         if ($heredoc_end > $heredoc_start) {
             $content = $content . main::substring($self->{source}, $heredoc_start, $heredoc_end);
@@ -7481,7 +7481,7 @@ sub parse_command ($self) {
         if ($self->lex_is_command_terminator()) {
             last;
         }
-        if (scalar(@{$words}) == 0) {
+        if (scalar(@{($words // [])}) == 0) {
             $reserved = $self->lex_peek_reserved_word();
             if ($reserved eq "}" || $reserved eq "]]") {
                 last;
@@ -7499,8 +7499,8 @@ sub parse_command ($self) {
                 last;
             }
         }
-        $in_assign_builtin = scalar(@{$words}) > 0 && (exists(main::ASSIGNMENT_BUILTINS()->{$words->[0]->{value}}));
-        $word = $self->parse_word(!(scalar(@{($words // [])}) > 0) || $all_assignments && scalar(@{$redirects}) == 0, 0, $in_assign_builtin);
+        $in_assign_builtin = scalar(@{($words // [])}) > 0 && (exists(main::ASSIGNMENT_BUILTINS()->{$words->[0]->{value}}));
+        $word = $self->parse_word(!(scalar(@{($words // [])}) > 0) || $all_assignments && scalar(@{($redirects // [])}) == 0, 0, $in_assign_builtin);
         if (!defined($word)) {
             last;
         }
@@ -8059,7 +8059,7 @@ sub parse_for_arith ($self) {
             push(@{$current}, $self->advance());
         }
     }
-    if (scalar(@{$parts}) != 3) {
+    if (scalar(@{($parts // [])}) != 3) {
         die "Expected three expressions in for ((;;))";
     }
     my $init = $parts->[0];
@@ -8668,7 +8668,7 @@ sub parse_list_until ($self, $stop_words) {
         }
         push(@{$parts}, $pipeline);
     }
-    if (scalar(@{$parts}) == 1) {
+    if (scalar(@{($parts // [])}) == 1) {
         return $parts->[0];
     }
     return List->new($parts, "list");
@@ -8871,7 +8871,7 @@ sub parse_simple_pipeline ($self) {
         }
         push(@{$commands}, $cmd);
     }
-    if (scalar(@{$commands}) == 1) {
+    if (scalar(@{($commands // [])}) == 1) {
         return $commands->[0];
     }
     return Pipeline->new($commands, "pipeline");
@@ -8923,7 +8923,7 @@ sub parse_list ($self, $newline_as_separator) {
     }
     my $parts = [$pipeline];
     if ($self->in_state(main::PARSERSTATEFLAGS_PST_EOFTOKEN()) && $self->at_eof_token()) {
-        return (scalar(@{$parts}) == 1 ? $parts->[0] : List->new($parts, "list"));
+        return (scalar(@{($parts // [])}) == 1 ? $parts->[0] : List->new($parts, "list"));
     }
     while (1) {
         $self->skip_whitespace();
@@ -8998,7 +8998,7 @@ sub parse_list ($self, $newline_as_separator) {
             last;
         }
     }
-    if (scalar(@{$parts}) == 1) {
+    if (scalar(@{($parts // [])}) == 1) {
         return $parts->[0];
     }
     return List->new($parts, "list");
@@ -9071,7 +9071,7 @@ sub parse ($self) {
 }
 
 sub last_word_on_own_line ($self, $nodes) {
-    return scalar(@{$nodes}) >= 2;
+    return scalar(@{($nodes // [])}) >= 2;
 }
 
 sub strip_trailing_backslash_from_last_word ($self, $nodes) {
@@ -9499,8 +9499,8 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
         }
         my $result = "";
         if ($compact_redirects && (scalar(@{($node->{words} // [])}) > 0) && (scalar(@{($node->{redirects} // [])}) > 0)) {
-            $word_parts = [@{$parts}[0 .. scalar(@{$node->{words}}) - 1]];
-            $redirect_parts = [@{$parts}[scalar(@{$node->{words}}) .. $#{$parts}]];
+            $word_parts = [@{$parts}[0 .. scalar(@{($node->{words} // [])}) - 1]];
+            $redirect_parts = [@{$parts}[scalar(@{($node->{words} // [])}) .. $#{$parts}]];
             $result = join(" ", @{$word_parts}) . join("", @{$redirect_parts});
         } else {
             $result = join(" ", @{$parts});
@@ -9516,25 +9516,25 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
         $i = 0;
         my $cmd = undef;
         my $needs_redirect = 0;
-        while ($i < scalar(@{$node->{commands}})) {
+        while ($i < scalar(@{($node->{commands} // [])})) {
             $cmd = $node->{commands}->[$i];
             if (ref($cmd) eq 'PipeBoth') {
                 my $cmd = $cmd;
                 $i += 1;
                 next;
             }
-            $needs_redirect = $i + 1 < scalar(@{$node->{commands}}) && $node->{commands}->[$i + 1]->{kind} eq "pipe-both";
+            $needs_redirect = $i + 1 < scalar(@{($node->{commands} // [])}) && $node->{commands}->[$i + 1]->{kind} eq "pipe-both";
             push(@{$cmds}, [$cmd, $needs_redirect]);
             $i += 1;
         }
         $result_parts = [];
         $idx = 0;
-        while ($idx < scalar(@{$cmds})) {
+        while ($idx < scalar(@{($cmds // [])})) {
             my $entry = $cmds->[$idx];
             $cmd = $entry->[0];
             $needs_redirect = $entry->[1];
             $formatted = format_cmdsub_node($cmd, $indent, $in_procsub, 0, $procsub_first && $idx == 0);
-            $is_last = $idx == scalar(@{$cmds}) - 1;
+            $is_last = $idx == scalar(@{($cmds // [])}) - 1;
             $has_heredoc = 0;
             if ($cmd->{kind} eq "command" && (scalar(@{($cmd->{redirects} // [])}) > 0)) {
                 for my $r (@{($cmd->{redirects} // [])}) {
@@ -9572,7 +9572,7 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
         $compact_pipe = $in_procsub && (scalar(@{($cmds // [])}) > 0) && $cmds->[0]->[0]->{kind} eq "subshell";
         $result = "";
         $idx = 0;
-        while ($idx < scalar(@{$result_parts})) {
+        while ($idx < scalar(@{($result_parts // [])})) {
             $part = $result_parts->[$idx];
             if ($idx > 0) {
                 if ((substr($result, -length("\n")) eq "\n")) {
@@ -9632,7 +9632,7 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
                         $skipped_semi = 1;
                         next;
                     }
-                    if (scalar(@{$result}) >= 3 && $result->[-2] eq "\n" && (substr($result->[-3], -length("\n")) eq "\n")) {
+                    if (scalar(@{($result // [])}) >= 3 && $result->[-2] eq "\n" && (substr($result->[-3], -length("\n")) eq "\n")) {
                         $skipped_semi = 1;
                         next;
                     }
@@ -9674,7 +9674,7 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
                     push(@{$result}, " ");
                 }
                 $formatted_cmd = format_cmdsub_node($p, $indent, $in_procsub, $compact_redirects, $procsub_first && $cmd_count == 0);
-                if (scalar(@{$result}) > 0) {
+                if (scalar(@{($result // [])}) > 0) {
                     $last_ = $result->[-1];
                     if (((index($last_, " || \n") >= 0)) || ((index($last_, " && \n") >= 0))) {
                         $formatted_cmd = " " . $formatted_cmd;
@@ -9780,7 +9780,7 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
         $word = $node->{word}->{value};
         $patterns = [];
         $i = 0;
-        while ($i < scalar(@{$node->{patterns}})) {
+        while ($i < scalar(@{($node->{patterns} // [])})) {
             $p = $node->{patterns}->[$i];
             $pat = ($p->{pattern} =~ s/\|/ | /gr);
             my $body = "";

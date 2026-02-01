@@ -222,6 +222,7 @@ class CSharpBackend:
         self._loop_temp_counter = 0
         self._func_params: set[str] = set()
         self._current_break_flag: str | None = None
+        self._method_to_interface: dict[str, str] = {}  # method name -> interface name
 
     def emit(self, module: Module) -> str:
         """Emit C# code from IR Module."""
@@ -231,6 +232,10 @@ class CSharpBackend:
         self._hoisted_vars = set()
         self._module_name = module.name
         self._interface_names = {iface.name for iface in module.interfaces}
+        self._method_to_interface = {}
+        for iface in module.interfaces:
+            for m in iface.methods:
+                self._method_to_interface[m.name] = iface.name
         self._collect_struct_fields(module)
         self._emit_module(module)
         return "\n".join(self.lines)
@@ -1267,10 +1272,19 @@ class CSharpBackend:
         if method == "join":
             # Python: sep.join(list) -> C#: string.Join(sep, list)
             return f"string.Join({obj_str}, {args_str})"
-        # ToSexp needs cast when receiver is object (from type switch default)
-        if method == "to_sexp":
-            return f"((INode){obj_str}).ToSexp()"
-        return f"{obj_str}.{_safe_pascal(method)}({args_str})"
+        # When receiver is object but method is on a specific interface, cast to that interface
+        pascal_method = _safe_pascal(method)
+        if self._type(obj.typ) == "object":
+            iface_name = None
+            if isinstance(receiver_type, InterfaceRef) and receiver_type.name != "any":
+                iface_name = receiver_type.name
+            elif pascal_method in self._method_to_interface:
+                # Look up interface from method name when receiver_type is unknown
+                iface_name = self._method_to_interface[pascal_method]
+            if iface_name:
+                iface = f"I{iface_name}"
+                return f"(({iface}){obj_str}).{pascal_method}({args_str})"
+        return f"{obj_str}.{pascal_method}({args_str})"
 
     def _slice_expr(self, obj: Expr, low: Expr | None, high: Expr | None) -> str:
         obj_str = self._expr(obj)

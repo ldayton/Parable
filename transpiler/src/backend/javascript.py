@@ -107,6 +107,7 @@ class JsBackend:
         self.receiver_name: str | None = None
         self.current_struct: str | None = None
         self.struct_fields: dict[str, list[str]] = {}  # struct name -> [field_names]
+        self._struct_field_count: dict[str, int] = {}  # struct name -> field count
         self._hoisted_vars: set[str] = set()  # vars hoisted in current scope
 
     def emit(self, module: Module) -> str:
@@ -114,11 +115,24 @@ class JsBackend:
         self.indent = 0
         self.lines = []
         self.struct_fields = {}
+        self._struct_field_count = {}
         self._hoisted_vars = set()
         for struct in module.structs:
             self.struct_fields[struct.name] = [f.name for f in struct.fields]
+            self._struct_field_count[struct.name] = len(struct.fields)
         self._emit_module(module)
         return "\n".join(self.lines)
+
+    def _get_public_symbols(self, module: Module) -> list[str]:
+        """Collect public (non-underscore) symbols for export."""
+        symbols = []
+        for func in module.functions:
+            if not func.name.startswith("_"):
+                symbols.append(_camel(func.name))
+        for struct in module.structs:
+            if not struct.name.startswith("_"):
+                symbols.append(_safe_name(struct.name))
+        return symbols
 
     def _line(self, text: str = "") -> None:
         if text:
@@ -166,14 +180,17 @@ class JsBackend:
                 self._line()
             self._emit_function(func)
             need_blank = True
-        # Emit CommonJS exports for test runner
-        self._line()
-        self._line("// CommonJS exports")
-        self._line("if (typeof module !== 'undefined') {")
-        self.indent += 1
-        self._line("module.exports = { parse, ParseError };")
-        self.indent -= 1
-        self._line("}")
+        # Emit CommonJS exports
+        symbols = self._get_public_symbols(module)
+        if symbols:
+            self._line()
+            self._line("// CommonJS exports")
+            self._line("if (typeof module !== 'undefined') {")
+            self.indent += 1
+            exports = ", ".join(symbols)
+            self._line(f"module.exports = {{ {exports} }};")
+            self.indent -= 1
+            self._line("}")
 
     def _emit_constant(self, const: Constant) -> None:
         val = self._expr(const.value)
@@ -378,7 +395,7 @@ class JsBackend:
             case Raise(error_type=error_type, message=message, pos=pos, reraise_var=reraise_var):
                 if reraise_var:
                     self._line(f"throw {_camel(reraise_var)}")
-                elif error_type == "MatchedPairError":
+                elif error_type and self._struct_field_count.get(error_type, 0) == 0:
                     self._line(f"throw new {error_type}()")
                 else:
                     p = self._expr(pos)

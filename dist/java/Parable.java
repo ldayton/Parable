@@ -1,7 +1,5 @@
 import java.util.*;
-
-@FunctionalInterface
-interface NodeSupplier { Node call(); }
+import java.util.function.*;
 
 final class Constants {
     public static final Map<String, Integer> ANSI_C_ESCAPES = new HashMap<>(Map.ofEntries(Map.entry("a", 7), Map.entry("b", 8), Map.entry("e", 27), Map.entry("E", 27), Map.entry("f", 12), Map.entry("n", 10), Map.entry("r", 13), Map.entry("t", 9), Map.entry("v", 11), Map.entry("\\", 92), Map.entry("\"", 34), Map.entry("?", 63)));
@@ -3565,10 +3563,10 @@ class Command implements Node {
     public String toSexp() {
         List<String> parts = new ArrayList<>();
         for (Word w : this.words) {
-            parts.add(((Node) w).toSexp());
+            parts.add(w.toSexp());
         }
         for (Node r : this.redirects) {
-            parts.add(((Node) r).toSexp());
+            parts.add(r.toSexp());
         }
         String inner = String.join(" ", parts);
         if (!(!inner.isEmpty())) {
@@ -3593,7 +3591,7 @@ class Pipeline implements Node {
 
     public String toSexp() {
         if (this.commands.size() == 1) {
-            return ((Node) this.commands.get(0)).toSexp();
+            return this.commands.get(0).toSexp();
         }
         List<Tuple5> cmds = new ArrayList<>();
         int i = 0;
@@ -3626,7 +3624,7 @@ class Pipeline implements Node {
             cmd = pair.f0();
             needs = pair.f1();
             if (needs && !cmd.getKind().equals("command")) {
-                result = "(pipe " + ((Node) cmd).toSexp() + " (redirect \">&\" 1) " + result + ")";
+                result = "(pipe " + cmd.toSexp() + " (redirect \">&\" 1) " + result + ")";
             } else {
                 result = "(pipe " + this._cmdSexp(cmd, needs) + " " + result + ")";
             }
@@ -3637,20 +3635,20 @@ class Pipeline implements Node {
 
     public String _cmdSexp(Node cmd, boolean needsRedirect) {
         if (!needsRedirect) {
-            return ((Node) cmd).toSexp();
+            return cmd.toSexp();
         }
         if (cmd instanceof Command cmdCommand) {
             List<String> parts = new ArrayList<>();
             for (Word w : cmdCommand.words) {
-                parts.add(((Node) w).toSexp());
+                parts.add(w.toSexp());
             }
             for (Node r : cmdCommand.redirects) {
-                parts.add(((Node) r).toSexp());
+                parts.add(r.toSexp());
             }
             parts.add("(redirect \">&\" 1)");
             return "(command " + String.join(" ", parts) + ")";
         }
-        return ((Node) cmd).toSexp();
+        return cmd.toSexp();
     }
 
     public String getKind() {
@@ -3658,11 +3656,11 @@ class Pipeline implements Node {
     }
 }
 
-class ListNode implements Node {
+class List_ implements Node {
     List<Node> parts;
     String kind;
 
-    ListNode(List<Node> parts, String kind) {
+    List_(List<Node> parts, String kind) {
         this.parts = parts;
         this.kind = kind;
     }
@@ -3674,7 +3672,7 @@ class ListNode implements Node {
             parts = ParableFunctions._sublist(parts, 0, parts.size() - 1);
         }
         if (parts.size() == 1) {
-            return ((Node) parts.get(0)).toSexp();
+            return parts.get(0).toSexp();
         }
         if (parts.get(parts.size() - 1).getKind().equals("operator") && ((Operator) parts.get(parts.size() - 1)).op.equals("&")) {
             for (int i = parts.size() - 3; i > 0; i += -2) {
@@ -3683,25 +3681,25 @@ class ListNode implements Node {
                     List<Node> right = ParableFunctions._sublist(parts, i + 1, parts.size() - 1);
                     String leftSexp = "";
                     if (left.size() > 1) {
-                        leftSexp = ((Node) new ListNode(left, "list")).toSexp();
+                        leftSexp = new List_(left, "list").toSexp();
                     } else {
-                        leftSexp = ((Node) left.get(0)).toSexp();
+                        leftSexp = left.get(0).toSexp();
                     }
                     String rightSexp = "";
                     if (right.size() > 1) {
-                        rightSexp = ((Node) new ListNode(right, "list")).toSexp();
+                        rightSexp = new List_(right, "list").toSexp();
                     } else {
-                        rightSexp = ((Node) right.get(0)).toSexp();
+                        rightSexp = right.get(0).toSexp();
                     }
                     return "(semi " + leftSexp + " (background " + rightSexp + "))";
                 }
             }
             List<Node> innerParts = ParableFunctions._sublist(parts, 0, parts.size() - 1);
             if (innerParts.size() == 1) {
-                return "(background " + ((Node) innerParts.get(0)).toSexp() + ")";
+                return "(background " + innerParts.get(0).toSexp() + ")";
             }
-            ListNode innerList = new ListNode(innerParts, "list");
-            return "(background " + ((Node) innerList).toSexp() + ")";
+            List_ innerList = new List_(innerParts, "list");
+            return "(background " + innerList.toSexp() + ")";
         }
         return this._toSexpWithPrecedence(parts, opNames);
     }
@@ -3742,7 +3740,7 @@ class ListNode implements Node {
 
     public String _toSexpAmpAndHigher(List<Node> parts, Map<String, String> opNames) {
         if (parts.size() == 1) {
-            return ((Node) parts.get(0)).toSexp();
+            return parts.get(0).toSexp();
         }
         List<Integer> ampPositions = new ArrayList<>();
         for (int i = 1; i < parts.size() - 1; i += 2) {
@@ -3769,14 +3767,14 @@ class ListNode implements Node {
 
     public String _toSexpAndOr(List<Node> parts, Map<String, String> opNames) {
         if (parts.size() == 1) {
-            return ((Node) parts.get(0)).toSexp();
+            return parts.get(0).toSexp();
         }
-        String result = ((Node) parts.get(0)).toSexp();
+        String result = parts.get(0).toSexp();
         for (int i = 1; i < parts.size() - 1; i += 2) {
             Node op = parts.get(i);
             Node cmd = parts.get(i + 1);
             String opName = opNames.getOrDefault(((Operator) op).op, ((Operator) op).op);
-            result = "(" + opName + " " + result + " " + ((Node) cmd).toSexp() + ")";
+            result = "(" + opName + " " + result + " " + cmd.toSexp() + ")";
         }
         return result;
     }
@@ -3988,7 +3986,7 @@ class Subshell implements Node {
     }
 
     public String toSexp() {
-        String base = "(subshell " + ((Node) this.body).toSexp() + ")";
+        String base = "(subshell " + this.body.toSexp() + ")";
         return ParableFunctions._appendRedirects(base, this.redirects);
     }
 
@@ -4009,7 +4007,7 @@ class BraceGroup implements Node {
     }
 
     public String toSexp() {
-        String base = "(brace-group " + ((Node) this.body).toSexp() + ")";
+        String base = "(brace-group " + this.body.toSexp() + ")";
         return ParableFunctions._appendRedirects(base, this.redirects);
     }
 
@@ -4034,13 +4032,13 @@ class If implements Node {
     }
 
     public String toSexp() {
-        String result = "(if " + ((Node) this.condition).toSexp() + " " + ((Node) this.thenBody).toSexp();
+        String result = "(if " + this.condition.toSexp() + " " + this.thenBody.toSexp();
         if (this.elseBody != null) {
-            result = result + " " + ((Node) this.elseBody).toSexp();
+            result = result + " " + this.elseBody.toSexp();
         }
         result = result + ")";
         for (Node r : this.redirects) {
-            result = result + " " + ((Node) r).toSexp();
+            result = result + " " + r.toSexp();
         }
         return result;
     }
@@ -4064,7 +4062,7 @@ class While implements Node {
     }
 
     public String toSexp() {
-        String base = "(while " + ((Node) this.condition).toSexp() + " " + ((Node) this.body).toSexp() + ")";
+        String base = "(while " + this.condition.toSexp() + " " + this.body.toSexp() + ")";
         return ParableFunctions._appendRedirects(base, this.redirects);
     }
 
@@ -4087,7 +4085,7 @@ class Until implements Node {
     }
 
     public String toSexp() {
-        String base = "(until " + ((Node) this.condition).toSexp() + " " + ((Node) this.body).toSexp() + ")";
+        String base = "(until " + this.condition.toSexp() + " " + this.body.toSexp() + ")";
         return ParableFunctions._appendRedirects(base, this.redirects);
     }
 
@@ -4116,7 +4114,7 @@ class For implements Node {
         if ((!this.redirects.isEmpty())) {
             List<String> redirectParts = new ArrayList<>();
             for (Node r : this.redirects) {
-                redirectParts.add(((Node) r).toSexp());
+                redirectParts.add(r.toSexp());
             }
             suffix = " " + String.join(" ", redirectParts);
         }
@@ -4124,17 +4122,17 @@ class For implements Node {
         String varFormatted = tempWord._formatCommandSubstitutions(this.var, false);
         String varEscaped = varFormatted.replace("\\", "\\\\").replace("\"", "\\\"");
         if (this.words == null) {
-            return "(for (word \"" + varEscaped + "\") (in (word \"\\\"$@\\\"\")) " + ((Node) this.body).toSexp() + ")" + suffix;
+            return "(for (word \"" + varEscaped + "\") (in (word \"\\\"$@\\\"\")) " + this.body.toSexp() + ")" + suffix;
         } else {
             if (this.words.size() == 0) {
-                return "(for (word \"" + varEscaped + "\") (in) " + ((Node) this.body).toSexp() + ")" + suffix;
+                return "(for (word \"" + varEscaped + "\") (in) " + this.body.toSexp() + ")" + suffix;
             } else {
                 List<String> wordParts = new ArrayList<>();
                 for (Word w : this.words) {
                     wordParts.add(((Node) w).toSexp());
                 }
                 String wordStrs = String.join(" ", wordParts);
-                return "(for (word \"" + varEscaped + "\") (in " + wordStrs + ") " + ((Node) this.body).toSexp() + ")" + suffix;
+                return "(for (word \"" + varEscaped + "\") (in " + wordStrs + ") " + this.body.toSexp() + ")" + suffix;
             }
         }
     }
@@ -4166,7 +4164,7 @@ class ForArith implements Node {
         if ((!this.redirects.isEmpty())) {
             List<String> redirectParts = new ArrayList<>();
             for (Node r : this.redirects) {
-                redirectParts.add(((Node) r).toSexp());
+                redirectParts.add(r.toSexp());
             }
             suffix = " " + String.join(" ", redirectParts);
         }
@@ -4176,7 +4174,7 @@ class ForArith implements Node {
         String initStr = ParableFunctions._formatArithVal(initVal);
         String condStr = ParableFunctions._formatArithVal(condVal);
         String incrStr = ParableFunctions._formatArithVal(incrVal);
-        String bodyStr = ((Node) this.body).toSexp();
+        String bodyStr = this.body.toSexp();
         return String.format("(arith-for (init (word \"%s\")) (test (word \"%s\")) (step (word \"%s\")) %s)%s", initStr, condStr, incrStr, bodyStr, suffix);
     }
 
@@ -4205,7 +4203,7 @@ class Select implements Node {
         if ((!this.redirects.isEmpty())) {
             List<String> redirectParts = new ArrayList<>();
             for (Node r : this.redirects) {
-                redirectParts.add(((Node) r).toSexp());
+                redirectParts.add(r.toSexp());
             }
             suffix = " " + String.join(" ", redirectParts);
         }
@@ -4225,7 +4223,7 @@ class Select implements Node {
         } else {
             inClause = "(in (word \"\\\"$@\\\"\"))";
         }
-        return "(select (word \"" + varEscaped + "\") " + inClause + " " + ((Node) this.body).toSexp() + ")" + suffix;
+        return "(select (word \"" + varEscaped + "\") " + inClause + " " + this.body.toSexp() + ")" + suffix;
     }
 
     public String getKind() {
@@ -4248,9 +4246,9 @@ class Case implements Node {
 
     public String toSexp() {
         List<String> parts = new ArrayList<>();
-        parts.add("(case " + ((Node) this.word).toSexp());
+        parts.add("(case " + this.word.toSexp());
         for (Node p : this.patterns) {
-            parts.add(((Node) p).toSexp());
+            parts.add(p.toSexp());
         }
         String base = String.join(" ", parts) + ")";
         return ParableFunctions._appendRedirects(base, this.redirects);
@@ -4351,12 +4349,12 @@ class CasePattern implements Node {
         alternatives.add(String.join("", current));
         List<String> wordList = new ArrayList<>();
         for (String alt : alternatives) {
-            wordList.add(((Node) new Word(alt, new ArrayList<>(), "word")).toSexp());
+            wordList.add(new Word(alt, new ArrayList<>(), "word").toSexp());
         }
         String patternStr = String.join(" ", wordList);
         List<String> parts = new ArrayList<>(Arrays.asList("(pattern (" + patternStr + ")"));
         if (this.body != null) {
-            parts.add(" " + ((Node) this.body).toSexp());
+            parts.add(" " + this.body.toSexp());
         } else {
             parts.add(" ()");
         }
@@ -4381,7 +4379,7 @@ class Function implements Node {
     }
 
     public String toSexp() {
-        return "(function \"" + this.name + "\" " + ((Node) this.body).toSexp() + ")";
+        return "(function \"" + this.name + "\" " + this.body.toSexp() + ")";
     }
 
     public String getKind() {
@@ -4489,9 +4487,9 @@ class CommandSubstitution implements Node {
 
     public String toSexp() {
         if (this.brace) {
-            return "(funsub " + ((Node) this.command).toSexp() + ")";
+            return "(funsub " + this.command.toSexp() + ")";
         }
-        return "(cmdsub " + ((Node) this.command).toSexp() + ")";
+        return "(cmdsub " + this.command.toSexp() + ")";
     }
 
     public String getKind() {
@@ -4512,7 +4510,7 @@ class ArithmeticExpansion implements Node {
         if (this.expression == null) {
             return "(arith)";
         }
-        return "(arith " + ((Node) this.expression).toSexp() + ")";
+        return "(arith " + this.expression.toSexp() + ")";
     }
 
     public String getKind() {
@@ -4540,7 +4538,7 @@ class ArithmeticCommand implements Node {
         if ((!this.redirects.isEmpty())) {
             List<String> redirectParts = new ArrayList<>();
             for (Node r : this.redirects) {
-                redirectParts.add(((Node) r).toSexp());
+                redirectParts.add(r.toSexp());
             }
             String redirectSexps = String.join(" ", redirectParts);
             return result + " " + redirectSexps;
@@ -4619,7 +4617,7 @@ class ArithBinaryOp implements Node {
     }
 
     public String toSexp() {
-        return "(binary-op \"" + this.op + "\" " + ((Node) this.left).toSexp() + " " + ((Node) this.right).toSexp() + ")";
+        return "(binary-op \"" + this.op + "\" " + this.left.toSexp() + " " + this.right.toSexp() + ")";
     }
 
     public String getKind() {
@@ -4639,7 +4637,7 @@ class ArithUnaryOp implements Node {
     }
 
     public String toSexp() {
-        return "(unary-op \"" + this.op + "\" " + ((Node) this.operand).toSexp() + ")";
+        return "(unary-op \"" + this.op + "\" " + this.operand.toSexp() + ")";
     }
 
     public String getKind() {
@@ -4657,7 +4655,7 @@ class ArithPreIncr implements Node {
     }
 
     public String toSexp() {
-        return "(pre-incr " + ((Node) this.operand).toSexp() + ")";
+        return "(pre-incr " + this.operand.toSexp() + ")";
     }
 
     public String getKind() {
@@ -4675,7 +4673,7 @@ class ArithPostIncr implements Node {
     }
 
     public String toSexp() {
-        return "(post-incr " + ((Node) this.operand).toSexp() + ")";
+        return "(post-incr " + this.operand.toSexp() + ")";
     }
 
     public String getKind() {
@@ -4693,7 +4691,7 @@ class ArithPreDecr implements Node {
     }
 
     public String toSexp() {
-        return "(pre-decr " + ((Node) this.operand).toSexp() + ")";
+        return "(pre-decr " + this.operand.toSexp() + ")";
     }
 
     public String getKind() {
@@ -4711,7 +4709,7 @@ class ArithPostDecr implements Node {
     }
 
     public String toSexp() {
-        return "(post-decr " + ((Node) this.operand).toSexp() + ")";
+        return "(post-decr " + this.operand.toSexp() + ")";
     }
 
     public String getKind() {
@@ -4733,7 +4731,7 @@ class ArithAssign implements Node {
     }
 
     public String toSexp() {
-        return "(assign \"" + this.op + "\" " + ((Node) this.target).toSexp() + " " + ((Node) this.value).toSexp() + ")";
+        return "(assign \"" + this.op + "\" " + this.target.toSexp() + " " + this.value.toSexp() + ")";
     }
 
     public String getKind() {
@@ -4755,7 +4753,7 @@ class ArithTernary implements Node {
     }
 
     public String toSexp() {
-        return "(ternary " + ((Node) this.condition).toSexp() + " " + ((Node) this.ifTrue).toSexp() + " " + ((Node) this.ifFalse).toSexp() + ")";
+        return "(ternary " + this.condition.toSexp() + " " + this.ifTrue.toSexp() + " " + this.ifFalse.toSexp() + ")";
     }
 
     public String getKind() {
@@ -4775,7 +4773,7 @@ class ArithComma implements Node {
     }
 
     public String toSexp() {
-        return "(comma " + ((Node) this.left).toSexp() + " " + ((Node) this.right).toSexp() + ")";
+        return "(comma " + this.left.toSexp() + " " + this.right.toSexp() + ")";
     }
 
     public String getKind() {
@@ -4795,7 +4793,7 @@ class ArithSubscript implements Node {
     }
 
     public String toSexp() {
-        return "(subscript \"" + this.array + "\" " + ((Node) this.index).toSexp() + ")";
+        return "(subscript \"" + this.array + "\" " + this.index.toSexp() + ")";
     }
 
     public String getKind() {
@@ -4852,7 +4850,7 @@ class ArithConcat implements Node {
     public String toSexp() {
         List<String> sexps = new ArrayList<>();
         for (Node p : this.parts) {
-            sexps.add(((Node) p).toSexp());
+            sexps.add(p.toSexp());
         }
         return "(arith-concat " + String.join(" ", sexps) + ")";
     }
@@ -4912,7 +4910,7 @@ class ProcessSubstitution implements Node {
     }
 
     public String toSexp() {
-        return "(procsub \"" + this.direction + "\" " + ((Node) this.command).toSexp() + ")";
+        return "(procsub \"" + this.direction + "\" " + this.command.toSexp() + ")";
     }
 
     public String getKind() {
@@ -4933,7 +4931,7 @@ class Negation implements Node {
         if (this.pipeline == null) {
             return "(negation (command))";
         }
-        return "(negation " + ((Node) this.pipeline).toSexp() + ")";
+        return "(negation " + this.pipeline.toSexp() + ")";
     }
 
     public String getKind() {
@@ -4961,9 +4959,9 @@ class Time implements Node {
             }
         }
         if (this.posix) {
-            return "(time -p " + ((Node) this.pipeline).toSexp() + ")";
+            return "(time -p " + this.pipeline.toSexp() + ")";
         }
-        return "(time " + ((Node) this.pipeline).toSexp() + ")";
+        return "(time " + this.pipeline.toSexp() + ")";
     }
 
     public String getKind() {
@@ -4994,7 +4992,7 @@ class ConditionalExpr implements Node {
         if ((!this.redirects.isEmpty())) {
             List<String> redirectParts = new ArrayList<>();
             for (Node r : this.redirects) {
-                redirectParts.add(((Node) r).toSexp());
+                redirectParts.add(r.toSexp());
             }
             String redirectSexps = String.join(" ", redirectParts);
             return result + " " + redirectSexps;
@@ -5064,7 +5062,7 @@ class CondAnd implements Node {
     }
 
     public String toSexp() {
-        return "(cond-and " + ((Node) this.left).toSexp() + " " + ((Node) this.right).toSexp() + ")";
+        return "(cond-and " + this.left.toSexp() + " " + this.right.toSexp() + ")";
     }
 
     public String getKind() {
@@ -5084,7 +5082,7 @@ class CondOr implements Node {
     }
 
     public String toSexp() {
-        return "(cond-or " + ((Node) this.left).toSexp() + " " + ((Node) this.right).toSexp() + ")";
+        return "(cond-or " + this.left.toSexp() + " " + this.right.toSexp() + ")";
     }
 
     public String getKind() {
@@ -5102,7 +5100,7 @@ class CondNot implements Node {
     }
 
     public String toSexp() {
-        return ((Node) this.operand).toSexp();
+        return this.operand.toSexp();
     }
 
     public String getKind() {
@@ -5120,7 +5118,7 @@ class CondParen implements Node {
     }
 
     public String toSexp() {
-        return "(cond-expr " + ((Node) this.inner).toSexp() + ")";
+        return "(cond-expr " + this.inner.toSexp() + ")";
     }
 
     public String getKind() {
@@ -5143,7 +5141,7 @@ class Array implements Node {
         }
         List<String> parts = new ArrayList<>();
         for (Word e : this.elements) {
-            parts.add(((Node) e).toSexp());
+            parts.add(e.toSexp());
         }
         String inner = String.join(" ", parts);
         return "(array " + inner + ")";
@@ -5172,7 +5170,7 @@ class Coproc implements Node {
         } else {
             name = "COPROC";
         }
-        return "(coproc \"" + name + "\" " + ((Node) this.command).toSexp() + ")";
+        return "(coproc \"" + name + "\" " + this.command.toSexp() + ")";
     }
 
     public String getKind() {
@@ -6416,8 +6414,8 @@ class Parser {
         return cond;
     }
 
-    public Node _arithParseLeftAssoc(List<String> ops, NodeSupplier parsefn) {
-        Node left = parsefn.call();
+    public Node _arithParseLeftAssoc(List<String> ops, Supplier<Node> parsefn) {
+        Node left = parsefn.get();
         while (true) {
             this._arithSkipWs();
             boolean matched = false;
@@ -6425,7 +6423,7 @@ class Parser {
                 if (this._arithMatch(op)) {
                     this._arithConsume(op);
                     this._arithSkipWs();
-                    left = new ArithBinaryOp(op, left, parsefn.call(), "binary-op");
+                    left = new ArithBinaryOp(op, left, parsefn.get(), "binary-op");
                     matched = true;
                     break;
                 }
@@ -8842,7 +8840,7 @@ class Parser {
         if (parts.size() == 1) {
             return parts.get(0);
         }
-        return new ListNode(parts, "list");
+        return new List_(parts, "list");
     }
 
     public Node parseCompoundCommand() {
@@ -9098,7 +9096,7 @@ class Parser {
         }
         List<Node> parts = new ArrayList<>(Arrays.asList(pipeline));
         if (this._inState(Constants.PARSERSTATEFLAGS_PST_EOFTOKEN) && this._atEofToken()) {
-            return (parts.size() == 1 ? parts.get(0) : new ListNode(parts, "list"));
+            return (parts.size() == 1 ? parts.get(0) : new List_(parts, "list"));
         }
         while (true) {
             this.skipWhitespace();
@@ -9180,7 +9178,7 @@ class Parser {
         if (parts.size() == 1) {
             return parts.get(0);
         }
-        return new ListNode(parts, "list");
+        return new List_(parts, "list");
     }
 
     public Node parseComment() {
@@ -9290,9 +9288,9 @@ class Parser {
                 return this._findLastWord(nodePipeline.commands.get(nodePipeline.commands.size() - 1));
             }
         }
-        if (node instanceof ListNode nodeList) {
-            if ((!nodeList.parts.isEmpty())) {
-                return this._findLastWord(nodeList.parts.get(nodeList.parts.size() - 1));
+        if (node instanceof List_ nodeList_) {
+            if ((!nodeList_.parts.isEmpty())) {
+                return this._findLastWord(nodeList_.parts.get(nodeList_.parts.size() - 1));
             }
         }
         return null;
@@ -9430,7 +9428,7 @@ final class ParableFunctions {
         if ((!redirects.isEmpty())) {
             List<String> parts = new ArrayList<>();
             for (Node r : redirects) {
-                parts.add(((Node) r).toSexp());
+                parts.add(r.toSexp());
             }
             return base + " " + String.join(" ", parts);
         }
@@ -9573,8 +9571,8 @@ final class ParableFunctions {
         if (node instanceof Subshell nodeSubshell) {
             return true;
         }
-        if (node instanceof ListNode nodeList) {
-            for (Node p : nodeList.parts) {
+        if (node instanceof List_ nodeList_) {
+            for (Node p : nodeList_.parts) {
                 if (!p.getKind().equals("operator")) {
                     return ParableFunctions._startsWithSubshell(p);
                 }
@@ -9710,9 +9708,9 @@ final class ParableFunctions {
             }
             return result;
         }
-        if (node instanceof ListNode nodeList) {
+        if (node instanceof List_ nodeList_) {
             boolean hasHeredoc = false;
-            for (Node p : nodeList.parts) {
+            for (Node p : nodeList_.parts) {
                 if (p.getKind().equals("command") && (!((Command) p).redirects.isEmpty())) {
                     for (Node r : ((Command) p).redirects) {
                         if (r instanceof HereDoc rHereDoc) {
@@ -9741,7 +9739,7 @@ final class ParableFunctions {
             List<String> result = new ArrayList<>();
             boolean skippedSemi = false;
             int cmdCount = 0;
-            for (Node p : nodeList.parts) {
+            for (Node p : nodeList_.parts) {
                 if (p instanceof Operator pOperator) {
                     if (pOperator.op.equals(";")) {
                         if ((!result.isEmpty()) && result.get(result.size() - 1).endsWith("\n")) {

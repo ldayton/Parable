@@ -4622,11 +4622,11 @@ public class Command : INode
         List<string> parts = new List<string>();
         foreach (Word w in this.Words)
         {
-            parts.Add(((INode)w).ToSexp());
+            parts.Add(w.ToSexp());
         }
         foreach (INode r in this.Redirects)
         {
-            parts.Add(((INode)r).ToSexp());
+            parts.Add(r.ToSexp());
         }
         string inner = string.Join(" ", parts);
         if (!((!string.IsNullOrEmpty(inner))))
@@ -4657,7 +4657,7 @@ public class Pipeline : INode
     {
         if (this.Commands.Count == 1)
         {
-            return ((INode)this.Commands[0]).ToSexp();
+            return this.Commands[0].ToSexp();
         }
         List<(INode, bool)> cmds = new List<(INode, bool)>();
         int i = 0;
@@ -4696,7 +4696,7 @@ public class Pipeline : INode
             needs = pair.Item2;
             if (needs && cmd.Kind != "command")
             {
-                result = "(pipe " + ((INode)cmd).ToSexp() + " (redirect \">&\" 1) " + result + ")";
+                result = "(pipe " + cmd.ToSexp() + " (redirect \">&\" 1) " + result + ")";
             }
             else
             {
@@ -4711,7 +4711,7 @@ public class Pipeline : INode
     {
         if (!(needsRedirect))
         {
-            return ((INode)cmd).ToSexp();
+            return cmd.ToSexp();
         }
         switch (cmd)
         {
@@ -4719,16 +4719,16 @@ public class Pipeline : INode
                 List<string> parts = new List<string>();
                 foreach (Word w in cmdCommand.Words)
                 {
-                    parts.Add(((INode)w).ToSexp());
+                    parts.Add(w.ToSexp());
                 }
                 foreach (INode r in cmdCommand.Redirects)
                 {
-                    parts.Add(((INode)r).ToSexp());
+                    parts.Add(r.ToSexp());
                 }
                 parts.Add("(redirect \">&\" 1)");
                 return "(command " + string.Join(" ", parts) + ")";
         }
-        return ((INode)cmd).ToSexp();
+        return cmd.ToSexp();
     }
 
     public string GetKind()
@@ -4758,7 +4758,7 @@ public class List : INode
         }
         if (parts.Count == 1)
         {
-            return ((INode)parts[0]).ToSexp();
+            return parts[0].ToSexp();
         }
         if (parts[parts.Count - 1].Kind == "operator" && ((Operator)parts[parts.Count - 1]).Op == "&")
         {
@@ -4771,20 +4771,20 @@ public class List : INode
                     string leftSexp = "";
                     if (left.Count > 1)
                     {
-                        leftSexp = ((INode)new List(left, "list")).ToSexp();
+                        leftSexp = new List(left, "list").ToSexp();
                     }
                     else
                     {
-                        leftSexp = ((INode)left[0]).ToSexp();
+                        leftSexp = left[0].ToSexp();
                     }
                     string rightSexp = "";
                     if (right.Count > 1)
                     {
-                        rightSexp = ((INode)new List(right, "list")).ToSexp();
+                        rightSexp = new List(right, "list").ToSexp();
                     }
                     else
                     {
-                        rightSexp = ((INode)right[0]).ToSexp();
+                        rightSexp = right[0].ToSexp();
                     }
                     return "(semi " + leftSexp + " (background " + rightSexp + "))";
                 }
@@ -4792,10 +4792,10 @@ public class List : INode
             List<INode> innerParts = ParableFunctions._Sublist(parts, 0, parts.Count - 1);
             if (innerParts.Count == 1)
             {
-                return "(background " + ((INode)innerParts[0]).ToSexp() + ")";
+                return "(background " + innerParts[0].ToSexp() + ")";
             }
             List innerList = new List(innerParts, "list");
-            return "(background " + ((INode)innerList).ToSexp() + ")";
+            return "(background " + innerList.ToSexp() + ")";
         }
         return this._ToSexpWithPrecedence(parts, opNames);
     }
@@ -4847,7 +4847,7 @@ public class List : INode
     {
         if (parts.Count == 1)
         {
-            return ((INode)parts[0]).ToSexp();
+            return parts[0].ToSexp();
         }
         List<int> ampPositions = new List<int>();
         for (int i = 1; i < parts.Count - 1; i += 2)
@@ -4881,15 +4881,15 @@ public class List : INode
     {
         if (parts.Count == 1)
         {
-            return ((INode)parts[0]).ToSexp();
+            return parts[0].ToSexp();
         }
-        string result = ((INode)parts[0]).ToSexp();
+        string result = parts[0].ToSexp();
         for (int i = 1; i < parts.Count - 1; i += 2)
         {
             INode op = parts[i];
             INode cmd = parts[i + 1];
             string opName = (opNames.TryGetValue(((Operator)op).Op, out var _v) ? _v : ((Operator)op).Op);
-            result = "(" + opName + " " + result + " " + ((INode)cmd).ToSexp() + ")";
+            result = "(" + opName + " " + result + " " + cmd.ToSexp() + ")";
         }
         return result;
     }
@@ -5150,7 +5150,7 @@ public class Subshell : INode
 
     public string ToSexp()
     {
-        string @base = "(subshell " + ((INode)this.Body).ToSexp() + ")";
+        string @base = "(subshell " + this.Body.ToSexp() + ")";
         return ParableFunctions._AppendRedirects(@base, this.Redirects);
     }
 
@@ -5175,7 +5175,7 @@ public class BraceGroup : INode
 
     public string ToSexp()
     {
-        string @base = "(brace-group " + ((INode)this.Body).ToSexp() + ")";
+        string @base = "(brace-group " + this.Body.ToSexp() + ")";
         return ParableFunctions._AppendRedirects(@base, this.Redirects);
     }
 
@@ -5204,15 +5204,15 @@ public class If : INode
 
     public string ToSexp()
     {
-        string result = "(if " + ((INode)this.Condition).ToSexp() + " " + ((INode)this.ThenBody).ToSexp();
+        string result = "(if " + this.Condition.ToSexp() + " " + this.ThenBody.ToSexp();
         if (this.ElseBody != null)
         {
-            result = result + " " + ((INode)this.ElseBody).ToSexp();
+            result = result + " " + this.ElseBody.ToSexp();
         }
         result = result + ")";
         foreach (INode r in this.Redirects)
         {
-            result = result + " " + ((INode)r).ToSexp();
+            result = result + " " + r.ToSexp();
         }
         return result;
     }
@@ -5240,7 +5240,7 @@ public class While : INode
 
     public string ToSexp()
     {
-        string @base = "(while " + ((INode)this.Condition).ToSexp() + " " + ((INode)this.Body).ToSexp() + ")";
+        string @base = "(while " + this.Condition.ToSexp() + " " + this.Body.ToSexp() + ")";
         return ParableFunctions._AppendRedirects(@base, this.Redirects);
     }
 
@@ -5267,7 +5267,7 @@ public class Until : INode
 
     public string ToSexp()
     {
-        string @base = "(until " + ((INode)this.Condition).ToSexp() + " " + ((INode)this.Body).ToSexp() + ")";
+        string @base = "(until " + this.Condition.ToSexp() + " " + this.Body.ToSexp() + ")";
         return ParableFunctions._AppendRedirects(@base, this.Redirects);
     }
 
@@ -5302,7 +5302,7 @@ public class For : INode
             List<string> redirectParts = new List<string>();
             foreach (INode r in this.Redirects)
             {
-                redirectParts.Add(((INode)r).ToSexp());
+                redirectParts.Add(r.ToSexp());
             }
             suffix = " " + string.Join(" ", redirectParts);
         }
@@ -5311,13 +5311,13 @@ public class For : INode
         string varEscaped = varFormatted.Replace("\\", "\\\\").Replace("\"", "\\\"");
         if (this.Words == null)
         {
-            return "(for (word \"" + varEscaped + "\") (in (word \"\\\"$@\\\"\")) " + ((INode)this.Body).ToSexp() + ")" + suffix;
+            return "(for (word \"" + varEscaped + "\") (in (word \"\\\"$@\\\"\")) " + this.Body.ToSexp() + ")" + suffix;
         }
         else
         {
             if (this.Words.Count == 0)
             {
-                return "(for (word \"" + varEscaped + "\") (in) " + ((INode)this.Body).ToSexp() + ")" + suffix;
+                return "(for (word \"" + varEscaped + "\") (in) " + this.Body.ToSexp() + ")" + suffix;
             }
             else
             {
@@ -5327,7 +5327,7 @@ public class For : INode
                     wordParts.Add(((INode)w).ToSexp());
                 }
                 string wordStrs = string.Join(" ", wordParts);
-                return "(for (word \"" + varEscaped + "\") (in " + wordStrs + ") " + ((INode)this.Body).ToSexp() + ")" + suffix;
+                return "(for (word \"" + varEscaped + "\") (in " + wordStrs + ") " + this.Body.ToSexp() + ")" + suffix;
             }
         }
     }
@@ -5365,7 +5365,7 @@ public class ForArith : INode
             List<string> redirectParts = new List<string>();
             foreach (INode r in this.Redirects)
             {
-                redirectParts.Add(((INode)r).ToSexp());
+                redirectParts.Add(r.ToSexp());
             }
             suffix = " " + string.Join(" ", redirectParts);
         }
@@ -5375,7 +5375,7 @@ public class ForArith : INode
         string initStr = ParableFunctions._FormatArithVal(initVal);
         string condStr = ParableFunctions._FormatArithVal(condVal);
         string incrStr = ParableFunctions._FormatArithVal(incrVal);
-        string bodyStr = ((INode)this.Body).ToSexp();
+        string bodyStr = this.Body.ToSexp();
         return string.Format("(arith-for (init (word \"{0}\")) (test (word \"{1}\")) (step (word \"{2}\")) {3}){4}", initStr, condStr, incrStr, bodyStr, suffix);
     }
 
@@ -5410,7 +5410,7 @@ public class Select : INode
             List<string> redirectParts = new List<string>();
             foreach (INode r in this.Redirects)
             {
-                redirectParts.Add(((INode)r).ToSexp());
+                redirectParts.Add(r.ToSexp());
             }
             suffix = " " + string.Join(" ", redirectParts);
         }
@@ -5437,7 +5437,7 @@ public class Select : INode
         {
             inClause = "(in (word \"\\\"$@\\\"\"))";
         }
-        return "(select (word \"" + varEscaped + "\") " + inClause + " " + ((INode)this.Body).ToSexp() + ")" + suffix;
+        return "(select (word \"" + varEscaped + "\") " + inClause + " " + this.Body.ToSexp() + ")" + suffix;
     }
 
     public string GetKind()
@@ -5464,10 +5464,10 @@ public class Case : INode
     public string ToSexp()
     {
         List<string> parts = new List<string>();
-        parts.Add("(case " + ((INode)this.Word).ToSexp());
+        parts.Add("(case " + this.Word.ToSexp());
         foreach (INode p in this.Patterns)
         {
-            parts.Add(((INode)p).ToSexp());
+            parts.Add(p.ToSexp());
         }
         string @base = string.Join(" ", parts) + ")";
         return ParableFunctions._AppendRedirects(@base, this.Redirects);
@@ -5594,13 +5594,13 @@ public class CasePattern : INode
         List<string> wordList = new List<string>();
         foreach (string alt in alternatives)
         {
-            wordList.Add(((INode)new Word(alt, new List<INode>(), "word")).ToSexp());
+            wordList.Add(new Word(alt, new List<INode>(), "word").ToSexp());
         }
         string patternStr = string.Join(" ", wordList);
         List<string> parts = new List<string> { "(pattern (" + patternStr + ")" };
         if (this.Body != null)
         {
-            parts.Add(" " + ((INode)this.Body).ToSexp());
+            parts.Add(" " + this.Body.ToSexp());
         }
         else
         {
@@ -5631,7 +5631,7 @@ public class Function : INode
 
     public string ToSexp()
     {
-        return "(function \"" + this.Name + "\" " + ((INode)this.Body).ToSexp() + ")";
+        return "(function \"" + this.Name + "\" " + this.Body.ToSexp() + ")";
     }
 
     public string GetKind()
@@ -5764,9 +5764,9 @@ public class CommandSubstitution : INode
     {
         if (this.Brace)
         {
-            return "(funsub " + ((INode)this.Command).ToSexp() + ")";
+            return "(funsub " + this.Command.ToSexp() + ")";
         }
-        return "(cmdsub " + ((INode)this.Command).ToSexp() + ")";
+        return "(cmdsub " + this.Command.ToSexp() + ")";
     }
 
     public string GetKind()
@@ -5792,7 +5792,7 @@ public class ArithmeticExpansion : INode
         {
             return "(arith)";
         }
-        return "(arith " + ((INode)this.Expression).ToSexp() + ")";
+        return "(arith " + this.Expression.ToSexp() + ")";
     }
 
     public string GetKind()
@@ -5826,7 +5826,7 @@ public class ArithmeticCommand : INode
             List<string> redirectParts = new List<string>();
             foreach (INode r in this.Redirects)
             {
-                redirectParts.Add(((INode)r).ToSexp());
+                redirectParts.Add(r.ToSexp());
             }
             string redirectSexps = string.Join(" ", redirectParts);
             return result + " " + redirectSexps;
@@ -5921,7 +5921,7 @@ public class ArithBinaryOp : INode
 
     public string ToSexp()
     {
-        return "(binary-op \"" + this.Op + "\" " + ((INode)this.Left).ToSexp() + " " + ((INode)this.Right).ToSexp() + ")";
+        return "(binary-op \"" + this.Op + "\" " + this.Left.ToSexp() + " " + this.Right.ToSexp() + ")";
     }
 
     public string GetKind()
@@ -5945,7 +5945,7 @@ public class ArithUnaryOp : INode
 
     public string ToSexp()
     {
-        return "(unary-op \"" + this.Op + "\" " + ((INode)this.Operand).ToSexp() + ")";
+        return "(unary-op \"" + this.Op + "\" " + this.Operand.ToSexp() + ")";
     }
 
     public string GetKind()
@@ -5967,7 +5967,7 @@ public class ArithPreIncr : INode
 
     public string ToSexp()
     {
-        return "(pre-incr " + ((INode)this.Operand).ToSexp() + ")";
+        return "(pre-incr " + this.Operand.ToSexp() + ")";
     }
 
     public string GetKind()
@@ -5989,7 +5989,7 @@ public class ArithPostIncr : INode
 
     public string ToSexp()
     {
-        return "(post-incr " + ((INode)this.Operand).ToSexp() + ")";
+        return "(post-incr " + this.Operand.ToSexp() + ")";
     }
 
     public string GetKind()
@@ -6011,7 +6011,7 @@ public class ArithPreDecr : INode
 
     public string ToSexp()
     {
-        return "(pre-decr " + ((INode)this.Operand).ToSexp() + ")";
+        return "(pre-decr " + this.Operand.ToSexp() + ")";
     }
 
     public string GetKind()
@@ -6033,7 +6033,7 @@ public class ArithPostDecr : INode
 
     public string ToSexp()
     {
-        return "(post-decr " + ((INode)this.Operand).ToSexp() + ")";
+        return "(post-decr " + this.Operand.ToSexp() + ")";
     }
 
     public string GetKind()
@@ -6059,7 +6059,7 @@ public class ArithAssign : INode
 
     public string ToSexp()
     {
-        return "(assign \"" + this.Op + "\" " + ((INode)this.Target).ToSexp() + " " + ((INode)this.Value).ToSexp() + ")";
+        return "(assign \"" + this.Op + "\" " + this.Target.ToSexp() + " " + this.Value.ToSexp() + ")";
     }
 
     public string GetKind()
@@ -6085,7 +6085,7 @@ public class ArithTernary : INode
 
     public string ToSexp()
     {
-        return "(ternary " + ((INode)this.Condition).ToSexp() + " " + ((INode)this.IfTrue).ToSexp() + " " + ((INode)this.IfFalse).ToSexp() + ")";
+        return "(ternary " + this.Condition.ToSexp() + " " + this.IfTrue.ToSexp() + " " + this.IfFalse.ToSexp() + ")";
     }
 
     public string GetKind()
@@ -6109,7 +6109,7 @@ public class ArithComma : INode
 
     public string ToSexp()
     {
-        return "(comma " + ((INode)this.Left).ToSexp() + " " + ((INode)this.Right).ToSexp() + ")";
+        return "(comma " + this.Left.ToSexp() + " " + this.Right.ToSexp() + ")";
     }
 
     public string GetKind()
@@ -6133,7 +6133,7 @@ public class ArithSubscript : INode
 
     public string ToSexp()
     {
-        return "(subscript \"" + this.Array + "\" " + ((INode)this.Index).ToSexp() + ")";
+        return "(subscript \"" + this.Array + "\" " + this.Index.ToSexp() + ")";
     }
 
     public string GetKind()
@@ -6203,7 +6203,7 @@ public class ArithConcat : INode
         List<string> sexps = new List<string>();
         foreach (INode p in this.Parts)
         {
-            sexps.Add(((INode)p).ToSexp());
+            sexps.Add(p.ToSexp());
         }
         return "(arith-concat " + string.Join(" ", sexps) + ")";
     }
@@ -6275,7 +6275,7 @@ public class ProcessSubstitution : INode
 
     public string ToSexp()
     {
-        return "(procsub \"" + this.Direction + "\" " + ((INode)this.Command).ToSexp() + ")";
+        return "(procsub \"" + this.Direction + "\" " + this.Command.ToSexp() + ")";
     }
 
     public string GetKind()
@@ -6301,7 +6301,7 @@ public class Negation : INode
         {
             return "(negation (command))";
         }
-        return "(negation " + ((INode)this.Pipeline).ToSexp() + ")";
+        return "(negation " + this.Pipeline.ToSexp() + ")";
     }
 
     public string GetKind()
@@ -6338,9 +6338,9 @@ public class Time : INode
         }
         if (this.Posix)
         {
-            return "(time -p " + ((INode)this.Pipeline).ToSexp() + ")";
+            return "(time -p " + this.Pipeline.ToSexp() + ")";
         }
-        return "(time " + ((INode)this.Pipeline).ToSexp() + ")";
+        return "(time " + this.Pipeline.ToSexp() + ")";
     }
 
     public string GetKind()
@@ -6381,7 +6381,7 @@ public class ConditionalExpr : INode
             List<string> redirectParts = new List<string>();
             foreach (INode r in this.Redirects)
             {
-                redirectParts.Add(((INode)r).ToSexp());
+                redirectParts.Add(r.ToSexp());
             }
             string redirectSexps = string.Join(" ", redirectParts);
             return result + " " + redirectSexps;
@@ -6463,7 +6463,7 @@ public class CondAnd : INode
 
     public string ToSexp()
     {
-        return "(cond-and " + ((INode)this.Left).ToSexp() + " " + ((INode)this.Right).ToSexp() + ")";
+        return "(cond-and " + this.Left.ToSexp() + " " + this.Right.ToSexp() + ")";
     }
 
     public string GetKind()
@@ -6487,7 +6487,7 @@ public class CondOr : INode
 
     public string ToSexp()
     {
-        return "(cond-or " + ((INode)this.Left).ToSexp() + " " + ((INode)this.Right).ToSexp() + ")";
+        return "(cond-or " + this.Left.ToSexp() + " " + this.Right.ToSexp() + ")";
     }
 
     public string GetKind()
@@ -6509,7 +6509,7 @@ public class CondNot : INode
 
     public string ToSexp()
     {
-        return ((INode)this.Operand).ToSexp();
+        return this.Operand.ToSexp();
     }
 
     public string GetKind()
@@ -6531,7 +6531,7 @@ public class CondParen : INode
 
     public string ToSexp()
     {
-        return "(cond-expr " + ((INode)this.Inner).ToSexp() + ")";
+        return "(cond-expr " + this.Inner.ToSexp() + ")";
     }
 
     public string GetKind()
@@ -6560,7 +6560,7 @@ public class Array : INode
         List<string> parts = new List<string>();
         foreach (Word e in this.Elements)
         {
-            parts.Add(((INode)e).ToSexp());
+            parts.Add(e.ToSexp());
         }
         string inner = string.Join(" ", parts);
         return "(array " + inner + ")";
@@ -6596,7 +6596,7 @@ public class Coproc : INode
         {
             name = "COPROC";
         }
-        return "(coproc \"" + name + "\" " + ((INode)this.Command).ToSexp() + ")";
+        return "(coproc \"" + name + "\" " + this.Command.ToSexp() + ")";
     }
 
     public string GetKind()
@@ -12136,7 +12136,7 @@ public static class ParableFunctions
             List<string> parts = new List<string>();
             foreach (INode r in redirects)
             {
-                parts.Add(((INode)r).ToSexp());
+                parts.Add(r.ToSexp());
             }
             return @base + " " + string.Join(" ", parts);
         }

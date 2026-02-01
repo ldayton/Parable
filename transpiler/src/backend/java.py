@@ -161,7 +161,7 @@ def _java_safe_name(name: str) -> str:
 def _java_safe_class(name: str) -> str:
     """Escape class names that conflict with Java stdlib."""
     if name in _JAVA_STDLIB_CLASSES:
-        return name + "Node"
+        return name + "_"
     return name
 
 
@@ -442,6 +442,7 @@ class JavaBackend:
         self._current_func: str | None = None  # Current function name for type overrides
         self._func_params: set[str] = set()  # Function-typed parameter names
         self._module_name: str = ""  # Current module name
+        self._method_to_interface: dict[str, str] = {}  # method name -> interface name
 
     def emit(self, module: Module) -> str:
         """Emit Java code from IR Module."""
@@ -455,6 +456,11 @@ class JavaBackend:
         self._module_name = module.name
         self._hoisted_vars = set()
         self._type_switch_binding_rename = {}
+        self._method_to_interface = {}
+        for iface in module.interfaces:
+            for m in iface.methods:
+                # Store with camelCase key since that's what we use for lookup
+                self._method_to_interface[to_camel(m.name)] = iface.name
         self._collect_struct_fields(module)
         self._collect_tuple_types(module)
         self._emit_module(module)
@@ -502,10 +508,7 @@ class JavaBackend:
 
     def _emit_module(self, module: Module) -> None:
         self._line("import java.util.*;")
-        self._line("")
-        # Emit functional interface for () -> Node pattern
-        self._line("@FunctionalInterface")
-        self._line("interface NodeSupplier { Node call(); }")
+        self._line("import java.util.function.*;")
         self._line("")
         if module.constants:
             self._line("final class Constants {")
@@ -1322,9 +1325,9 @@ class JavaBackend:
                 if func == "_intPtr" or func == "_int_ptr":
                     # Java auto-boxes int to Integer
                     return f"({self._expr(args[0])})"
-                # Check if calling a function-typed parameter
+                # Check if calling a function-typed parameter (Supplier.get())
                 if func in self._func_params:
-                    return f"{func}.call()"
+                    return f"{func}.get()"
                 # Module-level functions are in {ModuleName}Functions class
                 func_class = f"{to_pascal(self._module_name)}Functions"
                 return f"{func_class}.{to_camel(func)}({args_str})"
@@ -1645,10 +1648,17 @@ class JavaBackend:
         # Fallback for join on non-string receiver (e.g., StringConcat)
         if method == "join":
             return f"String.join({obj_str}, {args_str})"
-        # Cast to Node for toSexp() - this method only exists on Node interface
-        if method == "to_sexp":
-            return f"((Node) {obj_str}).toSexp()"
-        return f"{obj_str}.{to_camel(method)}({args_str})"
+        # When receiver is Object but method is on a specific interface, cast to that interface
+        camel_method = to_camel(method)
+        if self._type(obj.typ) == "Object":
+            iface_name = None
+            if isinstance(receiver_type, InterfaceRef) and receiver_type.name != "any":
+                iface_name = receiver_type.name
+            elif camel_method in self._method_to_interface:
+                iface_name = self._method_to_interface[camel_method]
+            if iface_name:
+                return f"(({_java_safe_class(iface_name)}) {obj_str}).{camel_method}({args_str})"
+        return f"{obj_str}.{camel_method}({args_str})"
 
     def _slice_expr(self, obj: Expr, low: Expr | None, high: Expr | None) -> str:
         obj_str = self._expr(obj)
@@ -1794,9 +1804,10 @@ class JavaBackend:
                     return _java_safe_class(name)
                 return "Object"
             case FuncType(params=params, ret=ret):
-                # Use NodeSupplier for () -> Node pattern
+                # Use Supplier<T> for () -> T pattern
                 if not params and isinstance(ret, (InterfaceRef, StructRef)):
-                    return "NodeSupplier"
+                    ret_type = self._type(ret)
+                    return f"Supplier<{ret_type}>"
                 return "Object"
             case _:
                 return "Object"

@@ -1105,7 +1105,7 @@ class PerlBackend:
                         pos = self._expr(args[1])
                         return f"(index({obj_str}, {prefix}, {pos}) == {pos})"
                     if method == "endswith":
-                        return f"(substr({obj_str}, -length({args_str})) eq {args_str})"
+                        return self._endswith_expr(obj_str, args)
                     if method == "split":
                         return f"[split({args_str}, {obj_str})]"
                     if method == "upper":
@@ -1127,7 +1127,7 @@ class PerlBackend:
                 # Fallback: if type is unknown but method is a common string method, treat as string
                 if method in ("endswith", "startswith", "find", "rfind", "upper", "lower", "split", "join"):
                     if method == "endswith":
-                        return f"(substr({obj_str}, -length({args_str})) eq {args_str})"
+                        return self._endswith_expr(obj_str, args)
                     if method == "startswith":
                         # With 1 arg: index(s, prefix) == 0
                         # With 2 args: index(s, prefix, pos) == pos
@@ -1298,6 +1298,19 @@ class PerlBackend:
         if negated:
             return f"(!grep {{ $_ eq {item_str} }} @{{{container_str}}})"
         return f"(grep {{ $_ eq {item_str} }} @{{{container_str}}})"
+
+    def _endswith_expr(self, obj_str: str, args: list[Expr]) -> str:
+        """Generate endswith check, handling tuple arguments."""
+        if len(args) == 1 and isinstance(args[0], TupleLit):
+            # Handle endswith with tuple: s.endswith((" ", "\n")) -> multiple checks
+            checks = []
+            for elem in args[0].elements:
+                suffix = self._expr(elem)
+                checks.append(f"(substr({obj_str}, -length({suffix})) eq {suffix})")
+            return "(" + " || ".join(checks) + ")"
+        # Single suffix
+        suffix = self._expr(args[0])
+        return f"(substr({obj_str}, -length({suffix})) eq {suffix})"
 
     def _slice_expr(self, obj: Expr, low: Expr | None, high: Expr | None) -> str:
         obj_str = self._expr(obj)

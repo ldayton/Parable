@@ -9670,7 +9670,7 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
                     push(@{$result}, " " . $p->{op});
                 }
             } else {
-                if ((scalar(@{($result // [])}) > 0) && !(substr($result->[-1], -length([" ", "\n"])) eq [" ", "\n"])) {
+                if ((scalar(@{($result // [])}) > 0) && !((substr($result->[-1], -length(" ")) eq " ") || (substr($result->[-1], -length("\n")) eq "\n"))) {
                     push(@{$result}, " ");
                 }
                 $formatted_cmd = format_cmdsub_node($p, $indent, $in_procsub, $compact_redirects, $procsub_first && $cmd_count == 0);

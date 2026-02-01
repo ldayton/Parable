@@ -3046,7 +3046,7 @@ class Word implements Node {
         var inner: any = Substring(value, i + 2, j - 1);
         if (cmdsubIdx < cmdsubParts.length) {
           var node: any = cmdsubParts[cmdsubIdx];
-          var formatted: any = FormatCmdsubNode((node as unknown as CommandSubstitution).command, 0, false, false, false);
+          var formatted: any = FormatCmdsubNode((node.command as unknown as Node), 0, false, false, false);
           cmdsubIdx += 1;
         } else {
           try {
@@ -3126,10 +3126,10 @@ class Word implements Node {
                 var direction: any = value[i];
                 var j: any = FindCmdsubEnd(value, i + 2);
                 var node: any = procsubParts[procsubIdx];
-                var compact: any = StartsWithSubshell((node as unknown as ProcessSubstitution).command);
-                var formatted: any = FormatCmdsubNode((node as unknown as ProcessSubstitution).command, 0, true, compact, true);
+                var compact: any = StartsWithSubshell((node.command as unknown as Node));
+                var formatted: any = FormatCmdsubNode((node.command as unknown as Node), 0, true, compact, true);
                 var rawContent: any = Substring(value, i + 2, j - 1);
-                if ((node as unknown as ProcessSubstitution).command.kind === "subshell") {
+                if (node.command.kind === "subshell") {
                   var leadingWsEnd: any = 0;
                   while (leadingWsEnd < rawContent.length && " \t\n".includes(rawContent[leadingWsEnd])) {
                     leadingWsEnd += 1;
@@ -3139,7 +3139,7 @@ class Word implements Node {
                   if (stripped.startsWith("(")) {
                     if ((leadingWs.length > 0)) {
                       var normalizedWs: any = leadingWs.replace(/\n/g, " ").replace(/\t/g, " ");
-                      var spaced: any = FormatCmdsubNode((node as unknown as ProcessSubstitution).command, 0, false, false, false);
+                      var spaced: any = FormatCmdsubNode((node.command as unknown as Node), 0, false, false, false);
                       result.push(direction + "(" + normalizedWs + spaced + ")");
                     } else {
                       rawContent = rawContent.replace(/\\\n/g, "");
@@ -3152,7 +3152,7 @@ class Word implements Node {
                 }
                 rawContent = Substring(value, i + 2, j - 1);
                 var rawStripped: any = rawContent.replace(/\\\n/g, "");
-                if (StartsWithSubshell((node as unknown as ProcessSubstitution).command) && formatted !== rawStripped) {
+                if (StartsWithSubshell((node.command as unknown as Node)) && formatted !== rawStripped) {
                   result.push(direction + "(" + rawStripped + ")");
                 } else {
                   var finalOutput: any = direction + "(" + formatted + ")";
@@ -3554,15 +3554,15 @@ class List implements Node {
   toSexp(): string {
     var parts: any = this.parts.slice();
     var opNames: any = new Map([["&&", "and"], ["||", "or"], [";", "semi"], ["\n", "semi"], ["&", "background"]]);
-    while (parts.length > 1 && parts[parts.length - 1].kind === "operator" && ((parts[parts.length - 1] as unknown as Operator).op === ";" || (parts[parts.length - 1] as unknown as Operator).op === "\n")) {
+    while (parts.length > 1 && parts[parts.length - 1].kind === "operator" && (parts[parts.length - 1].op === ";" || parts[parts.length - 1].op === "\n")) {
       parts = Sublist(parts, 0, parts.length - 1);
     }
     if (parts.length === 1) {
       return parts[0].toSexp();
     }
-    if (parts[parts.length - 1].kind === "operator" && (parts[parts.length - 1] as unknown as Operator).op === "&") {
+    if (parts[parts.length - 1].kind === "operator" && parts[parts.length - 1].op === "&") {
       for (var i: any = parts.length - 3; i > 0; i += -2) {
-        if (parts[i].kind === "operator" && ((parts[i] as unknown as Operator).op === ";" || (parts[i] as unknown as Operator).op === "\n")) {
+        if (parts[i].kind === "operator" && (parts[i].op === ";" || parts[i].op === "\n")) {
           var left: any = Sublist(parts, 0, i);
           var right: any = Sublist(parts, i + 1, parts.length - 1);
           if (left.length > 1) {
@@ -3591,7 +3591,7 @@ class List implements Node {
   ToSexpWithPrecedence(parts: Node[], opNames: Map<string, string>): string {
     var semiPositions: any = [];
     for (var i: any = 0; i < parts.length; i += 1) {
-      if (parts[i].kind === "operator" && ((parts[i] as unknown as Operator).op === ";" || (parts[i] as unknown as Operator).op === "\n")) {
+      if (parts[i].kind === "operator" && (parts[i].op === ";" || parts[i].op === "\n")) {
         semiPositions.push(i);
       }
     }
@@ -3627,7 +3627,7 @@ class List implements Node {
     }
     var ampPositions: any = [];
     for (var i: any = 1; i < parts.length - 1; i += 2) {
-      if (parts[i].kind === "operator" && (parts[i] as unknown as Operator).op === "&") {
+      if (parts[i].kind === "operator" && parts[i].op === "&") {
         ampPositions.push(i);
       }
     }
@@ -3656,7 +3656,7 @@ class List implements Node {
     for (var i: any = 1; i < parts.length - 1; i += 2) {
       var op: any = parts[i];
       var cmd: any = parts[i + 1];
-      var opName: any = opNames.get((op as unknown as Operator).op) ?? (op as unknown as Operator).op;
+      var opName: any = opNames.get(op.op) ?? op.op;
       result = "(" + opName + " " + result + " " + cmd.toSexp() + ")";
     }
     return result;
@@ -4867,7 +4867,7 @@ class UnaryTest implements Node {
   }
 
   toSexp(): string {
-    var operandVal: any = (this.operand as unknown as Word).getCondFormattedValue();
+    var operandVal: any = this.operand.getCondFormattedValue();
     return "(cond-unary \"" + this.op + "\" (cond-term \"" + operandVal + "\"))";
   }
 
@@ -4890,8 +4890,8 @@ class BinaryTest implements Node {
   }
 
   toSexp(): string {
-    var leftVal: any = (this.left as unknown as Word).getCondFormattedValue();
-    var rightVal: any = (this.right as unknown as Word).getCondFormattedValue();
+    var leftVal: any = this.left.getCondFormattedValue();
+    var rightVal: any = this.right.getCondFormattedValue();
     return "(cond-binary \"" + this.op + "\" (cond-term \"" + leftVal + "\") (cond-term \"" + rightVal + "\"))";
   }
 
@@ -5641,7 +5641,7 @@ class Parser {
   }
 
   IsAssignmentWord(word: Node): boolean {
-    return Assignment((word as unknown as Word).value, 0) !== -1;
+    return Assignment(word.value, 0) !== -1;
   }
 
   ParseBacktickSubstitution(): [Node, string] {
@@ -8752,8 +8752,8 @@ class Parser {
           this.skipWhitespace();
           var inner: any = this.parsePipeline();
           if (inner !== null && inner.kind === "negation") {
-            if ((inner as unknown as Negation).pipeline !== null) {
-              return (inner as unknown as Negation).pipeline;
+            if (inner.pipeline !== null) {
+              return inner.pipeline;
             } else {
               return new Command([] as any, [], "command" as any);
             }
@@ -9024,7 +9024,7 @@ class Parser {
     var lastWord: any = this.FindLastWord(lastNode);
     if (lastWord !== null && lastWord.value.endsWith("\\")) {
       lastWord.value = Substring(lastWord.value, 0, lastWord.value.length - 1);
-      if (!(lastWord.value.length > 0) && lastNode instanceof Command && ((lastNode as unknown as Command).words.length > 0)) {
+      if (!(lastWord.value.length > 0) && lastNode instanceof Command && lastNode.words !== null) {
         (lastNode as unknown as Command).words.pop();
       }
     }
@@ -9301,12 +9301,12 @@ function ConsumeBracketClass(s: string, start: number, depth: number): [number, 
 function FormatCondBody(node: Node): string {
   var kind: any = node.kind;
   if (kind === "unary-test") {
-    var operandVal: any = ((node as unknown as UnaryTest).operand as unknown as Word).getCondFormattedValue();
+    var operandVal: any = (node as unknown as UnaryTest).operand.getCondFormattedValue();
     return (node as unknown as UnaryTest).op + " " + operandVal;
   }
   if (kind === "binary-test") {
-    var leftVal: any = ((node as unknown as BinaryTest).left as unknown as Word).getCondFormattedValue();
-    var rightVal: any = ((node as unknown as BinaryTest).right as unknown as Word).getCondFormattedValue();
+    var leftVal: any = (node as unknown as BinaryTest).left.getCondFormattedValue();
+    var rightVal: any = (node as unknown as BinaryTest).right.getCondFormattedValue();
     return leftVal + " " + (node as unknown as BinaryTest).op + " " + rightVal;
   }
   if (kind === "cond-and") {
@@ -9406,8 +9406,8 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
       var formatted: any = FormatCmdsubNode(cmd, indent, inProcsub, false, procsubFirst && idx === 0);
       var isLast: any = idx === cmds.length - 1;
       var hasHeredoc: any = false;
-      if (cmd.kind === "command" && ((cmd as unknown as Command).redirects.length > 0)) {
-        for (const r of (cmd as unknown as Command).redirects as Node[]) {
+      if (cmd.kind === "command" && cmd.redirects !== null) {
+        for (const r of cmd.redirects) {
           if (r instanceof HereDoc) {
             hasHeredoc = true;
             break;
@@ -9462,8 +9462,8 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
   if (node instanceof List) {
     var hasHeredoc: any = false;
     for (const p of node.parts as Node[]) {
-      if (p.kind === "command" && ((p as unknown as Command).redirects.length > 0)) {
-        for (const r of (p as unknown as Command).redirects as Node[]) {
+      if (p.kind === "command" && p.redirects !== null) {
+        for (const r of p.redirects) {
           if (r instanceof HereDoc) {
             hasHeredoc = true;
             break;
@@ -9472,8 +9472,8 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
       } else {
         if (p instanceof Pipeline) {
           for (const cmd of p.commands as Node[]) {
-            if (cmd.kind === "command" && ((cmd as unknown as Command).redirects.length > 0)) {
-              for (const r of (cmd as unknown as Command).redirects as Node[]) {
+            if (cmd.kind === "command" && cmd.redirects !== null) {
+              for (const r of cmd.redirects) {
                 if (r instanceof HereDoc) {
                   hasHeredoc = true;
                   break;
@@ -9639,18 +9639,18 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
     return result;
   }
   if (node instanceof Case) {
-    var word: any = (node.word as unknown as Word).value;
+    var word: any = node.word.value;
     var patterns: any = [];
     var i: any = 0;
     while (i < node.patterns.length) {
       var p: any = node.patterns[i];
-      var pat: any = (p as unknown as CasePattern).pattern.replace(/\|/g, " | ");
-      if ((p as unknown as CasePattern).body !== null) {
-        var body: any = FormatCmdsubNode((p as unknown as CasePattern).body, indent + 8, false, false, false);
+      var pat: any = p.pattern.replace(/\|/g, " | ");
+      if (p.body !== null) {
+        var body: any = FormatCmdsubNode((p.body as unknown as Node), indent + 8, false, false, false);
       } else {
         var body: any = "";
       }
-      var term: any = (p as unknown as CasePattern).terminator;
+      var term: any = p.terminator;
       var patIndent: any = RepeatStr(" ", indent + 8);
       var termIndent: any = RepeatStr(" ", indent + 4);
       var bodyPart: any = ((body.length > 0) ? patIndent + body + "\n" : "\n");
@@ -9672,7 +9672,7 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
   }
   if (node instanceof FunctionName) {
     var name: any = node.name;
-    var innerBody: any = (node.body.kind === "brace-group" ? (node.body as unknown as BraceGroup).body : node.body);
+    var innerBody: any = (node.body.kind === "brace-group" ? node.body.body : node.body);
     var body: any = FormatCmdsubNode(innerBody, indent + 4, false, false, false).replace(/[;]+$/, '');
     return `function ${name} () 
 { 
@@ -9756,7 +9756,7 @@ function FormatRedirect(r: Node, compact: boolean, heredocOpOnly: boolean): stri
     }
     return op + delim + "\n" + r.content + r.delimiter + "\n";
   }
-  var op: any = (r as unknown as Redirect).op;
+  var op: any = r.op;
   if (op === "1>") {
     op = ">";
   } else {
@@ -9764,10 +9764,10 @@ function FormatRedirect(r: Node, compact: boolean, heredocOpOnly: boolean): stri
       op = "<";
     }
   }
-  var target: any = (r as unknown as Redirect).target.value;
-  target = (r as unknown as Redirect).target.ExpandAllAnsiCQuotes(target);
-  target = (r as unknown as Redirect).target.StripLocaleStringDollars(target);
-  target = (r as unknown as Redirect).target.FormatCommandSubstitutions(target, false);
+  var target: any = r.target.value;
+  target = r.target.ExpandAllAnsiCQuotes(target);
+  target = r.target.StripLocaleStringDollars(target);
+  target = r.target.FormatCommandSubstitutions(target, false);
   if (target.startsWith("&")) {
     var wasInputClose: any = false;
     if (target === "&-" && op.endsWith("<")) {
@@ -9805,7 +9805,7 @@ function FormatRedirect(r: Node, compact: boolean, heredocOpOnly: boolean): stri
 }
 
 function FormatHeredocBody(r: Node): string {
-  return "\n" + (r as unknown as HereDoc).content + (r as unknown as HereDoc).delimiter + "\n";
+  return "\n" + r.content + r.delimiter + "\n";
 }
 
 function LookaheadForEsac(value: string, start: number, caseDepth: number): boolean {

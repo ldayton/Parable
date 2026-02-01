@@ -1154,7 +1154,7 @@ public class Lexer
     {
         int start = this.Pos;
         List<string> chars = new List<string>();
-        List<INode> parts = new List<INode>();
+        List<object> parts = new List<object>();
         int bracketDepth = 0;
         int bracketStartPos = -1;
         bool seenEquals = false;
@@ -1710,7 +1710,7 @@ public class Lexer
         this.Advance();
         this.Advance();
         List<string> contentChars = new List<string>();
-        List<INode> innerParts = new List<INode>();
+        List<object> innerParts = new List<object>();
         bool foundClose = false;
         while (!(this.AtEnd()))
         {
@@ -3757,7 +3757,7 @@ public class Word : INode
 
     public List<INode> _CollectCmdsubs(INode node)
     {
-        List<INode> result = new List<INode>();
+        List<object> result = new List<object>();
         switch (node)
         {
             case CommandSubstitution nodeCommandSubstitution:
@@ -3824,7 +3824,7 @@ public class Word : INode
 
     public List<INode> _CollectProcsubs(INode node)
     {
-        List<INode> result = new List<INode>();
+        List<object> result = new List<object>();
         switch (node)
         {
             case ProcessSubstitution nodeProcessSubstitution:
@@ -4041,7 +4041,7 @@ public class Word : INode
                 if (cmdsubIdx < cmdsubParts.Count)
                 {
                     node = cmdsubParts[cmdsubIdx];
-                    formatted = ParableFunctions._FormatCmdsubNode(((CommandSubstitution)node).Command, 0, false, false, false);
+                    formatted = ParableFunctions._FormatCmdsubNode(((INode)node.Command), 0, false, false, false);
                     cmdsubIdx += 1;
                 }
                 else
@@ -4160,10 +4160,10 @@ public class Word : INode
                                 direction = (value[i]).ToString();
                                 j = ParableFunctions._FindCmdsubEnd(value, i + 2);
                                 node = procsubParts[procsubIdx];
-                                compact = ParableFunctions._StartsWithSubshell(((ProcessSubstitution)node).Command);
-                                formatted = ParableFunctions._FormatCmdsubNode(((ProcessSubstitution)node).Command, 0, true, compact, true);
+                                compact = ParableFunctions._StartsWithSubshell(((INode)node.Command));
+                                formatted = ParableFunctions._FormatCmdsubNode(((INode)node.Command), 0, true, compact, true);
                                 string rawContent = ParableFunctions._Substring(value, i + 2, j - 1);
-                                if (((ProcessSubstitution)node).Command.Kind == "subshell")
+                                if (node.Command.Kind == "subshell")
                                 {
                                     int leadingWsEnd = 0;
                                     while (leadingWsEnd < rawContent.Length && " \t\n".Contains((rawContent[leadingWsEnd]).ToString()))
@@ -4177,7 +4177,7 @@ public class Word : INode
                                         if ((!string.IsNullOrEmpty(leadingWs)))
                                         {
                                             string normalizedWs = leadingWs.Replace("\n", " ").Replace("\t", " ");
-                                            string spaced = ParableFunctions._FormatCmdsubNode(((ProcessSubstitution)node).Command, 0, false, false, false);
+                                            string spaced = ParableFunctions._FormatCmdsubNode(((INode)node.Command), 0, false, false, false);
                                             result.Add(direction + "(" + normalizedWs + spaced + ")");
                                         }
                                         else
@@ -4192,7 +4192,7 @@ public class Word : INode
                                 }
                                 rawContent = ParableFunctions._Substring(value, i + 2, j - 1);
                                 string rawStripped = rawContent.Replace("\\\n", "");
-                                if (ParableFunctions._StartsWithSubshell(((ProcessSubstitution)node).Command) && formatted != rawStripped)
+                                if (ParableFunctions._StartsWithSubshell(((INode)node.Command)) && formatted != rawStripped)
                                 {
                                     result.Add(direction + "(" + rawStripped + ")");
                                 }
@@ -4752,7 +4752,7 @@ public class List : INode
     {
         List<INode> parts = new List<INode>(this.Parts);
         Dictionary<string, string> opNames = new Dictionary<string, string> { { "&&", "and" }, { "||", "or" }, { ";", "semi" }, { "\n", "semi" }, { "&", "background" } };
-        while (parts.Count > 1 && parts[parts.Count - 1].Kind == "operator" && (((Operator)parts[parts.Count - 1]).Op == ";" || ((Operator)parts[parts.Count - 1]).Op == "\n"))
+        while (parts.Count > 1 && parts[parts.Count - 1].Kind == "operator" && (parts[parts.Count - 1].Op == ";" || parts[parts.Count - 1].Op == "\n"))
         {
             parts = ParableFunctions._Sublist(parts, 0, parts.Count - 1);
         }
@@ -4760,11 +4760,11 @@ public class List : INode
         {
             return parts[0].ToSexp();
         }
-        if (parts[parts.Count - 1].Kind == "operator" && ((Operator)parts[parts.Count - 1]).Op == "&")
+        if (parts[parts.Count - 1].Kind == "operator" && parts[parts.Count - 1].Op == "&")
         {
             for (int i = parts.Count - 3; i > 0; i += -2)
             {
-                if (parts[i].Kind == "operator" && (((Operator)parts[i]).Op == ";" || ((Operator)parts[i]).Op == "\n"))
+                if (parts[i].Kind == "operator" && (parts[i].Op == ";" || parts[i].Op == "\n"))
                 {
                     List<INode> left = ParableFunctions._Sublist(parts, 0, i);
                     List<INode> right = ParableFunctions._Sublist(parts, i + 1, parts.Count - 1);
@@ -4805,7 +4805,7 @@ public class List : INode
         List<int> semiPositions = new List<int>();
         for (int i = 0; i < parts.Count; i += 1)
         {
-            if (parts[i].Kind == "operator" && (((Operator)parts[i]).Op == ";" || ((Operator)parts[i]).Op == "\n"))
+            if (parts[i].Kind == "operator" && (parts[i].Op == ";" || parts[i].Op == "\n"))
             {
                 semiPositions.Add(i);
             }
@@ -4852,7 +4852,7 @@ public class List : INode
         List<int> ampPositions = new List<int>();
         for (int i = 1; i < parts.Count - 1; i += 2)
         {
-            if (parts[i].Kind == "operator" && ((Operator)parts[i]).Op == "&")
+            if (parts[i].Kind == "operator" && parts[i].Op == "&")
             {
                 ampPositions.Add(i);
             }
@@ -4883,12 +4883,12 @@ public class List : INode
         {
             return parts[0].ToSexp();
         }
-        string result = parts[0].ToSexp();
+        object result = parts[0].ToSexp();
         for (int i = 1; i < parts.Count - 1; i += 2)
         {
             INode op = parts[i];
             INode cmd = parts[i + 1];
-            string opName = (opNames.TryGetValue(((Operator)op).Op, out var _v) ? _v : ((Operator)op).Op);
+            string opName = (opNames.TryGetValue(op.Op, out var _v) ? _v : op.Op);
             result = "(" + opName + " " + result + " " + cmd.ToSexp() + ")";
         }
         return result;
@@ -5204,7 +5204,7 @@ public class If : INode
 
     public string ToSexp()
     {
-        string result = "(if " + this.Condition.ToSexp() + " " + this.ThenBody.ToSexp();
+        object result = "(if " + this.Condition.ToSexp() + " " + this.ThenBody.ToSexp();
         if (this.ElseBody != null)
         {
             result = result + " " + this.ElseBody.ToSexp();
@@ -5375,7 +5375,7 @@ public class ForArith : INode
         string initStr = ParableFunctions._FormatArithVal(initVal);
         string condStr = ParableFunctions._FormatArithVal(condVal);
         string incrStr = ParableFunctions._FormatArithVal(incrVal);
-        string bodyStr = this.Body.ToSexp();
+        object bodyStr = this.Body.ToSexp();
         return string.Format("(arith-for (init (word \"{0}\")) (test (word \"{1}\")) (step (word \"{2}\")) {3}){4}", initStr, condStr, incrStr, bodyStr, suffix);
     }
 
@@ -6410,7 +6410,7 @@ public class UnaryTest : INode
 
     public string ToSexp()
     {
-        string operandVal = ((Word)this.Operand).GetCondFormattedValue();
+        object operandVal = this.Operand.GetCondFormattedValue();
         return "(cond-unary \"" + this.Op + "\" (cond-term \"" + operandVal + "\"))";
     }
 
@@ -6437,8 +6437,8 @@ public class BinaryTest : INode
 
     public string ToSexp()
     {
-        string leftVal = ((Word)this.Left).GetCondFormattedValue();
-        string rightVal = ((Word)this.Right).GetCondFormattedValue();
+        object leftVal = this.Left.GetCondFormattedValue();
+        object rightVal = this.Right.GetCondFormattedValue();
         return "(cond-binary \"" + this.Op + "\" (cond-term \"" + leftVal + "\") (cond-term \"" + rightVal + "\"))";
     }
 
@@ -7375,7 +7375,7 @@ public class Parser
 
     public bool _IsAssignmentWord(INode word)
     {
-        return ParableFunctions._Assignment(((Word)word).Value, 0) != -1;
+        return ParableFunctions._Assignment(word.Value, 0) != -1;
     }
 
     public (INode, string) _ParseBacktickSubstitution()
@@ -11551,9 +11551,9 @@ public class Parser
                     INode inner = this.ParsePipeline();
                     if (inner != null && inner.Kind == "negation")
                     {
-                        if (((Negation)inner).Pipeline != null)
+                        if (inner.Pipeline != null)
                         {
-                            return ((Negation)inner).Pipeline;
+                            return inner.Pipeline;
                         }
                         else
                         {
@@ -11913,7 +11913,7 @@ public class Parser
         if (lastWord != null && lastWord.Value.EndsWith("\\", StringComparison.Ordinal))
         {
             lastWord.Value = ParableFunctions._Substring(lastWord.Value, 0, lastWord.Value.Length - 1);
-            if (!((!string.IsNullOrEmpty(lastWord.Value))) && (lastNode is Command) && (((Command)lastNode).Words.Count > 0))
+            if (!((!string.IsNullOrEmpty(lastWord.Value))) && (lastNode is Command) && lastNode.Words != null)
             {
                 ((Func<Word, Word>)(_tmp => { ((Command)lastNode).Words.RemoveAt(((Command)lastNode).Words.Count - 1); return _tmp; }))(((Command)lastNode).Words[((Command)lastNode).Words.Count - 1]);
             }
@@ -12277,31 +12277,31 @@ public static class ParableFunctions
 
     public static string _FormatCondBody(INode node)
     {
-        string kind = node.Kind;
-        if (kind == "unary-test")
+        object kind = node.Kind;
+        if ((string)kind == "unary-test")
         {
-            string operandVal = ((Word)((UnaryTest)node).Operand).GetCondFormattedValue();
+            object operandVal = ((UnaryTest)node).Operand.GetCondFormattedValue();
             return ((UnaryTest)node).Op + " " + operandVal;
         }
-        if (kind == "binary-test")
+        if ((string)kind == "binary-test")
         {
-            string leftVal = ((Word)((BinaryTest)node).Left).GetCondFormattedValue();
-            string rightVal = ((Word)((BinaryTest)node).Right).GetCondFormattedValue();
+            object leftVal = ((BinaryTest)node).Left.GetCondFormattedValue();
+            object rightVal = ((BinaryTest)node).Right.GetCondFormattedValue();
             return leftVal + " " + ((BinaryTest)node).Op + " " + rightVal;
         }
-        if (kind == "cond-and")
+        if ((string)kind == "cond-and")
         {
             return ParableFunctions._FormatCondBody(((CondAnd)node).Left) + " && " + ParableFunctions._FormatCondBody(((CondAnd)node).Right);
         }
-        if (kind == "cond-or")
+        if ((string)kind == "cond-or")
         {
             return ParableFunctions._FormatCondBody(((CondOr)node).Left) + " || " + ParableFunctions._FormatCondBody(((CondOr)node).Right);
         }
-        if (kind == "cond-not")
+        if ((string)kind == "cond-not")
         {
             return "! " + ParableFunctions._FormatCondBody(((CondNot)node).Operand);
         }
-        if (kind == "cond-paren")
+        if ((string)kind == "cond-paren")
         {
             return "( " + ParableFunctions._FormatCondBody(((CondParen)node).Inner) + " )";
         }
@@ -12427,9 +12427,9 @@ public static class ParableFunctions
                     string formatted = ParableFunctions._FormatCmdsubNode(cmd, indent, inProcsub, false, procsubFirst && idx == 0);
                     bool isLast = idx == cmds.Count - 1;
                     bool hasHeredoc = false;
-                    if (cmd.Kind == "command" && (((Command)cmd).Redirects.Count > 0))
+                    if (cmd.Kind == "command" && cmd.Redirects != null)
                     {
-                        foreach (INode r in ((Command)cmd).Redirects)
+                        foreach (string r in cmd.Redirects)
                         {
                             bool _breakLoop6 = false;
                             switch (r)
@@ -12515,9 +12515,9 @@ public static class ParableFunctions
                 bool hasHeredoc = false;
                 foreach (INode p in nodeList.Parts)
                 {
-                    if (p.Kind == "command" && (((Command)p).Redirects.Count > 0))
+                    if (p.Kind == "command" && p.Redirects != null)
                     {
-                        foreach (INode r in ((Command)p).Redirects)
+                        foreach (string r in p.Redirects)
                         {
                             bool _breakLoop7 = false;
                             switch (r)
@@ -12537,9 +12537,9 @@ public static class ParableFunctions
                             case Pipeline pPipeline:
                                 foreach (INode cmd in pPipeline.Commands)
                                 {
-                                    if (cmd.Kind == "command" && (((Command)cmd).Redirects.Count > 0))
+                                    if (cmd.Kind == "command" && cmd.Redirects != null)
                                     {
-                                        foreach (INode r in ((Command)cmd).Redirects)
+                                        foreach (string r in cmd.Redirects)
                                         {
                                             bool _breakLoop8 = false;
                                             switch (r)
@@ -12781,23 +12781,23 @@ public static class ParableFunctions
         switch (node)
         {
             case Case nodeCase:
-                string word = ((Word)nodeCase.Word).Value;
+                object word = nodeCase.Word.Value;
                 List<string> patterns = new List<string>();
                 int i = 0;
                 while (i < nodeCase.Patterns.Count)
                 {
                     INode p = nodeCase.Patterns[i];
-                    object pat = ((CasePattern)p).Pattern.Replace("|", " | ");
+                    object pat = p.Pattern.Replace("|", " | ");
                     string body = "";
-                    if (((CasePattern)p).Body != null)
+                    if (p.Body != null)
                     {
-                        body = ParableFunctions._FormatCmdsubNode(((CasePattern)p).Body, indent + 8, false, false, false);
+                        body = ParableFunctions._FormatCmdsubNode(((INode)p.Body), indent + 8, false, false, false);
                     }
                     else
                     {
                         body = "";
                     }
-                    string term = ((CasePattern)p).Terminator;
+                    object term = p.Terminator;
                     string patIndent = ParableFunctions._RepeatStr(" ", indent + 8);
                     string termIndent = ParableFunctions._RepeatStr(" ", indent + 4);
                     string bodyPart = ((!string.IsNullOrEmpty(body)) ? patIndent + body + "\n" : "\n");
@@ -12828,7 +12828,7 @@ public static class ParableFunctions
         {
             case Function nodeFunction:
                 string name = nodeFunction.Name;
-                INode innerBody = (nodeFunction.Body.Kind == "brace-group" ? ((BraceGroup)nodeFunction.Body).Body : nodeFunction.Body);
+                INode innerBody = (nodeFunction.Body.Kind == "brace-group" ? nodeFunction.Body.Body : nodeFunction.Body);
                 string body = ParableFunctions._FormatCmdsubNode(innerBody, indent + 4, false, false, false).TrimEnd(";".ToCharArray());
                 return string.Format("function {0} () \n{{ \n{1}{2}\n}}", name, innerSp, body);
         }
@@ -12948,7 +12948,7 @@ public static class ParableFunctions
                 }
                 return op + delim + "\n" + rHereDoc.Content + rHereDoc.Delimiter + "\n";
         }
-        op = ((Redirect)r).Op;
+        op = r.Op;
         if (op == "1>")
         {
             op = ">";
@@ -12960,19 +12960,19 @@ public static class ParableFunctions
                 op = "<";
             }
         }
-        string target = ((Redirect)r).Target.Value;
-        target = ((Redirect)r).Target._ExpandAllAnsiCQuotes(target);
-        target = ((Redirect)r).Target._StripLocaleStringDollars(target);
-        target = ((Redirect)r).Target._FormatCommandSubstitutions(target, false);
-        if (target.StartsWith("&", StringComparison.Ordinal))
+        object target = r.Target.Value;
+        target = r.Target._ExpandAllAnsiCQuotes(target);
+        target = r.Target._StripLocaleStringDollars(target);
+        target = r.Target._FormatCommandSubstitutions(target, false);
+        if (target.StartsWith("&"))
         {
             bool wasInputClose = false;
-            if (target == "&-" && op.EndsWith("<", StringComparison.Ordinal))
+            if ((string)target == "&-" && op.EndsWith("<", StringComparison.Ordinal))
             {
                 wasInputClose = true;
                 op = ParableFunctions._Substring(op, 0, op.Length - 1) + ">";
             }
-            string afterAmp = ParableFunctions._Substring(target, 1, target.Length);
+            string afterAmp = ParableFunctions._Substring(target, 1, target.Count);
             bool isLiteralFd = afterAmp == "-" || afterAmp.Length > 0 && ((afterAmp[0]).ToString().Length > 0 && (afterAmp[0]).ToString().All(char.IsDigit));
             if (isLiteralFd)
             {
@@ -13017,7 +13017,7 @@ public static class ParableFunctions
 
     public static string _FormatHeredocBody(INode r)
     {
-        return "\n" + ((HereDoc)r).Content + ((HereDoc)r).Delimiter + "\n";
+        return "\n" + r.Content + r.Delimiter + "\n";
     }
 
     public static bool _LookaheadForEsac(string value, int start, int caseDepth)

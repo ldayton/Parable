@@ -464,10 +464,12 @@ def deref_for_func_slice_params(
     return result
 
 
-def coerce_args_to_node(func_info: "FuncInfo", args: list["ir.Expr"]) -> list["ir.Expr"]:
+def coerce_args_to_node(func_info: "FuncInfo", args: list["ir.Expr"], hierarchy_root: str | None = None) -> list["ir.Expr"]:
     """Add type assertions when passing interface{} to Node parameter."""
     from .. import ir
 
+    if hierarchy_root is None:
+        return args
     result = list(args)
     for i, arg in enumerate(result):
         if i >= len(func_info.params):
@@ -475,15 +477,15 @@ def coerce_args_to_node(func_info: "FuncInfo", args: list["ir.Expr"]) -> list["i
         param = func_info.params[i]
         param_type = param.typ
         # Check if param expects Node but arg is interface{}
-        if isinstance(param_type, InterfaceRef) and param_type.name == "Node":
+        if isinstance(param_type, InterfaceRef) and param_type.name == hierarchy_root:
             arg_type = arg.typ
             # interface{} is represented as InterfaceRef("any")
             if arg_type == InterfaceRef("any"):
                 result[i] = ir.TypeAssert(
                     expr=arg,
-                    asserted=InterfaceRef("Node"),
+                    asserted=InterfaceRef(hierarchy_root),
                     safe=True,
-                    typ=InterfaceRef("Node"),
+                    typ=InterfaceRef(hierarchy_root),
                     loc=arg.loc,
                 )
     return result
@@ -1439,7 +1441,7 @@ def lower_stmt_Return(
     return_type = ctx.type_ctx.return_type
     if value and return_type:
         from_type = type_inference.synthesize_type(
-            value, ctx.type_ctx, ctx.current_func_info, ctx.symbols, ctx.node_types
+            value, ctx.type_ctx, ctx.current_func_info, ctx.symbols, ctx.node_types, ctx.hierarchy_root
         )
         value = type_inference.coerce(
             value,
@@ -1449,6 +1451,7 @@ def lower_stmt_Return(
             ctx.current_func_info,
             ctx.symbols,
             ctx.node_types,
+            ctx.hierarchy_root,
         )
     return ir.Return(value=value, loc=loc_from_node(node))
 
@@ -1952,7 +1955,7 @@ def lower_expr_Call(
             # Dereference * for slice params
             args = dispatch.deref_for_func_slice_params(func_name, args, node_args)
             # Add type assertions for interface{} -> Node coercion
-            args = coerce_args_to_node(func_info, args)
+            args = coerce_args_to_node(func_info, args, ctx.hierarchy_root)
         return ir.Call(func=func_name, args=args, typ=ret_type, loc=loc_from_node(node))
     return ir.Var(name="TODO_Call", typ=InterfaceRef("any"))
 
@@ -2127,11 +2130,11 @@ def lower_stmt_Assign(
                 # Update var_types
                 if is_type(target_elts[0], ["Name"]):
                     type_ctx.var_types[target_elts[0].get("id")] = type_inference.synthesize_type(
-                        val0, type_ctx, ctx.current_func_info, ctx.symbols, ctx.node_types
+                        val0, type_ctx, ctx.current_func_info, ctx.symbols, ctx.node_types, ctx.hierarchy_root
                     )
                 if is_type(target_elts[1], ["Name"]):
                     type_ctx.var_types[target_elts[1].get("id")] = type_inference.synthesize_type(
-                        val1, type_ctx, ctx.current_func_info, ctx.symbols, ctx.node_types
+                        val1, type_ctx, ctx.current_func_info, ctx.symbols, ctx.node_types, ctx.hierarchy_root
                     )
                 block = ir.Block(
                     body=[
@@ -2160,7 +2163,7 @@ def lower_stmt_Assign(
         if is_type(target, ["Name"]) and target_id in type_ctx.var_types:
             expected_type = type_ctx.var_types[target_id]
             from_type = type_inference.synthesize_type(
-                value, type_ctx, ctx.current_func_info, ctx.symbols, ctx.node_types
+                value, type_ctx, ctx.current_func_info, ctx.symbols, ctx.node_types, ctx.hierarchy_root
             )
             value = type_inference.coerce(
                 value,
@@ -2170,6 +2173,7 @@ def lower_stmt_Assign(
                 ctx.current_func_info,
                 ctx.symbols,
                 ctx.node_types,
+                ctx.hierarchy_root,
             )
         # Track variable type dynamically for later use in nested scopes
         if is_type(target, ["Name"]):
@@ -2181,7 +2185,7 @@ def lower_stmt_Assign(
                 pass  # Already set above
             else:
                 value_type = type_inference.synthesize_type(
-                    value, type_ctx, ctx.current_func_info, ctx.symbols, ctx.node_types
+                    value, type_ctx, ctx.current_func_info, ctx.symbols, ctx.node_types, ctx.hierarchy_root
                 )
                 # Update type if it's concrete (not any) and either:
                 # - Variable not yet tracked, or
@@ -2215,7 +2219,7 @@ def lower_stmt_Assign(
                 if list_var in type_ctx.list_element_unions:
                     type_ctx.union_types[target_id] = type_ctx.list_element_unions[list_var]
                     # Also reset var_types to Node so union_types logic is used for field access
-                    type_ctx.var_types[target_id] = InterfaceRef("Node")
+                    type_ctx.var_types[target_id] = InterfaceRef(ctx.hierarchy_root) if ctx.hierarchy_root else InterfaceRef("any")
         lval = dispatch.lower_lvalue(target)
         assign = ir.Assign(target=lval, value=value, loc=loc_from_node(node))
         # Add declaration type if VAR_TYPE_OVERRIDE applies or if var_types has a unified Node type
@@ -2228,9 +2232,10 @@ def lower_stmt_Assign(
             elif target_id in type_ctx.var_types:
                 # Use unified Node type from var_types for hoisted variables
                 unified_type = type_ctx.var_types[target_id]
-                if unified_type == InterfaceRef("Node"):
+                hierarchy_root_type = InterfaceRef(ctx.hierarchy_root) if ctx.hierarchy_root else None
+                if hierarchy_root_type and unified_type == hierarchy_root_type:
                     expr_type = type_inference.synthesize_type(
-                        value, type_ctx, ctx.current_func_info, ctx.symbols, ctx.node_types
+                        value, type_ctx, ctx.current_func_info, ctx.symbols, ctx.node_types, ctx.hierarchy_root
                     )
                     if unified_type != expr_type:
                         assign.decl_typ = unified_type
@@ -2244,7 +2249,7 @@ def lower_stmt_Assign(
         if is_type(target, ["Name"]):
             target_id = target.get("id")
             value_type = type_inference.synthesize_type(
-                value, type_ctx, ctx.current_func_info, ctx.symbols, ctx.node_types
+                value, type_ctx, ctx.current_func_info, ctx.symbols, ctx.node_types, ctx.hierarchy_root
             )
             if value_type != InterfaceRef("any"):
                 type_ctx.var_types[target_id] = value_type
@@ -2307,7 +2312,7 @@ def lower_stmt_AnnAssign(
             value = dispatch.lower_expr(node_value)
         # Coerce value to expected type
         from_type = type_inference.synthesize_type(
-            value, type_ctx, ctx.current_func_info, ctx.symbols, ctx.node_types
+            value, type_ctx, ctx.current_func_info, ctx.symbols, ctx.node_types, ctx.hierarchy_root
         )
         value = type_inference.coerce(
             value,
@@ -2317,6 +2322,7 @@ def lower_stmt_AnnAssign(
             ctx.current_func_info,
             ctx.symbols,
             ctx.node_types,
+            ctx.hierarchy_root,
         )
     else:
         value = None
@@ -2345,7 +2351,7 @@ def lower_stmt_AnnAssign(
                 field_info = struct_info.fields.get(field_name)
                 if field_info:
                     from_type = type_inference.synthesize_type(
-                        value, type_ctx, ctx.current_func_info, ctx.symbols, ctx.node_types
+                        value, type_ctx, ctx.current_func_info, ctx.symbols, ctx.node_types, ctx.hierarchy_root
                     )
                     value = type_inference.coerce(
                         value,
@@ -2355,6 +2361,7 @@ def lower_stmt_AnnAssign(
                         ctx.current_func_info,
                         ctx.symbols,
                         ctx.node_types,
+                        ctx.hierarchy_root,
                     )
         return ir.Assign(target=lval, value=value, loc=loc_from_node(node))
     return ir.NoOp()
@@ -2566,7 +2573,7 @@ def lower_stmt_For(
         if iter_name in type_ctx.list_element_unions:
             iterable_union_types = type_ctx.list_element_unions[iter_name]
             # When iterating a list with union types, element type is Node
-            elem_type = InterfaceRef("Node")
+            elem_type = InterfaceRef(ctx.hierarchy_root) if ctx.hierarchy_root else InterfaceRef("any")
     if is_type(node_target, ["Name"]):
         target_id = node_target.get("id")
         if target_id == "_":

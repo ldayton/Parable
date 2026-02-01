@@ -431,6 +431,7 @@ def infer_element_type_from_append_arg(
     current_class_name: str,
     current_func_info: FuncInfo | None,
     callbacks: InferenceCallbacks,
+    hierarchy_root: str | None = None,
 ) -> "Type":
     """Infer slice element type from what's being appended."""
     # Constant literals
@@ -484,7 +485,7 @@ def infer_element_type_from_append_arg(
         for elt in arg.get("elts", []):
             elem_types.append(
                 infer_element_type_from_append_arg(
-                    elt, var_types, symbols, current_class_name, current_func_info, callbacks
+                    elt, var_types, symbols, current_class_name, current_func_info, callbacks, hierarchy_root
                 )
             )
         return Tuple(tuple(elem_types))
@@ -523,7 +524,7 @@ def infer_element_type_from_append_arg(
         if func_name in symbols.structs:
             info = symbols.structs[func_name]
             if info.is_node:
-                return InterfaceRef("Node")
+                return InterfaceRef(hierarchy_root) if hierarchy_root else InterfaceRef("any")
             return Pointer(StructRef(func_name))
         # Function return types
         if func_name in symbols.functions:
@@ -558,6 +559,7 @@ def collect_var_types(
     current_func_info: FuncInfo | None,
     node_types: set[str],
     callbacks: InferenceCallbacks,
+    hierarchy_root: str | None = None,
 ) -> tuple[dict[str, "Type"], dict[str, list[str]], set[str], dict[str, list[str]]]:
     """Pre-scan function body to collect variable types, tuple var mappings, and sentinel ints."""
     var_types: dict[str, "Type"] = {}
@@ -632,9 +634,11 @@ def collect_var_types(
             vars_concrete_type[var_name] = unique_types[0]
         else:
             # Multiple types - check if all are Node-related
-            all_node = all(
-                t == InterfaceRef("Node")
-                or t == StructRef("Node")
+            hierarchy_root_iface = InterfaceRef(hierarchy_root) if hierarchy_root else None
+            hierarchy_root_struct = StructRef(hierarchy_root) if hierarchy_root else None
+            all_node = hierarchy_root and all(
+                t == hierarchy_root_iface
+                or t == hierarchy_root_struct
                 or (
                     isinstance(t, Pointer)
                     and isinstance(t.target, StructRef)
@@ -642,8 +646,8 @@ def collect_var_types(
                 )
                 for t in unique_types
             )
-            if all_node:
-                vars_concrete_type[var_name] = InterfaceRef("Node")
+            if all_node and hierarchy_root:
+                vars_concrete_type[var_name] = InterfaceRef(hierarchy_root)
             # Otherwise, no unified type (will fall back to default inference)
     # First pass: collect For loop variable types (needed for append inference)
     for stmt in dict_walk({"_type": "Module", "body": stmts}):
@@ -921,6 +925,7 @@ def collect_var_types(
                         current_class_name,
                         current_func_info,
                         callbacks,
+                        hierarchy_root,
                     )
                     if elem_type != InterfaceRef("any"):
                         var_types[var_name] = Slice(elem_type)
@@ -1027,18 +1032,19 @@ def collect_var_types(
                 # Int with None -> use sentinel (-1 = None)
                 var_types[var_name] = INT
                 sentinel_ints.add(var_name)
-            elif concrete_type == InterfaceRef("Node"):
+            elif hierarchy_root and concrete_type == InterfaceRef(hierarchy_root):
                 # Node with None -> use Node interface (nilable in Go)
-                var_types[var_name] = InterfaceRef("Node")
+                var_types[var_name] = InterfaceRef(hierarchy_root)
             else:
                 # Other types -> use Optional (pointer)
                 var_types[var_name] = Optional(concrete_type)
     # Seventh pass: variables with multiple Node types (not assigned None)
     # These are variables assigned different Node subtypes in branches or sequentially
     # The unified Node type takes precedence over any single assignment's type
+    hierarchy_root_iface = InterfaceRef(hierarchy_root) if hierarchy_root else None
     for var_name, concrete_type in vars_concrete_type.items():
-        if var_name not in vars_assigned_none and concrete_type == InterfaceRef("Node"):
-            var_types[var_name] = InterfaceRef("Node")
+        if var_name not in vars_assigned_none and hierarchy_root_iface and concrete_type == hierarchy_root_iface:
+            var_types[var_name] = hierarchy_root_iface
     return var_types, tuple_vars, sentinel_ints, list_element_unions
 
 

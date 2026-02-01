@@ -337,11 +337,12 @@ def build_struct(
     symbols: "SymbolTable",
     callbacks: BuilderCallbacks,
     with_body: bool = False,
+    hierarchy_root: str | None = None,
 ) -> tuple[Struct | None, Function | None]:
     """Build IR Struct from class definition. Returns (struct, constructor_func)."""
     # Node is emitted as InterfaceDef, not Struct
     node_name = node.get("name")
-    if node_name == "Node":
+    if hierarchy_root and node_name == hierarchy_root:
         return None, None
     info = symbols.structs.get(node_name)
     if not info:
@@ -391,8 +392,8 @@ def build_struct(
             )
             methods.append(getkind_method)
     implements = []
-    if info.is_node:
-        implements.append("Node")
+    if info.is_node and hierarchy_root:
+        implements.append(hierarchy_root)
     # Determine embedded type for exception inheritance
     embedded_type = None
     if info.is_exception and info.bases:
@@ -422,6 +423,7 @@ def build_module(
     tree: ASTNode,
     symbols: "SymbolTable",
     callbacks: BuilderCallbacks,
+    hierarchy_root: str | None = None,
 ) -> Module:
     """Build IR Module from collected symbols."""
     from .. import ir
@@ -471,20 +473,21 @@ def build_module(
                                 )
                             )
     # Build Node interface (abstract base for AST nodes)
-    node_interface = InterfaceDef(
-        name="Node",
-        methods=[
-            MethodSig(name="GetKind", params=[], ret=STRING),
-            MethodSig(name="ToSexp", params=[], ret=STRING),
-        ],
-        fields=[Field(name="kind", typ=STRING)],
-    )
-    module.interfaces.append(node_interface)
+    if hierarchy_root:
+        node_interface = InterfaceDef(
+            name=hierarchy_root,
+            methods=[
+                MethodSig(name="GetKind", params=[], ret=STRING),
+                MethodSig(name="ToSexp", params=[], ret=STRING),
+            ],
+            fields=[Field(name="kind", typ=STRING)],
+        )
+        module.interfaces.append(node_interface)
     # Build structs (with method bodies) and collect constructor functions
     constructor_funcs: list[Function] = []
     for node in tree.get("body", []):
         if is_type(node, ["ClassDef"]):
-            struct, ctor = build_struct(node, symbols, callbacks, with_body=True)
+            struct, ctor = build_struct(node, symbols, callbacks, with_body=True, hierarchy_root=hierarchy_root)
             if struct:
                 module.structs.append(struct)
             if ctor:

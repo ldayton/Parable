@@ -2531,14 +2531,14 @@ static Tuple_int64_t_Vec_Str_bool consume_bracket_class(const char * s, int64_t 
 }
 
 static const char * format_cond_body(Node * node) {
-    const char * kind = _kind_to_str(node->kind);
+    Any * kind = _kind_to_str(node->kind);
     if ((strcmp(kind, "unary-test") == 0)) {
-        const char * operand_val = Word_get_cond_formatted_value(((Word *)(((UnaryTest *)(node))->operand->data)));
+        Any * operand_val = Node_get_cond_formatted_value(((UnaryTest *)(node))->operand);
         return _str_concat(g_arena, _str_concat(g_arena, ((UnaryTest *)(node))->op, " "), operand_val);
     }
     if ((strcmp(kind, "binary-test") == 0)) {
-        const char * left_val = Word_get_cond_formatted_value(((Word *)(((BinaryTest *)(node))->left->data)));
-        const char * right_val = Word_get_cond_formatted_value(((Word *)(((BinaryTest *)(node))->right->data)));
+        Any * left_val = Node_get_cond_formatted_value(((BinaryTest *)(node))->left);
+        Any * right_val = Node_get_cond_formatted_value(((BinaryTest *)(node))->right);
         return _str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, left_val, " "), ((BinaryTest *)(node))->op), " "), right_val);
     }
     if ((strcmp(kind, "cond-and") == 0)) {
@@ -2701,9 +2701,10 @@ static const char * format_cmdsub_node(Node * node, int64_t indent, bool in_proc
             formatted = format_cmdsub_node(cmd, indent, in_procsub, false, (procsub_first && (idx == 0)));
             is_last = (idx == (cmds.len - 1));
             has_heredoc = false;
-            if (((strcmp(_kind_to_str(cmd->kind), "command") == 0) && (((Command *)(cmd->data))->redirects.len > 0))) {
-                for (size_t _idx = 0; _idx < ((Command *)(cmd->data))->redirects.len; _idx++) {
-                    Node * r = ((Command *)(cmd->data))->redirects.data[_idx];
+            if (((strcmp(_kind_to_str(cmd->kind), "command") == 0) && (cmd->redirects != NULL))) {
+                // ForRange over InterfaceRef(name='any')
+                for (size_t _idx = 0; _idx < cmd->redirects.len; _idx++) {
+                    void * r = cmd->redirects.data[_idx];
                     void *_data9 = r->data;
                     switch (r->kind) {
                     case KIND_HEREDOC: {
@@ -2772,9 +2773,10 @@ static const char * format_cmdsub_node(Node * node, int64_t indent, bool in_proc
         has_heredoc = false;
         for (size_t _idx = 0; _idx < node->parts.len; _idx++) {
             Node * p = node->parts.data[_idx];
-            if (((strcmp(_kind_to_str(p->kind), "command") == 0) && (((Command *)(p->data))->redirects.len > 0))) {
-                for (size_t _idx = 0; _idx < ((Command *)(p->data))->redirects.len; _idx++) {
-                    Node * r = ((Command *)(p->data))->redirects.data[_idx];
+            if (((strcmp(_kind_to_str(p->kind), "command") == 0) && (p->redirects != NULL))) {
+                // ForRange over InterfaceRef(name='any')
+                for (size_t _idx = 0; _idx < p->redirects.len; _idx++) {
+                    void * r = p->redirects.data[_idx];
                     void *_data11 = r->data;
                     switch (r->kind) {
                     case KIND_HEREDOC: {
@@ -2792,9 +2794,10 @@ static const char * format_cmdsub_node(Node * node, int64_t indent, bool in_proc
                     Pipeline *p = (Pipeline *)_data12;
                     for (size_t _idx = 0; _idx < p->commands.len; _idx++) {
                         Node * cmd = p->commands.data[_idx];
-                        if (((strcmp(_kind_to_str(cmd->kind), "command") == 0) && (((Command *)(cmd->data))->redirects.len > 0))) {
-                            for (size_t _idx = 0; _idx < ((Command *)(cmd->data))->redirects.len; _idx++) {
-                                Node * r = ((Command *)(cmd->data))->redirects.data[_idx];
+                        if (((strcmp(_kind_to_str(cmd->kind), "command") == 0) && (cmd->redirects != NULL))) {
+                            // ForRange over InterfaceRef(name='any')
+                            for (size_t _idx = 0; _idx < cmd->redirects.len; _idx++) {
+                                void * r = cmd->redirects.data[_idx];
                                 void *_data13 = r->data;
                                 switch (r->kind) {
                                 case KIND_HEREDOC: {
@@ -3010,11 +3013,11 @@ static const char * format_cmdsub_node(Node * node, int64_t indent, bool in_proc
         break;
     }
     }
-    const char * word;
+    Any * word;
     Vec_Str patterns;
     Node * p;
     Any * pat;
-    const char * term;
+    Any * term;
     const char * pat_indent;
     const char * term_indent;
     const char * body_part;
@@ -3024,18 +3027,18 @@ static const char * format_cmdsub_node(Node * node, int64_t indent, bool in_proc
     switch (node->kind) {
     case KIND_CASE: {
         Case *node = (Case *)_data20;
-        word = ((Word *)(node->word->data))->value;
+        word = node->word->value;
         patterns = (Vec_Str){NULL, 0, 0};
         i = 0;
         while ((i < node->patterns.len)) {
             p = node->patterns.data[i];
-            pat = _str_replace(g_arena, ((CasePattern *)(p->data))->pattern, "|", " | ");
-            if ((((CasePattern *)(p->data))->body != NULL)) {
-                body = format_cmdsub_node(((CasePattern *)(p->data))->body, (indent + 8), false, false, false);
+            pat = _str_replace(g_arena, p->pattern, "|", " | ");
+            if ((p->body != NULL)) {
+                body = format_cmdsub_node(((Node *)(p->body)), (indent + 8), false, false, false);
             } else {
                 body = "";
             }
-            term = ((CasePattern *)(p->data))->terminator;
+            term = p->terminator;
             pat_indent = _str_repeat(g_arena, " ", (indent + 8));
             term_indent = _str_repeat(g_arena, " ", (indent + 4));
             body_part = ((body != NULL && body[0] != '\0') ? _str_concat(g_arena, _str_concat(g_arena, pat_indent, body), "\n") : "\n");
@@ -3067,7 +3070,7 @@ static const char * format_cmdsub_node(Node * node, int64_t indent, bool in_proc
     case KIND_FUNCTION: {
         Function *node = (Function *)_data21;
         name = node->name;
-        inner_body = ((strcmp(_kind_to_str(node->body->kind), "brace-group") == 0) ? ((BraceGroup *)(node->body->data))->body : node->body);
+        inner_body = ((strcmp(_kind_to_str(node->body->kind), "brace-group") == 0) ? node->body->body : node->body);
         body = _str_rtrim(g_arena, format_cmdsub_node(inner_body, (indent + 4), false, false, false), ";");
         return _str_format(g_arena, "function %v () \n{ \n%v%v\n}", name, inner_sp, body);
         break;
@@ -3195,23 +3198,23 @@ static const char * format_redirect(Node * r, bool compact, bool heredoc_op_only
         break;
     }
     }
-    op = ((Redirect *)(r->data))->op;
+    Any * op = r->op;
     if ((strcmp(op, "1>") == 0)) {
         op = ">";
     } else if ((strcmp(op, "0<") == 0)) {
         op = "<";
     }
-    const char * target = ((Redirect *)(r->data))->target->value;
-    target = Word_expand_all_ansi_c_quotes(((Redirect *)(r->data))->target, target);
-    target = Word_strip_locale_string_dollars(((Redirect *)(r->data))->target, target);
-    target = Word_format_command_substitutions(((Redirect *)(r->data))->target, target, false);
+    Any * target = r->target->value;
+    target = any_expand_all_ansi_c_quotes(r->target, target);
+    target = any_strip_locale_string_dollars(r->target, target);
+    target = any_format_command_substitutions(r->target, target, false);
     if (_str_startswith(target, "&")) {
         bool was_input_close = false;
         if (((strcmp(target, "&-") == 0) && _str_endswith(op, "<"))) {
             was_input_close = true;
             op = _str_concat(g_arena, substring(op, 0, (_rune_len(op) - 1)), ">");
         }
-        const char * after_amp = substring(target, 1, _rune_len(target));
+        const char * after_amp = substring(target, 1, strlen(target));
         bool is_literal_fd = ((strcmp(after_amp, "-") == 0) || ((_rune_len(after_amp) > 0) && _str_is_digit((const char *)(_char_at_str(g_arena, after_amp, 0)))));
         if (is_literal_fd) {
             if (((strcmp(op, ">") == 0) || (strcmp(op, ">&") == 0))) {
@@ -3236,7 +3239,7 @@ static const char * format_redirect(Node * r, bool compact, bool heredoc_op_only
 }
 
 static const char * format_heredoc_body(Node * r) {
-    return _str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, "\n", ((HereDoc *)(r->data))->content), ((HereDoc *)(r->data))->delimiter), "\n");
+    return _str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, "\n", r->content), r->delimiter), "\n");
 }
 
 static bool lookahead_for_esac(const char * value, int64_t start, int64_t case_depth) {
@@ -4988,7 +4991,7 @@ static const char * Lexer_collect_param_argument(Lexer *self, int64_t flags, boo
 static Word * Lexer_read_word_internal(Lexer *self, int64_t ctx, bool at_command_start, bool in_array_literal, bool in_assign_builtin) {
     int64_t start = self->pos;
     Vec_Str chars = (Vec_Str){NULL, 0, 0};
-    Vec_Node parts = (Vec_Node){NULL, 0, 0};
+    Vec_Any parts = (Vec_Any){NULL, 0, 0};
     int64_t bracket_depth = 0;
     int64_t bracket_start_pos = -1;
     bool seen_equals = false;
@@ -5177,7 +5180,7 @@ static Word * Lexer_read_word_internal(Lexer *self, int64_t ctx, bool at_command
             Vec_Node locale_result2 = _tup39.F2;
             if ((locale_result0 != NULL)) {
                 VEC_PUSH(g_arena, &parts, (locale_result0));
-                do { Vec_Node _src = locale_result2; for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &parts, _src.data[_i]); } } while(0);
+                do { Vec_Any _src = locale_result2; for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &parts, _src.data[_i]); } } while(0);
                 VEC_PUSH(g_arena, &chars, (locale_result1));
             } else {
                 VEC_PUSH(g_arena, &chars, (Lexer_advance(self)));
@@ -5283,7 +5286,7 @@ static Word * Lexer_read_word_internal(Lexer *self, int64_t ctx, bool at_command
         return NULL;
     }
     if ((parts.len > 0)) {
-        return Word_new(_str_join(g_arena, "", chars), parts, "word");
+        return Word_new(_str_join(g_arena, "", chars), *(Vec_Node *)&parts, "word");
     }
     return Word_new(_str_join(g_arena, "", chars), (Vec_Node){NULL, 0, 0}, "word");
 }
@@ -5426,7 +5429,7 @@ static Tuple_NodePtr_constcharPtr_Vec_Node Lexer_read_locale_string(Lexer *self)
     Lexer_advance(self);
     Lexer_advance(self);
     Vec_Str content_chars = (Vec_Str){NULL, 0, 0};
-    Vec_Node inner_parts = (Vec_Node){NULL, 0, 0};
+    Vec_Any inner_parts = (Vec_Any){NULL, 0, 0};
     bool found_close = false;
     while (!(Lexer_at_end(self))) {
         const char * ch = Lexer_peek(self);
@@ -6787,7 +6790,7 @@ static const char * Word_strip_arith_line_continuations(Word *self, const char *
 }
 
 static Vec_Node Word_collect_cmdsubs(Word *self, Node * node) {
-    Vec_Node result = (Vec_Node){NULL, 0, 0};
+    Vec_Any result = (Vec_Any){NULL, 0, 0};
     void *_data48 = node->data;
     switch (node->kind) {
     case KIND_COMMANDSUBSTITUTION: {
@@ -6809,7 +6812,7 @@ static Vec_Node Word_collect_cmdsubs(Word *self, Node * node) {
                     break;
                 }
                 default: {
-                    do { Vec_Node _src = Word_collect_cmdsubs(self, p); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
+                    do { Vec_Any _src = Word_collect_cmdsubs(self, p); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
                 }
                 }
             }
@@ -6819,58 +6822,58 @@ static Vec_Node Word_collect_cmdsubs(Word *self, Node * node) {
     case KIND_ARITHMETICEXPANSION: {
         ArithmeticExpansion *node = (ArithmeticExpansion *)_data48;
         if ((node->expression != NULL)) {
-            do { Vec_Node _src = Word_collect_cmdsubs(self, node->expression); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
+            do { Vec_Any _src = Word_collect_cmdsubs(self, node->expression); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
         }
         break;
     }
     case KIND_ARITHBINARYOP: {
         ArithBinaryOp *node = (ArithBinaryOp *)_data48;
-        do { Vec_Node _src = Word_collect_cmdsubs(self, node->left); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
-        do { Vec_Node _src = Word_collect_cmdsubs(self, node->right); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
+        do { Vec_Any _src = Word_collect_cmdsubs(self, node->left); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
+        do { Vec_Any _src = Word_collect_cmdsubs(self, node->right); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
         break;
     }
     case KIND_ARITHCOMMA: {
         ArithComma *node = (ArithComma *)_data48;
-        do { Vec_Node _src = Word_collect_cmdsubs(self, node->left); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
-        do { Vec_Node _src = Word_collect_cmdsubs(self, node->right); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
+        do { Vec_Any _src = Word_collect_cmdsubs(self, node->left); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
+        do { Vec_Any _src = Word_collect_cmdsubs(self, node->right); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
         break;
     }
     case KIND_ARITHUNARYOP: {
         ArithUnaryOp *node = (ArithUnaryOp *)_data48;
-        do { Vec_Node _src = Word_collect_cmdsubs(self, node->operand); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
+        do { Vec_Any _src = Word_collect_cmdsubs(self, node->operand); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
         break;
     }
     case KIND_ARITHPREINCR: {
         ArithPreIncr *node = (ArithPreIncr *)_data48;
-        do { Vec_Node _src = Word_collect_cmdsubs(self, node->operand); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
+        do { Vec_Any _src = Word_collect_cmdsubs(self, node->operand); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
         break;
     }
     case KIND_ARITHPOSTINCR: {
         ArithPostIncr *node = (ArithPostIncr *)_data48;
-        do { Vec_Node _src = Word_collect_cmdsubs(self, node->operand); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
+        do { Vec_Any _src = Word_collect_cmdsubs(self, node->operand); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
         break;
     }
     case KIND_ARITHPREDECR: {
         ArithPreDecr *node = (ArithPreDecr *)_data48;
-        do { Vec_Node _src = Word_collect_cmdsubs(self, node->operand); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
+        do { Vec_Any _src = Word_collect_cmdsubs(self, node->operand); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
         break;
     }
     case KIND_ARITHPOSTDECR: {
         ArithPostDecr *node = (ArithPostDecr *)_data48;
-        do { Vec_Node _src = Word_collect_cmdsubs(self, node->operand); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
+        do { Vec_Any _src = Word_collect_cmdsubs(self, node->operand); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
         break;
     }
     case KIND_ARITHTERNARY: {
         ArithTernary *node = (ArithTernary *)_data48;
-        do { Vec_Node _src = Word_collect_cmdsubs(self, node->condition); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
-        do { Vec_Node _src = Word_collect_cmdsubs(self, node->if_true); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
-        do { Vec_Node _src = Word_collect_cmdsubs(self, node->if_false); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
+        do { Vec_Any _src = Word_collect_cmdsubs(self, node->condition); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
+        do { Vec_Any _src = Word_collect_cmdsubs(self, node->if_true); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
+        do { Vec_Any _src = Word_collect_cmdsubs(self, node->if_false); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
         break;
     }
     case KIND_ARITHASSIGN: {
         ArithAssign *node = (ArithAssign *)_data48;
-        do { Vec_Node _src = Word_collect_cmdsubs(self, node->target); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
-        do { Vec_Node _src = Word_collect_cmdsubs(self, node->value); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
+        do { Vec_Any _src = Word_collect_cmdsubs(self, node->target); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
+        do { Vec_Any _src = Word_collect_cmdsubs(self, node->value); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
         break;
     }
     }
@@ -6878,7 +6881,7 @@ static Vec_Node Word_collect_cmdsubs(Word *self, Node * node) {
 }
 
 static Vec_Node Word_collect_procsubs(Word *self, Node * node) {
-    Vec_Node result = (Vec_Node){NULL, 0, 0};
+    Vec_Any result = (Vec_Any){NULL, 0, 0};
     void *_data50 = node->data;
     switch (node->kind) {
     case KIND_PROCESSSUBSTITUTION: {
@@ -6900,7 +6903,7 @@ static Vec_Node Word_collect_procsubs(Word *self, Node * node) {
                     break;
                 }
                 default: {
-                    do { Vec_Node _src = Word_collect_procsubs(self, p); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
+                    do { Vec_Any _src = Word_collect_procsubs(self, p); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
                 }
                 }
             }
@@ -7069,7 +7072,7 @@ static const char * Word_format_command_substitutions(Word *self, const char * v
             inner = substring(value, (i + 2), (j - 1));
             if ((cmdsub_idx < cmdsub_parts.len)) {
                 node = cmdsub_parts.data[cmdsub_idx];
-                formatted = format_cmdsub_node(((CommandSubstitution *)(node->data))->command, 0, false, false, false);
+                formatted = format_cmdsub_node(((Node *)(node->command)), 0, false, false, false);
                 cmdsub_idx += 1;
             } else {
                 // try {
@@ -7140,10 +7143,10 @@ static const char * Word_format_command_substitutions(Word *self, const char * v
                 direction = (const char *)(_char_at_str(g_arena, value, i));
                 j = find_cmdsub_end(value, (i + 2));
                 Node * node = procsub_parts.data[procsub_idx];
-                compact = starts_with_subshell(((ProcessSubstitution *)(node->data))->command);
-                formatted = format_cmdsub_node(((ProcessSubstitution *)(node->data))->command, 0, true, compact, true);
+                compact = starts_with_subshell(((Node *)(node->command)));
+                formatted = format_cmdsub_node(((Node *)(node->command)), 0, true, compact, true);
                 const char * raw_content = substring(value, (i + 2), (j - 1));
-                if ((strcmp(_kind_to_str(((ProcessSubstitution *)(node->data))->command->kind), "subshell") == 0)) {
+                if ((strcmp(_kind_to_str(node->command->kind), "subshell") == 0)) {
                     int64_t leading_ws_end = 0;
                     while (((leading_ws_end < _rune_len(raw_content)) && _str_contains(" \t\n", (const char *)(_char_at_str(g_arena, raw_content, leading_ws_end))))) {
                         leading_ws_end += 1;
@@ -7153,7 +7156,7 @@ static const char * Word_format_command_substitutions(Word *self, const char * v
                     if (_str_startswith(stripped, "(")) {
                         if ((leading_ws != NULL && leading_ws[0] != '\0')) {
                             const char * normalized_ws = _str_replace(g_arena, _str_replace(g_arena, leading_ws, "\n", " "), "\t", " ");
-                            const char * spaced = format_cmdsub_node(((ProcessSubstitution *)(node->data))->command, 0, false, false, false);
+                            const char * spaced = format_cmdsub_node(((Node *)(node->command)), 0, false, false, false);
                             VEC_PUSH(g_arena, &result, (_str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, direction, "("), normalized_ws), spaced), ")")));
                         } else {
                             raw_content = _str_replace(g_arena, raw_content, "\\\n", "");
@@ -7166,7 +7169,7 @@ static const char * Word_format_command_substitutions(Word *self, const char * v
                 }
                 raw_content = substring(value, (i + 2), (j - 1));
                 const char * raw_stripped = _str_replace(g_arena, raw_content, "\\\n", "");
-                if ((starts_with_subshell(((ProcessSubstitution *)(node->data))->command) && (strcmp(formatted, raw_stripped) != 0))) {
+                if ((starts_with_subshell(((Node *)(node->command))) && (strcmp(formatted, raw_stripped) != 0))) {
                     VEC_PUSH(g_arena, &result, (_str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, direction, "("), raw_stripped), ")")));
                 } else {
                     const char * final_output = _str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, direction, "("), formatted), ")");
@@ -7525,28 +7528,28 @@ static const char * Pipeline_get_kind(Pipeline *self) {
 static const char * List_to_sexp(List *self) {
     Vec_Node parts = self->parts /* copy */;
     void * op_names = NULL;
-    while ((((parts.len > 1) && (strcmp(_kind_to_str(parts.data[(parts.len - 1)]->kind), "operator") == 0)) && ((strcmp(((Operator *)(parts.data[(parts.len - 1)]->data))->op, ";") == 0) || (strcmp(((Operator *)(parts.data[(parts.len - 1)]->data))->op, "\n") == 0)))) {
+    while ((((parts.len > 1) && (strcmp(_kind_to_str(parts.data[(parts.len - 1)]->kind), "operator") == 0)) && ((strcmp(parts.data[(parts.len - 1)]->op, ";") == 0) || (strcmp(parts.data[(parts.len - 1)]->op, "\n") == 0)))) {
         parts = /* sublist */ parts;
     }
     if ((parts.len == 1)) {
         return Node_to_sexp(parts.data[0]);
     }
-    if (((strcmp(_kind_to_str(parts.data[(parts.len - 1)]->kind), "operator") == 0) && (strcmp(((Operator *)(parts.data[(parts.len - 1)]->data))->op, "&") == 0))) {
+    if (((strcmp(_kind_to_str(parts.data[(parts.len - 1)]->kind), "operator") == 0) && (strcmp(parts.data[(parts.len - 1)]->op, "&") == 0))) {
         for (int64_t i = (parts.len - 3); (i > 0); i += -(2)) {
             const char * left_sexp;
             const char * right_sexp;
-            if (((strcmp(_kind_to_str(parts.data[i]->kind), "operator") == 0) && ((strcmp(((Operator *)(parts.data[i]->data))->op, ";") == 0) || (strcmp(((Operator *)(parts.data[i]->data))->op, "\n") == 0)))) {
+            if (((strcmp(_kind_to_str(parts.data[i]->kind), "operator") == 0) && ((strcmp(parts.data[i]->op, ";") == 0) || (strcmp(parts.data[i]->op, "\n") == 0)))) {
                 Vec_Node left = /* sublist */ parts;
                 Vec_Node right = /* sublist */ parts;
                 if ((left.len > 1)) {
                     left_sexp = List_to_sexp(List_new(left, "list"));
                 } else {
-                    left_sexp = Node_to_sexp(left.data[0]);
+                    Any * left_sexp = Node_to_sexp(left.data[0]);
                 }
                 if ((right.len > 1)) {
                     right_sexp = List_to_sexp(List_new(right, "list"));
                 } else {
-                    right_sexp = Node_to_sexp(right.data[0]);
+                    Any * right_sexp = Node_to_sexp(right.data[0]);
                 }
                 return _str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, "(semi ", left_sexp), " (background "), right_sexp), "))");
             }
@@ -7564,7 +7567,7 @@ static const char * List_to_sexp(List *self) {
 static const char * List_to_sexp_with_precedence(List *self, Vec_Node parts, void * op_names) {
     Vec_Int semi_positions = (Vec_Int){NULL, 0, 0};
     for (int64_t i = 0; (i < parts.len); i++) {
-        if (((strcmp(_kind_to_str(parts.data[i]->kind), "operator") == 0) && ((strcmp(((Operator *)(parts.data[i]->data))->op, ";") == 0) || (strcmp(((Operator *)(parts.data[i]->data))->op, "\n") == 0)))) {
+        if (((strcmp(_kind_to_str(parts.data[i]->kind), "operator") == 0) && ((strcmp(parts.data[i]->op, ";") == 0) || (strcmp(parts.data[i]->op, "\n") == 0)))) {
             VEC_PUSH(g_arena, &semi_positions, (i));
         }
     }
@@ -7602,7 +7605,7 @@ static const char * List_to_sexp_amp_and_higher(List *self, Vec_Node parts, void
     }
     Vec_Int amp_positions = (Vec_Int){NULL, 0, 0};
     for (int64_t i = 1; (i < (parts.len - 1)); i += 2) {
-        if (((strcmp(_kind_to_str(parts.data[i]->kind), "operator") == 0) && (strcmp(((Operator *)(parts.data[i]->data))->op, "&") == 0))) {
+        if (((strcmp(_kind_to_str(parts.data[i]->kind), "operator") == 0) && (strcmp(parts.data[i]->op, "&") == 0))) {
             VEC_PUSH(g_arena, &amp_positions, (i));
         }
     }
@@ -7628,11 +7631,11 @@ static const char * List_to_sexp_and_or(List *self, Vec_Node parts, void * op_na
     if ((parts.len == 1)) {
         return Node_to_sexp(parts.data[0]);
     }
-    const char * result = Node_to_sexp(parts.data[0]);
+    Any * result = Node_to_sexp(parts.data[0]);
     for (int64_t i = 1; (i < (parts.len - 1)); i += 2) {
         Node * op = parts.data[i];
         Node * cmd = parts.data[(i + 1)];
-        const char * op_name = "" /* map_get(op_names, ((Operator *)(op->data))->op) */;
+        const char * op_name = "" /* map_get(op_names, op->op) */;
         result = _str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, "(", op_name), " "), result), " "), Node_to_sexp(cmd)), ")");
     }
     return result;
@@ -7777,7 +7780,7 @@ static const char * BraceGroup_get_kind(BraceGroup *self) {
 }
 
 static const char * If_to_sexp(If *self) {
-    const char * result = _str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, "(if ", Node_to_sexp(self->condition)), " "), Node_to_sexp(self->then_body));
+    Any * result = _str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, "(if ", Node_to_sexp(self->condition)), " "), Node_to_sexp(self->then_body));
     if ((self->else_body != NULL)) {
         result = _str_concat(g_arena, _str_concat(g_arena, result, " "), Node_to_sexp(self->else_body));
     }
@@ -7861,7 +7864,7 @@ static const char * ForArith_to_sexp(ForArith *self) {
     const char * init_str = format_arith_val(init_val);
     const char * cond_str = format_arith_val(cond_val);
     const char * incr_str = format_arith_val(incr_val);
-    const char * body_str = Node_to_sexp(self->body);
+    Any * body_str = Node_to_sexp(self->body);
     return _str_format(g_arena, "(arith-for (init (word \"%v\")) (test (word \"%v\")) (step (word \"%v\")) %v)%v", init_str, cond_str, incr_str, body_str, suffix);
 }
 
@@ -8316,7 +8319,7 @@ static const char * ConditionalExpr_get_kind(ConditionalExpr *self) {
 }
 
 static const char * UnaryTest_to_sexp(UnaryTest *self) {
-    const char * operand_val = Word_get_cond_formatted_value(((Word *)(self->operand->data)));
+    Any * operand_val = Node_get_cond_formatted_value(self->operand);
     return _str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, "(cond-unary \"", self->op), "\" (cond-term \""), operand_val), "\"))");
 }
 
@@ -8325,8 +8328,8 @@ static const char * UnaryTest_get_kind(UnaryTest *self) {
 }
 
 static const char * BinaryTest_to_sexp(BinaryTest *self) {
-    const char * left_val = Word_get_cond_formatted_value(((Word *)(self->left->data)));
-    const char * right_val = Word_get_cond_formatted_value(((Word *)(self->right->data)));
+    Any * left_val = Node_get_cond_formatted_value(self->left);
+    Any * right_val = Node_get_cond_formatted_value(self->right);
     return _str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, "(cond-binary \"", self->op), "\" (cond-term \""), left_val), "\") (cond-term \""), right_val), "\"))");
 }
 
@@ -8984,7 +8987,7 @@ static Tuple_NodePtr_constcharPtr Parser_parse_funsub(Parser *self, int64_t star
 }
 
 static bool Parser_is_assignment_word(Parser *self, Node * word) {
-    return (assignment(((Word *)(word->data))->value, 0) != -(1));
+    return (assignment(word->value, 0) != -(1));
 }
 
 static Tuple_NodePtr_constcharPtr Parser_parse_backtick_substitution(Parser *self) {
@@ -12055,8 +12058,8 @@ static Node * Parser_parse_pipeline(Parser *self) {
             Parser_skip_whitespace(self);
             Node * inner = Parser_parse_pipeline(self);
             if (((inner != NULL) && (strcmp(_kind_to_str(inner->kind), "negation") == 0))) {
-                if ((((Negation *)(inner->data))->pipeline != NULL)) {
-                    return ((Negation *)(inner->data))->pipeline;
+                if ((inner->pipeline != NULL)) {
+                    return inner->pipeline;
                 } else {
                     return Command_new((Vec_Word){NULL, 0, 0}, (Vec_Node){NULL, 0, 0}, "command");
                 }
@@ -12323,7 +12326,7 @@ static void Parser_strip_trailing_backslash_from_last_word(Parser *self, Vec_Nod
     Word * last_word = Parser_find_last_word(self, last_node);
     if (((last_word != NULL) && _str_endswith(last_word->value, "\\"))) {
         last_word->value = substring(last_word->value, 0, (_rune_len(last_word->value) - 1));
-        if (((!((last_word->value != NULL && last_word->value[0] != '\0')) && (last_node->kind == KIND_COMMAND)) && (((Command *)(last_node->data))->words.len > 0))) {
+        if (((!((last_word->value != NULL && last_word->value[0] != '\0')) && (last_node->kind == KIND_COMMAND)) && (last_node->words != NULL))) {
             ((Command *)(last_node))->words.data[--((Command *)(last_node))->words.len];
         }
     }

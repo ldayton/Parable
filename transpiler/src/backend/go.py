@@ -184,58 +184,57 @@ def _needs_string_cast(arg_type: Type, elem_type: Type) -> bool:
     return False
 
 
-_NODE_METHODS: set[str] = {"ToSexp", "GetKind", "to_sexp", "get_kind"}
-
-
-def _check_uses_node_methods_expr(expr: Expr | None, binding: str) -> bool:
-    """Check if expr uses Node interface methods on the binding variable."""
+def _check_uses_interface_methods_expr(
+    expr: Expr | None, binding: str, interface_methods: set[str]
+) -> bool:
+    """Check if expr uses interface methods on the binding variable."""
     if expr is None:
         return False
     if isinstance(expr, MethodCall):
         if isinstance(expr.obj, Var) and expr.obj.name == binding:
-            if expr.method in _NODE_METHODS:
+            if expr.method in interface_methods or go_to_pascal(expr.method) in interface_methods:
                 return True
-        if _check_uses_node_methods_expr(expr.obj, binding):
+        if _check_uses_interface_methods_expr(expr.obj, binding, interface_methods):
             return True
         for arg in expr.args:
-            if _check_uses_node_methods_expr(arg, binding):
+            if _check_uses_interface_methods_expr(arg, binding, interface_methods):
                 return True
     if isinstance(expr, BinaryOp):
-        return _check_uses_node_methods_expr(expr.left, binding) or _check_uses_node_methods_expr(expr.right, binding)
+        return _check_uses_interface_methods_expr(expr.left, binding, interface_methods) or _check_uses_interface_methods_expr(expr.right, binding, interface_methods)
     if isinstance(expr, UnaryOp):
-        return _check_uses_node_methods_expr(expr.operand, binding)
+        return _check_uses_interface_methods_expr(expr.operand, binding, interface_methods)
     if isinstance(expr, Ternary):
-        return _check_uses_node_methods_expr(expr.cond, binding) or _check_uses_node_methods_expr(expr.then_expr, binding) or _check_uses_node_methods_expr(expr.else_expr, binding)
+        return _check_uses_interface_methods_expr(expr.cond, binding, interface_methods) or _check_uses_interface_methods_expr(expr.then_expr, binding, interface_methods) or _check_uses_interface_methods_expr(expr.else_expr, binding, interface_methods)
     if isinstance(expr, (Cast, TypeAssert, IsNil, IsType)):
-        return _check_uses_node_methods_expr(expr.expr, binding)
+        return _check_uses_interface_methods_expr(expr.expr, binding, interface_methods)
     if isinstance(expr, Index):
-        return _check_uses_node_methods_expr(expr.obj, binding) or _check_uses_node_methods_expr(expr.index, binding)
+        return _check_uses_interface_methods_expr(expr.obj, binding, interface_methods) or _check_uses_interface_methods_expr(expr.index, binding, interface_methods)
     if isinstance(expr, FieldAccess):
-        return _check_uses_node_methods_expr(expr.obj, binding)
+        return _check_uses_interface_methods_expr(expr.obj, binding, interface_methods)
     if isinstance(expr, Call):
         for arg in expr.args:
-            if _check_uses_node_methods_expr(arg, binding):
+            if _check_uses_interface_methods_expr(arg, binding, interface_methods):
                 return True
     if isinstance(expr, StringConcat):
         for part in expr.parts:
-            if _check_uses_node_methods_expr(part, binding):
+            if _check_uses_interface_methods_expr(part, binding, interface_methods):
                 return True
     return False
 
 
-def _check_uses_node_methods_stmt(stmt: Stmt, binding: str) -> bool:
-    """Check if stmt uses Node interface methods on the binding variable."""
+def _check_uses_interface_methods_stmt(stmt: Stmt, binding: str, interface_methods: set[str]) -> bool:
+    """Check if stmt uses interface methods on the binding variable."""
     if isinstance(stmt, (Assign, OpAssign)):
-        return _check_uses_node_methods_expr(stmt.value, binding)
+        return _check_uses_interface_methods_expr(stmt.value, binding, interface_methods)
     if isinstance(stmt, ExprStmt):
-        return _check_uses_node_methods_expr(stmt.expr, binding)
+        return _check_uses_interface_methods_expr(stmt.expr, binding, interface_methods)
     if isinstance(stmt, Return) and stmt.value:
-        return _check_uses_node_methods_expr(stmt.value, binding)
+        return _check_uses_interface_methods_expr(stmt.value, binding, interface_methods)
     if isinstance(stmt, If):
-        if _check_uses_node_methods_expr(stmt.cond, binding):
+        if _check_uses_interface_methods_expr(stmt.cond, binding, interface_methods):
             return True
         for s in stmt.then_body + stmt.else_body:
-            if _check_uses_node_methods_stmt(s, binding):
+            if _check_uses_interface_methods_stmt(s, binding, interface_methods):
                 return True
     return False
 
@@ -270,10 +269,29 @@ class GoBackend:
         self._named_returns: list[str] | None = None  # Named return param names (when needed)
         self._in_catch_body: bool = False  # Whether we're inside a TryCatch catch body
         self._current_return_type: Type = VOID  # Current function's return type
+        self._interface_methods: set[str] = set()  # All interface method names (for Node assertion)
+        self._interface_field_getters: dict[str, str] = {}  # (iface, field) -> getter method
+        self._method_to_interface: dict[str, str] = {}  # method name -> interface name
+        self._struct_names: set[str] = set()  # All struct names (for error type detection)
 
     def emit(self, module: Module) -> str:
         """Emit Go code from IR Module."""
         self.output = []
+        # Build interface method lookup
+        self._interface_methods = set()
+        self._interface_field_getters = {}
+        self._method_to_interface = {}
+        for iface in module.interfaces:
+            for m in iface.methods:
+                self._interface_methods.add(m.name)
+                self._interface_methods.add(go_to_pascal(m.name))
+                # Store with PascalCase key for lookup
+                self._method_to_interface[go_to_pascal(m.name)] = iface.name
+            # Interface fields become getter methods in Go
+            for f in iface.fields:
+                getter = go_to_pascal("get_" + f.name)
+                self._interface_field_getters[(iface.name, f.name)] = getter
+        self._struct_names = {s.name for s in module.structs}
         self._emit_header(module)
         self._emit_constants(module.constants)
         for iface in module.interfaces:
@@ -1145,10 +1163,10 @@ func _Substring(s string, start int, end int) string {
             return
         msg = self._emit_expr(stmt.message)
         pos = self._emit_expr(stmt.pos)
-        if stmt.error_type == "ParseError":
-            self._line(f"panic(NewParseError({msg}, {pos}, 0))")
-        elif stmt.error_type == "MatchedPairError":
-            self._line(f"panic(NewMatchedPairError({msg}, {pos}, 0))")
+        # If error_type is a known struct, use its constructor
+        if stmt.error_type and stmt.error_type in self._struct_names:
+            constructor = f"New{stmt.error_type}"
+            self._line(f"panic({constructor}({msg}, {pos}, 0))")
         else:
             # Fallback for other error types
             if pos != "0":
@@ -1159,12 +1177,53 @@ func _Substring(s string, start int, end int) string {
     def _emit_stmt_SoftFail(self, stmt: SoftFail) -> None:
         self._line("return nil")
 
-    def _uses_node_methods(self, stmts: list[Stmt], binding: str) -> bool:
-        """Check if binding variable is used with Node interface methods in statements."""
+    def _uses_interface_methods(self, stmts: list[Stmt], binding: str) -> bool:
+        """Check if binding variable is used with interface methods in statements."""
         for stmt in stmts:
-            if _check_uses_node_methods_stmt(stmt, binding):
+            if _check_uses_interface_methods_stmt(stmt, binding, self._interface_methods):
                 return True
         return False
+
+    def _find_interface_for_stmts(self, stmts: list[Stmt], binding: str) -> str | None:
+        """Find which interface the binding variable is used with in statements."""
+        for stmt in stmts:
+            iface = self._find_interface_in_stmt(stmt, binding)
+            if iface:
+                return iface
+        return None
+
+    def _find_interface_in_stmt(self, stmt: Stmt, binding: str) -> str | None:
+        """Find interface used with binding in a statement."""
+        if isinstance(stmt, ExprStmt):
+            return self._find_interface_in_expr(stmt.expr, binding)
+        if isinstance(stmt, (Assign, OpAssign)):
+            return self._find_interface_in_expr(stmt.value, binding)
+        if isinstance(stmt, Return) and stmt.value:
+            return self._find_interface_in_expr(stmt.value, binding)
+        if isinstance(stmt, If):
+            result = self._find_interface_in_expr(stmt.cond, binding)
+            if result:
+                return result
+            for s in stmt.then_body + stmt.else_body:
+                result = self._find_interface_in_stmt(s, binding)
+                if result:
+                    return result
+        return None
+
+    def _find_interface_in_expr(self, expr: Expr | None, binding: str) -> str | None:
+        """Find interface used with binding in an expression."""
+        if expr is None:
+            return None
+        if isinstance(expr, MethodCall):
+            if isinstance(expr.obj, Var) and expr.obj.name == binding:
+                method = go_to_pascal(expr.method)
+                if method in self._method_to_interface:
+                    return self._method_to_interface[method]
+        if isinstance(expr, BinaryOp):
+            return self._find_interface_in_expr(expr.left, binding) or self._find_interface_in_expr(expr.right, binding)
+        if isinstance(expr, Ternary):
+            return self._find_interface_in_expr(expr.cond, binding) or self._find_interface_in_expr(expr.then_expr, binding) or self._find_interface_in_expr(expr.else_expr, binding)
+        return None
 
     def _emit_stmt_TypeSwitch(self, stmt: TypeSwitch) -> None:
         # Emit hoisted variable declarations before the switch
@@ -1225,7 +1284,7 @@ func _Substring(s string, start int, end int) string {
             # Save hoisted vars state - default case has its own scope
             saved_hoisted = set(self._hoisted_in_try)
             # In default case, binding has type interface{} - assert back to original type
-            needs_node_assertion = False
+            needs_interface_assertion = False
             if not binding_unused and not binding_reassigned:
                 binding = go_to_camel(stmt.binding)
                 expr_typ = stmt.expr.typ
@@ -1234,15 +1293,18 @@ func _Substring(s string, start int, end int) string {
                     if type_str not in ("interface{}", "any"):
                         # Use = not := since binding is already declared by the switch
                         self._line(f"{binding} = {binding}.({type_str})")
-                    elif self._uses_node_methods(stmt.default, stmt.binding):
-                        # Need to assert to Node, but must use a new scope for shadowing
-                        needs_node_assertion = True
-            if needs_node_assertion:
+                    elif self._uses_interface_methods(stmt.default, stmt.binding):
+                        # Need to assert to interface, but must use a new scope for shadowing
+                        needs_interface_assertion = True
+            if needs_interface_assertion:
                 # Wrap in block to allow := shadowing
-                binding = go_to_camel(stmt.binding)
-                self._line("{")
-                self.indent += 1
-                self._line(f"{binding} := {binding}.(Node)")
+                # Find which interface the methods belong to
+                iface_name = self._find_interface_for_stmts(stmt.default, stmt.binding)
+                if iface_name:
+                    binding = go_to_camel(stmt.binding)
+                    self._line("{")
+                    self.indent += 1
+                    self._line(f"{binding} := {binding}.({iface_name})")
                 for s in stmt.default:
                     self._emit_stmt(s)
                 self.indent -= 1
@@ -1431,11 +1493,11 @@ func _Substring(s string, start int, end int) string {
         field = go_to_pascal(expr.field)
         # Interface fields must be accessed via getter methods
         obj_type = expr.obj.typ
-        is_node_type = (isinstance(obj_type, InterfaceRef) and obj_type.name == "Node") or (
-            isinstance(obj_type, StructRef) and obj_type.name == "Node"
-        )
-        if is_node_type and expr.field == "kind":
-            return f"{obj}.GetKind()"
+        if isinstance(obj_type, InterfaceRef):
+            key = (obj_type.name, expr.field)
+            if key in self._interface_field_getters:
+                getter = self._interface_field_getters[key]
+                return f"{obj}.{getter}()"
         return f"{obj}.{field}"
 
     def _emit_expr_FuncRef(self, expr: FuncRef) -> str:

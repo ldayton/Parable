@@ -365,6 +365,7 @@ class PerlBackend:
         self.current_package: str | None = None
         self.constants: set[str] = set()
         self._hoisted_vars: set[str] = set()
+        self._func_params: set[str] = set()  # Parameters with FuncType
 
     def emit(self, module: Module) -> str:
         """Emit Perl code from IR Module."""
@@ -573,6 +574,7 @@ class PerlBackend:
 
     def _emit_function(self, func: Function) -> None:
         self._hoisted_vars = set()
+        self._func_params = {p.name for p in func.params if isinstance(p.typ, FuncType)}
         params = self._params(func.params)
         param_names = {p.name for p in func.params}
         self._line(f"sub {_safe_name(func.name)} ({params}) {{")
@@ -592,6 +594,7 @@ class PerlBackend:
 
     def _emit_method(self, func: Function) -> None:
         self._hoisted_vars = set()
+        self._func_params = {p.name for p in func.params if isinstance(p.typ, FuncType)}
         params = self._params(func.params, with_self=True)
         param_names = {p.name for p in func.params}
         self._line(f"sub {_safe_name(func.name)} ({params}) {{")
@@ -980,8 +983,14 @@ class PerlBackend:
                 else:
                     return f"({s_expr} =~ s/^[{chars_expr}]+|[{chars_expr}]+$//gr)"
             case Call(func=func, args=args):
+                # _intPtr is a no-op in Perl (pointers are transparent)
+                if func == "_intPtr" and args:
+                    return self._expr(args[0])
                 args_str = ", ".join(self._expr(a) for a in args)
                 safe_func = _safe_name(func)
+                # Function parameters need to be called via reference
+                if func in self._func_params:
+                    return f"${safe_func}->({args_str})"
                 if self.current_package is not None:
                     return f"main::{safe_func}({args_str})"
                 return f"{safe_func}({args_str})"
@@ -990,18 +999,35 @@ class PerlBackend:
                 obj_str = self._expr(obj)
                 if isinstance(obj, (BinaryOp, UnaryOp, Ternary)):
                     obj_str = f"({obj_str})"
-                if isinstance(receiver_type, Slice):
+                # Unwrap Pointer/Optional to get inner type for slice checks
+                inner_type = receiver_type
+                if isinstance(inner_type, Pointer):
+                    inner_type = inner_type.target
+                if isinstance(inner_type, Optional):
+                    inner_type = inner_type.inner
+                if isinstance(inner_type, Slice):
                     if method == "append":
                         return f"push(@{{{obj_str}}}, {args_str})"
+                    if method == "extend":
+                        return f"push(@{{{obj_str}}}, @{{{args_str}}})"
                     if method == "pop":
                         return f"pop(@{{{obj_str}}})"
                     if method == "copy":
                         return f"[@{{{obj_str}}}]"
+                if isinstance(inner_type, Map):
+                    if method == "get":
+                        key = self._expr(args[0])
+                        if len(args) == 2:
+                            default = self._expr(args[1])
+                            return f"({obj_str}->{{{key}}} // {default})"
+                        return f"{obj_str}->{{{key}}}"
                 if _is_string_type(receiver_type):
                     if method == "join":
                         return f"join({obj_str}, @{{{args_str}}})"
                     if method == "find":
                         return f"index({obj_str}, {args_str})"
+                    if method == "rfind":
+                        return f"rindex({obj_str}, {args_str})"
                     if method == "startswith":
                         return f"(index({obj_str}, {args_str}) == 0)"
                     if method == "endswith":

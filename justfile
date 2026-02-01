@@ -177,10 +177,16 @@ backend-test backend:
 
 # --- CI/Check ---
 
+# Check that C backend compiles (without running tests)
+[group: 'ci']
+c-compile:
+    just backend-transpile c
+    just -f dist/c/justfile build
+
 # Internal: run all parallel checks
 [private]
 [parallel]
-_check-parallel: src-test src-lint src-fmt src-verify-lock src-subset transpiler-subset transpiler-test check-dump-ast (backend-test "c") (backend-test "csharp") (backend-test "go") (backend-test "java") (backend-test "javascript") (backend-test "lua") (backend-test "perl") (backend-test "php") (backend-test "python") (backend-test "ruby") (backend-test "typescript")
+_check-parallel: src-test src-lint src-fmt src-verify-lock src-subset transpiler-subset transpiler-test check-dump-ast c-compile (backend-test "csharp") (backend-test "go") (backend-test "java") (backend-test "javascript") (backend-test "lua") (backend-test "perl") (backend-test "php") (backend-test "python") (backend-test "ruby") (backend-test "typescript")
 
 # Ensure biome is installed (prevents race condition in parallel JS checks)
 [private]

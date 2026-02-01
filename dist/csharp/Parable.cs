@@ -2830,7 +2830,7 @@ public class Word : INode
         }
         string inner = ParableFunctions._Substring(value, 1, value.Length - 1);
         List<byte> literalBytes = this._AnsiCToBytes(inner);
-        string literalStr = (literalBytes).ToString();
+        string literalStr = ParableFunctions._BytesToString(literalBytes);
         return this._ShSingleQuote(literalStr);
     }
 
@@ -14443,5 +14443,10 @@ public static class ParableFunctions
         self._ArithPos = 0;
         self._ArithLen = 0;
         return self;
+    }
+
+    public static string _BytesToString(List<byte> bytes)
+    {
+        return System.Text.Encoding.UTF8.GetString(bytes.ToArray());
     }
 }

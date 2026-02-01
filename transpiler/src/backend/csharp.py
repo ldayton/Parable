@@ -359,6 +359,14 @@ class CSharpBackend:
             if i > 0:
                 self._line("")
             self._emit_function(func)
+        # Emit _BytesToString helper for bytes.decode() calls
+        self._line("")
+        self._line("public static string _BytesToString(List<byte> bytes)")
+        self._line("{")
+        self.indent += 1
+        self._line("return System.Text.Encoding.UTF8.GetString(bytes.ToArray());")
+        self.indent -= 1
+        self._line("}")
         self.indent -= 1
         self._line("}")
 
@@ -1089,6 +1097,12 @@ class CSharpBackend:
         if func == "int" and len(args) == 2:
             return f"Convert.ToInt64({args_str})"
         if func == "str":
+            # Check if converting bytes to string (List<byte>)
+            if args and isinstance(args[0].typ, Slice):
+                elem_type = args[0].typ.element
+                if isinstance(elem_type, Primitive) and elem_type.kind == "byte":
+                    func_class = to_pascal(self._module_name) + "Functions"
+                    return f"{func_class}._BytesToString({args_str})"
             return f"({self._expr(args[0])}).ToString()"
         if func == "len":
             arg = self._expr(args[0])
@@ -1151,6 +1165,12 @@ class CSharpBackend:
                 return "((Func<" + elem_type + ", " + elem_type + ">)(_tmp => { " + body + " }))(" + obj_str + "[" + idx + "])"
             if method == "copy":
                 return f"new List<{self._element_type(receiver_type)}>({obj_str})"
+            # Handle bytes.decode() -> convert List<byte> to string
+            if method == "decode":
+                elem = receiver_type.element
+                if isinstance(elem, Primitive) and elem.kind == "byte":
+                    func_class = to_pascal(self._module_name) + "Functions"
+                    return f"{func_class}._BytesToString({obj_str})"
         if isinstance(receiver_type, Primitive) and receiver_type.kind == "string":
             if method == "startswith":
                 if len(args) == 2:
@@ -1258,6 +1278,12 @@ class CSharpBackend:
             if to_type.kind == "byte":
                 return f"(byte)({inner_str})"
             if to_type.kind == "string":
+                # Handle List<byte> -> string (decoding)
+                if isinstance(inner_type, Slice):
+                    elem = inner_type.element
+                    if isinstance(elem, Primitive) and elem.kind == "byte":
+                        func_class = to_pascal(self._module_name) + "Functions"
+                        return f"{func_class}._BytesToString({inner_str})"
                 return f"({inner_str}).ToString()"
             if to_type.kind == "rune":
                 return f"(char)({inner_str})"

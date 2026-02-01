@@ -366,6 +366,7 @@ class PerlBackend:
         self.constants: set[str] = set()
         self._hoisted_vars: set[str] = set()
         self._func_params: set[str] = set()  # Parameters with FuncType
+        self.struct_fields: dict[str, list[tuple[str, Type]]] = {}  # Struct field info
 
     def emit(self, module: Module) -> str:
         """Emit Perl code from IR Module."""
@@ -534,6 +535,8 @@ class PerlBackend:
         is_empty = not struct.fields and not struct.methods and not struct.doc
         if is_empty and not struct.is_exception and not struct.implements:
             return
+        # Track struct fields for proper StructLit emission
+        self.struct_fields[struct.name] = [(f.name, f.typ) for f in struct.fields]
         self._line(f"package {struct.name};")
         self.current_package = struct.name
         if struct.is_exception:
@@ -1134,6 +1137,22 @@ class PerlBackend:
                 pairs = ", ".join(f"{self._expr(e)} => 1" for e in elements)
                 return f"{{{pairs}}}"
             case StructLit(struct_name=struct_name, fields=fields):
+                # Use struct field order, fill in missing fields with undef
+                field_info = self.struct_fields.get(struct_name, [])
+                if field_info:
+                    ordered_args = []
+                    for field_name, field_type in field_info:
+                        if field_name in fields:
+                            field_val = fields[field_name]
+                            if isinstance(field_val, NilLit) and isinstance(field_type, Slice):
+                                ordered_args.append("[]")
+                            else:
+                                ordered_args.append(self._expr(field_val))
+                        else:
+                            ordered_args.append(self._zero_value(field_type))
+                    return f"{struct_name}->new({', '.join(ordered_args)})"
+                elif not fields:
+                    return f"{struct_name}->new()"
                 args = ", ".join(f"{self._expr(v)}" for v in fields.values())
                 return f"{struct_name}->new({args})"
             case TupleLit(elements=elements):

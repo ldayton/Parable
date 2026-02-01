@@ -1067,21 +1067,27 @@ class PerlBackend:
                 obj_str = self._expr(obj)
                 if isinstance(obj, (BinaryOp, UnaryOp, Ternary)):
                     obj_str = f"({obj_str})"
-                # Unwrap Pointer/Optional to get inner type for slice checks
+                # Unwrap Pointer/Optional/Union to get inner type for slice checks
                 inner_type = receiver_type
                 if isinstance(inner_type, Pointer):
                     inner_type = inner_type.target
                 if isinstance(inner_type, Optional):
                     inner_type = inner_type.inner
-                if isinstance(inner_type, Slice):
-                    if method == "append":
-                        return f"push(@{{{obj_str}}}, {args_str})"
-                    if method == "extend":
-                        return f"push(@{{{obj_str}}}, @{{{args_str}}})"
-                    if method == "pop":
-                        return f"pop(@{{{obj_str}}})"
-                    if method == "copy":
-                        return f"[@{{{obj_str}}}]"
+                if isinstance(inner_type, Union):
+                    # Check if any variant is a Slice
+                    for v in inner_type.variants:
+                        if isinstance(v, Slice):
+                            inner_type = v
+                            break
+                # Handle slice methods (append/extend/pop/copy) - these only apply to arrays
+                if method == "append":
+                    return f"push(@{{{obj_str}}}, {args_str})"
+                if method == "extend":
+                    return f"push(@{{{obj_str}}}, @{{{args_str}}})"
+                if method == "pop" and not args and isinstance(inner_type, (Slice, Array)):
+                    return f"pop(@{{{obj_str}}})"
+                if method == "copy" and isinstance(inner_type, (Slice, Array)):
+                    return f"[@{{{obj_str}}}]"
                 if isinstance(inner_type, Map):
                     if method == "get":
                         key = self._expr(args[0])
@@ -1159,6 +1165,16 @@ class PerlBackend:
                     else:
                         new_val = self._expr(args[1])
                     return f"({obj_str} =~ s/{old_val}/{new_val}/gr)"
+                # Fallback for slice methods when type is unknown (None or untyped)
+                if inner_type is None:
+                    if method == "append":
+                        return f"push(@{{{obj_str}}}, {args_str})"
+                    if method == "extend":
+                        return f"push(@{{{obj_str}}}, @{{{args_str}}})"
+                    if method == "pop":
+                        return f"pop(@{{{obj_str}}})"
+                    if method == "copy":
+                        return f"[@{{{obj_str}}}]"
                 pl_method = _method_name(method, receiver_type)
                 if args_str:
                     return f"{obj_str}->{pl_method}({args_str})"

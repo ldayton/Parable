@@ -5721,7 +5721,7 @@ sub parse_backtick_substitution ($self) {
                 }
                 $in_heredoc_body = 0;
                 if (scalar(@{($pending_heredocs // [])}) > 0) {
-                    ($current_heredoc_delim, $current_heredoc_strip) = @{pop(@{$pending_heredocs})};
+                    ($current_heredoc_delim, $current_heredoc_strip) = @{$pending_heredocs->pop_(0)};
                     $in_heredoc_body = 1;
                 }
             } elsif ((index($check_line, $current_heredoc_delim) == 0) && length($check_line) > length($current_heredoc_delim)) {
@@ -5734,7 +5734,7 @@ sub parse_backtick_substitution ($self) {
                 $self->{pos_} = $line_start + $end_pos;
                 $in_heredoc_body = 0;
                 if (scalar(@{($pending_heredocs // [])}) > 0) {
-                    ($current_heredoc_delim, $current_heredoc_strip) = @{pop(@{$pending_heredocs})};
+                    ($current_heredoc_delim, $current_heredoc_strip) = @{$pending_heredocs->pop_(0)};
                     $in_heredoc_body = 1;
                 }
             } else {
@@ -5919,7 +5919,7 @@ sub parse_backtick_substitution ($self) {
             push(@{$content_chars}, $ch);
             push(@{$text_chars}, $ch);
             if (scalar(@{($pending_heredocs // [])}) > 0) {
-                ($current_heredoc_delim, $current_heredoc_strip) = @{pop(@{$pending_heredocs})};
+                ($current_heredoc_delim, $current_heredoc_strip) = @{$pending_heredocs->pop_(0)};
                 $in_heredoc_body = 1;
             }
             next;
@@ -9805,7 +9805,7 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
         if ((scalar(@{($node->{redirects} // [])}) > 0)) {
             $redirect_parts = [];
             for my $r (@{($node->{redirects} // [])}) {
-                $redirect_parts->append(format_redirect($r, 0, 0));
+                push(@{$redirect_parts}, format_redirect($r, 0, 0));
             }
             $redirects = " " . join(" ", @{$redirect_parts});
         }
@@ -9828,7 +9828,7 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
         if ((scalar(@{($node->{redirects} // [])}) > 0)) {
             $redirect_parts = [];
             for my $r (@{($node->{redirects} // [])}) {
-                $redirect_parts->append(format_redirect($r, 0, 0));
+                push(@{$redirect_parts}, format_redirect($r, 0, 0));
             }
             $redirects = join(" ", @{$redirect_parts});
         }
@@ -9852,7 +9852,7 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
         if ((scalar(@{($node->{redirects} // [])}) > 0)) {
             $redirect_parts = [];
             for my $r (@{($node->{redirects} // [])}) {
-                $redirect_parts->append(format_redirect($r, 0, 0));
+                push(@{$redirect_parts}, format_redirect($r, 0, 0));
             }
             $redirects = join(" ", @{$redirect_parts});
         }

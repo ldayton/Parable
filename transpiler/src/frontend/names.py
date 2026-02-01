@@ -22,7 +22,7 @@ ALLOWED_BUILTINS: set[str] = {
     # Collections
     "list", "dict", "set", "tuple", "frozenset", "len", "sorted",
     # Type check
-    "isinstance", "type",
+    "isinstance",
     # Iteration
     "range", "enumerate", "zip",
     # Formatting

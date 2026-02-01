@@ -1780,7 +1780,7 @@ class Word
     value = self.normalize_param_expansion_newlines(value)
     value = self.strip_arith_line_continuations(value)
     value = self.double_ctlesc_smart(value)
-    value = value.gsub("", "")
+    value = value.gsub("\u007f", "\u0001\u007f")
     value = value.gsub("\\") { "\\\\" }
     if value.end_with?("\\\\") && !value.end_with?("\\\\\\\\")
       value = value + "\\\\"
@@ -1804,7 +1804,7 @@ class Word
         quote.double = !quote.double
       end
       result.push(c)
-      if c == ""
+      if c == "\u0001"
         if quote.double
           bs_count = 0
           j = result.length - 2
@@ -1817,10 +1817,10 @@ class Word
             j += -1
           end
           if bs_count % 2 == 0
-            result.push("")
+            result.push("\u0001")
           end
         else
-          result.push("")
+          result.push("\u0001")
         end
       end
     end
@@ -2132,7 +2132,7 @@ class Word
         outer_in_dquote = quote.outer_double
         if brace_depth > 0 && outer_in_dquote && expanded.start_with?("'") && expanded.end_with?("'")
           inner = substring(expanded, 1, expanded.length - 1)
-          if inner.index("").nil?
+          if inner.index("\u0001").nil?
             result_str = result.join
             in_pattern = false
             last_brace_idx = result_str.rindex("${")
@@ -3197,7 +3197,7 @@ class Word
     value = self.strip_locale_string_dollars(value)
     value = self.format_command_substitutions(value, false)
     value = self.normalize_extglob_whitespace(value)
-    value = value.gsub("", "")
+    value = value.gsub("\u0001", "\u0001\u0001")
     return value.gsub(/[\n]+\z/, '')
   end
 

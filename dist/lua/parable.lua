@@ -1947,7 +1947,7 @@ function Word:to_sexp()
   value = self:normalize_param_expansion_newlines(value)
   value = self:strip_arith_line_continuations(value)
   value = self:double_ctlesc_smart(value)
-  value = (string.gsub(value, "", ""))
+  value = (string.gsub(value, "\u{007f}", "\u{0001}\u{007f}"))
   value = (string.gsub(value, "\\", "\\\\"))
   if (string.sub(value, -#"\\\\") == "\\\\") and not (string.sub(value, -#"\\\\\\\\") == "\\\\\\\\") then
     value = value .. "\\\\"
@@ -1972,7 +1972,7 @@ function Word:double_ctlesc_smart(value)
       quote.double = not quote.double
     end
     ;(function() table.insert(result, c); return result end)()
-    if c == "" then
+    if c == "\u{0001}" then
       if quote.double then
         bs_count = 0
         j = #result - 2
@@ -1985,10 +1985,10 @@ function Word:double_ctlesc_smart(value)
           j = j + -1
         end
         if bs_count % 2 == 0 then
-          ;(function() table.insert(result, ""); return result end)()
+          ;(function() table.insert(result, "\u{0001}"); return result end)()
         end
       else
-        ;(function() table.insert(result, ""); return result end)()
+        ;(function() table.insert(result, "\u{0001}"); return result end)()
       end
     end
   end
@@ -2307,7 +2307,7 @@ function Word:expand_all_ansi_c_quotes(value)
       outer_in_dquote = quote:outer_double()
       if brace_depth > 0 and outer_in_dquote and (string.sub(expanded, 1, #"'") == "'") and (string.sub(expanded, -#"'") == "'") then
         inner = substring(expanded, 1, #expanded - 1)
-        if _string_find(inner, "") == -1 then
+        if _string_find(inner, "\u{0001}") == -1 then
           result_str = table.concat(result, "")
           in_pattern = false
           last_brace_idx = _string_rfind(result_str, "${")
@@ -3387,7 +3387,7 @@ function Word:get_cond_formatted_value()
   value = self:strip_locale_string_dollars(value)
   value = self:format_command_substitutions(value, false)
   value = self:normalize_extglob_whitespace(value)
-  value = (string.gsub(value, "", ""))
+  value = (string.gsub(value, "\u{0001}", "\u{0001}\u{0001}"))
   return (string.gsub(value, '[' .. "\n" .. ']+$', ''))
 end
 

@@ -1981,7 +1981,7 @@ func (self *Word) ToSexp() string {
 	value = self.normalizeParamExpansionNewlines(value)
 	value = self.stripArithLineContinuations(value)
 	value = self.doubleCtlescSmart(value)
-	value = strings.ReplaceAll(value, "", "")
+	value = strings.ReplaceAll(value, "\u007f", "\u0001\u007f")
 	value = strings.ReplaceAll(value, "\\", "\\\\")
 	if strings.HasSuffix(value, "\\\\") && !strings.HasSuffix(value, "\\\\\\\\") {
 		value = value + "\\\\"
@@ -2015,10 +2015,10 @@ func (self *Word) doubleCtlescSmart(value string) string {
 					}
 				}
 				if (bsCount % 2) == 0 {
-					result = append(result, "")
+					result = append(result, "\u0001")
 				}
 			} else {
-				result = append(result, "")
+				result = append(result, "\u0001")
 			}
 		}
 	}
@@ -2330,7 +2330,7 @@ func (self *Word) expandAllAnsiCQuotes(value string) string {
 			outerInDquote := quote.OuterDouble()
 			if braceDepth > 0 && outerInDquote && strings.HasPrefix(expanded, "'") && strings.HasSuffix(expanded, "'") {
 				inner := substring(expanded, 1, _runeLen(expanded)-1)
-				if strings.Index(inner, "") == -1 {
+				if strings.Index(inner, "\u0001") == -1 {
 					resultStr := strings.Join(result, "")
 					inPattern := false
 					lastBraceIdx := strings.LastIndex(resultStr, "${")
@@ -3428,7 +3428,7 @@ func (self *Word) GetCondFormattedValue() string {
 	value = self.stripLocaleStringDollars(value)
 	value = self.formatCommandSubstitutions(value, false)
 	value = self.normalizeExtglobWhitespace(value)
-	value = strings.ReplaceAll(value, "", "")
+	value = strings.ReplaceAll(value, "\u0001", "\u0001\u0001")
 	return strings.TrimRight(value, "\n")
 }
 

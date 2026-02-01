@@ -796,6 +796,8 @@ class PhpBackend:
                     return f"({inner_str} !== '')"
                 if isinstance(inner_type, (Slice, Map, Set)):
                     return f"(count({inner_str}) > 0)"
+                if isinstance(inner_type, Optional) and isinstance(inner_type.inner, (Slice, Map, Set)):
+                    return f"(count({inner_str}) > 0)"
                 if isinstance(inner_type, Primitive) and inner_type.kind == "int":
                     return f"({inner_str} !== 0)"
                 return f"({inner_str} !== null)"
@@ -826,7 +828,10 @@ class PhpBackend:
                     return f"({self._expr(operand)} === 0)"
                 if isinstance(operand_type, (InterfaceRef, StructRef, Pointer)):
                     return f"({self._expr(operand)} === null)"
-                return f"!{self._expr(operand)}"
+                inner = self._expr(operand)
+                if isinstance(operand, BinaryOp):
+                    inner = f"({inner})"
+                return f"!{inner}"
             case UnaryOp(op=op, operand=operand):
                 return f"{op}{self._expr(operand)}"
             case Ternary(cond=cond, then_expr=then_expr, else_expr=else_expr):
@@ -943,9 +948,11 @@ class PhpBackend:
                     return f"({checks})"
                 return f"str_ends_with({obj_str}, {args_str})"
             if method == "find":
-                return f"mb_strpos({obj_str}, {args_str})"
+                # mb_strpos returns false when not found, but Python find() returns -1
+                return f"(mb_strpos({obj_str}, {args_str}) === false ? -1 : mb_strpos({obj_str}, {args_str}))"
             if method == "rfind":
-                return f"mb_strrpos({obj_str}, {args_str})"
+                # mb_strrpos returns false when not found, but Python rfind() returns -1
+                return f"(mb_strrpos({obj_str}, {args_str}) === false ? -1 : mb_strrpos({obj_str}, {args_str}))"
             if method == "replace":
                 return f"str_replace({self._expr(args[0])}, {self._expr(args[1])}, {obj_str})"
             if method == "split":
@@ -984,9 +991,11 @@ class PhpBackend:
         if method == "startswith":
             return f"str_starts_with({obj_str}, {args_str})"
         if method == "find":
-            return f"mb_strpos({obj_str}, {args_str})"
+            # mb_strpos returns false when not found, but Python find() returns -1
+            return f"(mb_strpos({obj_str}, {args_str}) === false ? -1 : mb_strpos({obj_str}, {args_str}))"
         if method == "rfind":
-            return f"mb_strrpos({obj_str}, {args_str})"
+            # mb_strrpos returns false when not found, but Python rfind() returns -1
+            return f"(mb_strrpos({obj_str}, {args_str}) === false ? -1 : mb_strrpos({obj_str}, {args_str}))"
         if method == "replace":
             return f"str_replace({self._expr(args[0])}, {self._expr(args[1])}, {obj_str})"
         if method == "split":
@@ -1047,6 +1056,10 @@ class PhpBackend:
             return f"array_values(unpack('C*', {inner_str}))"
         if isinstance(to_type, Primitive):
             if to_type.kind == "int":
+                # Casting byte/rune to int: use mb_ord to get Unicode code point
+                inner_type = inner.typ
+                if isinstance(inner_type, Primitive) and inner_type.kind in ("byte", "rune"):
+                    return f"mb_ord({inner_str})"
                 return f"(int)({inner_str})"
             if to_type.kind == "float":
                 return f"(float)({inner_str})"

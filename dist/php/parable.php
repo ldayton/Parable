@@ -684,7 +684,7 @@ class Lexer
             {
                 return true;
             }
-            if (_isRedirectChar($ch) && !$this->pos + 1 < $this->length && (string)(mb_substr($this->source, $this->pos + 1, 1)) === "(")
+            if (_isRedirectChar($ch) && !($this->pos + 1 < $this->length && (string)(mb_substr($this->source, $this->pos + 1, 1)) === "("))
             {
                 return true;
             }
@@ -738,7 +738,7 @@ class Lexer
                 if ($sc === "[" && $scan + 1 < $this->length && (string)(mb_substr($this->source, $scan + 1, 1)) === ":")
                 {
                     $scan += 2;
-                    while ($scan < $this->length && !(string)(mb_substr($this->source, $scan, 1)) === ":" && $scan + 1 < $this->length && (string)(mb_substr($this->source, $scan + 1, 1)) === "]")
+                    while ($scan < $this->length && !((string)(mb_substr($this->source, $scan, 1)) === ":" && $scan + 1 < $this->length && (string)(mb_substr($this->source, $scan + 1, 1)) === "]"))
                     {
                         $scan += 1;
                     }
@@ -788,7 +788,7 @@ class Lexer
             {
                 array_push($chars, $this->advance());
                 array_push($chars, $this->advance());
-                while (!$this->atEnd() && !$this->peek() === ":" && $this->pos + 1 < $this->length && (string)(mb_substr($this->source, $this->pos + 1, 1)) === "]")
+                while (!$this->atEnd() && !($this->peek() === ":" && $this->pos + 1 < $this->length && (string)(mb_substr($this->source, $this->pos + 1, 1)) === "]"))
                 {
                     array_push($chars, $this->advance());
                 }
@@ -804,7 +804,7 @@ class Lexer
                 {
                     array_push($chars, $this->advance());
                     array_push($chars, $this->advance());
-                    while (!$this->atEnd() && !$this->peek() === "=" && $this->pos + 1 < $this->length && (string)(mb_substr($this->source, $this->pos + 1, 1)) === "]")
+                    while (!$this->atEnd() && !($this->peek() === "=" && $this->pos + 1 < $this->length && (string)(mb_substr($this->source, $this->pos + 1, 1)) === "]"))
                     {
                         array_push($chars, $this->advance());
                     }
@@ -820,7 +820,7 @@ class Lexer
                     {
                         array_push($chars, $this->advance());
                         array_push($chars, $this->advance());
-                        while (!$this->atEnd() && !$this->peek() === "." && $this->pos + 1 < $this->length && (string)(mb_substr($this->source, $this->pos + 1, 1)) === "]")
+                        while (!$this->atEnd() && !($this->peek() === "." && $this->pos + 1 < $this->length && (string)(mb_substr($this->source, $this->pos + 1, 1)) === "]"))
                         {
                             array_push($chars, $this->advance());
                         }
@@ -934,7 +934,7 @@ class Lexer
             }
             if ($ch === $openChar && $openChar !== $closeChar)
             {
-                if (!(($flags & MATCHEDPAIRFLAGS_DOLBRACE) !== 0) && $openChar === "{")
+                if (!((($flags & MATCHEDPAIRFLAGS_DOLBRACE) !== 0) && $openChar === "{"))
                 {
                     $count += 1;
                 }
@@ -2670,7 +2670,7 @@ class Word implements Node
                                 }
                                 else
                                 {
-                                    array_push($result, (int)(mb_substr((string)(mb_substr($inner, $i, 1)), 0, 1)));
+                                    array_push($result, mb_ord(mb_substr((string)(mb_substr($inner, $i, 1)), 0, 1)));
                                     $i += 1;
                                 }
                             }
@@ -2697,7 +2697,7 @@ class Word implements Node
                                 }
                                 else
                                 {
-                                    array_push($result, (int)(mb_substr((string)(mb_substr($inner, $i, 1)), 0, 1)));
+                                    array_push($result, mb_ord(mb_substr((string)(mb_substr($inner, $i, 1)), 0, 1)));
                                     $i += 1;
                                 }
                             }
@@ -2722,7 +2722,7 @@ class Word implements Node
                                     }
                                     else
                                     {
-                                        array_push($result, (int)(mb_substr((string)(mb_substr($inner, $i, 1)), 0, 1)));
+                                        array_push($result, mb_ord(mb_substr((string)(mb_substr($inner, $i, 1)), 0, 1)));
                                         $i += 1;
                                     }
                                 }
@@ -2738,7 +2738,7 @@ class Word implements Node
                                             {
                                                 $skipExtra = 1;
                                             }
-                                            $ctrlVal = ((int)(mb_substr($ctrlChar, 0, 1)) & 31);
+                                            $ctrlVal = (mb_ord(mb_substr($ctrlChar, 0, 1)) & 31);
                                             if ($ctrlVal === 0)
                                             {
                                                 return $result;
@@ -2748,7 +2748,7 @@ class Word implements Node
                                         }
                                         else
                                         {
-                                            array_push($result, (int)(mb_substr((string)(mb_substr($inner, $i, 1)), 0, 1)));
+                                            array_push($result, mb_ord(mb_substr((string)(mb_substr($inner, $i, 1)), 0, 1)));
                                             $i += 1;
                                         }
                                     }
@@ -2796,7 +2796,7 @@ class Word implements Node
                                             else
                                             {
                                                 array_push($result, 92);
-                                                array_push($result, (int)(mb_substr($c, 0, 1)));
+                                                array_push($result, mb_ord(mb_substr($c, 0, 1)));
                                                 $i += 2;
                                             }
                                         }
@@ -2818,7 +2818,7 @@ class Word implements Node
 
     public function _expandAnsiCEscapes(string $value): string
     {
-        if (!str_starts_with($value, "'") && str_ends_with($value, "'"))
+        if (!(str_starts_with($value, "'") && str_ends_with($value, "'")))
         {
             return $value;
         }
@@ -2939,11 +2939,11 @@ class Word implements Node
                             if ($braceDepth > 0 && $outerInDquote && str_starts_with($expanded, "'") && str_ends_with($expanded, "'"))
                             {
                                 $inner = _substring($expanded, 1, mb_strlen($expanded) - 1);
-                                if (mb_strpos($inner, "") === -1)
+                                if ((mb_strpos($inner, "") === false ? -1 : mb_strpos($inner, "")) === -1)
                                 {
                                     $resultStr = implode("", $result);
                                     $inPattern = false;
-                                    $lastBraceIdx = mb_strrpos($resultStr, "\${");
+                                    $lastBraceIdx = (mb_strrpos($resultStr, "\${") === false ? -1 : mb_strrpos($resultStr, "\${"));
                                     if ($lastBraceIdx >= 0)
                                     {
                                         $afterBrace = mb_substr($resultStr, $lastBraceIdx + 2);
@@ -2961,7 +2961,7 @@ class Word implements Node
                                                     while ($varNameLen < mb_strlen($afterBrace))
                                                     {
                                                         $c = (string)(mb_substr($afterBrace, $varNameLen, 1));
-                                                        if (!ctype_alnum($c) || $c === "_")
+                                                        if (!(ctype_alnum($c) || $c === "_"))
                                                         {
                                                             break;
                                                         }
@@ -3185,7 +3185,7 @@ class Word implements Node
     public function _normalizeArrayWhitespace(string $value): string
     {
         $i = 0;
-        if (!$i < mb_strlen($value) && (ctype_alpha((string)(mb_substr($value, $i, 1))) || (string)(mb_substr($value, $i, 1)) === "_"))
+        if (!($i < mb_strlen($value) && (ctype_alpha((string)(mb_substr($value, $i, 1))) || (string)(mb_substr($value, $i, 1)) === "_")))
         {
             return $value;
         }
@@ -3222,7 +3222,7 @@ class Word implements Node
         {
             $i += 1;
         }
-        if (!$i + 1 < mb_strlen($value) && (string)(mb_substr($value, $i, 1)) === "=" && (string)(mb_substr($value, $i + 1, 1)) === "(")
+        if (!($i + 1 < mb_strlen($value) && (string)(mb_substr($value, $i, 1)) === "=" && (string)(mb_substr($value, $i + 1, 1)) === "("))
         {
             return $value;
         }
@@ -3876,7 +3876,7 @@ class Word implements Node
                 array_push($procsubParts, ...$this->_collectProcsubs($p));
             }
         }
-        $hasBraceCmdsub = mb_strpos($value, "\${ ") !== -1 || mb_strpos($value, "\${\t") !== -1 || mb_strpos($value, "\${\n") !== -1 || mb_strpos($value, "\${|") !== -1;
+        $hasBraceCmdsub = (mb_strpos($value, "\${ ") === false ? -1 : mb_strpos($value, "\${ ")) !== -1 || (mb_strpos($value, "\${\t") === false ? -1 : mb_strpos($value, "\${\t")) !== -1 || (mb_strpos($value, "\${\n") === false ? -1 : mb_strpos($value, "\${\n")) !== -1 || (mb_strpos($value, "\${|") === false ? -1 : mb_strpos($value, "\${|")) !== -1;
         $hasUntrackedCmdsub = false;
         $hasUntrackedProcsub = false;
         $idx = 0;
@@ -5423,7 +5423,7 @@ class Select implements Node
                 array_push($wordParts, $w->toSexp());
             }
             $wordStrs = implode(" ", $wordParts);
-            if (($this->words !== null))
+            if ((count($this->words) > 0))
             {
                 $inClause = "(in " . $wordStrs . ")";
             }
@@ -9025,8 +9025,8 @@ class Parser
                 {
                     if (((str_contains($varname, "["))) || ((str_contains($varname, "]"))))
                     {
-                        $left = mb_strpos($varname, "[");
-                        $right = mb_strrpos($varname, "]");
+                        $left = (mb_strpos($varname, "[") === false ? -1 : mb_strpos($varname, "["));
+                        $right = (mb_strrpos($varname, "]") === false ? -1 : mb_strrpos($varname, "]"));
                         if ($left !== -1 && $right === mb_strlen($varname) - 1 && $right > $left + 1)
                         {
                             $base = mb_substr($varname, 0, $left);
@@ -9035,7 +9035,7 @@ class Parser
                                 $isValidVarfd = true;
                                 foreach (mb_str_split(mb_substr($base, 1)) as $c)
                                 {
-                                    if (!ctype_alnum($c) || $c === "_")
+                                    if (!(ctype_alnum($c) || $c === "_"))
                                     {
                                         $isValidVarfd = false;
                                         break;
@@ -9049,7 +9049,7 @@ class Parser
                         $isValidVarfd = true;
                         foreach (mb_str_split(mb_substr($varname, 1)) as $c)
                         {
-                            if (!ctype_alnum($c) || $c === "_")
+                            if (!(ctype_alnum($c) || $c === "_"))
                             {
                                 $isValidVarfd = false;
                                 break;
@@ -9941,7 +9941,7 @@ class Parser
             return null;
         }
         $nextPos = $this->pos + 2;
-        if ($nextPos < $this->length && !_isWhitespace((string)(mb_substr($this->source, $nextPos, 1))) || (string)(mb_substr($this->source, $nextPos, 1)) === "\\" && $nextPos + 1 < $this->length && (string)(mb_substr($this->source, $nextPos + 1, 1)) === "\n")
+        if ($nextPos < $this->length && !(_isWhitespace((string)(mb_substr($this->source, $nextPos, 1))) || (string)(mb_substr($this->source, $nextPos, 1)) === "\\" && $nextPos + 1 < $this->length && (string)(mb_substr($this->source, $nextPos + 1, 1)) === "\n"))
         {
             return null;
         }
@@ -10082,7 +10082,7 @@ class Parser
         if (!$this->_condAtEnd() && $this->peek() !== "&" && $this->peek() !== "|" && $this->peek() !== ")")
         {
             $word2 = null;
-            if (_isRedirectChar($this->peek()) && !$this->pos + 1 < $this->length && (string)(mb_substr($this->source, $this->pos + 1, 1)) === "(")
+            if (_isRedirectChar($this->peek()) && !($this->pos + 1 < $this->length && (string)(mb_substr($this->source, $this->pos + 1, 1)) === "("))
             {
                 $op = $this->advance();
                 $this->_condSkipWhitespace();
@@ -10777,7 +10777,7 @@ class Parser
                                         }
                                         if ($scanPos < $this->length && (string)(mb_substr($this->source, $scanPos, 1)) === "]")
                                         {
-                                            if (mb_strpos($this->source, "]", $scanPos + 1) !== -1)
+                                            if ((mb_strpos($this->source, "]", $scanPos + 1) === false ? -1 : mb_strpos($this->source, "]", $scanPos + 1)) !== -1)
                                             {
                                                 $scanPos += 1;
                                                 $hasFirstBracketLiteral = true;
@@ -11869,7 +11869,7 @@ class Parser
         {
             return [new Empty_("empty")];
         }
-        if ($this->_sawNewlineInSingleQuote && ($this->source !== '') && (string)(mb_substr($this->source, mb_strlen($this->source) - 1, 1)) === "\\" && !mb_strlen($this->source) >= 3 && mb_substr($this->source, mb_strlen($this->source) - 3, mb_strlen($this->source) - 1 - mb_strlen($this->source) - 3) === "\\\n")
+        if ($this->_sawNewlineInSingleQuote && ($this->source !== '') && (string)(mb_substr($this->source, mb_strlen($this->source) - 1, 1)) === "\\" && !(mb_strlen($this->source) >= 3 && mb_substr($this->source, mb_strlen($this->source) - 3, mb_strlen($this->source) - 1 - mb_strlen($this->source) - 3) === "\\\n"))
         {
             if (!$this->_lastWordOnOwnLine($results))
             {
@@ -12403,7 +12403,7 @@ function _formatCmdsubNode(?Node $node, int $indent, bool $inProcsub, bool $comp
             {
                 if ($hasHeredoc)
                 {
-                    $firstNl = mb_strpos($formatted, "\n");
+                    $firstNl = (mb_strpos($formatted, "\n") === false ? -1 : mb_strpos($formatted, "\n"));
                     if ($firstNl !== -1)
                     {
                         $formatted = mb_substr($formatted, 0, $firstNl) . " 2>&1" . mb_substr($formatted, $firstNl);
@@ -12420,7 +12420,7 @@ function _formatCmdsubNode(?Node $node, int $indent, bool $inProcsub, bool $comp
             }
             if (!$isLast && $hasHeredoc)
             {
-                $firstNl = mb_strpos($formatted, "\n");
+                $firstNl = (mb_strpos($formatted, "\n") === false ? -1 : mb_strpos($formatted, "\n"));
                 if ($firstNl !== -1)
                 {
                     $formatted = mb_substr($formatted, 0, $firstNl) . " |" . mb_substr($formatted, $firstNl);
@@ -12561,7 +12561,7 @@ function _formatCmdsubNode(?Node $node, int $indent, bool $inProcsub, bool $comp
                                 }
                                 else
                                 {
-                                    $firstNl = mb_strpos($last, "\n");
+                                    $firstNl = (mb_strpos($last, "\n") === false ? -1 : mb_strpos($last, "\n"));
                                     $result[count($result) - 1] = mb_substr($last, 0, $firstNl) . " &" . mb_substr($last, $firstNl);
                                 }
                             }
@@ -12575,7 +12575,7 @@ function _formatCmdsubNode(?Node $node, int $indent, bool $inProcsub, bool $comp
                             if ((count($result) > 0) && ((str_contains($result[count($result) - 1], "<<"))) && ((str_contains($result[count($result) - 1], "\n"))))
                             {
                                 $last = $result[count($result) - 1];
-                                $firstNl = mb_strpos($last, "\n");
+                                $firstNl = (mb_strpos($last, "\n") === false ? -1 : mb_strpos($last, "\n"));
                                 $result[count($result) - 1] = mb_substr($last, 0, $firstNl) . " " . $p->op . " " . mb_substr($last, $firstNl);
                             }
                             else
@@ -13349,7 +13349,7 @@ function _findCmdsubEnd(string $value, int $start): int
         }
         if ($c === "(")
         {
-            if (!$inCasePatterns && $caseDepth > 0)
+            if (!($inCasePatterns && $caseDepth > 0))
             {
                 if ($arithDepth > 0)
                 {
@@ -14096,7 +14096,7 @@ function _assignment(string $s, int $flags): int
     {
         return -1;
     }
-    if (!ctype_alpha((string)(mb_substr($s, 0, 1))) || (string)(mb_substr($s, 0, 1)) === "_")
+    if (!(ctype_alpha((string)(mb_substr($s, 0, 1))) || (string)(mb_substr($s, 0, 1)) === "_"))
     {
         return -1;
     }
@@ -14135,7 +14135,7 @@ function _assignment(string $s, int $flags): int
             }
             return -1;
         }
-        if (!ctype_alnum($c) || $c === "_")
+        if (!(ctype_alnum($c) || $c === "_"))
         {
             return -1;
         }
@@ -14150,7 +14150,7 @@ function _isArrayAssignmentPrefix(?array $chars): bool
     {
         return false;
     }
-    if (!ctype_alpha($chars[0]) || $chars[0] === "_")
+    if (!(ctype_alpha($chars[0]) || $chars[0] === "_"))
     {
         return false;
     }
@@ -14266,13 +14266,13 @@ function _isValidIdentifier(string $name): bool
     {
         return false;
     }
-    if (!ctype_alpha((string)(mb_substr($name, 0, 1))) || (string)(mb_substr($name, 0, 1)) === "_")
+    if (!(ctype_alpha((string)(mb_substr($name, 0, 1))) || (string)(mb_substr($name, 0, 1)) === "_"))
     {
         return false;
     }
     foreach (mb_str_split(mb_substr($name, 1)) as $c)
     {
-        if (!ctype_alnum($c) || $c === "_")
+        if (!(ctype_alnum($c) || $c === "_"))
         {
             return false;
         }

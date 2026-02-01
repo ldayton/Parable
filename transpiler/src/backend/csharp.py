@@ -986,6 +986,8 @@ class CSharpBackend:
                     return f"(!string.IsNullOrEmpty({inner_str}))"
                 if isinstance(inner_type, (Slice, Map, Set)):
                     return f"({inner_str}.Count > 0)"
+                if isinstance(inner_type, Optional) and isinstance(inner_type.inner, (Slice, Map, Set)):
+                    return f"({inner_str}.Count > 0)"
                 if isinstance(inner_type, Primitive) and inner_type.kind == "int":
                     return f"({inner_str} != 0)"
                 return f"({inner_str} != null)"
@@ -1070,6 +1072,14 @@ class CSharpBackend:
                 type_name = self._type_name_for_check(tested_type)
                 return f"({self._expr(inner)} is {type_name})"
             case IsNil(expr=inner, negated=negated):
+                inner_type = inner.typ
+                # For non-nullable list types, check emptiness instead of null
+                # Note: Optional[Slice] means nullable, so we should check null first
+                if isinstance(inner_type, (Slice, Map, Set)):
+                    inner_str = self._expr(inner)
+                    if negated:
+                        return f"({inner_str}.Count > 0)"
+                    return f"({inner_str}.Count == 0)"
                 if negated:
                     return f"{self._expr(inner)} != null"
                 return f"{self._expr(inner)} == null"
@@ -1161,7 +1171,7 @@ class CSharpBackend:
         if func == "ord":
             return f"(int)({self._expr(args[0])}[0])"
         if func == "chr":
-            return f"((char){self._expr(args[0])}).ToString()"
+            return f"char.ConvertFromUtf32({self._expr(args[0])})"
         if func == "abs":
             return f"Math.Abs({args_str})"
         if func == "min":
@@ -1314,6 +1324,13 @@ class CSharpBackend:
                     if isinstance(elem, Primitive) and elem.kind == "byte":
                         func_class = to_pascal(self._module_name) + "Functions"
                         return f"{func_class}._BytesToString({inner_str})"
+                # Handle rune -> string: need char.ConvertFromUtf32 for codepoints > 0xFFFF
+                if isinstance(inner_type, Primitive) and inner_type.kind == "rune":
+                    # If inner is Cast to rune, use original codepoint for proper surrogate handling
+                    if isinstance(inner, Cast) and isinstance(inner.to_type, Primitive) and inner.to_type.kind == "rune":
+                        codepoint_str = self._expr(inner.expr)
+                        return f"char.ConvertFromUtf32({codepoint_str})"
+                    return f"char.ConvertFromUtf32({inner_str})"
                 return f"({inner_str}).ToString()"
             if to_type.kind == "rune":
                 return f"(char)({inner_str})"
@@ -1325,7 +1342,10 @@ class CSharpBackend:
 
     def _format_string(self, template: str, args: list[Expr]) -> str:
         from re import sub as re_sub
-        result = re_sub(r"\{(\d+)\}", r"{\1}", template)
+        # First escape all literal { and } as {{ and }}
+        result = template.replace("{", "{{").replace("}", "}}")
+        # Then convert {0}, {1} back to single braces (they got doubled to {{0}}, {{1}})
+        result = re_sub(r"\{\{(\d+)\}\}", r"{\1}", result)
         # Convert %v placeholders to {0}, {1}, {2}, etc.
         idx = 0
         while "%v" in result:

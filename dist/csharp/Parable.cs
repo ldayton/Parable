@@ -2698,7 +2698,7 @@ public class Word : INode
                                     {
                                         return result;
                                     }
-                                    result.AddRange(System.Text.Encoding.UTF8.GetBytes(((char)(codepoint)).ToString()).ToList());
+                                    result.AddRange(System.Text.Encoding.UTF8.GetBytes(char.ConvertFromUtf32(codepoint)).ToList());
                                     i = j;
                                 }
                                 else
@@ -2723,7 +2723,7 @@ public class Word : INode
                                         {
                                             return result;
                                         }
-                                        result.AddRange(System.Text.Encoding.UTF8.GetBytes(((char)(codepoint)).ToString()).ToList());
+                                        result.AddRange(System.Text.Encoding.UTF8.GetBytes(char.ConvertFromUtf32(codepoint)).ToList());
                                         i = j;
                                     }
                                     else
@@ -5424,7 +5424,7 @@ public class Select : INode
                 wordParts.Add(((INode)w).ToSexp());
             }
             string wordStrs = string.Join(" ", wordParts);
-            if ((this.Words != null))
+            if ((this.Words.Count > 0))
             {
                 inClause = "(in " + wordStrs + ")";
             }
@@ -7097,7 +7097,7 @@ public class Parser
             }
             return body;
         }
-        throw new ParseError(string.Format("Expected 'do' or '{' in {0}", context), this._LexPeekToken().Pos, 0);
+        throw new ParseError(string.Format("Expected 'do' or '{{' in {0}", context), this._LexPeekToken().Pos, 0);
     }
 
     public string PeekWord()
@@ -9410,7 +9410,7 @@ public class Parser
                                         int escVal = ParableFunctions._GetAnsiEscape(esc);
                                         if (escVal >= 0)
                                         {
-                                            delimiterChars.Add(((char)(escVal)).ToString());
+                                            delimiterChars.Add(char.ConvertFromUtf32(escVal));
                                             this.Advance();
                                         }
                                         else
@@ -12830,7 +12830,7 @@ public static class ParableFunctions
                 string name = nodeFunction.Name;
                 INode innerBody = (nodeFunction.Body.Kind == "brace-group" ? ((BraceGroup)nodeFunction.Body).Body : nodeFunction.Body);
                 string body = ParableFunctions._FormatCmdsubNode(innerBody, indent + 4, false, false, false).TrimEnd(";".ToCharArray());
-                return string.Format("function {0} () \n{ \n{1}{2}\n}", name, innerSp, body);
+                return string.Format("function {0} () \n{{ \n{1}{2}\n}}", name, innerSp, body);
         }
         switch (node)
         {

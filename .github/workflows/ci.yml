@@ -43,6 +43,10 @@ jobs:
         with:
           perl-version: '5.40'
 
+      - uses: leafo/gh-actions-lua@v10
+        with:
+          luaVersion: '5.4'
+
       - uses: extractions/setup-just@v2
 
       - name: Job summary

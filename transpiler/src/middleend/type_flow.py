@@ -7,9 +7,9 @@ def join_types(t1: Type | None, t2: Type | None) -> Type | None:
     """Compute joined type for variables assigned in multiple branches.
 
     For hoisting variables assigned in multiple branches:
-    - If one branch assigns nil (InterfaceRef("any")) and another assigns Node, use Node
-    - Go interfaces are nil-able, so InterfaceRef("Node") can hold nil without widening
-    - If both are different Node subtypes, use InterfaceRef("Node") as the common type
+    - If one branch assigns nil (InterfaceRef("any")) and another assigns concrete, use concrete
+    - Go interfaces are nil-able, so InterfaceRef can hold nil without widening
+    - If both are different struct types, widen to InterfaceRef("any")
     """
     if t1 is None:
         return t2
@@ -27,14 +27,13 @@ def join_types(t1: Type | None, t2: Type | None) -> Type | None:
         return t2
     if isinstance(t2, InterfaceRef) and t2.name == "any":
         return t1
-    # If one is InterfaceRef("Node") and other is StructRef, use InterfaceRef("Node")
-    if isinstance(t1, InterfaceRef) and t1.name == "Node":
+    # If one is a named InterfaceRef and other is StructRef, use the InterfaceRef
+    if isinstance(t1, InterfaceRef) and t1.name != "any" and isinstance(t2, StructRef):
         return t1
-    if isinstance(t2, InterfaceRef) and t2.name == "Node":
+    if isinstance(t2, InterfaceRef) and t2.name != "any" and isinstance(t1, StructRef):
         return t2
-    # If both are different StructRefs, they're likely Node subtypes - use InterfaceRef("Node")
-    # This handles cases like BraceGroup vs ArithmeticCommand assigned to same variable
+    # If both are different StructRefs, widen to "any" (we don't know their common interface)
     if isinstance(t1, StructRef) and isinstance(t2, StructRef) and t1.name != t2.name:
-        return InterfaceRef("Node")
+        return InterfaceRef("any")
     # Otherwise keep first type (arbitrary but deterministic)
     return t1

@@ -2,6 +2,7 @@ use strict;
 use warnings;
 use feature 'signatures';
 no warnings 'experimental::signatures';
+use Encode;
 
 use constant ANSI_C_ESCAPES => {"a" => 7, "b" => 8, "e" => 27, "E" => 27, "f" => 12, "n" => 10, "r" => 13, "t" => 9, "v" => 11, "\\" => 92, "\"" => 34, "?" => 63};
 use constant TOKENTYPE_EOF => 0;
@@ -2092,7 +2093,7 @@ sub ansi_c_to_bytes ($self, $inner) {
                     if ($codepoint == 0) {
                         return $result;
                     }
-                    push(@{$result}, @{[unpack('C*', chr($codepoint))]});
+                    push(@{$result}, @{[unpack('C*', Encode::encode('UTF-8', chr($codepoint)))]});
                     $i = $j;
                 } else {
                     push(@{$result}, ord(substr(substr($inner, $i, 1), 0, 1)));
@@ -2108,7 +2109,7 @@ sub ansi_c_to_bytes ($self, $inner) {
                     if ($codepoint == 0) {
                         return $result;
                     }
-                    push(@{$result}, @{[unpack('C*', chr($codepoint))]});
+                    push(@{$result}, @{[unpack('C*', Encode::encode('UTF-8', chr($codepoint)))]});
                     $i = $j;
                 } else {
                     push(@{$result}, ord(substr(substr($inner, $i, 1), 0, 1)));
@@ -2163,7 +2164,7 @@ sub ansi_c_to_bytes ($self, $inner) {
                 $i += 2;
             }
         } else {
-            push(@{$result}, @{[unpack('C*', substr($inner, $i, 1))]});
+            push(@{$result}, @{[unpack('C*', Encode::encode('UTF-8', substr($inner, $i, 1)))]});
             $i += 1;
         }
     }
@@ -9150,7 +9151,7 @@ sub is_whitespace ($c) {
 }
 
 sub string_to_bytes ($s_) {
-    return [@{[unpack('C*', $s_)]}];
+    return [@{[unpack('C*', Encode::encode('UTF-8', $s_))]}];
 }
 
 sub is_whitespace_no_newline ($c) {

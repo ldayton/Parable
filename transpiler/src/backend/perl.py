@@ -524,6 +524,7 @@ class PerlBackend:
         self._line("use warnings;")
         self._line("use feature 'signatures';")
         self._line("no warnings 'experimental::signatures';")
+        self._line("use Encode;")
         need_blank = True
         if module.constants:
             self._line()
@@ -1231,7 +1232,7 @@ class PerlBackend:
                 if to_type == Primitive(kind="string") and inner.typ == Primitive(kind="rune"):
                     return f"chr({self._expr(inner)})"
                 if isinstance(to_type, Slice) and to_type.element == Primitive(kind="byte"):
-                    return f"[unpack('C*', {self._expr(inner)})]"
+                    return f"[unpack('C*', Encode::encode('UTF-8', {self._expr(inner)}))]"
                 if to_type == Primitive(kind="int") and inner.typ in (
                     Primitive(kind="string"),
                     Primitive(kind="byte"),

@@ -1024,7 +1024,7 @@ class PerlBackend:
                             default = self._expr(args[1])
                             return f"({obj_str}->{{{key}}} // {default})"
                         return f"{obj_str}->{{{key}}}"
-                if _is_string_type(receiver_type):
+                if _is_string_type(inner_type):
                     if method == "join":
                         return f"join({obj_str}, @{{{args_str}}})"
                     if method == "find":

@@ -607,7 +607,7 @@ def lower_expr_Attribute(
     current_class_name: str,
     node_field_types: dict[str, list[str]],
     lower_expr: Callable[[ASTNode], "ir.Expr"],
-    is_node_interface_type: Callable[["Type | None"], bool],
+    hierarchy_root: str | None,
 ) -> "ir.Expr":
     """Lower Python attribute access to IR field access."""
     from .. import ir
@@ -631,7 +631,7 @@ def lower_expr_Attribute(
     # Check if accessing a field on a Node-typed expression that isn't in the interface
     # Node interface only has Kind() method, so any other field needs a type assertion
     obj_type = obj.typ
-    if is_node_interface_type(obj_type) and node_attr != "kind":
+    if type_inference.is_node_interface_type(obj_type, hierarchy_root) and node_attr != "kind":
         # Look up which struct types have this field
         if node_attr in node_field_types:
             struct_names = node_field_types[node_attr]
@@ -663,7 +663,7 @@ def lower_expr_Attribute(
     # Infer field type for self.field accesses
     field_type: "Type" = InterfaceRef("any")
     # Node interface field types (kind is defined as string)
-    if is_node_interface_type(obj_type) and node_attr == "kind":
+    if type_inference.is_node_interface_type(obj_type, hierarchy_root) and node_attr == "kind":
         field_type = STRING
     elif is_type(node_value, ["Name"]) and node_value.get("id") == "self":
         if current_class_name in symbols.structs:
@@ -1637,7 +1637,7 @@ def lower_expr_Call(
             )
         # Check if calling a method on a Node-typed expression that needs type assertion
         # Do this early so we can use the asserted type for default arg lookup
-        if type_inference.is_node_interface_type(obj_type) and method in NODE_METHOD_TYPES:
+        if type_inference.is_node_interface_type(obj_type, ctx.hierarchy_root) and method in NODE_METHOD_TYPES:
             struct_name = NODE_METHOD_TYPES[method]
             asserted_type = Pointer(StructRef(struct_name))
             obj = ir.TypeAssert(
@@ -1661,7 +1661,7 @@ def lower_expr_Call(
         args = dispatch.deref_for_slice_params(obj_type, method, args, node_args)
         # Infer return type
         ret_type = type_inference.synthesize_method_return_type(
-            obj_type, method, ctx.symbols, ctx.node_types
+            obj_type, method, ctx.symbols, ctx.node_types, ctx.hierarchy_root
         )
         return ir.MethodCall(
             obj=obj,
@@ -2272,7 +2272,7 @@ def lower_stmt_AnnAssign(
     node_value = node.get("value")
     node_target = node.get("target")
     py_type = dispatch.annotation_to_str(node_annotation)
-    typ = type_inference.py_type_to_ir(py_type, ctx.symbols, ctx.node_types, False)
+    typ = type_inference.py_type_to_ir(py_type, ctx.symbols, ctx.node_types, False, ctx.hierarchy_root)
     type_ctx = ctx.type_ctx
     # Handle int | None = None -> use -1 as sentinel
     if (
@@ -2735,7 +2735,7 @@ def _lower_expr_Attribute_dispatch(
         ctx.current_class_name,
         NODE_FIELD_TYPES,
         d.lower_expr,
-        type_inference.is_node_interface_type,
+        ctx.hierarchy_root,
     )
 
 

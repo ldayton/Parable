@@ -575,6 +575,7 @@ def infer_expr_type_from_ast(
     current_func_info: FuncInfo | None,
     current_class_name: str,
     node_types: set[str],
+    hierarchy_root: str | None = None,
 ) -> Type:
     """Infer the type of a Python AST expression without lowering it."""
     from .ast_compat import is_type, op_type
@@ -617,7 +618,7 @@ def infer_expr_type_from_ast(
         else:
             # Field access on other objects - infer object type then look up field
             obj_type = infer_expr_type_from_ast(
-                value, type_ctx, symbols, current_func_info, current_class_name, node_types
+                value, type_ctx, symbols, current_func_info, current_class_name, node_types, hierarchy_root
             )
             struct_name = extract_struct_name(obj_type)
             if struct_name and struct_name in symbols.structs:
@@ -630,9 +631,9 @@ def infer_expr_type_from_ast(
         func = node.get("func")
         if is_type(func, ["Attribute"]):
             obj_type = infer_expr_type_from_ast(
-                func.get("value"), type_ctx, symbols, current_func_info, current_class_name, node_types
+                func.get("value"), type_ctx, symbols, current_func_info, current_class_name, node_types, hierarchy_root
             )
-            return synthesize_method_return_type(obj_type, func.get("attr"), symbols, node_types)
+            return synthesize_method_return_type(obj_type, func.get("attr"), symbols, node_types, hierarchy_root)
         # Free function call - look up return type
         if is_type(func, ["Name"]):
             func_name = func.get("id")
@@ -654,7 +655,7 @@ def infer_expr_type_from_ast(
     # Subscript - derive element type from container
     if node_t == "Subscript":
         val_type = infer_expr_type_from_ast(
-            node.get("value"), type_ctx, symbols, current_func_info, current_class_name, node_types
+            node.get("value"), type_ctx, symbols, current_func_info, current_class_name, node_types, hierarchy_root
         )
         if val_type == STRING:
             return STRING  # string indexing returns string (after Cast)
@@ -669,10 +670,10 @@ def infer_expr_type_from_ast(
             return INT
         if op in ("Add", "Sub", "Mult", "FloorDiv", "Mod"):
             left_type = infer_expr_type_from_ast(
-                node.get("left"), type_ctx, symbols, current_func_info, current_class_name, node_types
+                node.get("left"), type_ctx, symbols, current_func_info, current_class_name, node_types, hierarchy_root
             )
             right_type = infer_expr_type_from_ast(
-                node.get("right"), type_ctx, symbols, current_func_info, current_class_name, node_types
+                node.get("right"), type_ctx, symbols, current_func_info, current_class_name, node_types, hierarchy_root
             )
             if left_type == INT or right_type == INT:
                 return INT
@@ -686,6 +687,7 @@ def infer_call_return_type(
     current_func_info: FuncInfo | None,
     current_class_name: str,
     node_types: set[str],
+    hierarchy_root: str | None = None,
 ) -> Type:
     """Infer the return type of a function or method call."""
     from .ast_compat import is_type
@@ -694,7 +696,7 @@ def infer_call_return_type(
     if is_type(func, ["Attribute"]):
         # Method call - look up return type
         obj_type = infer_expr_type_from_ast(
-            func.get("value"), type_ctx, symbols, current_func_info, current_class_name, node_types
+            func.get("value"), type_ctx, symbols, current_func_info, current_class_name, node_types, hierarchy_root
         )
         struct_name = extract_struct_name(obj_type)
         if struct_name and struct_name in symbols.structs:

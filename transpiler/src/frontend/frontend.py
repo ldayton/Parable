@@ -167,6 +167,7 @@ class Frontend:
             func_info,
             self._hierarchy.node_types,
             self._kind_to_struct,
+            self._hierarchy.hierarchy_root,
         )
         self._type_ctx = type_ctx
         return self._lower_stmts(stmts)
@@ -411,6 +412,7 @@ class Frontend:
             self._current_func_info,
             self._current_class_name,
             self._hierarchy.node_types,
+            self._hierarchy.hierarchy_root,
         )
 
     def _lower_expr_List(self, node: ASTNode, expected_type: Type | None = None) -> "ir.Expr":

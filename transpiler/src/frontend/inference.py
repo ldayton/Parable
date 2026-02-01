@@ -296,6 +296,7 @@ def infer_attr_chain_type(
     var_types: dict[str, "Type"],
     symbols: "SymbolTable",
     current_class_name: str,
+    current_func_info: FuncInfo | None = None,
 ) -> "Type":
     """Recursively infer type of chained attribute access like self.target.value."""
     if is_type(node, ["Name"]):
@@ -304,10 +305,15 @@ def infer_attr_chain_type(
             return Pointer(StructRef(current_class_name))
         if name_id in var_types:
             return var_types[name_id]
+        # Check function parameters
+        if current_func_info:
+            for p in current_func_info.params:
+                if p.name == name_id:
+                    return p.typ
         return InterfaceRef("any")
     if is_type(node, ["Attribute"]):
         obj_type = infer_attr_chain_type(
-            node.get("value", {}), var_types, symbols, current_class_name
+            node.get("value", {}), var_types, symbols, current_class_name, current_func_info
         )
         struct_name = extract_struct_name(obj_type)
         if struct_name and struct_name in symbols.structs:
@@ -772,7 +778,7 @@ def collect_var_types(
                 # Handles chained access like self.target.value
                 elif is_type(value, ["Attribute"]):
                     field_type = infer_attr_chain_type(
-                        value, var_types, symbols, current_class_name
+                        value, var_types, symbols, current_class_name, current_func_info
                     )
                     if field_type != InterfaceRef("any"):
                         var_types[var_name] = field_type
@@ -1056,6 +1062,7 @@ class _ExprTypeCtx:
     current_class_name: str
     current_func_info: FuncInfo | None
     node_types: set[str]
+    hierarchy_root: str | None
     kind_to_struct: dict[str, str]
     kind_source_vars: dict[str, str]  # Maps kind var -> source node var
     narrowed_attr_paths: dict[tuple[str, ...], str]  # Maps attr path -> struct name
@@ -1104,6 +1111,7 @@ def _compute_expr_in_stmt(
                 ctx.current_func_info,
                 ctx.current_class_name,
                 ctx.node_types,
+                ctx.hierarchy_root,
             )
             subnode["_expr_type"] = typ
 
@@ -1208,6 +1216,7 @@ def compute_expr_types(
     current_func_info: FuncInfo | None,
     node_types: set[str],
     kind_to_struct: dict[str, str] | None = None,
+    hierarchy_root: str | None = None,
 ) -> None:
     """Compute types for all expressions in statements.
 
@@ -1221,6 +1230,7 @@ def compute_expr_types(
         current_class_name=current_class_name,
         current_func_info=current_func_info,
         node_types=node_types,
+        hierarchy_root=hierarchy_root,
         kind_to_struct=kind_to_struct,
         kind_source_vars={},
         narrowed_attr_paths={},

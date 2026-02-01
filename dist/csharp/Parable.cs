@@ -1534,7 +1534,7 @@ public class Lexer
         {
             return new Word(string.Join("", chars), parts, "word");
         }
-        return new Word(string.Join("", chars), null, "word");
+        return new Word(string.Join("", chars), new List<INode>(), "word");
     }
 
     public Token _ReadWord()
@@ -1560,7 +1560,7 @@ public class Lexer
         {
             return null;
         }
-        return new Token(Constants.TOKENTYPE_WORD, word.Value, start, null, word);
+        return new Token(Constants.TOKENTYPE_WORD, word.Value, start, new List<INode>(), word);
     }
 
     public Token NextToken()

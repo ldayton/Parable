@@ -1278,7 +1278,13 @@ class CSharpBackend:
             ordered_args = []
             for field_name, field_type in field_info:
                 if field_name in fields:
-                    ordered_args.append(self._expr(fields[field_name]))
+                    field_val = fields[field_name]
+                    # Handle null for list fields - use empty List
+                    if isinstance(field_val, NilLit) and isinstance(field_type, Slice):
+                        elem = self._type(field_type.element)
+                        ordered_args.append(f"new List<{elem}>()")
+                    else:
+                        ordered_args.append(self._expr(field_val))
                 else:
                     ordered_args.append(self._default_value(field_type))
             return f"new {struct_name}({', '.join(ordered_args)})"

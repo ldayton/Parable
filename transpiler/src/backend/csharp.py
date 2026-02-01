@@ -1216,18 +1216,20 @@ class CSharpBackend:
                 if len(args) == 2:
                     prefix = self._expr(args[0])
                     pos = self._expr(args[1])
-                    return f"({obj_str}.IndexOf({prefix}, {pos}) == {pos})"
-                return f"{obj_str}.StartsWith({args_str})"
+                    # Use ordinal comparison to match Python/Java behavior
+                    return f"({obj_str}.IndexOf({prefix}, {pos}, StringComparison.Ordinal) == {pos})"
+                return f"{obj_str}.StartsWith({args_str}, StringComparison.Ordinal)"
             if method == "endswith":
                 # Handle tuple argument: str.endswith((" ", "\n")) -> multiple checks
                 if args and isinstance(args[0], TupleLit):
-                    checks = [f"{obj_str}.EndsWith({self._expr(e)})" for e in args[0].elements]
+                    checks = [f"{obj_str}.EndsWith({self._expr(e)}, StringComparison.Ordinal)" for e in args[0].elements]
                     return "(" + " || ".join(checks) + ")"
-                return f"{obj_str}.EndsWith({args_str})"
+                return f"{obj_str}.EndsWith({args_str}, StringComparison.Ordinal)"
             if method == "find":
-                return f"{obj_str}.IndexOf({args_str})"
+                # Use ordinal comparison to match Python/Java behavior with control chars
+                return f"{obj_str}.IndexOf({args_str}, StringComparison.Ordinal)"
             if method == "rfind":
-                return f"{obj_str}.LastIndexOf({args_str})"
+                return f"{obj_str}.LastIndexOf({args_str}, StringComparison.Ordinal)"
             if method == "replace":
                 return f"{obj_str}.Replace({args_str})"
             if method == "split":

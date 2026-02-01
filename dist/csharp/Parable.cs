@@ -2353,14 +2353,14 @@ public class Lexer
         try
         {
             int flags = (inDquote ? Constants.MATCHEDPAIRFLAGS_DQUOTE : Constants.MATCHEDPAIRFLAGS_NONE);
-            bool paramEndsWithDollar = param != "" && param.EndsWith("$");
+            bool paramEndsWithDollar = param != "" && param.EndsWith("$", StringComparison.Ordinal);
             arg = this._CollectParamArgument(flags, paramEndsWithDollar);
         } catch (MatchedPairError)
         {
             this._DolbraceState = savedDolbrace;
             throw;
         }
-        if ((op == "<" || op == ">") && arg.StartsWith("(") && arg.EndsWith(")"))
+        if ((op == "<" || op == ">") && arg.StartsWith("(", StringComparison.Ordinal) && arg.EndsWith(")", StringComparison.Ordinal))
         {
             string inner = arg.Substring(1, (arg.Length - 1) - (1));
             try
@@ -2412,7 +2412,7 @@ public class Word : INode
         value = this._DoubleCtlescSmart(value);
         value = value.Replace("\u007f", "\u0001\u007f");
         value = value.Replace("\\", "\\\\");
-        if (value.EndsWith("\\\\") && !(value.EndsWith("\\\\\\\\")))
+        if (value.EndsWith("\\\\", StringComparison.Ordinal) && !(value.EndsWith("\\\\\\\\", StringComparison.Ordinal)))
         {
             value = value + "\\\\";
         }
@@ -2824,7 +2824,7 @@ public class Word : INode
 
     public string _ExpandAnsiCEscapes(string value)
     {
-        if (!(value.StartsWith("'") && value.EndsWith("'")))
+        if (!(value.StartsWith("'", StringComparison.Ordinal) && value.EndsWith("'", StringComparison.Ordinal)))
         {
             return value;
         }
@@ -2942,14 +2942,14 @@ public class Word : INode
                             string ansiStr = ParableFunctions._Substring(value, i, j);
                             string expanded = this._ExpandAnsiCEscapes(ParableFunctions._Substring(ansiStr, 1, ansiStr.Length));
                             bool outerInDquote = quote.OuterDouble();
-                            if (braceDepth > 0 && outerInDquote && expanded.StartsWith("'") && expanded.EndsWith("'"))
+                            if (braceDepth > 0 && outerInDquote && expanded.StartsWith("'", StringComparison.Ordinal) && expanded.EndsWith("'", StringComparison.Ordinal))
                             {
                                 string inner = ParableFunctions._Substring(expanded, 1, expanded.Length - 1);
-                                if (inner.IndexOf("\u0001") == -1)
+                                if (inner.IndexOf("\u0001", StringComparison.Ordinal) == -1)
                                 {
                                     string resultStr = string.Join("", result);
                                     bool inPattern = false;
-                                    int lastBraceIdx = resultStr.LastIndexOf("${");
+                                    int lastBraceIdx = resultStr.LastIndexOf("${", StringComparison.Ordinal);
                                     if (lastBraceIdx >= 0)
                                     {
                                         string afterBrace = resultStr.Substring(lastBraceIdx + 2);
@@ -2979,13 +2979,13 @@ public class Word : INode
                                         if (varNameLen > 0 && varNameLen < afterBrace.Length && !"#?-".Contains((afterBrace[0]).ToString()))
                                         {
                                             string opStart = afterBrace.Substring(varNameLen);
-                                            if (opStart.StartsWith("@") && opStart.Length > 1)
+                                            if (opStart.StartsWith("@", StringComparison.Ordinal) && opStart.Length > 1)
                                             {
                                                 opStart = opStart.Substring(1);
                                             }
                                             foreach (string op in new List<string> { "//", "%%", "##", "/", "%", "#", "^", "^^", ",", ",," })
                                             {
-                                                if (opStart.StartsWith(op))
+                                                if (opStart.StartsWith(op, StringComparison.Ordinal))
                                                 {
                                                     inPattern = true;
                                                     break;
@@ -3235,7 +3235,7 @@ public class Word : INode
         string prefix = ParableFunctions._Substring(value, 0, i + 1);
         int openParenPos = i + 1;
         int closeParenPos = 0;
-        if (value.EndsWith(")"))
+        if (value.EndsWith(")", StringComparison.Ordinal))
         {
             closeParenPos = value.Length - 1;
         }
@@ -3875,7 +3875,7 @@ public class Word : INode
                     break;
             }
         }
-        bool hasBraceCmdsub = value.IndexOf("${ ") != -1 || value.IndexOf("${\t") != -1 || value.IndexOf("${\n") != -1 || value.IndexOf("${|") != -1;
+        bool hasBraceCmdsub = value.IndexOf("${ ", StringComparison.Ordinal) != -1 || value.IndexOf("${\t", StringComparison.Ordinal) != -1 || value.IndexOf("${\n", StringComparison.Ordinal) != -1 || value.IndexOf("${|", StringComparison.Ordinal) != -1;
         bool hasUntrackedCmdsub = false;
         bool hasUntrackedProcsub = false;
         int idx = 0;
@@ -4056,7 +4056,7 @@ public class Word : INode
                         formatted = inner;
                     }
                 }
-                if (formatted.StartsWith("("))
+                if (formatted.StartsWith("(", StringComparison.Ordinal))
                 {
                     result.Add("$( " + formatted + ")");
                 }
@@ -4103,7 +4103,7 @@ public class Word : INode
                             bool hasPipe = (value[i + 2]).ToString() == "|";
                             prefix = (hasPipe ? "${|" : "${ ");
                             string origInner = ParableFunctions._Substring(value, i + 2, j - 1);
-                            bool endsWithNewline = origInner.EndsWith("\n");
+                            bool endsWithNewline = origInner.EndsWith("\n", StringComparison.Ordinal);
                             string suffix = "";
                             if (!((!string.IsNullOrEmpty(formatted))) || (formatted.Length > 0 && formatted.All(char.IsWhiteSpace)))
                             {
@@ -4111,9 +4111,9 @@ public class Word : INode
                             }
                             else
                             {
-                                if (formatted.EndsWith("&") || formatted.EndsWith("& "))
+                                if (formatted.EndsWith("&", StringComparison.Ordinal) || formatted.EndsWith("& ", StringComparison.Ordinal))
                                 {
-                                    suffix = (formatted.EndsWith("&") ? " }" : "}");
+                                    suffix = (formatted.EndsWith("&", StringComparison.Ordinal) ? " }" : "}");
                                 }
                                 else
                                 {
@@ -4172,7 +4172,7 @@ public class Word : INode
                                     }
                                     string leadingWs = rawContent.Substring(0, leadingWsEnd);
                                     stripped = rawContent.Substring(leadingWsEnd);
-                                    if (stripped.StartsWith("("))
+                                    if (stripped.StartsWith("(", StringComparison.Ordinal))
                                     {
                                         if ((!string.IsNullOrEmpty(leadingWs)))
                                         {
@@ -4315,13 +4315,13 @@ public class Word : INode
                                             formatted = ParableFunctions._FormatCmdsubNode(parsed, 0, false, false, false);
                                             formatted = formatted.TrimEnd(";".ToCharArray());
                                             string terminator = "";
-                                            if (inner.TrimEnd(" \t".ToCharArray()).EndsWith("\n"))
+                                            if (inner.TrimEnd(" \t".ToCharArray()).EndsWith("\n", StringComparison.Ordinal))
                                             {
                                                 terminator = "\n }";
                                             }
                                             else
                                             {
-                                                if (formatted.EndsWith(" &"))
+                                                if (formatted.EndsWith(" &", StringComparison.Ordinal))
                                                 {
                                                     terminator = " }";
                                                 }
@@ -5003,7 +5003,7 @@ public class Redirect : INode
     public string ToSexp()
     {
         string op = this.Op.TrimStart("0123456789".ToCharArray());
-        if (op.StartsWith("{"))
+        if (op.StartsWith("{", StringComparison.Ordinal))
         {
             int j = 1;
             if (j < op.Length && (((op[j]).ToString().Length > 0 && (op[j]).ToString().All(char.IsLetter)) || (op[j]).ToString() == "_"))
@@ -5036,11 +5036,11 @@ public class Redirect : INode
         targetVal = this.Target._StripLocaleStringDollars(targetVal);
         targetVal = this.Target._FormatCommandSubstitutions(targetVal, false);
         targetVal = this.Target._StripArithLineContinuations(targetVal);
-        if (targetVal.EndsWith("\\") && !(targetVal.EndsWith("\\\\")))
+        if (targetVal.EndsWith("\\", StringComparison.Ordinal) && !(targetVal.EndsWith("\\\\", StringComparison.Ordinal)))
         {
             targetVal = targetVal + "\\";
         }
-        if (targetVal.StartsWith("&"))
+        if (targetVal.StartsWith("&", StringComparison.Ordinal))
         {
             if (op == ">")
             {
@@ -5058,7 +5058,7 @@ public class Redirect : INode
             {
                 return "(redirect \"" + op + "\" " + ((int)Convert.ToInt64(raw, 10)).ToString() + ")";
             }
-            if (raw.EndsWith("-") && (raw.Substring(0, raw.Length - 1).Length > 0 && raw.Substring(0, raw.Length - 1).All(char.IsDigit)) && Convert.ToInt64(raw.Substring(0, raw.Length - 1), 10) <= 2147483647)
+            if (raw.EndsWith("-", StringComparison.Ordinal) && (raw.Substring(0, raw.Length - 1).Length > 0 && raw.Substring(0, raw.Length - 1).All(char.IsDigit)) && Convert.ToInt64(raw.Substring(0, raw.Length - 1), 10) <= 2147483647)
             {
                 return "(redirect \"" + op + "\" " + ((int)Convert.ToInt64(raw.Substring(0, raw.Length - 1), 10)).ToString() + ")";
             }
@@ -5066,7 +5066,7 @@ public class Redirect : INode
             {
                 return "(redirect \">&-\" 0)";
             }
-            string fdTarget = (raw.EndsWith("-") ? raw.Substring(0, raw.Length - 1) : raw);
+            string fdTarget = (raw.EndsWith("-", StringComparison.Ordinal) ? raw.Substring(0, raw.Length - 1) : raw);
             return "(redirect \"" + op + "\" \"" + fdTarget + "\")";
         }
         if (op == ">&" || op == "<&")
@@ -5079,11 +5079,11 @@ public class Redirect : INode
             {
                 return "(redirect \">&-\" 0)";
             }
-            if (targetVal.EndsWith("-") && (targetVal.Substring(0, targetVal.Length - 1).Length > 0 && targetVal.Substring(0, targetVal.Length - 1).All(char.IsDigit)) && Convert.ToInt64(targetVal.Substring(0, targetVal.Length - 1), 10) <= 2147483647)
+            if (targetVal.EndsWith("-", StringComparison.Ordinal) && (targetVal.Substring(0, targetVal.Length - 1).Length > 0 && targetVal.Substring(0, targetVal.Length - 1).All(char.IsDigit)) && Convert.ToInt64(targetVal.Substring(0, targetVal.Length - 1), 10) <= 2147483647)
             {
                 return "(redirect \"" + op + "\" " + ((int)Convert.ToInt64(targetVal.Substring(0, targetVal.Length - 1), 10)).ToString() + ")";
             }
-            string outVal = (targetVal.EndsWith("-") ? targetVal.Substring(0, targetVal.Length - 1) : targetVal);
+            string outVal = (targetVal.EndsWith("-", StringComparison.Ordinal) ? targetVal.Substring(0, targetVal.Length - 1) : targetVal);
             return "(redirect \"" + op + "\" \"" + outVal + "\")";
         }
         return "(redirect \"" + op + "\" \"" + targetVal + "\")";
@@ -5122,7 +5122,7 @@ public class HereDoc : INode
     {
         string op = (this.StripTabs ? "<<-" : "<<");
         string content = this.Content;
-        if (content.EndsWith("\\") && !(content.EndsWith("\\\\")))
+        if (content.EndsWith("\\", StringComparison.Ordinal) && !(content.EndsWith("\\\\", StringComparison.Ordinal)))
         {
             content = content + "\\";
         }
@@ -6829,7 +6829,7 @@ public class Parser
             return "";
         }
         string word = tok.Value;
-        if (word.EndsWith("\\\n"))
+        if (word.EndsWith("\\\n", StringComparison.Ordinal))
         {
             word = word.Substring(0, word.Length - 2);
         }
@@ -6854,7 +6854,7 @@ public class Parser
             return false;
         }
         string word = tok.Value;
-        if (word.EndsWith("\\\n"))
+        if (word.EndsWith("\\\n", StringComparison.Ordinal))
         {
             word = word.Substring(0, word.Length - 2);
         }
@@ -7432,7 +7432,7 @@ public class Parser
                 }
                 else
                 {
-                    if (checkLine.StartsWith(currentHeredocDelim) && checkLine.Length > currentHeredocDelim.Length)
+                    if (checkLine.StartsWith(currentHeredocDelim, StringComparison.Ordinal) && checkLine.Length > currentHeredocDelim.Length)
                     {
                         int tabsStripped = line.Length - checkLine.Length;
                         int endPos = tabsStripped + currentHeredocDelim.Length;
@@ -8784,47 +8784,47 @@ public class Parser
         }
         this._ArithConsume("}");
         string opStr = string.Join("", opChars);
-        if (opStr.StartsWith(":-"))
+        if (opStr.StartsWith(":-", StringComparison.Ordinal))
         {
             return new ParamExpansion(name, ":-", ParableFunctions._Substring(opStr, 2, opStr.Length), "param");
         }
-        if (opStr.StartsWith(":="))
+        if (opStr.StartsWith(":=", StringComparison.Ordinal))
         {
             return new ParamExpansion(name, ":=", ParableFunctions._Substring(opStr, 2, opStr.Length), "param");
         }
-        if (opStr.StartsWith(":+"))
+        if (opStr.StartsWith(":+", StringComparison.Ordinal))
         {
             return new ParamExpansion(name, ":+", ParableFunctions._Substring(opStr, 2, opStr.Length), "param");
         }
-        if (opStr.StartsWith(":?"))
+        if (opStr.StartsWith(":?", StringComparison.Ordinal))
         {
             return new ParamExpansion(name, ":?", ParableFunctions._Substring(opStr, 2, opStr.Length), "param");
         }
-        if (opStr.StartsWith(":"))
+        if (opStr.StartsWith(":", StringComparison.Ordinal))
         {
             return new ParamExpansion(name, ":", ParableFunctions._Substring(opStr, 1, opStr.Length), "param");
         }
-        if (opStr.StartsWith("##"))
+        if (opStr.StartsWith("##", StringComparison.Ordinal))
         {
             return new ParamExpansion(name, "##", ParableFunctions._Substring(opStr, 2, opStr.Length), "param");
         }
-        if (opStr.StartsWith("#"))
+        if (opStr.StartsWith("#", StringComparison.Ordinal))
         {
             return new ParamExpansion(name, "#", ParableFunctions._Substring(opStr, 1, opStr.Length), "param");
         }
-        if (opStr.StartsWith("%%"))
+        if (opStr.StartsWith("%%", StringComparison.Ordinal))
         {
             return new ParamExpansion(name, "%%", ParableFunctions._Substring(opStr, 2, opStr.Length), "param");
         }
-        if (opStr.StartsWith("%"))
+        if (opStr.StartsWith("%", StringComparison.Ordinal))
         {
             return new ParamExpansion(name, "%", ParableFunctions._Substring(opStr, 1, opStr.Length), "param");
         }
-        if (opStr.StartsWith("//"))
+        if (opStr.StartsWith("//", StringComparison.Ordinal))
         {
             return new ParamExpansion(name, "//", ParableFunctions._Substring(opStr, 2, opStr.Length), "param");
         }
-        if (opStr.StartsWith("/"))
+        if (opStr.StartsWith("/", StringComparison.Ordinal))
         {
             return new ParamExpansion(name, "/", ParableFunctions._Substring(opStr, 1, opStr.Length), "param");
         }
@@ -9041,8 +9041,8 @@ public class Parser
                 {
                     if (varname.Contains("[") || varname.Contains("]"))
                     {
-                        int left = varname.IndexOf("[");
-                        int right = varname.LastIndexOf("]");
+                        int left = varname.IndexOf("[", StringComparison.Ordinal);
+                        int right = varname.LastIndexOf("]", StringComparison.Ordinal);
                         if (left != -1 && right == varname.Length - 1 && right > left + 1)
                         {
                             string @base = varname.Substring(0, left);
@@ -9710,13 +9710,13 @@ public class Parser
                 string normalizedCheck = ParableFunctions._NormalizeHeredocDelimiter(checkLine);
                 string normalizedDelim = ParableFunctions._NormalizeHeredocDelimiter(heredoc.Delimiter);
                 int tabsStripped = 0;
-                if (this._EofToken == ")" && normalizedCheck.StartsWith(normalizedDelim))
+                if (this._EofToken == ")" && normalizedCheck.StartsWith(normalizedDelim, StringComparison.Ordinal))
                 {
                     tabsStripped = line.Length - checkLine.Length;
                     this.Pos = lineStart + tabsStripped + heredoc.Delimiter.Length;
                     break;
                 }
-                if (lineEnd >= this.Length && normalizedCheck.StartsWith(normalizedDelim) && this._InProcessSub)
+                if (lineEnd >= this.Length && normalizedCheck.StartsWith(normalizedDelim, StringComparison.Ordinal) && this._InProcessSub)
                 {
                     tabsStripped = line.Length - checkLine.Length;
                     this.Pos = lineStart + tabsStripped + heredoc.Delimiter.Length;
@@ -10795,7 +10795,7 @@ public class Parser
                                         }
                                         if (scanPos < this.Length && (this.Source[scanPos]).ToString() == "]")
                                         {
-                                            if (this.Source.IndexOf("]", scanPos + 1) != -1)
+                                            if (this.Source.IndexOf("]", scanPos + 1, StringComparison.Ordinal) != -1)
                                             {
                                                 scanPos += 1;
                                                 hasFirstBracketLiteral = true;
@@ -11910,7 +11910,7 @@ public class Parser
         }
         INode lastNode = nodes[nodes.Count - 1];
         Word lastWord = this._FindLastWord(lastNode);
-        if (lastWord != null && lastWord.Value.EndsWith("\\"))
+        if (lastWord != null && lastWord.Value.EndsWith("\\", StringComparison.Ordinal))
         {
             lastWord.Value = ParableFunctions._Substring(lastWord.Value, 0, lastWord.Value.Length - 1);
             if (!((!string.IsNullOrEmpty(lastWord.Value))) && (lastNode is Command) && (((Command)lastNode).Words.Count > 0))
@@ -11933,7 +11933,7 @@ public class Parser
                 if ((nodeCommand.Words.Count > 0))
                 {
                     Word lastWord = nodeCommand.Words[nodeCommand.Words.Count - 1];
-                    if (lastWord.Value.EndsWith("\\"))
+                    if (lastWord.Value.EndsWith("\\", StringComparison.Ordinal))
                     {
                         return lastWord;
                     }
@@ -12017,7 +12017,7 @@ public static class ParableFunctions
 
     public static bool _StartsWithAt(string s, int pos, string prefix)
     {
-        return (s.IndexOf(prefix, pos) == pos);
+        return (s.IndexOf(prefix, pos, StringComparison.Ordinal) == pos);
     }
 
     public static int _CountConsecutiveDollarsBefore(string s, int pos)
@@ -12447,7 +12447,7 @@ public static class ParableFunctions
                     {
                         if (hasHeredoc)
                         {
-                            firstNl = formatted.IndexOf("\n");
+                            firstNl = formatted.IndexOf("\n", StringComparison.Ordinal);
                             if (firstNl != -1)
                             {
                                 formatted = formatted.Substring(0, firstNl) + " 2>&1" + formatted.Substring(firstNl);
@@ -12464,7 +12464,7 @@ public static class ParableFunctions
                     }
                     if (!(isLast) && hasHeredoc)
                     {
-                        firstNl = formatted.IndexOf("\n");
+                        firstNl = formatted.IndexOf("\n", StringComparison.Ordinal);
                         if (firstNl != -1)
                         {
                             formatted = formatted.Substring(0, firstNl) + " |" + formatted.Substring(firstNl);
@@ -12571,12 +12571,12 @@ public static class ParableFunctions
                         case Operator pOperator:
                             if (pOperator.Op == ";")
                             {
-                                if ((result.Count > 0) && result[result.Count - 1].EndsWith("\n"))
+                                if ((result.Count > 0) && result[result.Count - 1].EndsWith("\n", StringComparison.Ordinal))
                                 {
                                     skippedSemi = true;
                                     continue;
                                 }
-                                if (result.Count >= 3 && result[result.Count - 2] == "\n" && result[result.Count - 3].EndsWith("\n"))
+                                if (result.Count >= 3 && result[result.Count - 2] == "\n" && result[result.Count - 3].EndsWith("\n", StringComparison.Ordinal))
                                 {
                                     skippedSemi = true;
                                     continue;
@@ -12593,7 +12593,7 @@ public static class ParableFunctions
                                         skippedSemi = false;
                                         continue;
                                     }
-                                    if ((result.Count > 0) && result[result.Count - 1].EndsWith("\n"))
+                                    if ((result.Count > 0) && result[result.Count - 1].EndsWith("\n", StringComparison.Ordinal))
                                     {
                                         result.Add((skippedSemi ? " " : "\n"));
                                         skippedSemi = false;
@@ -12611,13 +12611,13 @@ public static class ParableFunctions
                                         if ((result.Count > 0) && result[result.Count - 1].Contains("<<") && result[result.Count - 1].Contains("\n"))
                                         {
                                             last = result[result.Count - 1];
-                                            if (last.Contains(" |") || last.StartsWith("|"))
+                                            if (last.Contains(" |") || last.StartsWith("|", StringComparison.Ordinal))
                                             {
                                                 result[result.Count - 1] = last + " &";
                                             }
                                             else
                                             {
-                                                firstNl = last.IndexOf("\n");
+                                                firstNl = last.IndexOf("\n", StringComparison.Ordinal);
                                                 result[result.Count - 1] = last.Substring(0, firstNl) + " &" + last.Substring(firstNl);
                                             }
                                         }
@@ -12631,7 +12631,7 @@ public static class ParableFunctions
                                         if ((result.Count > 0) && result[result.Count - 1].Contains("<<") && result[result.Count - 1].Contains("\n"))
                                         {
                                             last = result[result.Count - 1];
-                                            firstNl = last.IndexOf("\n");
+                                            firstNl = last.IndexOf("\n", StringComparison.Ordinal);
                                             result[result.Count - 1] = last.Substring(0, firstNl) + " " + pOperator.Op + " " + last.Substring(firstNl);
                                         }
                                         else
@@ -12643,7 +12643,7 @@ public static class ParableFunctions
                             }
                             break;
                         default:
-                            if ((result.Count > 0) && !((result[result.Count - 1].EndsWith(" ") || result[result.Count - 1].EndsWith("\n"))))
+                            if ((result.Count > 0) && !((result[result.Count - 1].EndsWith(" ", StringComparison.Ordinal) || result[result.Count - 1].EndsWith("\n", StringComparison.Ordinal))))
                             {
                                 result.Add(" ");
                             }
@@ -12667,17 +12667,17 @@ public static class ParableFunctions
                     }
                 }
                 string s = string.Join("", result);
-                if (s.Contains(" &\n") && s.EndsWith("\n"))
+                if (s.Contains(" &\n") && s.EndsWith("\n", StringComparison.Ordinal))
                 {
                     return s + " ";
                 }
-                while (s.EndsWith(";"))
+                while (s.EndsWith(";", StringComparison.Ordinal))
                 {
                     s = ParableFunctions._Substring(s, 0, s.Length - 1);
                 }
                 if (!(hasHeredoc))
                 {
-                    while (s.EndsWith("\n"))
+                    while (s.EndsWith("\n", StringComparison.Ordinal))
                     {
                         s = ParableFunctions._Substring(s, 0, s.Length - 1);
                     }
@@ -12865,7 +12865,7 @@ public static class ParableFunctions
             case BraceGroup nodeBraceGroup:
                 string body = ParableFunctions._FormatCmdsubNode(nodeBraceGroup.Body, indent, false, false, false);
                 body = body.TrimEnd(";".ToCharArray());
-                string terminator = (body.EndsWith(" &") ? " }" : "; }");
+                string terminator = (body.EndsWith(" &", StringComparison.Ordinal) ? " }" : "; }");
                 string redirects = "";
                 if ((nodeBraceGroup.Redirects.Count > 0))
                 {
@@ -12964,10 +12964,10 @@ public static class ParableFunctions
         target = ((Redirect)r).Target._ExpandAllAnsiCQuotes(target);
         target = ((Redirect)r).Target._StripLocaleStringDollars(target);
         target = ((Redirect)r).Target._FormatCommandSubstitutions(target, false);
-        if (target.StartsWith("&"))
+        if (target.StartsWith("&", StringComparison.Ordinal))
         {
             bool wasInputClose = false;
-            if (target == "&-" && op.EndsWith("<"))
+            if (target == "&-" && op.EndsWith("<", StringComparison.Ordinal))
             {
                 wasInputClose = true;
                 op = ParableFunctions._Substring(op, 0, op.Length - 1) + ">";
@@ -13004,7 +13004,7 @@ public static class ParableFunctions
             }
             return op + target;
         }
-        if (op.EndsWith("&"))
+        if (op.EndsWith("&", StringComparison.Ordinal))
         {
             return op + target;
         }
@@ -13717,7 +13717,7 @@ public static class ParableFunctions
                     return lineEnd;
                 }
             }
-            if (stripped.StartsWith(delimiter) && stripped.Length > delimiter.Length)
+            if (stripped.StartsWith(delimiter, StringComparison.Ordinal) && stripped.Length > delimiter.Length)
             {
                 int tabsStripped = line.Length - stripped.Length;
                 return lineStart + tabsStripped + delimiter.Length;
@@ -13805,7 +13805,7 @@ public static class ParableFunctions
                     pos = (lineEnd < source.Length ? lineEnd + 1 : lineEnd);
                     break;
                 }
-                if (lineStripped.StartsWith(delimiter) && lineStripped.Length > delimiter.Length)
+                if (lineStripped.StartsWith(delimiter, StringComparison.Ordinal) && lineStripped.Length > delimiter.Length)
                 {
                     int tabsStripped = line.Length - lineStripped.Length;
                     pos = lineStart + tabsStripped + delimiter.Length;

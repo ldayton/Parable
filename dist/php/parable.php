@@ -11895,7 +11895,7 @@ class Parser
         if ($lastWord !== null && str_ends_with($lastWord->value, "\\"))
         {
             $lastWord->value = _substring($lastWord->value, 0, mb_strlen($lastWord->value) - 1);
-            if (!($lastWord->value !== '') && ($lastNode instanceof Command) && $lastNode->words !== null)
+            if (!($lastWord->value !== '') && ($lastNode instanceof Command) && (count($lastNode->words) > 0))
             {
                 array_pop($lastNode->words);
             }
@@ -12387,7 +12387,7 @@ function _formatCmdsubNode(?Node $node, int $indent, bool $inProcsub, bool $comp
             $formatted = _formatCmdsubNode($cmd, $indent, $inProcsub, false, $procsubFirst && $idx === 0);
             $isLast = $idx === count($cmds) - 1;
             $hasHeredoc = false;
-            if ($cmd->kind === "command" && $cmd->redirects !== null)
+            if ($cmd->kind === "command" && (count($cmd->redirects) > 0))
             {
                 foreach ($cmd->redirects as $r)
                 {
@@ -12470,7 +12470,7 @@ function _formatCmdsubNode(?Node $node, int $indent, bool $inProcsub, bool $comp
         $hasHeredoc = false;
         foreach ($node->parts as $p)
         {
-            if ($p->kind === "command" && $p->redirects !== null)
+            if ($p->kind === "command" && (count($p->redirects) > 0))
             {
                 foreach ($p->redirects as $r)
                 {
@@ -12487,7 +12487,7 @@ function _formatCmdsubNode(?Node $node, int $indent, bool $inProcsub, bool $comp
                 {
                     foreach ($p->commands as $cmd)
                     {
-                        if ($cmd->kind === "command" && $cmd->redirects !== null)
+                        if ($cmd->kind === "command" && (count($cmd->redirects) > 0))
                         {
                             foreach ($cmd->redirects as $r)
                             {
@@ -12902,7 +12902,7 @@ function _formatRedirect(?Node $r, bool $compact, bool $heredocOpOnly): string
             $wasInputClose = true;
             $op = _substring($op, 0, mb_strlen($op) - 1) . ">";
         }
-        $afterAmp = _substring($target, 1, count($target));
+        $afterAmp = _substring($target, 1, mb_strlen($target));
         $isLiteralFd = $afterAmp === "-" || mb_strlen($afterAmp) > 0 && ctype_digit((string)(mb_substr($afterAmp, 0, 1)));
         if ($isLiteralFd)
         {

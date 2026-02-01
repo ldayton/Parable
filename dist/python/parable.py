@@ -713,7 +713,7 @@ class Lexer:
     def _read_word_internal(self, ctx: int, at_command_start: bool, in_array_literal: bool, in_assign_builtin: bool) -> Word:
         start = self.pos
         chars: list[str] = []
-        parts: list[any] = []
+        parts: list[Node] = []
         bracket_depth = 0
         bracket_start_pos: int = -1
         seen_equals = False
@@ -1040,7 +1040,7 @@ class Lexer:
         self.advance()
         self.advance()
         content_chars: list[str] = []
-        inner_parts: list[any] = []
+        inner_parts: list[Node] = []
         found_close = False
         while not self.at_end():
             ch = self.peek()
@@ -2127,7 +2127,7 @@ class Word(Node):
         return "".join(result)
 
     def _collect_cmdsubs(self, node: Node) -> list[Node]:
-        result: list[any] = []
+        result: list[Node] = []
         if isinstance(node, CommandSubstitution):
             node = node
             result.append(node)
@@ -2179,7 +2179,7 @@ class Word(Node):
         return result
 
     def _collect_procsubs(self, node: Node) -> list[Node]:
-        result: list[any] = []
+        result: list[Node] = []
         if isinstance(node, ProcessSubstitution):
             node = node
             result.append(node)
@@ -6734,7 +6734,7 @@ class Parser:
         last_word = self._find_last_word(last_node)
         if last_word is not None and last_word.value.endswith("\\"):
             last_word.value = _substring(last_word.value, 0, len(last_word.value) - 1)
-            if not last_word.value and isinstance(last_node, Command) and last_node.words is not None:
+            if not last_word.value and isinstance(last_node, Command) and last_node.words:
                 last_node.words.pop()
 
     def _find_last_word(self, node: Node) -> Word:
@@ -7054,7 +7054,7 @@ def _format_cmdsub_node(node: Node, indent: int, in_procsub: bool, compact_redir
             formatted = _format_cmdsub_node(cmd, indent, in_procsub, False, procsub_first and idx == 0)
             is_last = idx == len(cmds) - 1
             has_heredoc = False
-            if cmd.kind == "command" and cmd.redirects is not None:
+            if cmd.kind == "command" and cmd.redirects:
                 for r in (cmd.redirects or []):
                     if isinstance(r, HereDoc):
                         r = r
@@ -7097,7 +7097,7 @@ def _format_cmdsub_node(node: Node, indent: int, in_procsub: bool, compact_redir
         node = node
         has_heredoc = False
         for p in (node.parts or []):
-            if p.kind == "command" and p.redirects is not None:
+            if p.kind == "command" and p.redirects:
                 for r in (p.redirects or []):
                     if isinstance(r, HereDoc):
                         r = r
@@ -7107,7 +7107,7 @@ def _format_cmdsub_node(node: Node, indent: int, in_procsub: bool, compact_redir
                 if isinstance(p, Pipeline):
                     p = p
                     for cmd in (p.commands or []):
-                        if cmd.kind == "command" and cmd.redirects is not None:
+                        if cmd.kind == "command" and cmd.redirects:
                             for r in (cmd.redirects or []):
                                 if isinstance(r, HereDoc):
                                     r = r

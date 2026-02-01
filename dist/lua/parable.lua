@@ -9078,7 +9078,7 @@ function Parser:strip_trailing_backslash_from_last_word(nodes)
   last_word = self:find_last_word(last_node)
   if (last_word ~= nil) and (string.sub(last_word.value, -#"\\") == "\\") then
     last_word.value = substring(last_word.value, 0, #last_word.value - 1)
-    if not (last_word.value ~= nil and #(last_word.value) > 0) and (type(last_node) == 'table' and getmetatable(last_node) == Command) and (last_node.words ~= nil) then
+    if not (last_word.value ~= nil and #(last_word.value) > 0) and (type(last_node) == 'table' and getmetatable(last_node) == Command) and (#(last_node.words) > 0) then
       table.remove(last_node.words)
     end
   end
@@ -9485,7 +9485,7 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
       formatted = format_cmdsub_node(cmd, indent, in_procsub, false, procsub_first and idx == 0)
       is_last = idx == #cmds - 1
       has_heredoc = false
-      if cmd.kind == "command" and (cmd.redirects ~= nil) then
+      if cmd.kind == "command" and (#(cmd.redirects) > 0) then
         for _, r in ipairs(cmd.redirects) do
           if (type(r) == 'table' and getmetatable(r) == HereDoc) then
             local r = r
@@ -9541,7 +9541,7 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
     local node = node
     has_heredoc = false
     for _, p in ipairs(node.parts) do
-      if p.kind == "command" and (p.redirects ~= nil) then
+      if p.kind == "command" and (#(p.redirects) > 0) then
         for _, r in ipairs(p.redirects) do
           if (type(r) == 'table' and getmetatable(r) == HereDoc) then
             local r = r
@@ -9553,7 +9553,7 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
         if (type(p) == 'table' and getmetatable(p) == Pipeline) then
           local p = p
           for _, cmd in ipairs(p.commands) do
-            if cmd.kind == "command" and (cmd.redirects ~= nil) then
+            if cmd.kind == "command" and (#(cmd.redirects) > 0) then
               for _, r in ipairs(cmd.redirects) do
                 if (type(r) == 'table' and getmetatable(r) == HereDoc) then
                   local r = r

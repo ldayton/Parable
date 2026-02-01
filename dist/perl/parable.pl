@@ -9083,7 +9083,7 @@ sub strip_trailing_backslash_from_last_word ($self, $nodes) {
     my $last_word = $self->find_last_word($last_node);
     if (defined($last_word) && (substr($last_word->{value}, -length("\\")) eq "\\")) {
         $last_word->{value} = main::substring($last_word->{value}, 0, length($last_word->{value}) - 1);
-        if (!(length($last_word->{value}) > 0) && (ref($last_node) eq 'Command') && defined($last_node->{words})) {
+        if (!(length($last_word->{value}) > 0) && (ref($last_node) eq 'Command') && (scalar(@{($last_node->{words} // [])}) > 0)) {
             pop(@{$last_node->{words}});
         }
     }
@@ -9537,7 +9537,7 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
             $formatted = format_cmdsub_node($cmd, $indent, $in_procsub, 0, $procsub_first && $idx == 0);
             $is_last = $idx == scalar(@{($cmds // [])}) - 1;
             $has_heredoc = 0;
-            if ($cmd->{kind} eq "command" && defined($cmd->{redirects})) {
+            if ($cmd->{kind} eq "command" && (scalar(@{($cmd->{redirects} // [])}) > 0)) {
                 for my $r (@{($cmd->{redirects} // [])}) {
                     if (ref($r) eq 'HereDoc') {
                         my $r = $r;
@@ -9594,7 +9594,7 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
         my $node = $node;
         $has_heredoc = 0;
         for my $p (@{($node->{parts} // [])}) {
-            if ($p->{kind} eq "command" && defined($p->{redirects})) {
+            if ($p->{kind} eq "command" && (scalar(@{($p->{redirects} // [])}) > 0)) {
                 for my $r (@{($p->{redirects} // [])}) {
                     if (ref($r) eq 'HereDoc') {
                         my $r = $r;
@@ -9606,7 +9606,7 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
                 if (ref($p) eq 'Pipeline') {
                     my $p = $p;
                     for my $cmd (@{($p->{commands} // [])}) {
-                        if ($cmd->{kind} eq "command" && defined($cmd->{redirects})) {
+                        if ($cmd->{kind} eq "command" && (scalar(@{($cmd->{redirects} // [])}) > 0)) {
                             for my $r (@{($cmd->{redirects} // [])}) {
                                 if (ref($r) eq 'HereDoc') {
                                     my $r = $r;
@@ -9933,7 +9933,7 @@ sub format_redirect ($r, $compact, $heredoc_op_only) {
             $was_input_close = 1;
             $op = substring($op, 0, length($op) - 1) . ">";
         }
-        $after_amp = substring($target, 1, scalar(@{($target // [])}));
+        $after_amp = substring($target, 1, length($target));
         $is_literal_fd = $after_amp eq "-" || length($after_amp) > 0 && (substr($after_amp, 0, 1) =~ /^\d+$/);
         if ($is_literal_fd) {
             if ($op eq ">" || $op eq ">&") {

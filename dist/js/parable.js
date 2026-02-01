@@ -9138,7 +9138,7 @@ var Parser = /** @class */ (function () {
         var lastWord = this.FindLastWord(lastNode);
         if (lastWord !== null && lastWord.value.endsWith("\\")) {
             lastWord.value = Substring(lastWord.value, 0, lastWord.value.length - 1);
-            if (!(lastWord.value.length > 0) && lastNode instanceof Command && lastNode.words !== null) {
+            if (!(lastWord.value.length > 0) && lastNode instanceof Command && (lastNode.words.length > 0)) {
                 lastNode.words.pop();
             }
         }
@@ -9506,7 +9506,7 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
             var formatted = FormatCmdsubNode(cmd, indent, inProcsub, false, procsubFirst && idx === 0);
             var isLast = idx === cmds.length - 1;
             var hasHeredoc = false;
-            if (cmd.kind === "command" && cmd.redirects !== null) {
+            if (cmd.kind === "command" && (cmd.redirects.length > 0)) {
                 for (var _g = 0, _h = cmd.redirects; _g < _h.length; _g++) {
                     var r = _h[_g];
                     if (r instanceof HereDoc) {
@@ -9570,7 +9570,7 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
         var hasHeredoc = false;
         for (var _j = 0, _k = node.parts; _j < _k.length; _j++) {
             var p_1 = _k[_j];
-            if (p_1.kind === "command" && p_1.redirects !== null) {
+            if (p_1.kind === "command" && (p_1.redirects.length > 0)) {
                 for (var _l = 0, _m = p_1.redirects; _l < _m.length; _l++) {
                     var r = _m[_l];
                     if (r instanceof HereDoc) {
@@ -9583,7 +9583,7 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
                 if (p_1 instanceof Pipeline) {
                     for (var _o = 0, _p = p_1.commands; _o < _p.length; _o++) {
                         var cmd_1 = _p[_o];
-                        if (cmd_1.kind === "command" && cmd_1.redirects !== null) {
+                        if (cmd_1.kind === "command" && (cmd_1.redirects.length > 0)) {
                             for (var _q = 0, _r = cmd_1.redirects; _q < _r.length; _q++) {
                                 var r = _r[_q];
                                 if (r instanceof HereDoc) {

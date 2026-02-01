@@ -8510,7 +8510,7 @@ class Parser
     last_word = self.find_last_word(last_node)
     if !last_word.nil? && last_word.value.end_with?("\\")
       last_word.value = substring(last_word.value, 0, last_word.value.length - 1)
-      if !(last_word.value && !last_word.value.empty?) && last_node.is_a?(Command) && !last_node.words.nil?
+      if !(last_word.value && !last_word.value.empty?) && last_node.is_a?(Command) && (last_node.words && !last_node.words.empty?)
         last_node.words.pop
       end
     end
@@ -8917,7 +8917,7 @@ def format_cmdsub_node(node, indent = 0, in_procsub = false, compact_redirects =
       formatted = format_cmdsub_node(cmd, indent, in_procsub, false, procsub_first && idx == 0)
       is_last = idx == cmds.length - 1
       has_heredoc = false
-      if cmd.kind == "command" && !cmd.redirects.nil?
+      if cmd.kind == "command" && (cmd.redirects && !cmd.redirects.empty?)
         (cmd.redirects || []).each do |r|
           case r
           when HereDoc
@@ -8975,7 +8975,7 @@ def format_cmdsub_node(node, indent = 0, in_procsub = false, compact_redirects =
     node = node
     has_heredoc = false
     (node.parts || []).each do |p_|
-      if p_.kind == "command" && !p_.redirects.nil?
+      if p_.kind == "command" && (p_.redirects && !p_.redirects.empty?)
         (p_.redirects || []).each do |r|
           case r
           when HereDoc
@@ -8989,7 +8989,7 @@ def format_cmdsub_node(node, indent = 0, in_procsub = false, compact_redirects =
         when Pipeline
           p_ = p_
           (p_.commands || []).each do |cmd|
-            if cmd.kind == "command" && !cmd.redirects.nil?
+            if cmd.kind == "command" && (cmd.redirects && !cmd.redirects.empty?)
               (cmd.redirects || []).each do |r|
                 case r
                 when HereDoc

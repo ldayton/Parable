@@ -1084,8 +1084,12 @@ class PerlBackend:
                     return f"push(@{{{obj_str}}}, {args_str})"
                 if method == "extend":
                     return f"push(@{{{obj_str}}}, @{{{args_str}}})"
-                if method == "pop" and not args and isinstance(inner_type, (Slice, Array)):
-                    return f"pop(@{{{obj_str}}})"
+                if method == "pop" and isinstance(inner_type, (Slice, Array)):
+                    if not args:
+                        return f"pop(@{{{obj_str}}})"
+                    # pop(0) -> shift (remove from front)
+                    if len(args) == 1 and isinstance(args[0], IntLit) and args[0].value == 0:
+                        return f"shift(@{{{obj_str}}})"
                 if method == "copy" and isinstance(inner_type, (Slice, Array)):
                     return f"[@{{{obj_str}}}]"
                 if isinstance(inner_type, Map):
@@ -1172,7 +1176,11 @@ class PerlBackend:
                     if method == "extend":
                         return f"push(@{{{obj_str}}}, @{{{args_str}}})"
                     if method == "pop":
-                        return f"pop(@{{{obj_str}}})"
+                        if not args:
+                            return f"pop(@{{{obj_str}}})"
+                        # pop(0) -> shift (remove from front)
+                        if len(args) == 1 and isinstance(args[0], IntLit) and args[0].value == 0:
+                            return f"shift(@{{{obj_str}}})"
                     if method == "copy":
                         return f"[@{{{obj_str}}}]"
                 pl_method = _method_name(method, receiver_type)

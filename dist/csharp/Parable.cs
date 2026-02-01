@@ -1228,7 +1228,7 @@ public class Lexer
                 }
                 break;
             }
-            if (ctx == Constants.WORD_CTX_COND || ctx == Constants.WORD_CTX_REGEX && ch == "[")
+            if ((ctx == Constants.WORD_CTX_COND || ctx == Constants.WORD_CTX_REGEX) && ch == "[")
             {
                 bool forRegex = ctx == Constants.WORD_CTX_REGEX;
                 if (this._ReadBracketExpression(chars, parts, forRegex, parenDepth))
@@ -1280,7 +1280,7 @@ public class Lexer
                 {
                     chars.Add("\"");
                     bool inSingleInDquote = false;
-                    while (!(this.AtEnd()) && inSingleInDquote || this.Peek() != "\"")
+                    while (!(this.AtEnd()) && (inSingleInDquote || this.Peek() != "\""))
                     {
                         string c = this.Peek();
                         if (inSingleInDquote)
@@ -1482,7 +1482,7 @@ public class Lexer
                         isArrayAssign = ParableFunctions._IsArrayAssignmentPrefix(chars.GetRange(0, chars.Count - 1));
                     }
                 }
-                if (isArrayAssign && atCommandStart || inAssignBuiltin)
+                if (isArrayAssign && (atCommandStart || inAssignBuiltin))
                 {
                     this._SyncToParser();
                     (INode arrayResult0, string arrayResult1) = this._Parser._ParseArrayLiteral();
@@ -1549,8 +1549,8 @@ public class Lexer
         {
             return null;
         }
-        bool isProcsub = c == "<" || c == ">" && this.Pos + 1 < this.Length && (this.Source[this.Pos + 1]).ToString() == "(";
-        bool isRegexParen = this._WordContext == Constants.WORD_CTX_REGEX && c == "(" || c == ")";
+        bool isProcsub = (c == "<" || c == ">") && this.Pos + 1 < this.Length && (this.Source[this.Pos + 1]).ToString() == "(";
+        bool isRegexParen = this._WordContext == Constants.WORD_CTX_REGEX && (c == "(" || c == ")");
         if (this.IsMetachar(c) && !(isProcsub) && !(isRegexParen))
         {
             return null;
@@ -2252,7 +2252,7 @@ public class Lexer
         param = this._ConsumeParamName();
         if (!((!string.IsNullOrEmpty(param))))
         {
-            if (!(this.AtEnd()) && "-=+?".Contains(this.Peek()) || this.Peek() == ":" && this.Pos + 1 < this.Length && ParableFunctions._IsSimpleParamOp((this.Source[this.Pos + 1]).ToString()))
+            if (!(this.AtEnd()) && ("-=+?".Contains(this.Peek()) || this.Peek() == ":" && this.Pos + 1 < this.Length && ParableFunctions._IsSimpleParamOp((this.Source[this.Pos + 1]).ToString())))
             {
                 param = "";
             }
@@ -2279,7 +2279,7 @@ public class Lexer
         op = this._ConsumeParamOperator();
         if (op == "")
         {
-            if (!(this.AtEnd()) && this.Peek() == "$" && this.Pos + 1 < this.Length && (this.Source[this.Pos + 1]).ToString() == "\"" || (this.Source[this.Pos + 1]).ToString() == "'")
+            if (!(this.AtEnd()) && this.Peek() == "$" && this.Pos + 1 < this.Length && ((this.Source[this.Pos + 1]).ToString() == "\"" || (this.Source[this.Pos + 1]).ToString() == "'"))
             {
                 int dollarCount = 1 + ParableFunctions._CountConsecutiveDollarsBefore(this.Source, this.Pos);
                 if (dollarCount % 2 == 1)
@@ -2326,7 +2326,7 @@ public class Lexer
                     }
                     else
                     {
-                        if (!(this.AtEnd()) && this.Peek() == "'" || this.Peek() == "\"")
+                        if (!(this.AtEnd()) && (this.Peek() == "'" || this.Peek() == "\""))
                         {
                             op = "";
                         }
@@ -2360,7 +2360,7 @@ public class Lexer
             this._DolbraceState = savedDolbrace;
             throw;
         }
-        if (op == "<" || op == ">" && arg.StartsWith("(") && arg.EndsWith(")"))
+        if ((op == "<" || op == ">") && arg.StartsWith("(") && arg.EndsWith(")"))
         {
             string inner = arg.Substring(1, arg.Length - 1 - 1);
             try
@@ -3064,7 +3064,7 @@ public class Word : INode
             }
             else
             {
-                if (ParableFunctions._StartsWithAt(value, i, "${") && !(quote.Single) && !(braceQuote.Single) && i == 0 || (value[i - 1]).ToString() != "$")
+                if (ParableFunctions._StartsWithAt(value, i, "${") && !(quote.Single) && !(braceQuote.Single) && (i == 0 || (value[i - 1]).ToString() != "$"))
                 {
                     braceDepth += 1;
                     braceQuote.Double = false;
@@ -3140,7 +3140,7 @@ public class Word : INode
                                                 }
                                                 else
                                                 {
-                                                    if (ParableFunctions._StartsWithAt(value, i, "$\"") && !(quote.Single) && !(braceQuote.Single) && braceDepth > 0 || bracketDepth > 0 || !(quote.Double) && !(braceQuote.Double) && !(bracketInDoubleQuote))
+                                                    if (ParableFunctions._StartsWithAt(value, i, "$\"") && !(quote.Single) && !(braceQuote.Single) && (braceDepth > 0 || bracketDepth > 0 || !(quote.Double)) && !(braceQuote.Double) && !(bracketInDoubleQuote))
                                                     {
                                                         int dollarCount = 1 + ParableFunctions._CountConsecutiveDollarsBefore(value, i);
                                                         if (dollarCount % 2 == 1)
@@ -3191,12 +3191,12 @@ public class Word : INode
     public string _NormalizeArrayWhitespace(string value)
     {
         int i = 0;
-        if (!(i < value.Length && ((value[i]).ToString().Length > 0 && (value[i]).ToString().All(char.IsLetter)) || (value[i]).ToString() == "_"))
+        if (!(i < value.Length && (((value[i]).ToString().Length > 0 && (value[i]).ToString().All(char.IsLetter)) || (value[i]).ToString() == "_")))
         {
             return value;
         }
         i += 1;
-        while (i < value.Length && ((value[i]).ToString().Length > 0 && (value[i]).ToString().All(char.IsLetterOrDigit)) || (value[i]).ToString() == "_")
+        while (i < value.Length && (((value[i]).ToString().Length > 0 && (value[i]).ToString().All(char.IsLetterOrDigit)) || (value[i]).ToString() == "_"))
         {
             i += 1;
         }
@@ -3515,7 +3515,7 @@ public class Word : INode
                                 }
                                 else
                                 {
-                                    if (ch == "<" || ch == ">" && i + 1 < inner.Length && (inner[i + 1]).ToString() == "(")
+                                    if ((ch == "<" || ch == ">") && i + 1 < inner.Length && (inner[i + 1]).ToString() == "(")
                                     {
                                         inWhitespace = false;
                                         j = i + 2;
@@ -3910,7 +3910,7 @@ public class Word : INode
                     }
                     else
                     {
-                        if (ParableFunctions._StartsWithAt(value, idx, "<(") || ParableFunctions._StartsWithAt(value, idx, ">(") && !(scanQuote.Double))
+                        if ((ParableFunctions._StartsWithAt(value, idx, "<(") || ParableFunctions._StartsWithAt(value, idx, ">(")) && !(scanQuote.Double))
                         {
                             if (idx == 0 || !(((value[idx - 1]).ToString().Length > 0 && (value[idx - 1]).ToString().All(char.IsLetterOrDigit))) && !"\"'".Contains((value[idx - 1]).ToString()))
                             {
@@ -3927,7 +3927,7 @@ public class Word : INode
                 }
             }
         }
-        bool hasParamWithProcsubPattern = value.Contains("${") && value.Contains("<(") || value.Contains(">(");
+        bool hasParamWithProcsubPattern = value.Contains("${") && (value.Contains("<(") || value.Contains(">("));
         if (!((cmdsubParts.Count > 0)) && !((procsubParts.Count > 0)) && !(hasBraceCmdsub) && !(hasUntrackedCmdsub) && !(hasUntrackedProcsub) && !(hasParamWithProcsubPattern))
         {
             return value;
@@ -4138,7 +4138,7 @@ public class Word : INode
                     }
                     else
                     {
-                        if (ParableFunctions._StartsWithAt(value, i, ">(") || ParableFunctions._StartsWithAt(value, i, "<(") && !(mainQuote.Double) && deprecatedArithDepth == 0 && arithDepth == 0)
+                        if ((ParableFunctions._StartsWithAt(value, i, ">(") || ParableFunctions._StartsWithAt(value, i, "<(")) && !(mainQuote.Double) && deprecatedArithDepth == 0 && arithDepth == 0)
                         {
                             bool isProcsub = i == 0 || !(((value[i - 1]).ToString().Length > 0 && (value[i - 1]).ToString().All(char.IsLetterOrDigit))) && !"\"'".Contains((value[i - 1]).ToString());
                             if (extglobDepth > 0)
@@ -4279,7 +4279,7 @@ public class Word : INode
                         else
                         {
                             int depth = 0;
-                            if (ParableFunctions._IsExpansionStart(value, i, "${ ") || ParableFunctions._IsExpansionStart(value, i, "${\t") || ParableFunctions._IsExpansionStart(value, i, "${\n") || ParableFunctions._IsExpansionStart(value, i, "${|") && !(ParableFunctions._IsBackslashEscaped(value, i)))
+                            if ((ParableFunctions._IsExpansionStart(value, i, "${ ") || ParableFunctions._IsExpansionStart(value, i, "${\t") || ParableFunctions._IsExpansionStart(value, i, "${\n") || ParableFunctions._IsExpansionStart(value, i, "${|")) && !(ParableFunctions._IsBackslashEscaped(value, i)))
                             {
                                 prefix = ParableFunctions._Substring(value, i, i + 3).Replace("\t", " ").Replace("\n", " ");
                                 j = i + 3;
@@ -4752,7 +4752,7 @@ public class List : INode
     {
         List<INode> parts = new List<INode>(this.Parts);
         Dictionary<string, string> opNames = new Dictionary<string, string> { { "&&", "and" }, { "||", "or" }, { ";", "semi" }, { "\n", "semi" }, { "&", "background" } };
-        while (parts.Count > 1 && parts[parts.Count - 1].Kind == "operator" && ((Operator)parts[parts.Count - 1]).Op == ";" || ((Operator)parts[parts.Count - 1]).Op == "\n")
+        while (parts.Count > 1 && parts[parts.Count - 1].Kind == "operator" && (((Operator)parts[parts.Count - 1]).Op == ";" || ((Operator)parts[parts.Count - 1]).Op == "\n"))
         {
             parts = ParableFunctions._Sublist(parts, 0, parts.Count - 1);
         }
@@ -4764,7 +4764,7 @@ public class List : INode
         {
             for (int i = parts.Count - 3; i > 0; i += -2)
             {
-                if (parts[i].Kind == "operator" && ((Operator)parts[i]).Op == ";" || ((Operator)parts[i]).Op == "\n")
+                if (parts[i].Kind == "operator" && (((Operator)parts[i]).Op == ";" || ((Operator)parts[i]).Op == "\n"))
                 {
                     List<INode> left = ParableFunctions._Sublist(parts, 0, i);
                     List<INode> right = ParableFunctions._Sublist(parts, i + 1, parts.Count - 1);
@@ -4805,7 +4805,7 @@ public class List : INode
         List<int> semiPositions = new List<int>();
         for (int i = 0; i < parts.Count; i += 1)
         {
-            if (parts[i].Kind == "operator" && ((Operator)parts[i]).Op == ";" || ((Operator)parts[i]).Op == "\n")
+            if (parts[i].Kind == "operator" && (((Operator)parts[i]).Op == ";" || ((Operator)parts[i]).Op == "\n"))
             {
                 semiPositions.Add(i);
             }
@@ -5006,10 +5006,10 @@ public class Redirect : INode
         if (op.StartsWith("{"))
         {
             int j = 1;
-            if (j < op.Length && ((op[j]).ToString().Length > 0 && (op[j]).ToString().All(char.IsLetter)) || (op[j]).ToString() == "_")
+            if (j < op.Length && (((op[j]).ToString().Length > 0 && (op[j]).ToString().All(char.IsLetter)) || (op[j]).ToString() == "_"))
             {
                 j += 1;
-                while (j < op.Length && ((op[j]).ToString().Length > 0 && (op[j]).ToString().All(char.IsLetterOrDigit)) || (op[j]).ToString() == "_")
+                while (j < op.Length && (((op[j]).ToString().Length > 0 && (op[j]).ToString().All(char.IsLetterOrDigit)) || (op[j]).ToString() == "_"))
                 {
                     j += 1;
                 }
@@ -5510,7 +5510,7 @@ public class CasePattern : INode
             }
             else
             {
-                if (ch == "@" || ch == "?" || ch == "*" || ch == "+" || ch == "!" && i + 1 < this.Pattern.Length && (this.Pattern[i + 1]).ToString() == "(")
+                if ((ch == "@" || ch == "?" || ch == "*" || ch == "+" || ch == "!") && i + 1 < this.Pattern.Length && (this.Pattern[i + 1]).ToString() == "(")
                 {
                     current.Add(ch);
                     current.Add("(");
@@ -7393,7 +7393,7 @@ public class Parser
         string currentHeredocDelim = "";
         bool currentHeredocStrip = false;
         string ch = "";
-        while (!(this.AtEnd()) && inHeredocBody || this.Peek() != "`")
+        while (!(this.AtEnd()) && (inHeredocBody || this.Peek() != "`"))
         {
             if (inHeredocBody)
             {
@@ -8614,7 +8614,7 @@ public class Parser
             }
             else
             {
-                if (ParableFunctions._IsSpecialParamOrDigit(ch) || ch == "#" && !((nameChars.Count > 0)))
+                if ((ParableFunctions._IsSpecialParamOrDigit(ch) || ch == "#") && !((nameChars.Count > 0)))
                 {
                     nameChars.Add(this._ArithAdvance());
                     break;
@@ -9043,7 +9043,7 @@ public class Parser
                         if (left != -1 && right == varname.Length - 1 && right > left + 1)
                         {
                             string @base = varname.Substring(0, left);
-                            if ((!string.IsNullOrEmpty(@base)) && ((@base[0]).ToString().Length > 0 && (@base[0]).ToString().All(char.IsLetter)) || (@base[0]).ToString() == "_")
+                            if ((!string.IsNullOrEmpty(@base)) && (((@base[0]).ToString().Length > 0 && (@base[0]).ToString().All(char.IsLetter)) || (@base[0]).ToString() == "_"))
                             {
                                 isValidVarfd = true;
                                 foreach (var _c5 in @base.Substring(1))
@@ -9244,7 +9244,7 @@ public class Parser
             if (target == null)
             {
                 Word innerWord = null;
-                if (!(this.AtEnd()) && (this.Peek().Length > 0 && this.Peek().All(char.IsDigit)) || this.Peek() == "-")
+                if (!(this.AtEnd()) && ((this.Peek().Length > 0 && this.Peek().All(char.IsDigit)) || this.Peek() == "-"))
                 {
                     int wordStart = this.Pos;
                     fdChars = new List<string>();
@@ -9302,7 +9302,7 @@ public class Parser
         else
         {
             this.SkipWhitespace();
-            if (op == ">&" || op == "<&" && !(this.AtEnd()) && this.Peek() == "-")
+            if ((op == ">&" || op == "<&") && !(this.AtEnd()) && this.Peek() == "-")
             {
                 if (this.Pos + 1 < this.Length && !(ParableFunctions._IsMetachar((this.Source[this.Pos + 1]).ToString())))
                 {
@@ -11529,7 +11529,7 @@ public class Parser
             this.SkipWhitespace();
             if (!(this.AtEnd()) && this.Peek() == "!")
             {
-                if (this.Pos + 1 >= this.Length || ParableFunctions._IsNegationBoundary((this.Source[this.Pos + 1]).ToString()) && !(this._IsBangFollowedByProcsub()))
+                if ((this.Pos + 1 >= this.Length || ParableFunctions._IsNegationBoundary((this.Source[this.Pos + 1]).ToString())) && !(this._IsBangFollowedByProcsub()))
                 {
                     this.Advance();
                     prefixOrder = "time_negation";
@@ -11541,7 +11541,7 @@ public class Parser
         {
             if (!(this.AtEnd()) && this.Peek() == "!")
             {
-                if (this.Pos + 1 >= this.Length || ParableFunctions._IsNegationBoundary((this.Source[this.Pos + 1]).ToString()) && !(this._IsBangFollowedByProcsub()))
+                if ((this.Pos + 1 >= this.Length || ParableFunctions._IsNegationBoundary((this.Source[this.Pos + 1]).ToString())) && !(this._IsBangFollowedByProcsub()))
                 {
                     this.Advance();
                     this.SkipWhitespace();
@@ -12006,7 +12006,10 @@ public static class ParableFunctions
 
     public static string _Substring(string s, int start, int end)
     {
-        return s.Substring(start, end - start);
+        int len = s.Length;
+        int clampedStart = Math.Max(0, Math.Min(start, len));
+        int clampedEnd = Math.Max(clampedStart, Math.Min(end, len));
+        return s.Substring(clampedStart, clampedEnd - clampedStart);
     }
 
     public static bool _StartsWithAt(string s, int pos, string prefix)
@@ -12196,7 +12199,7 @@ public static class ParableFunctions
             {
                 return true;
             }
-            if ((s[i]).ToString() == "|" || (s[i]).ToString() == ")" && depth == 0)
+            if (((s[i]).ToString() == "|" || (s[i]).ToString() == ")") && depth == 0)
             {
                 return false;
             }
@@ -12208,7 +12211,7 @@ public static class ParableFunctions
     public static (int, List<string>, bool) _ConsumeBracketClass(string s, int start, int depth)
     {
         int scanPos = start + 1;
-        if (scanPos < s.Length && (s[scanPos]).ToString() == "!" || (s[scanPos]).ToString() == "^")
+        if (scanPos < s.Length && ((s[scanPos]).ToString() == "!" || (s[scanPos]).ToString() == "^"))
         {
             scanPos += 1;
         }
@@ -12243,7 +12246,7 @@ public static class ParableFunctions
         }
         List<string> chars = new List<string> { "[" };
         int i = start + 1;
-        if (i < s.Length && (s[i]).ToString() == "!" || (s[i]).ToString() == "^")
+        if (i < s.Length && ((s[i]).ToString() == "!" || (s[i]).ToString() == "^"))
         {
             chars.Add((s[i]).ToString());
             i += 1;
@@ -13288,7 +13291,7 @@ public static class ParableFunctions
                 i = ParableFunctions._SkipDoubleQuoted(value, i + 1);
                 continue;
             }
-            if (c == "#" && arithDepth == 0 && i == start || (value[i - 1]).ToString() == " " || (value[i - 1]).ToString() == "\t" || (value[i - 1]).ToString() == "\n" || (value[i - 1]).ToString() == ";" || (value[i - 1]).ToString() == "|" || (value[i - 1]).ToString() == "&" || (value[i - 1]).ToString() == "(" || (value[i - 1]).ToString() == ")")
+            if (c == "#" && arithDepth == 0 && (i == start || (value[i - 1]).ToString() == " " || (value[i - 1]).ToString() == "\t" || (value[i - 1]).ToString() == "\n" || (value[i - 1]).ToString() == ";" || (value[i - 1]).ToString() == "|" || (value[i - 1]).ToString() == "&" || (value[i - 1]).ToString() == "(" || (value[i - 1]).ToString() == ")"))
             {
                 while (i < value.Length && (value[i]).ToString() != "\n")
                 {
@@ -13299,7 +13302,7 @@ public static class ParableFunctions
             if (ParableFunctions._StartsWithAt(value, i, "<<<"))
             {
                 i += 3;
-                while (i < value.Length && (value[i]).ToString() == " " || (value[i]).ToString() == "\t")
+                while (i < value.Length && ((value[i]).ToString() == " " || (value[i]).ToString() == "\t"))
                 {
                     i += 1;
                 }
@@ -13498,7 +13501,7 @@ public static class ParableFunctions
                     continue;
                 }
             }
-            if (c == "<" || c == ">" && i + 1 < value.Length && (value[i + 1]).ToString() == "(")
+            if ((c == "<" || c == ">") && i + 1 < value.Length && (value[i + 1]).ToString() == "(")
             {
                 i = ParableFunctions._FindCmdsubEnd(value, i + 2);
                 continue;
@@ -13547,7 +13550,7 @@ public static class ParableFunctions
         int delimStart = i;
         object quoteChar = null;
         string delimiter = "";
-        if (i < value.Length && (value[i]).ToString() == "\"" || (value[i]).ToString() == "'")
+        if (i < value.Length && ((value[i]).ToString() == "\"" || (value[i]).ToString() == "'"))
         {
             quoteChar = (value[i]).ToString();
             i += 1;
@@ -13593,7 +13596,7 @@ public static class ParableFunctions
         while (i < value.Length && (value[i]).ToString() != "\n")
         {
             string c = (value[i]).ToString();
-            if (c == "\\" && i + 1 < value.Length && quote.Double || inBacktick)
+            if (c == "\\" && i + 1 < value.Length && (quote.Double || inBacktick))
             {
                 i += 2;
                 continue;
@@ -13817,7 +13820,7 @@ public static class ParableFunctions
             }
         }
         int end = pos + wordLen;
-        if (end < s.Length && ((s[end]).ToString().Length > 0 && (s[end]).ToString().All(char.IsLetterOrDigit)) || (s[end]).ToString() == "_")
+        if (end < s.Length && (((s[end]).ToString().Length > 0 && (s[end]).ToString().All(char.IsLetterOrDigit)) || (s[end]).ToString() == "_"))
         {
             return false;
         }
@@ -14212,7 +14215,7 @@ public static class ParableFunctions
         }
         string s = string.Join("", chars);
         int i = 1;
-        while (i < s.Length && ((s[i]).ToString().Length > 0 && (s[i]).ToString().All(char.IsLetterOrDigit)) || (s[i]).ToString() == "_")
+        while (i < s.Length && (((s[i]).ToString().Length > 0 && (s[i]).ToString().All(char.IsLetterOrDigit)) || (s[i]).ToString() == "_"))
         {
             i += 1;
         }

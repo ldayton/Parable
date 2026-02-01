@@ -370,6 +370,18 @@ class CSharpBackend:
         params = self._params(func.params)
         ret = self._type(func.ret)
         name = _safe_pascal(func.name)
+        # Special case: _substring needs clamping to match Python slice semantics
+        if func.name == "_substring":
+            self._line(f"public static {ret} {name}({params})")
+            self._line("{")
+            self.indent += 1
+            self._line("int len = s.Length;")
+            self._line("int clampedStart = Math.Max(0, Math.Min(start, len));")
+            self._line("int clampedEnd = Math.Max(clampedStart, Math.Min(end, len));")
+            self._line("return s.Substring(clampedStart, clampedEnd - clampedStart);")
+            self.indent -= 1
+            self._line("}")
+            return
         self._line(f"public static {ret} {name}({params})")
         self._line("{")
         self.indent += 1
@@ -972,6 +984,12 @@ class CSharpBackend:
                 # Wrap bitwise ops in parens to ensure correct precedence with comparisons
                 if cs_op in ("&", "|", "^"):
                     return f"({left_str} {cs_op} {right_str})"
+                # Add parens around || when inside && to preserve precedence
+                if cs_op == "&&":
+                    if isinstance(left, BinaryOp) and left.op == "||":
+                        left_str = f"({left_str})"
+                    if isinstance(right, BinaryOp) and right.op == "||":
+                        right_str = f"({right_str})"
                 return f"{left_str} {cs_op} {right_str}"
             case UnaryOp(op="&", operand=operand):
                 return self._expr(operand)

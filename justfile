@@ -115,7 +115,7 @@ backend-test backend:
         csharp)
             just backend-transpile csharp
             dotnet build dist/csharp/csharp.csproj -o dist/csharp/bin --verbosity quiet
-            dotnet dist/csharp/bin/cs.dll "$tests_abs"
+            dotnet dist/csharp/bin/csharp.dll "$tests_abs"
             ;;
         go)
             just backend-transpile go

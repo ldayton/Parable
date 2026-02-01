@@ -125,6 +125,16 @@ class RunTests
             extglob = true;
             testInput = testInput.Substring("# @extglob\n".Length);
         }
+        var task = System.Threading.Tasks.Task.Run(() => RunTestInner(testInput, testExpected, extglob));
+        if (task.Wait(TimeSpan.FromSeconds(5)))
+        {
+            return task.Result;
+        }
+        return (false, "<timeout>", "Test timed out after 5 seconds");
+    }
+
+    static (bool passed, string actual, string errMsg) RunTestInner(string testInput, string testExpected, bool extglob)
+    {
         try
         {
             var nodes = ParableFunctions.Parse(testInput, extglob);
@@ -221,24 +231,20 @@ class RunTests
                 {
                     effectiveExpected = "<error>";
                 }
+                Console.Write($"{relPath}:{tc.LineNum} {tc.Name} ... ");
+                Console.Out.Flush();
                 var (passed, actual, errMsg) = RunTest(tc.Input, effectiveExpected);
 
                 if (passed)
                 {
                     totalPassed++;
-                    if (verbose)
-                    {
-                        Console.WriteLine($"PASS {relPath}:{tc.LineNum} {tc.Name}");
-                    }
+                    Console.WriteLine("ok");
                 }
                 else
                 {
                     totalFailed++;
                     failedTests.Add(new TestResult(relPath, tc.LineNum, tc.Name, tc.Input, tc.Expected, actual, errMsg));
-                    if (verbose)
-                    {
-                        Console.WriteLine($"FAIL {relPath}:{tc.LineNum} {tc.Name}");
-                    }
+                    Console.WriteLine("FAIL");
                 }
             }
         }

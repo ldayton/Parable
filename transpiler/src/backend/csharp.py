@@ -1017,7 +1017,12 @@ class CSharpBackend:
             case UnaryOp(op=op, operand=operand):
                 return f"{op}{self._expr(operand)}"
             case Ternary(cond=cond, then_expr=then_expr, else_expr=else_expr):
-                return f"({self._expr(cond)} ? {self._expr(then_expr)} : {self._expr(else_expr)})"
+                # When else is null but then is a list, use empty List instead
+                else_str = self._expr(else_expr)
+                if isinstance(else_expr, NilLit) and isinstance(then_expr.typ, Slice):
+                    elem = self._type(then_expr.typ.element)
+                    else_str = f"new List<{elem}>()"
+                return f"({self._expr(cond)} ? {self._expr(then_expr)} : {else_str})"
             case Cast(expr=inner, to_type=to_type):
                 return self._cast(inner, to_type)
             case TypeAssert(expr=inner, asserted=asserted):

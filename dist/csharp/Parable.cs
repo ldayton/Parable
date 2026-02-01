@@ -7069,7 +7069,7 @@ public class Parser
             }
             redirects.Add(redirect);
         }
-        return ((redirects.Count > 0) ? redirects : null);
+        return ((redirects.Count > 0) ? redirects : new List<INode>());
     }
 
     public INode _ParseLoopBody(string context)

@@ -954,7 +954,7 @@ func (self *Lexer) parseMatchedPair(openChar string, closeChar string, flags int
 				inDquote := (flags & MatchedPairFlagsDQUOTE) != 0
 				paramNode, paramText := self.parser.parseParamExpansion(inDquote)
 				self.syncFromParser()
-				if !_isNilInterfaceRef(paramNode) {
+				if paramNode != nil {
 					chars = append(chars, paramText)
 					wasDollar = false
 					wasGtlt = false
@@ -972,7 +972,7 @@ func (self *Lexer) parseMatchedPair(openChar string, closeChar string, flags int
 				if self.Pos+2 < self.Length && _runeAt(self.Source, self.Pos+2) == "(" {
 					arithNode, arithText := self.parser.parseArithmeticExpansion()
 					self.syncFromParser()
-					if !_isNilInterfaceRef(arithNode) {
+					if arithNode != nil {
 						chars = append(chars, arithText)
 						wasDollar = false
 						wasGtlt = false
@@ -980,7 +980,7 @@ func (self *Lexer) parseMatchedPair(openChar string, closeChar string, flags int
 						self.syncToParser()
 						cmdNode, cmdText = self.parser.parseCommandSubstitution()
 						self.syncFromParser()
-						if !_isNilInterfaceRef(cmdNode) {
+						if cmdNode != nil {
 							chars = append(chars, cmdText)
 							wasDollar = false
 							wasGtlt = false
@@ -994,7 +994,7 @@ func (self *Lexer) parseMatchedPair(openChar string, closeChar string, flags int
 				} else {
 					cmdNode, cmdText = self.parser.parseCommandSubstitution()
 					self.syncFromParser()
-					if !_isNilInterfaceRef(cmdNode) {
+					if cmdNode != nil {
 						chars = append(chars, cmdText)
 						wasDollar = false
 						wasGtlt = false
@@ -1011,7 +1011,7 @@ func (self *Lexer) parseMatchedPair(openChar string, closeChar string, flags int
 				self.syncToParser()
 				arithNode, arithText := self.parser.parseDeprecatedArithmetic()
 				self.syncFromParser()
-				if !_isNilInterfaceRef(arithNode) {
+				if arithNode != nil {
 					chars = append(chars, arithText)
 					wasDollar = false
 					wasGtlt = false
@@ -1030,7 +1030,7 @@ func (self *Lexer) parseMatchedPair(openChar string, closeChar string, flags int
 			self.syncToParser()
 			procsubNode, procsubText := self.parser.parseProcessSubstitution()
 			self.syncFromParser()
-			if !_isNilInterfaceRef(procsubNode) {
+			if procsubNode != nil {
 				chars = append(chars, procsubText)
 				wasDollar = false
 				wasGtlt = false
@@ -1187,7 +1187,7 @@ func (self *Lexer) readWordInternal(ctx int, atCommandStart bool, inArrayLiteral
 						self.syncToParser()
 						cmdsubResult0, cmdsubResult1 = self.parser.parseBacktickSubstitution()
 						self.syncFromParser()
-						if !_isNilInterfaceRef(cmdsubResult0) {
+						if cmdsubResult0 != nil {
 							parts = append(parts, cmdsubResult0)
 							chars = append(chars, cmdsubResult1)
 						} else {
@@ -1222,7 +1222,7 @@ func (self *Lexer) readWordInternal(ctx int, atCommandStart bool, inArrayLiteral
 		}
 		if ctx != WORDCTXREGEX && ch == "$" && self.Pos+1 < self.Length && _runeAt(self.Source, self.Pos+1) == "'" {
 			ansiResult0, ansiResult1 := self.readAnsiCQuote()
-			if !_isNilInterfaceRef(ansiResult0) {
+			if ansiResult0 != nil {
 				parts = append(parts, ansiResult0)
 				chars = append(chars, ansiResult1)
 			} else {
@@ -1232,7 +1232,7 @@ func (self *Lexer) readWordInternal(ctx int, atCommandStart bool, inArrayLiteral
 		}
 		if ctx != WORDCTXREGEX && ch == "$" && self.Pos+1 < self.Length && _runeAt(self.Source, self.Pos+1) == "\"" {
 			localeResult0, localeResult1, localeResult2 := self.readLocaleString()
-			if !_isNilInterfaceRef(localeResult0) {
+			if localeResult0 != nil {
 				parts = append(parts, localeResult0)
 				parts = append(parts, localeResult2...)
 				chars = append(chars, localeResult1)
@@ -1261,7 +1261,7 @@ func (self *Lexer) readWordInternal(ctx int, atCommandStart bool, inArrayLiteral
 			self.syncToParser()
 			cmdsubResult0, cmdsubResult1 = self.parser.parseBacktickSubstitution()
 			self.syncFromParser()
-			if !_isNilInterfaceRef(cmdsubResult0) {
+			if cmdsubResult0 != nil {
 				parts = append(parts, cmdsubResult0)
 				chars = append(chars, cmdsubResult1)
 			} else {
@@ -1273,7 +1273,7 @@ func (self *Lexer) readWordInternal(ctx int, atCommandStart bool, inArrayLiteral
 			self.syncToParser()
 			procsubResult0, procsubResult1 := self.parser.parseProcessSubstitution()
 			self.syncFromParser()
-			if !_isNilInterfaceRef(procsubResult0) {
+			if procsubResult0 != nil {
 				parts = append(parts, procsubResult0)
 				chars = append(chars, procsubResult1)
 			} else if len(procsubResult1) > 0 {
@@ -1297,7 +1297,7 @@ func (self *Lexer) readWordInternal(ctx int, atCommandStart bool, inArrayLiteral
 				self.syncToParser()
 				arrayResult0, arrayResult1 := self.parser.parseArrayLiteral()
 				self.syncFromParser()
-				if !_isNilInterfaceRef(arrayResult0) {
+				if arrayResult0 != nil {
 					parts = append(parts, arrayResult0)
 					chars = append(chars, arrayResult1)
 				} else {
@@ -1494,14 +1494,14 @@ func (self *Lexer) readLocaleString() (Node, string, []Node) {
 			self.syncToParser()
 			arithNode, arithText := self.parser.parseArithmeticExpansion()
 			self.syncFromParser()
-			if !_isNilInterfaceRef(arithNode) {
+			if arithNode != nil {
 				innerParts = append(innerParts, arithNode)
 				contentChars = append(contentChars, arithText)
 			} else {
 				self.syncToParser()
 				cmdsubNode, cmdsubText := self.parser.parseCommandSubstitution()
 				self.syncFromParser()
-				if !_isNilInterfaceRef(cmdsubNode) {
+				if cmdsubNode != nil {
 					innerParts = append(innerParts, cmdsubNode)
 					contentChars = append(contentChars, cmdsubText)
 				} else {
@@ -1512,7 +1512,7 @@ func (self *Lexer) readLocaleString() (Node, string, []Node) {
 			self.syncToParser()
 			cmdsubNode, cmdsubText := self.parser.parseCommandSubstitution()
 			self.syncFromParser()
-			if !_isNilInterfaceRef(cmdsubNode) {
+			if cmdsubNode != nil {
 				innerParts = append(innerParts, cmdsubNode)
 				contentChars = append(contentChars, cmdsubText)
 			} else {
@@ -1522,7 +1522,7 @@ func (self *Lexer) readLocaleString() (Node, string, []Node) {
 			self.syncToParser()
 			paramNode, paramText := self.parser.parseParamExpansion(false)
 			self.syncFromParser()
-			if !_isNilInterfaceRef(paramNode) {
+			if paramNode != nil {
 				innerParts = append(innerParts, paramNode)
 				contentChars = append(contentChars, paramText)
 			} else {
@@ -1532,7 +1532,7 @@ func (self *Lexer) readLocaleString() (Node, string, []Node) {
 			self.syncToParser()
 			cmdsubNode, cmdsubText := self.parser.parseBacktickSubstitution()
 			self.syncFromParser()
-			if !_isNilInterfaceRef(cmdsubNode) {
+			if cmdsubNode != nil {
 				innerParts = append(innerParts, cmdsubNode)
 				contentChars = append(contentChars, cmdsubText)
 			} else {
@@ -1950,7 +1950,7 @@ func (self *Lexer) readBracedParam(start int, inDquote bool) (Node, string) {
 				}
 			}()
 			subParser := NewParser(inner, true, self.parser.extglob)
-			parsed := subParser.ParseList(true)
+			var parsed Node = subParser.ParseList(true)
 			if !_isNilInterfaceRef(parsed) && subParser.AtEnd() {
 				formatted := formatCmdsubNode(parsed, 0, true, false, true)
 				arg = "(" + formatted + ")"
@@ -3085,7 +3085,7 @@ func (self *Word) formatCommandSubstitutions(value string, inArith bool) string 
 			i = j
 		} else if isExpansionStart(value, i, "${") && i+2 < _runeLen(value) && isFunsubChar(_runeAt(value, i+2)) && !isBackslashEscaped(value, i) {
 			j = findFunsubEnd(value, i+2)
-			cmdsubNode := func() Node {
+			var cmdsubNode Node = func() Node {
 				if cmdsubIdx < len(cmdsubParts) {
 					return cmdsubParts[cmdsubIdx]
 				} else {
@@ -3654,8 +3654,8 @@ func (self *List) toSexpAndOr(parts []Node, opNames map[string]string) string {
 	}
 	result := parts[0].ToSexp()
 	for i := 1; i < len(parts)-1; i += 2 {
-		op := parts[i]
-		cmd := parts[i+1]
+		var op Node = parts[i]
+		var cmd Node = parts[i+1]
 		opName := _mapGet(opNames, op.(*Operator).Op, op.(*Operator).Op)
 		result = "(" + opName + " " + result + " " + cmd.ToSexp() + ")"
 	}
@@ -3720,7 +3720,7 @@ func (self *Comment) GetKind() string {
 type Redirect struct {
 	Op     string
 	Target *Word
-	Fd     *int
+	Fd     int
 	Kind   string
 }
 
@@ -3811,7 +3811,7 @@ type HereDoc struct {
 	Content   string
 	StripTabs bool
 	Quoted    bool
-	Fd        *int
+	Fd        int
 	Complete  bool
 	startPos  int
 	Kind      string
@@ -3876,7 +3876,7 @@ type If struct {
 
 func (self *If) ToSexp() string {
 	result := "(if " + self.Condition.ToSexp() + " " + self.ThenBody.ToSexp()
-	if !_isNilInterfaceRef(self.ElseBody) {
+	if self.ElseBody != nil {
 		result = result + " " + self.ElseBody.ToSexp()
 	}
 	result = result + ")"
@@ -4051,8 +4051,8 @@ func (self *Select) GetKind() string {
 }
 
 type Case struct {
-	Word      Node
-	Patterns  []Node
+	Word      *Word
+	Patterns  []*CasePattern
 	Redirects []Node
 	Kind      string
 }
@@ -4134,7 +4134,7 @@ func (self *CasePattern) ToSexp() string {
 	}
 	patternStr := strings.Join(wordList, " ")
 	parts := []string{"(pattern (" + patternStr + ")"}
-	if !_isNilInterfaceRef(self.Body) {
+	if self.Body != nil {
 		parts = append(parts, " "+self.Body.ToSexp())
 	} else {
 		parts = append(parts, " ()")
@@ -4627,12 +4627,12 @@ func (self *ConditionalExpr) GetKind() string {
 
 type UnaryTest struct {
 	Op      string
-	Operand Node
+	Operand *Word
 	Kind    string
 }
 
 func (self *UnaryTest) ToSexp() string {
-	operandVal := self.Operand.(*Word).GetCondFormattedValue()
+	operandVal := self.Operand.GetCondFormattedValue()
 	return "(cond-unary \"" + self.Op + "\" (cond-term \"" + operandVal + "\"))"
 }
 
@@ -4642,14 +4642,14 @@ func (self *UnaryTest) GetKind() string {
 
 type BinaryTest struct {
 	Op    string
-	Left  Node
-	Right Node
+	Left  *Word
+	Right *Word
 	Kind  string
 }
 
 func (self *BinaryTest) ToSexp() string {
-	leftVal := self.Left.(*Word).GetCondFormattedValue()
-	rightVal := self.Right.(*Word).GetCondFormattedValue()
+	leftVal := self.Left.GetCondFormattedValue()
+	rightVal := self.Right.GetCondFormattedValue()
 	return "(cond-binary \"" + self.Op + "\" (cond-term \"" + leftVal + "\") (cond-term \"" + rightVal + "\"))"
 }
 
@@ -5116,7 +5116,7 @@ func (self *Parser) parseLoopBody(context string) Node {
 		return brace.Body
 	}
 	if self.lexConsumeWord("do") {
-		body := self.ParseListUntil(map[string]struct{}{"done": {}})
+		var body Node = self.ParseListUntil(map[string]struct{}{"done": {}})
 		if _isNilInterfaceRef(body) {
 			panic(NewParseError("Expected commands after 'do'", self.lexPeekToken().Pos, 0))
 		}
@@ -5227,13 +5227,13 @@ func (self *Parser) parseDollarExpansion(chars *[]string, parts *[]Node, inDquot
 	var result1 string
 	if self.Pos+2 < self.Length && _runeAt(self.Source, self.Pos+1) == "(" && _runeAt(self.Source, self.Pos+2) == "(" {
 		result0, result1 = self.parseArithmeticExpansion()
-		if !_isNilInterfaceRef(result0) {
+		if result0 != nil {
 			*parts = append(*parts, result0)
 			*chars = append(*chars, result1)
 			return true
 		}
 		result0, result1 = self.parseCommandSubstitution()
-		if !_isNilInterfaceRef(result0) {
+		if result0 != nil {
 			*parts = append(*parts, result0)
 			*chars = append(*chars, result1)
 			return true
@@ -5242,7 +5242,7 @@ func (self *Parser) parseDollarExpansion(chars *[]string, parts *[]Node, inDquot
 	}
 	if self.Pos+1 < self.Length && _runeAt(self.Source, self.Pos+1) == "[" {
 		result0, result1 = self.parseDeprecatedArithmetic()
-		if !_isNilInterfaceRef(result0) {
+		if result0 != nil {
 			*parts = append(*parts, result0)
 			*chars = append(*chars, result1)
 			return true
@@ -5251,7 +5251,7 @@ func (self *Parser) parseDollarExpansion(chars *[]string, parts *[]Node, inDquot
 	}
 	if self.Pos+1 < self.Length && _runeAt(self.Source, self.Pos+1) == "(" {
 		result0, result1 = self.parseCommandSubstitution()
-		if !_isNilInterfaceRef(result0) {
+		if result0 != nil {
 			*parts = append(*parts, result0)
 			*chars = append(*chars, result1)
 			return true
@@ -5259,7 +5259,7 @@ func (self *Parser) parseDollarExpansion(chars *[]string, parts *[]Node, inDquot
 		return false
 	}
 	result0, result1 = self.parseParamExpansion(inDquote)
-	if !_isNilInterfaceRef(result0) {
+	if result0 != nil {
 		*parts = append(*parts, result0)
 		*chars = append(*chars, result1)
 		return true
@@ -5308,7 +5308,7 @@ func (self *Parser) parseCommandSubstitution() (Node, string) {
 	saved := self.saveParserState()
 	self.setState((ParserStateFlagsPSTCMDSUBST | ParserStateFlagsPSTEOFTOKEN))
 	self.eofToken = ")"
-	cmd := self.ParseList(true)
+	var cmd Node = self.ParseList(true)
 	if _isNilInterfaceRef(cmd) {
 		cmd = &Empty{Kind: "empty"}
 	}
@@ -5333,7 +5333,7 @@ func (self *Parser) parseFunsub(start int) (Node, string) {
 	saved := self.saveParserState()
 	self.setState((ParserStateFlagsPSTCMDSUBST | ParserStateFlagsPSTEOFTOKEN))
 	self.eofToken = "}"
-	cmd := self.ParseList(true)
+	var cmd Node = self.ParseList(true)
 	if _isNilInterfaceRef(cmd) {
 		cmd = &Empty{Kind: "empty"}
 	}
@@ -5685,7 +5685,7 @@ func (self *Parser) parseProcessSubstitution() (result0 Node, result1 string) {
 			result1 = text
 		}
 	}()
-	cmd := self.ParseList(true)
+	var cmd Node = self.ParseList(true)
 	if _isNilInterfaceRef(cmd) {
 		cmd = &Empty{Kind: "empty"}
 	}
@@ -5897,12 +5897,12 @@ func (self *Parser) arithConsume(s string) bool {
 }
 
 func (self *Parser) arithParseComma() Node {
-	left := self.arithParseAssign()
+	var left Node = self.arithParseAssign()
 	for true {
 		self.arithSkipWs()
 		if self.arithConsume(",") {
 			self.arithSkipWs()
-			right := self.arithParseAssign()
+			var right Node = self.arithParseAssign()
 			left = &ArithComma{Left: left, Right: right, Kind: "comma"}
 		} else {
 			break
@@ -5912,7 +5912,7 @@ func (self *Parser) arithParseComma() Node {
 }
 
 func (self *Parser) arithParseAssign() Node {
-	left := self.arithParseTernary()
+	var left Node = self.arithParseTernary()
 	self.arithSkipWs()
 	assignOps := []string{"<<=", ">>=", "+=", "-=", "*=", "/=", "%=", "&=", "^=", "|=", "="}
 	for _, op := range assignOps {
@@ -5922,7 +5922,7 @@ func (self *Parser) arithParseAssign() Node {
 			}
 			self.arithConsume(op)
 			self.arithSkipWs()
-			right := self.arithParseAssign()
+			var right Node = self.arithParseAssign()
 			return &ArithAssign{Op: op, Target: left, Value: right, Kind: "assign"}
 		}
 	}
@@ -5930,7 +5930,7 @@ func (self *Parser) arithParseAssign() Node {
 }
 
 func (self *Parser) arithParseTernary() Node {
-	cond := self.arithParseLogicalOr()
+	var cond Node = self.arithParseLogicalOr()
 	self.arithSkipWs()
 	if self.arithConsume("?") {
 		self.arithSkipWs()
@@ -5958,7 +5958,7 @@ func (self *Parser) arithParseTernary() Node {
 }
 
 func (self *Parser) arithParseLeftAssoc(ops []string, parsefn func() Node) Node {
-	var left Node = parsefn()
+	left := parsefn()
 	for true {
 		self.arithSkipWs()
 		matched := false
@@ -5987,13 +5987,13 @@ func (self *Parser) arithParseLogicalAnd() Node {
 }
 
 func (self *Parser) arithParseBitwiseOr() Node {
-	left := self.arithParseBitwiseXor()
+	var left Node = self.arithParseBitwiseXor()
 	for true {
 		self.arithSkipWs()
 		if self.arithPeek(0) == "|" && self.arithPeek(1) != "|" && self.arithPeek(1) != "=" {
 			self.arithAdvance()
 			self.arithSkipWs()
-			right := self.arithParseBitwiseXor()
+			var right Node = self.arithParseBitwiseXor()
 			left = &ArithBinaryOp{Op: "|", Left: left, Right: right, Kind: "binary-op"}
 		} else {
 			break
@@ -6003,13 +6003,13 @@ func (self *Parser) arithParseBitwiseOr() Node {
 }
 
 func (self *Parser) arithParseBitwiseXor() Node {
-	left := self.arithParseBitwiseAnd()
+	var left Node = self.arithParseBitwiseAnd()
 	for true {
 		self.arithSkipWs()
 		if self.arithPeek(0) == "^" && self.arithPeek(1) != "=" {
 			self.arithAdvance()
 			self.arithSkipWs()
-			right := self.arithParseBitwiseAnd()
+			var right Node = self.arithParseBitwiseAnd()
 			left = &ArithBinaryOp{Op: "^", Left: left, Right: right, Kind: "binary-op"}
 		} else {
 			break
@@ -6019,13 +6019,13 @@ func (self *Parser) arithParseBitwiseXor() Node {
 }
 
 func (self *Parser) arithParseBitwiseAnd() Node {
-	left := self.arithParseEquality()
+	var left Node = self.arithParseEquality()
 	for true {
 		self.arithSkipWs()
 		if self.arithPeek(0) == "&" && self.arithPeek(1) != "&" && self.arithPeek(1) != "=" {
 			self.arithAdvance()
 			self.arithSkipWs()
-			right := self.arithParseEquality()
+			var right Node = self.arithParseEquality()
 			left = &ArithBinaryOp{Op: "&", Left: left, Right: right, Kind: "binary-op"}
 		} else {
 			break
@@ -6039,7 +6039,7 @@ func (self *Parser) arithParseEquality() Node {
 }
 
 func (self *Parser) arithParseComparison() Node {
-	left := self.arithParseShift()
+	var left Node = self.arithParseShift()
 	for true {
 		self.arithSkipWs()
 		var right Node
@@ -6071,7 +6071,7 @@ func (self *Parser) arithParseComparison() Node {
 }
 
 func (self *Parser) arithParseShift() Node {
-	left := self.arithParseAdditive()
+	var left Node = self.arithParseAdditive()
 	for true {
 		self.arithSkipWs()
 		if self.arithMatch("<<=") {
@@ -6099,7 +6099,7 @@ func (self *Parser) arithParseShift() Node {
 }
 
 func (self *Parser) arithParseAdditive() Node {
-	left := self.arithParseMultiplicative()
+	var left Node = self.arithParseMultiplicative()
 	for true {
 		self.arithSkipWs()
 		c := self.arithPeek(0)
@@ -6123,7 +6123,7 @@ func (self *Parser) arithParseAdditive() Node {
 }
 
 func (self *Parser) arithParseMultiplicative() Node {
-	left := self.arithParseExponentiation()
+	var left Node = self.arithParseExponentiation()
 	for true {
 		self.arithSkipWs()
 		c := self.arithPeek(0)
@@ -6152,12 +6152,12 @@ func (self *Parser) arithParseMultiplicative() Node {
 }
 
 func (self *Parser) arithParseExponentiation() Node {
-	left := self.arithParseUnary()
+	var left Node = self.arithParseUnary()
 	self.arithSkipWs()
 	if self.arithMatch("**") {
 		self.arithConsume("**")
 		self.arithSkipWs()
-		right := self.arithParseExponentiation()
+		var right Node = self.arithParseExponentiation()
 		return &ArithBinaryOp{Op: "**", Left: left, Right: right, Kind: "binary-op"}
 	}
 	return left
@@ -6207,7 +6207,7 @@ func (self *Parser) arithParseUnary() Node {
 }
 
 func (self *Parser) arithParsePostfix() Node {
-	left := self.arithParsePrimary()
+	var left Node = self.arithParsePrimary()
 	for true {
 		self.arithSkipWs()
 		if self.arithMatch("++") {
@@ -6220,7 +6220,7 @@ func (self *Parser) arithParsePostfix() Node {
 			if leftVar, ok := left.(*ArithVar); ok {
 				self.arithAdvance()
 				self.arithSkipWs()
-				index := self.arithParseComma()
+				var index Node = self.arithParseComma()
 				self.arithSkipWs()
 				if !self.arithConsume("]") {
 					panic(NewParseError("Expected ']' in array subscript", self.arithPos, 0))
@@ -6242,7 +6242,7 @@ func (self *Parser) arithParsePrimary() Node {
 	if c == "(" {
 		self.arithAdvance()
 		self.arithSkipWs()
-		expr := self.arithParseComma()
+		var expr Node = self.arithParseComma()
 		self.arithSkipWs()
 		if !self.arithConsume(")") {
 			panic(NewParseError("Expected ')' in arithmetic expression", self.arithPos, 0))
@@ -6336,7 +6336,7 @@ func (self *Parser) arithParseCmdsub() Node {
 		content = substring(self.arithSrc, contentStart, self.arithPos)
 		self.arithAdvance()
 		self.arithAdvance()
-		innerExpr := self.parseArithExpr(content)
+		var innerExpr Node = self.parseArithExpr(content)
 		return &ArithmeticExpansion{Expression: innerExpr, Kind: "arith"}
 	}
 	depth = 1
@@ -6359,7 +6359,7 @@ func (self *Parser) arithParseCmdsub() Node {
 	content = substring(self.arithSrc, contentStart, self.arithPos)
 	self.arithAdvance()
 	subParser := NewParser(content, false, self.extglob)
-	cmd := subParser.ParseList(true)
+	var cmd Node = subParser.ParseList(true)
 	return &CommandSubstitution{Command: cmd, Kind: "cmdsub"}
 }
 
@@ -6502,7 +6502,7 @@ func (self *Parser) arithParseBacktick() Node {
 		panic(NewParseError("Unterminated backtick in arithmetic", self.arithPos, 0))
 	}
 	subParser := NewParser(content, false, self.extglob)
-	cmd := subParser.ParseList(true)
+	var cmd Node = subParser.ParseList(true)
 	return &CommandSubstitution{Command: cmd, Kind: "cmdsub"}
 }
 
@@ -6522,7 +6522,7 @@ func (self *Parser) arithParseNumberOrVar() Node {
 		}
 		prefix := strings.Join(chars, "")
 		if !self.arithAtEnd() && self.arithPeek(0) == "$" {
-			expansion := self.arithParseExpansion()
+			var expansion Node = self.arithParseExpansion()
 			return &ArithConcat{Parts: []Node{&ArithNumber{Value: prefix, Kind: "number"}, expansion}, Kind: "arith-concat"}
 		}
 		return &ArithNumber{Value: prefix, Kind: "number"}
@@ -6711,7 +6711,7 @@ func (self *Parser) ParseRedirect() Node {
 		}
 	}
 	if op == "<<" {
-		return self.parseHeredoc(_intPtr(fd), stripTabs)
+		return self.parseHeredoc(fd, stripTabs)
 	}
 	if varfd != "" {
 		op = "{" + varfd + "}" + op
@@ -7081,7 +7081,7 @@ func (self *Parser) gatherHeredocBodies() {
 	self.pendingHeredocs = []*HereDoc{}
 }
 
-func (self *Parser) parseHeredoc(fd *int, stripTabs bool) *HereDoc {
+func (self *Parser) parseHeredoc(fd int, stripTabs bool) *HereDoc {
 	startPos := self.Pos
 	self.setState(ParserStateFlagsPSTHEREDOC)
 	delimiter, quoted := self.parseHeredocDelimiter()
@@ -7144,7 +7144,7 @@ func (self *Parser) ParseSubshell() *Subshell {
 	}
 	self.Advance()
 	self.setState(ParserStateFlagsPSTSUBSHELL)
-	body := self.ParseList(true)
+	var body Node = self.ParseList(true)
 	if _isNilInterfaceRef(body) {
 		self.clearState(ParserStateFlagsPSTSUBSHELL)
 		panic(NewParseError("Expected command in subshell", self.Pos, 0))
@@ -7223,7 +7223,7 @@ func (self *Parser) ParseArithmeticCommand() *ArithmeticCommand {
 	content = strings.ReplaceAll(content, "\\\n", "")
 	self.Advance()
 	self.Advance()
-	expr := self.parseArithExpr(content)
+	var expr Node = self.parseArithExpr(content)
 	return &ArithmeticCommand{Expression: expr, Redirects: self.collectRedirects(), RawContent: content, Kind: "arith-cmd"}
 }
 
@@ -7240,7 +7240,7 @@ func (self *Parser) ParseConditionalExpr() *ConditionalExpr {
 	self.Advance()
 	self.setState(ParserStateFlagsPSTCONDEXPR)
 	self.wordContext = WORDCTXCOND
-	body := self.parseCondOr()
+	var body Node = self.parseCondOr()
 	for !self.AtEnd() && isWhitespaceNoNewline(self.Peek()) {
 		self.Advance()
 	}
@@ -7277,12 +7277,12 @@ func (self *Parser) condAtEnd() bool {
 
 func (self *Parser) parseCondOr() Node {
 	self.condSkipWhitespace()
-	left := self.parseCondAnd()
+	var left Node = self.parseCondAnd()
 	self.condSkipWhitespace()
 	if !self.condAtEnd() && self.Peek() == "|" && self.Pos+1 < self.Length && _runeAt(self.Source, self.Pos+1) == "|" {
 		self.Advance()
 		self.Advance()
-		right := self.parseCondOr()
+		var right Node = self.parseCondOr()
 		return &CondOr{Left: left, Right: right, Kind: "cond-or"}
 	}
 	return left
@@ -7290,12 +7290,12 @@ func (self *Parser) parseCondOr() Node {
 
 func (self *Parser) parseCondAnd() Node {
 	self.condSkipWhitespace()
-	left := self.parseCondTerm()
+	var left Node = self.parseCondTerm()
 	self.condSkipWhitespace()
 	if !self.condAtEnd() && self.Peek() == "&" && self.Pos+1 < self.Length && _runeAt(self.Source, self.Pos+1) == "&" {
 		self.Advance()
 		self.Advance()
-		right := self.parseCondAnd()
+		var right Node = self.parseCondAnd()
 		return &CondAnd{Left: left, Right: right, Kind: "cond-and"}
 	}
 	return left
@@ -7306,18 +7306,17 @@ func (self *Parser) parseCondTerm() Node {
 	if self.condAtEnd() {
 		panic(NewParseError("Unexpected end of conditional expression", self.Pos, 0))
 	}
-	var operand Node
 	if self.Peek() == "!" {
 		if self.Pos+1 < self.Length && !isWhitespaceNoNewline(_runeAt(self.Source, self.Pos+1)) {
 		} else {
 			self.Advance()
-			operand = self.parseCondTerm()
+			var operand Node = self.parseCondTerm()
 			return &CondNot{Operand: operand, Kind: "cond-not"}
 		}
 	}
 	if self.Peek() == "(" {
 		self.Advance()
-		inner := self.parseCondOr()
+		var inner Node = self.parseCondOr()
 		self.condSkipWhitespace()
 		if self.AtEnd() || self.Peek() != ")" {
 			panic(NewParseError("Expected ) in conditional expression", self.Pos, 0))
@@ -7331,11 +7330,11 @@ func (self *Parser) parseCondTerm() Node {
 	}
 	self.condSkipWhitespace()
 	if _mapHas(CONDUNARYOPS, word1.Value) {
-		operand = self.parseCondWord()
-		if _isNilInterfaceRef(operand) {
+		unaryOperand := self.parseCondWord()
+		if unaryOperand == nil {
 			panic(NewParseError("Expected operand after "+word1.Value, self.Pos, 0))
 		}
-		return &UnaryTest{Op: word1.Value, Operand: operand, Kind: "unary-test"}
+		return &UnaryTest{Op: word1.Value, Operand: unaryOperand, Kind: "unary-test"}
 	}
 	if !self.condAtEnd() && self.Peek() != "&" && self.Peek() != "|" && self.Peek() != ")" {
 		var word2 *Word
@@ -7404,7 +7403,7 @@ func (self *Parser) ParseBraceGroup() *BraceGroup {
 		return nil
 	}
 	self.SkipWhitespaceAndNewlines()
-	body := self.ParseList(true)
+	var body Node = self.ParseList(true)
 	if _isNilInterfaceRef(body) {
 		panic(NewParseError("Expected command in brace group", self.lexPeekToken().Pos, 0))
 	}
@@ -7420,7 +7419,7 @@ func (self *Parser) ParseIf() *If {
 	if !self.lexConsumeWord("if") {
 		return nil
 	}
-	condition := self.ParseListUntil(map[string]struct{}{"then": {}})
+	var condition Node = self.ParseListUntil(map[string]struct{}{"then": {}})
 	if _isNilInterfaceRef(condition) {
 		panic(NewParseError("Expected condition after 'if'", self.lexPeekToken().Pos, 0))
 	}
@@ -7428,7 +7427,7 @@ func (self *Parser) ParseIf() *If {
 	if !self.lexConsumeWord("then") {
 		panic(NewParseError("Expected 'then' after if condition", self.lexPeekToken().Pos, 0))
 	}
-	thenBody := self.ParseListUntil(map[string]struct{}{"elif": {}, "else": {}, "fi": {}})
+	var thenBody Node = self.ParseListUntil(map[string]struct{}{"elif": {}, "else": {}, "fi": {}})
 	if _isNilInterfaceRef(thenBody) {
 		panic(NewParseError("Expected commands after 'then'", self.lexPeekToken().Pos, 0))
 	}
@@ -7436,7 +7435,7 @@ func (self *Parser) ParseIf() *If {
 	var elseBody Node
 	if self.lexIsAtReservedWord("elif") {
 		self.lexConsumeWord("elif")
-		elifCondition := self.ParseListUntil(map[string]struct{}{"then": {}})
+		var elifCondition Node = self.ParseListUntil(map[string]struct{}{"then": {}})
 		if _isNilInterfaceRef(elifCondition) {
 			panic(NewParseError("Expected condition after 'elif'", self.lexPeekToken().Pos, 0))
 		}
@@ -7444,7 +7443,7 @@ func (self *Parser) ParseIf() *If {
 		if !self.lexConsumeWord("then") {
 			panic(NewParseError("Expected 'then' after elif condition", self.lexPeekToken().Pos, 0))
 		}
-		elifThenBody := self.ParseListUntil(map[string]struct{}{"elif": {}, "else": {}, "fi": {}})
+		var elifThenBody Node = self.ParseListUntil(map[string]struct{}{"elif": {}, "else": {}, "fi": {}})
 		if _isNilInterfaceRef(elifThenBody) {
 			panic(NewParseError("Expected commands after 'then'", self.lexPeekToken().Pos, 0))
 		}
@@ -7476,7 +7475,7 @@ func (self *Parser) ParseIf() *If {
 
 func (self *Parser) parseElifChain() *If {
 	self.lexConsumeWord("elif")
-	condition := self.ParseListUntil(map[string]struct{}{"then": {}})
+	var condition Node = self.ParseListUntil(map[string]struct{}{"then": {}})
 	if _isNilInterfaceRef(condition) {
 		panic(NewParseError("Expected condition after 'elif'", self.lexPeekToken().Pos, 0))
 	}
@@ -7484,7 +7483,7 @@ func (self *Parser) parseElifChain() *If {
 	if !self.lexConsumeWord("then") {
 		panic(NewParseError("Expected 'then' after elif condition", self.lexPeekToken().Pos, 0))
 	}
-	thenBody := self.ParseListUntil(map[string]struct{}{"elif": {}, "else": {}, "fi": {}})
+	var thenBody Node = self.ParseListUntil(map[string]struct{}{"elif": {}, "else": {}, "fi": {}})
 	if _isNilInterfaceRef(thenBody) {
 		panic(NewParseError("Expected commands after 'then'", self.lexPeekToken().Pos, 0))
 	}
@@ -7507,7 +7506,7 @@ func (self *Parser) ParseWhile() *While {
 	if !self.lexConsumeWord("while") {
 		return nil
 	}
-	condition := self.ParseListUntil(map[string]struct{}{"do": {}})
+	var condition Node = self.ParseListUntil(map[string]struct{}{"do": {}})
 	if _isNilInterfaceRef(condition) {
 		panic(NewParseError("Expected condition after 'while'", self.lexPeekToken().Pos, 0))
 	}
@@ -7515,7 +7514,7 @@ func (self *Parser) ParseWhile() *While {
 	if !self.lexConsumeWord("do") {
 		panic(NewParseError("Expected 'do' after while condition", self.lexPeekToken().Pos, 0))
 	}
-	body := self.ParseListUntil(map[string]struct{}{"done": {}})
+	var body Node = self.ParseListUntil(map[string]struct{}{"done": {}})
 	if _isNilInterfaceRef(body) {
 		panic(NewParseError("Expected commands after 'do'", self.lexPeekToken().Pos, 0))
 	}
@@ -7531,7 +7530,7 @@ func (self *Parser) ParseUntil() *Until {
 	if !self.lexConsumeWord("until") {
 		return nil
 	}
-	condition := self.ParseListUntil(map[string]struct{}{"do": {}})
+	var condition Node = self.ParseListUntil(map[string]struct{}{"do": {}})
 	if _isNilInterfaceRef(condition) {
 		panic(NewParseError("Expected condition after 'until'", self.lexPeekToken().Pos, 0))
 	}
@@ -7539,7 +7538,7 @@ func (self *Parser) ParseUntil() *Until {
 	if !self.lexConsumeWord("do") {
 		panic(NewParseError("Expected 'do' after until condition", self.lexPeekToken().Pos, 0))
 	}
-	body := self.ParseListUntil(map[string]struct{}{"done": {}})
+	var body Node = self.ParseListUntil(map[string]struct{}{"done": {}})
 	if _isNilInterfaceRef(body) {
 		panic(NewParseError("Expected commands after 'do'", self.lexPeekToken().Pos, 0))
 	}
@@ -7624,7 +7623,7 @@ func (self *Parser) ParseFor() Node {
 	if !self.lexConsumeWord("do") {
 		panic(NewParseError("Expected 'do' in for loop", self.lexPeekToken().Pos, 0))
 	}
-	body := self.ParseListUntil(map[string]struct{}{"done": {}})
+	var body Node = self.ParseListUntil(map[string]struct{}{"done": {}})
 	if _isNilInterfaceRef(body) {
 		panic(NewParseError("Expected commands after 'do'", self.lexPeekToken().Pos, 0))
 	}
@@ -7677,7 +7676,7 @@ func (self *Parser) parseForArith() *ForArith {
 		self.Advance()
 	}
 	self.SkipWhitespaceAndNewlines()
-	body := self.parseLoopBody("for loop")
+	var body Node = self.parseLoopBody("for loop")
 	return &ForArith{Init: init, Cond: cond, Incr: incr, Body: body, Redirects: self.collectRedirects(), Kind: "for-arith"}
 }
 
@@ -7724,7 +7723,7 @@ func (self *Parser) ParseSelect() *Select {
 		}
 	}
 	self.SkipWhitespaceAndNewlines()
-	body := self.parseLoopBody("select")
+	var body Node = self.parseLoopBody("select")
 	return &Select{Var: varName, Words: words, Body: body, Redirects: self.collectRedirects(), Kind: "select"}
 }
 
@@ -7752,7 +7751,7 @@ func (self *Parser) ParseCase() *Case {
 		panic(NewParseError("Expected 'in' after case word", self.lexPeekToken().Pos, 0))
 	}
 	self.SkipWhitespaceAndNewlines()
-	patterns := []Node{}
+	patterns := []*CasePattern{}
 	self.setState(ParserStateFlagsPSTCASEPAT)
 	for true {
 		self.SkipWhitespaceAndNewlines()
@@ -8191,7 +8190,7 @@ func (self *Parser) ParseListUntil(stopWords map[string]struct{}) Node {
 	if reserved != "" && _mapHas(stopWords, reserved) {
 		return nil
 	}
-	pipeline := self.ParsePipeline()
+	var pipeline Node = self.ParsePipeline()
 	if _isNilInterfaceRef(pipeline) {
 		return nil
 	}
@@ -8390,7 +8389,7 @@ func (self *Parser) ParsePipeline() Node {
 		if (self.Pos+1 >= self.Length || isNegationBoundary(_runeAt(self.Source, self.Pos+1))) && !self.isBangFollowedByProcsub() {
 			self.Advance()
 			self.SkipWhitespace()
-			inner := self.ParsePipeline()
+			var inner Node = self.ParsePipeline()
 			if !_isNilInterfaceRef(inner) && inner.GetKind() == "negation" {
 				if !_isNilInterfaceRef(inner.(*Negation).Pipeline) {
 					return inner.(*Negation).Pipeline
@@ -8401,7 +8400,7 @@ func (self *Parser) ParsePipeline() Node {
 			return &Negation{Pipeline: inner, Kind: "negation"}
 		}
 	}
-	result := self.parseSimplePipeline()
+	var result Node = self.parseSimplePipeline()
 	if prefixOrder == "time" {
 		result = &Time{Pipeline: result, Posix: timePosix, Kind: "time"}
 	} else if prefixOrder == "negation" {
@@ -8419,7 +8418,7 @@ func (self *Parser) ParsePipeline() Node {
 }
 
 func (self *Parser) parseSimplePipeline() Node {
-	cmd := self.ParseCompoundCommand()
+	var cmd Node = self.ParseCompoundCommand()
 	if _isNilInterfaceRef(cmd) {
 		return nil
 	}
@@ -8489,7 +8488,7 @@ func (self *Parser) ParseList(newlineAsSeparator bool) Node {
 	} else {
 		self.SkipWhitespace()
 	}
-	pipeline := self.ParsePipeline()
+	var pipeline Node = self.ParsePipeline()
 	if _isNilInterfaceRef(pipeline) {
 		return nil
 	}
@@ -8605,13 +8604,13 @@ func (self *Parser) Parse() []Node {
 		if self.AtEnd() {
 			break
 		}
-		comment := self.ParseComment()
+		var comment Node = self.ParseComment()
 		if _isNilInterfaceRef(comment) {
 			break
 		}
 	}
 	for !self.AtEnd() {
-		result := self.ParseList(false)
+		var result Node = self.ParseList(false)
 		if !_isNilInterfaceRef(result) {
 			results = append(results, result)
 		}
@@ -8650,7 +8649,7 @@ func (self *Parser) stripTrailingBackslashFromLastWord(nodes []Node) {
 	if !(len(nodes) > 0) {
 		return
 	}
-	lastNode := nodes[len(nodes)-1]
+	var lastNode Node = nodes[len(nodes)-1]
 	lastWord := self.findLastWord(lastNode)
 	if lastWord != nil && strings.HasSuffix(lastWord.Value, "\\") {
 		lastWord.Value = substring(lastWord.Value, 0, _runeLen(lastWord.Value)-1)
@@ -8674,7 +8673,7 @@ func (self *Parser) findLastWord(node Node) *Word {
 			}
 		}
 		if len(node.Redirects) > 0 {
-			lastRedirect := node.Redirects[len(node.Redirects)-1]
+			var lastRedirect Node = node.Redirects[len(node.Redirects)-1]
 			switch lastRedirect := lastRedirect.(type) {
 			case *Redirect:
 				return lastRedirect.Target
@@ -8919,12 +8918,12 @@ func consumeBracketClass(s string, start int, depth int) (int, []string, bool) {
 func formatCondBody(node Node) string {
 	kind := node.GetKind()
 	if kind == "unary-test" {
-		operandVal := node.(*UnaryTest).Operand.(*Word).GetCondFormattedValue()
+		operandVal := node.(*UnaryTest).Operand.GetCondFormattedValue()
 		return node.(*UnaryTest).Op + " " + operandVal
 	}
 	if kind == "binary-test" {
-		leftVal := node.(*BinaryTest).Left.(*Word).GetCondFormattedValue()
-		rightVal := node.(*BinaryTest).Right.(*Word).GetCondFormattedValue()
+		leftVal := node.(*BinaryTest).Left.GetCondFormattedValue()
+		rightVal := node.(*BinaryTest).Right.GetCondFormattedValue()
 		return leftVal + " " + node.(*BinaryTest).Op + " " + rightVal
 	}
 	if kind == "cond-and" {
@@ -8986,7 +8985,7 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 			val = w.formatCommandSubstitutions(val, false)
 			parts = append(parts, val)
 		}
-		var heredocs []*HereDoc = []*HereDoc{}
+		heredocs := []*HereDoc{}
 		for _, r := range node.Redirects {
 			switch r := r.(type) {
 			case *HereDoc:
@@ -8999,7 +8998,7 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 		var result string
 		if compactRedirects && (len(node.Words) > 0) && (len(node.Redirects) > 0) {
 			wordParts := parts[:len(node.Words)]
-			var redirectParts []string = parts[len(node.Words):]
+			redirectParts := parts[len(node.Words):]
 			result = strings.Join(wordParts, " ") + strings.Join(redirectParts, "")
 		} else {
 			result = strings.Join(parts, " ")
@@ -9011,10 +9010,7 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 	}
 	switch node := node.(type) {
 	case *Pipeline:
-		var cmds []struct {
-			F0 Node
-			F1 bool
-		} = []struct {
+		cmds := []struct {
 			F0 Node
 			F1 bool
 		}{}
@@ -9227,7 +9223,7 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 		cond := formatCmdsubNode(node.Condition, indent, false, false, false)
 		thenBody := formatCmdsubNode(node.ThenBody, indent+4, false, false, false)
 		result := "if " + cond + "; then\n" + innerSp + thenBody + ";"
-		if !_isNilInterfaceRef(node.ElseBody) {
+		if node.ElseBody != nil {
 			elseBody := formatCmdsubNode(node.ElseBody, indent+4, false, false, false)
 			result = result + "\n" + sp + "else\n" + innerSp + elseBody + ";"
 		}
@@ -9264,7 +9260,7 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 		body := formatCmdsubNode(node.Body, indent+4, false, false, false)
 		var result string
 		if node.Words != nil {
-			var wordVals []string = []string{}
+			wordVals := []string{}
 			for _, w := range node.Words {
 				wordVals = append(wordVals, w.Value)
 			}
@@ -9297,15 +9293,15 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 	}
 	switch node := node.(type) {
 	case *Case:
-		word := node.Word.(*Word).Value
-		var patterns []string = []string{}
+		word := node.Word.Value
+		patterns := []string{}
 		i := 0
 		for i < len(node.Patterns) {
-			p := node.Patterns[i]
+			var p Node = node.Patterns[i]
 			pat := strings.ReplaceAll(p.(*CasePattern).Pattern, "|", " | ")
 			var body string
-			if !_isNilInterfaceRef(p.(*CasePattern).Body) {
-				body = formatCmdsubNode(p.(*CasePattern).Body, indent+8, false, false, false)
+			if !_isNilInterfaceRef(p.(*Subshell).Body) {
+				body = formatCmdsubNode(p.(*Subshell).Body, indent+8, false, false, false)
 			} else {
 				body = ""
 			}
@@ -9329,7 +9325,7 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 		patternStr := strings.Join(patterns, "\n"+strings.Repeat(" ", indent+4))
 		redirects := ""
 		if len(node.Redirects) > 0 {
-			var redirectParts []string = []string{}
+			redirectParts := []string{}
 			for _, r := range node.Redirects {
 				redirectParts = append(redirectParts, formatRedirect(r, false, false))
 			}
@@ -9340,7 +9336,7 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 	switch node := node.(type) {
 	case *Function:
 		name := node.Name
-		innerBody := func() Node {
+		var innerBody Node = func() Node {
 			if node.Body.GetKind() == "brace-group" {
 				return node.Body.(*BraceGroup).Body
 			} else {
@@ -9355,7 +9351,7 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 		body := formatCmdsubNode(node.Body, indent, inProcsub, compactRedirects, false)
 		redirects := ""
 		if len(node.Redirects) > 0 {
-			var redirectParts []string = []string{}
+			redirectParts := []string{}
 			for _, r := range node.Redirects {
 				redirectParts = append(redirectParts, formatRedirect(r, false, false))
 			}
@@ -9385,7 +9381,7 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 		}()
 		redirects := ""
 		if len(node.Redirects) > 0 {
-			var redirectParts []string = []string{}
+			redirectParts := []string{}
 			for _, r := range node.Redirects {
 				redirectParts = append(redirectParts, formatRedirect(r, false, false))
 			}
@@ -9438,8 +9434,8 @@ func formatRedirect(r Node, compact bool, heredocOpOnly bool) string {
 		} else {
 			op = "<<"
 		}
-		if r.Fd != nil && *r.Fd > 0 {
-			op = strconv.Itoa(*r.Fd) + op
+		if r.Fd > 0 {
+			op = strconv.Itoa(r.Fd) + op
 		}
 		var delim string
 		if r.Quoted {

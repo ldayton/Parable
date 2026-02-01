@@ -20,17 +20,22 @@ The transpiler converts `src/parable.py` into 10 target languages. The same sour
 
 ```bash
 cd /home/lilydayton/source/Parable
-just backend-test perl 2>&1 | tail -2 | head -1
+just backend-test perl 2>&1 | tee /tmp/perl-test.out | tail -2 | head -1
 ```
 
 Store baseline counts from `X passed, Y failed`.
 
-Then get actual failures:
+Then list all failing tests:
 ```bash
-perl dist/perl/parable.pl --run-tests tests -f 01_words 2>&1 | head -50
+strings /tmp/perl-test.out | grep -E "^/home.*tests:" | head -20
 ```
 
-This filters to one test file and shows error details:
+Get details of a specific failure (replace TEST_NAME with actual test name from list):
+```bash
+strings /tmp/perl-test.out | grep -A50 "TEST_NAME" | head -60
+```
+
+The output shows:
 - `Input:` - the shell code being parsed
 - `Expected:` - the expected S-expression
 - `Actual:` - what Perl produced (often `<parse error>`)

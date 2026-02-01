@@ -1885,7 +1885,7 @@ class Word implements Node {
     value = this.NormalizeParamExpansionNewlines(value);
     value = this.StripArithLineContinuations(value);
     value = this.DoubleCtlescSmart(value);
-    value = value.replace(//g, "");
+    value = value.replace(//g, "\u0001\u007f");
     value = value.replace(/\\/g, "\\\\");
     if (value.endsWith("\\\\") && !value.endsWith("\\\\\\\\")) {
       value = value + "\\\\";
@@ -1910,7 +1910,7 @@ class Word implements Node {
         }
       }
       result.push(c);
-      if (c === "") {
+      if (c === "\u0001") {
         if (quote.double) {
           var bsCount: any = 0;
           for (var j: any = result.length - 2; j > -1; j += -1) {
@@ -1921,10 +1921,10 @@ class Word implements Node {
             }
           }
           if (bsCount % 2 === 0) {
-            result.push("");
+            result.push("\u0001");
           }
         } else {
-          result.push("");
+          result.push("\u0001");
         }
       }
     }
@@ -2267,7 +2267,7 @@ class Word implements Node {
               var outerInDquote: any = quote.outerDouble();
               if (braceDepth > 0 && outerInDquote && expanded.startsWith("'") && expanded.endsWith("'")) {
                 var inner: any = Substring(expanded, 1, expanded.length - 1);
-                if (inner.indexOf("") === -1) {
+                if (inner.indexOf("\u0001") === -1) {
                   var resultStr: any = result.join("");
                   var inPattern: any = false;
                   var lastBraceIdx: any = resultStr.lastIndexOf("${");
@@ -3437,7 +3437,7 @@ class Word implements Node {
     value = this.StripLocaleStringDollars(value);
     value = this.FormatCommandSubstitutions(value, false);
     value = this.NormalizeExtglobWhitespace(value);
-    value = value.replace(//g, "");
+    value = value.replace(//g, "\u0001\u0001");
     return value.replace(/[\n]+$/, '');
   }
 
@@ -5678,7 +5678,7 @@ class Parser {
           }
           inHeredocBody = false;
           if (pendingHeredocs.length > 0) {
-            [currentHeredocDelim, currentHeredocStrip] = pendingHeredocs.pop(0);
+            [currentHeredocDelim, currentHeredocStrip] = pendingHeredocs.shift();
             inHeredocBody = true;
           }
         } else {
@@ -5692,7 +5692,7 @@ class Parser {
             this.pos = lineStart + endPos;
             inHeredocBody = false;
             if (pendingHeredocs.length > 0) {
-              [currentHeredocDelim, currentHeredocStrip] = pendingHeredocs.pop(0);
+              [currentHeredocDelim, currentHeredocStrip] = pendingHeredocs.shift();
               inHeredocBody = true;
             }
           } else {
@@ -5883,7 +5883,7 @@ class Parser {
         contentChars.push(ch);
         textChars.push(ch);
         if (pendingHeredocs.length > 0) {
-          [currentHeredocDelim, currentHeredocStrip] = pendingHeredocs.pop(0);
+          [currentHeredocDelim, currentHeredocStrip] = pendingHeredocs.shift();
           inHeredocBody = true;
         }
         continue;

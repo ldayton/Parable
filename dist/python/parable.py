@@ -1433,7 +1433,7 @@ class Word(Node):
         value = self._normalize_param_expansion_newlines(value)
         value = self._strip_arith_line_continuations(value)
         value = self._double_ctlesc_smart(value)
-        value = value.replace("", "")
+        value = value.replace("\u007f", "\u0001\u007f")
         value = value.replace("\\", "\\\\")
         if value.endswith("\\\\") and not value.endswith("\\\\\\\\"):
             value = value + "\\\\"
@@ -1452,7 +1452,7 @@ class Word(Node):
             elif c == "\"" and not quote.single:
                 quote.double = not quote.double
             result.append(c)
-            if c == "":
+            if c == "\u0001":
                 if quote.double:
                     bs_count = 0
                     j: int = len(result) - 2
@@ -1463,9 +1463,9 @@ class Word(Node):
                             break
                         j += -1
                     if bs_count % 2 == 0:
-                        result.append("")
+                        result.append("\u0001")
                 else:
-                    result.append("")
+                    result.append("\u0001")
         return "".join(result)
 
     def _normalize_param_expansion_newlines(self, value: str) -> str:
@@ -1721,7 +1721,7 @@ class Word(Node):
                 outer_in_dquote = quote.outer_double()
                 if brace_depth > 0 and outer_in_dquote and expanded.startswith("'") and expanded.endswith("'"):
                     inner = _substring(expanded, 1, len(expanded) - 1)
-                    if inner.find("") == -1:
+                    if inner.find("\u0001") == -1:
                         result_str = "".join(result)
                         in_pattern = False
                         last_brace_idx = result_str.rfind("${")
@@ -2606,7 +2606,7 @@ class Word(Node):
         value = self._strip_locale_string_dollars(value)
         value = self._format_command_substitutions(value, False)
         value = self._normalize_extglob_whitespace(value)
-        value = value.replace("", "")
+        value = value.replace("\u0001", "\u0001\u0001")
         return value.rstrip("\n")
 
     def GetKind(self) -> str:

@@ -1968,7 +1968,7 @@ class Word implements Node {
         value = this._normalizeParamExpansionNewlines(value);
         value = this._stripArithLineContinuations(value);
         value = this._doubleCtlescSmart(value);
-        value = value.replace("", "");
+        value = value.replace("\u007f", "\u0001\u007f");
         value = value.replace("\\", "\\\\");
         if (value.endsWith("\\\\") && !value.endsWith("\\\\\\\\")) {
             value = value + "\\\\";
@@ -1994,7 +1994,7 @@ class Word implements Node {
                 }
             }
             result.add(c);
-            if (c.equals("")) {
+            if (c.equals("\u0001")) {
                 if (quote.double_) {
                     int bsCount = 0;
                     for (int j = result.size() - 2; j > -1; j += -1) {
@@ -2005,10 +2005,10 @@ class Word implements Node {
                         }
                     }
                     if (bsCount % 2 == 0) {
-                        result.add("");
+                        result.add("\u0001");
                     }
                 } else {
-                    result.add("");
+                    result.add("\u0001");
                 }
             }
         }
@@ -2355,7 +2355,7 @@ class Word implements Node {
                             boolean outerInDquote = quote.outerDouble();
                             if (braceDepth > 0 && outerInDquote && expanded.startsWith("'") && expanded.endsWith("'")) {
                                 String inner = ParableFunctions._substring(expanded, 1, expanded.length() - 1);
-                                if (inner.indexOf("") == -1) {
+                                if (inner.indexOf("\u0001") == -1) {
                                     String resultStr = String.join("", result);
                                     boolean inPattern = false;
                                     int lastBraceIdx = resultStr.lastIndexOf("${");
@@ -3231,7 +3231,7 @@ class Word implements Node {
                                 compact = ParableFunctions._startsWithSubshell(((ProcessSubstitution) node).command);
                                 formatted = ParableFunctions._formatCmdsubNode(((ProcessSubstitution) node).command, 0, true, compact, true);
                                 String rawContent = ParableFunctions._substring(value, i + 2, j - 1);
-                                if (((ProcessSubstitution) node).command.getKind() == "subshell") {
+                                if (((ProcessSubstitution) node).command.getKind().equals("subshell")) {
                                     int leadingWsEnd = 0;
                                     while (leadingWsEnd < rawContent.length() && " \t\n".indexOf(String.valueOf(rawContent.charAt(leadingWsEnd))) != -1) {
                                         leadingWsEnd += 1;
@@ -3542,7 +3542,7 @@ class Word implements Node {
         value = this._stripLocaleStringDollars(value);
         value = this._formatCommandSubstitutions(value, false);
         value = this._normalizeExtglobWhitespace(value);
-        value = value.replace("", "");
+        value = value.replace("\u0001", "\u0001\u0001");
         return value.replaceFirst("[" + "\n" + "]+$", "");
     }
 
@@ -3604,7 +3604,7 @@ class Pipeline implements Node {
                 i += 1;
                 continue;
             }
-            boolean needsRedirect = i + 1 < this.commands.size() && this.commands.get(i + 1).getKind() == "pipe-both";
+            boolean needsRedirect = i + 1 < this.commands.size() && this.commands.get(i + 1).getKind().equals("pipe-both");
             cmds.add(new Tuple5(cmd, needsRedirect));
             i += 1;
         }
@@ -3625,7 +3625,7 @@ class Pipeline implements Node {
             pair = cmds.get(j);
             cmd = pair.f0();
             needs = pair.f1();
-            if (needs && cmd.getKind() != "command") {
+            if (needs && !cmd.getKind().equals("command")) {
                 result = "(pipe " + ((Node) cmd).toSexp() + " (redirect \">&\" 1) " + result + ")";
             } else {
                 result = "(pipe " + this._cmdSexp(cmd, needs) + " " + result + ")";
@@ -3670,15 +3670,15 @@ class ListNode implements Node {
     public String toSexp() {
         List<Node> parts = new ArrayList<>(this.parts);
         Map<String, String> opNames = new HashMap<>(Map.of("&&", "and", "||", "or", ";", "semi", "\n", "semi", "&", "background"));
-        while (parts.size() > 1 && parts.get(parts.size() - 1).getKind() == "operator" && (((Operator) parts.get(parts.size() - 1)).op.equals(";") || ((Operator) parts.get(parts.size() - 1)).op.equals("\n"))) {
+        while (parts.size() > 1 && parts.get(parts.size() - 1).getKind().equals("operator") && (((Operator) parts.get(parts.size() - 1)).op.equals(";") || ((Operator) parts.get(parts.size() - 1)).op.equals("\n"))) {
             parts = ParableFunctions._sublist(parts, 0, parts.size() - 1);
         }
         if (parts.size() == 1) {
             return ((Node) parts.get(0)).toSexp();
         }
-        if (parts.get(parts.size() - 1).getKind() == "operator" && ((Operator) parts.get(parts.size() - 1)).op.equals("&")) {
+        if (parts.get(parts.size() - 1).getKind().equals("operator") && ((Operator) parts.get(parts.size() - 1)).op.equals("&")) {
             for (int i = parts.size() - 3; i > 0; i += -2) {
-                if (parts.get(i).getKind() == "operator" && (((Operator) parts.get(i)).op.equals(";") || ((Operator) parts.get(i)).op.equals("\n"))) {
+                if (parts.get(i).getKind().equals("operator") && (((Operator) parts.get(i)).op.equals(";") || ((Operator) parts.get(i)).op.equals("\n"))) {
                     List<Node> left = ParableFunctions._sublist(parts, 0, i);
                     List<Node> right = ParableFunctions._sublist(parts, i + 1, parts.size() - 1);
                     String leftSexp = "";
@@ -3709,7 +3709,7 @@ class ListNode implements Node {
     public String _toSexpWithPrecedence(List<Node> parts, Map<String, String> opNames) {
         List<Integer> semiPositions = new ArrayList<>();
         for (int i = 0; i < parts.size(); i += 1) {
-            if (parts.get(i).getKind() == "operator" && (((Operator) parts.get(i)).op.equals(";") || ((Operator) parts.get(i)).op.equals("\n"))) {
+            if (parts.get(i).getKind().equals("operator") && (((Operator) parts.get(i)).op.equals(";") || ((Operator) parts.get(i)).op.equals("\n"))) {
                 semiPositions.add(i);
             }
         }
@@ -3719,13 +3719,13 @@ class ListNode implements Node {
             List<Node> seg = new ArrayList<>();
             for (int pos : semiPositions) {
                 seg = ParableFunctions._sublist(parts, start, pos);
-                if ((!seg.isEmpty()) && seg.get(0).getKind() != "operator") {
+                if ((!seg.isEmpty()) && !seg.get(0).getKind().equals("operator")) {
                     segments.add(seg);
                 }
                 start = pos + 1;
             }
             seg = ParableFunctions._sublist(parts, start, parts.size());
-            if ((!seg.isEmpty()) && seg.get(0).getKind() != "operator") {
+            if ((!seg.isEmpty()) && !seg.get(0).getKind().equals("operator")) {
                 segments.add(seg);
             }
             if (!(!segments.isEmpty())) {
@@ -3746,7 +3746,7 @@ class ListNode implements Node {
         }
         List<Integer> ampPositions = new ArrayList<>();
         for (int i = 1; i < parts.size() - 1; i += 2) {
-            if (parts.get(i).getKind() == "operator" && ((Operator) parts.get(i)).op.equals("&")) {
+            if (parts.get(i).getKind().equals("operator") && ((Operator) parts.get(i)).op.equals("&")) {
                 ampPositions.add(i);
             }
         }
@@ -5825,6 +5825,7 @@ class Parser {
         boolean inHeredocBody = false;
         String currentHeredocDelim = "";
         boolean currentHeredocStrip = false;
+        String ch = "";
         while (!this.atEnd() && (inHeredocBody || !this.peek().equals("`"))) {
             if (inHeredocBody) {
                 int lineStart = this.pos;
@@ -5836,7 +5837,7 @@ class Parser {
                 String checkLine = (currentHeredocStrip ? line.replaceFirst("^[" + "\t" + "]+", "") : line);
                 if (checkLine.equals(currentHeredocDelim)) {
                     for (int _i = 0; _i < line.length(); _i++) {
-                        String ch = String.valueOf(line.charAt(_i));
+                        ch = String.valueOf(line.charAt(_i));
                         contentChars.add(ch);
                         textChars.add(ch);
                     }
@@ -5871,7 +5872,7 @@ class Parser {
                         }
                     } else {
                         for (int _i = 0; _i < line.length(); _i++) {
-                            String ch = String.valueOf(line.charAt(_i));
+                            ch = String.valueOf(line.charAt(_i));
                             contentChars.add(ch);
                             textChars.add(ch);
                         }
@@ -5886,7 +5887,6 @@ class Parser {
                 continue;
             }
             String c = this.peek();
-            String ch = "";
             if (c.equals("\\") && this.pos + 1 < this.length) {
                 String nextC = String.valueOf(this.source.charAt(this.pos + 1));
                 if (nextC.equals("\n")) {
@@ -8981,7 +8981,7 @@ class Parser {
                     this.advance();
                     this.skipWhitespace();
                     Node inner = this.parsePipeline();
-                    if (inner != null && inner.getKind() == "negation") {
+                    if (inner != null && inner.getKind().equals("negation")) {
                         if (((Negation) inner).pipeline != null) {
                             return ((Negation) inner).pipeline;
                         } else {
@@ -9544,7 +9544,7 @@ final class ParableFunctions {
     }
 
     static String _formatCondBody(Node node) {
-        Object kind = node.getKind();
+        String kind = node.getKind();
         if (kind == "unary-test") {
             String operandVal = ((Word) ((UnaryTest) node).operand).getCondFormattedValue();
             return ((UnaryTest) node).op + " " + operandVal;
@@ -9575,7 +9575,7 @@ final class ParableFunctions {
         }
         if (node instanceof ListNode nodeList) {
             for (Node p : nodeList.parts) {
-                if (p.getKind() != "operator") {
+                if (!p.getKind().equals("operator")) {
                     return ParableFunctions._startsWithSubshell(p);
                 }
             }
@@ -9641,7 +9641,7 @@ final class ParableFunctions {
                     i += 1;
                     continue;
                 }
-                needsRedirect = i + 1 < nodePipeline.commands.size() && nodePipeline.commands.get(i + 1).getKind() == "pipe-both";
+                needsRedirect = i + 1 < nodePipeline.commands.size() && nodePipeline.commands.get(i + 1).getKind().equals("pipe-both");
                 cmds.add(new Tuple5(cmd, needsRedirect));
                 i += 1;
             }
@@ -9656,7 +9656,7 @@ final class ParableFunctions {
                 String formatted = ParableFunctions._formatCmdsubNode(cmd, indent, inProcsub, false, procsubFirst && idx == 0);
                 boolean isLast = idx == cmds.size() - 1;
                 boolean hasHeredoc = false;
-                if (cmd.getKind() == "command" && (!((Command) cmd).redirects.isEmpty())) {
+                if (cmd.getKind().equals("command") && (!((Command) cmd).redirects.isEmpty())) {
                     for (Node r : ((Command) cmd).redirects) {
                         if (r instanceof HereDoc rHereDoc) {
                             hasHeredoc = true;
@@ -9688,7 +9688,7 @@ final class ParableFunctions {
                 }
                 idx += 1;
             }
-            boolean compactPipe = inProcsub && (!cmds.isEmpty()) && cmds.get(0).f0().getKind() == "subshell";
+            boolean compactPipe = inProcsub && (!cmds.isEmpty()) && cmds.get(0).f0().getKind().equals("subshell");
             String result = "";
             idx = 0;
             while (idx < resultParts.size()) {
@@ -9713,7 +9713,7 @@ final class ParableFunctions {
         if (node instanceof ListNode nodeList) {
             boolean hasHeredoc = false;
             for (Node p : nodeList.parts) {
-                if (p.getKind() == "command" && (!((Command) p).redirects.isEmpty())) {
+                if (p.getKind().equals("command") && (!((Command) p).redirects.isEmpty())) {
                     for (Node r : ((Command) p).redirects) {
                         if (r instanceof HereDoc rHereDoc) {
                             hasHeredoc = true;
@@ -9723,7 +9723,7 @@ final class ParableFunctions {
                 } else {
                     if (p instanceof Pipeline pPipeline) {
                         for (Node cmd : pPipeline.commands) {
-                            if (cmd.getKind() == "command" && (!((Command) cmd).redirects.isEmpty())) {
+                            if (cmd.getKind().equals("command") && (!((Command) cmd).redirects.isEmpty())) {
                                 for (Node r : ((Command) cmd).redirects) {
                                     if (r instanceof HereDoc rHereDoc) {
                                         hasHeredoc = true;
@@ -9931,7 +9931,7 @@ final class ParableFunctions {
         }
         if (node instanceof Function nodeFunction) {
             String name = nodeFunction.name;
-            Node innerBody = (nodeFunction.body.getKind() == "brace-group" ? ((BraceGroup) nodeFunction.body).body : nodeFunction.body);
+            Node innerBody = (nodeFunction.body.getKind().equals("brace-group") ? ((BraceGroup) nodeFunction.body).body : nodeFunction.body);
             String body = ParableFunctions._formatCmdsubNode(innerBody, indent + 4, false, false, false).replaceFirst("[" + ";" + "]+$", "");
             return String.format("function %s () \n{ \n%s%s\n}", name, innerSp, body);
         }
@@ -9997,8 +9997,8 @@ final class ParableFunctions {
     }
 
     static String _formatRedirect(Node r, boolean compact, boolean heredocOpOnly) {
+        String op = "";
         if (r instanceof HereDoc rHereDoc) {
-            String op = "";
             if (rHereDoc.stripTabs) {
                 op = "<<-";
             } else {
@@ -10018,7 +10018,7 @@ final class ParableFunctions {
             }
             return op + delim + "\n" + rHereDoc.content + rHereDoc.delimiter + "\n";
         }
-        String op = ((Redirect) r).op;
+        op = ((Redirect) r).op;
         if (op.equals("1>")) {
             op = ">";
         } else {

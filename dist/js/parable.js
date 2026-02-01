@@ -1929,7 +1929,7 @@ var Word = /** @class */ (function () {
         value = this.NormalizeParamExpansionNewlines(value);
         value = this.StripArithLineContinuations(value);
         value = this.DoubleCtlescSmart(value);
-        value = value.replace(//g, "");
+        value = value.replace(//g, "\u0001\u007f");
         value = value.replace(/\\/g, "\\\\");
         if (value.endsWith("\\\\") && !value.endsWith("\\\\\\\\")) {
             value = value + "\\\\";
@@ -1954,7 +1954,7 @@ var Word = /** @class */ (function () {
                 }
             }
             result.push(c);
-            if (c === "") {
+            if (c === "\u0001") {
                 if (quote.double) {
                     var bsCount = 0;
                     for (var j = result.length - 2; j > -1; j += -1) {
@@ -1966,11 +1966,11 @@ var Word = /** @class */ (function () {
                         }
                     }
                     if (bsCount % 2 === 0) {
-                        result.push("");
+                        result.push("\u0001");
                     }
                 }
                 else {
-                    result.push("");
+                    result.push("\u0001");
                 }
             }
         }
@@ -2338,7 +2338,7 @@ var Word = /** @class */ (function () {
                             var outerInDquote = quote.outerDouble();
                             if (braceDepth > 0 && outerInDquote && expanded.startsWith("'") && expanded.endsWith("'")) {
                                 var inner = Substring(expanded, 1, expanded.length - 1);
-                                if (inner.indexOf("") === -1) {
+                                if (inner.indexOf("\u0001") === -1) {
                                     var resultStr = result.join("");
                                     var inPattern = false;
                                     var lastBraceIdx = resultStr.lastIndexOf("${");
@@ -3625,7 +3625,7 @@ var Word = /** @class */ (function () {
         value = this.StripLocaleStringDollars(value);
         value = this.FormatCommandSubstitutions(value, false);
         value = this.NormalizeExtglobWhitespace(value);
-        value = value.replace(//g, "");
+        value = value.replace(//g, "\u0001\u0001");
         return value.replace(/[\n]+$/, '');
     };
     Word.prototype.getKind = function () {
@@ -5692,7 +5692,7 @@ var Parser = /** @class */ (function () {
                     }
                     inHeredocBody = false;
                     if (pendingHeredocs.length > 0) {
-                        _a = pendingHeredocs.pop(0), currentHeredocDelim = _a[0], currentHeredocStrip = _a[1];
+                        _a = pendingHeredocs.shift(), currentHeredocDelim = _a[0], currentHeredocStrip = _a[1];
                         inHeredocBody = true;
                     }
                 }
@@ -5707,7 +5707,7 @@ var Parser = /** @class */ (function () {
                         this.pos = lineStart + endPos;
                         inHeredocBody = false;
                         if (pendingHeredocs.length > 0) {
-                            _b = pendingHeredocs.pop(0), currentHeredocDelim = _b[0], currentHeredocStrip = _b[1];
+                            _b = pendingHeredocs.shift(), currentHeredocDelim = _b[0], currentHeredocStrip = _b[1];
                             inHeredocBody = true;
                         }
                     }
@@ -5908,7 +5908,7 @@ var Parser = /** @class */ (function () {
                 contentChars.push(ch);
                 textChars.push(ch);
                 if (pendingHeredocs.length > 0) {
-                    _c = pendingHeredocs.pop(0), currentHeredocDelim = _c[0], currentHeredocStrip = _c[1];
+                    _c = pendingHeredocs.shift(), currentHeredocDelim = _c[0], currentHeredocStrip = _c[1];
                     inHeredocBody = true;
                 }
                 continue;

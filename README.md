@@ -8,7 +8,7 @@
 </pre>
 </div>
 
-Parse bash exactly as bash does. Python, Typescript, Go, or Java—your choice. One file, zero dependencies. This is the only complete bash parser for these languages. Extensively validated against bash itself.
+Parse bash exactly as bash does. One file, zero dependencies, in your language. This is the only complete bash parser for most languages. Extensively validated against bash itself.
 
 ---
 
@@ -18,11 +18,31 @@ Parse bash exactly as bash does. Python, Typescript, Go, or Java—your choice. 
 
 **Match bash exactly.** Bash is the oracle. We [patched](https://github.com/ldayton/bash-oracle) GNU Bash 5.3 so it reveals its internal parse tree, then test against it. No spec interpretation, no "close enough"—if bash parses it one way, so do we. Bash always tells the truth, even when it's lying.
 
-**Portable performance.** Hand-written recursive descent—no generators, no native extensions, no imports. Pure Python transpiles to Go, TypeScript, and Java. All run the same tests.
+**Portable performance.** Hand-written recursive descent—no generators, no native extensions, no imports. Pure Python transpiles to other target languages. All run the same tests.
 
-## Transpiled Outputs
+## Transpiler
 
-The Python implementation transpiles to Go, TypeScript, Java, and Python via a custom IR-based transpiler. All outputs are validated the same way—same tests, same bash AST comparisons, same edge cases.
+The transpiler supports these target languages:
+
+| Language   | Reference    | Released | Homebrew      | GitHub Actions    | Status |
+| ---------- | ------------ | -------- | ------------- | ----------------- | ------ |
+| Go         | Go 1.21      | Aug 2023 | `go@1.21`     | `setup-go@v5`     | Done   |
+| Java       | Temurin 21   | Sep 2023 | `temurin@21`  | `setup-java@v4`   | Done   |
+| Javascript | Node.js 21   | Oct 2023 | `node@21`     | `setup-node@v4`   | Done   |
+| Lua        | Lua 5.4      | May 2023 | `lua`         | `gh-actions-lua`  | Done   |
+| Python     | CPython 3.12 | Oct 2023 | `python@3.12` | `setup-uv@v4`     | Done   |
+| Ruby       | Ruby 3.3     | Dec 2023 | `ruby@3.3`    | `setup-ruby@v1`   | Done   |
+| Typescript | tsc 5.3      | Nov 2023 | `node@21`     | `setup-node@v4`   | Done   |
+| C#         | .NET 8       | Nov 2023 | `dotnet@8`    | `setup-dotnet@v4` | WIP    |
+| Perl       | Perl 5.38    | Jul 2023 | `perl`        | `setup-perl@v1`   | WIP    |
+| PHP        | PHP 8.3      | Nov 2023 | `php@8.3`     | `setup-php@v2`    | WIP    |
+| C          | GCC 13       | Jul 2023 | `gcc@13`      | `setup-gcc@v1`    | Future |
+| Dart       | Dart 3.2     | Nov 2023 | `dart`        | `setup-dart@v1`   | Future |
+| Rust       | Rust 1.75    | Dec 2023 | `rust`        | `setup-rust@v1`   | Future |
+| Swift      | Swift 5.9    | Sep 2023 | `swift`       | `setup-swift@v2`  | Future |
+| Zig        | Zig 0.11     | Aug 2023 | `zig`         | `setup-zig@v2`    | Future |
+
+Output code quality is a work in progress. Currently the transpiler prioritizes correctness over readability; generated code may not yet match hand-written idioms.
 
 ## Why Parable?
 
@@ -103,8 +123,6 @@ Every test validated against real bash 5.3 ASTs.
 
 ## Usage
 
-### Python
-
 ```python
 from parable import parse
 
@@ -121,35 +139,11 @@ print(ast[0].to_sexp())
 # (command (word "cat") (redirect "<<" "heredoc content\n"))
 ```
 
-## Installation
-
-```bash
-git clone https://github.com/ldayton/Parable.git
-cd Parable && uv pip install -e .
-```
-
-## Tests
-
-```bash
-just src-test             # Python
-just backend-test go      # Go
-just backend-test ts      # TypeScript
-just backend-test java    # Java
-```
-
-See [tests/README.md](tests/README.md) for options and coverage details.
-
 ## Project Structure
 
 ```
 src/
 └── parable.py                   # Single-file Python parser
-
-dist/                            # Transpiled outputs
-├── go/parable.go
-├── java/Parable.java
-├── python/parable.py
-└── ts/parable.ts
 
 tests/
 ├── bin/                         # Test runners + corpus utilities
@@ -163,20 +157,17 @@ transpiler/                      # Python → multi-language transpiler
 ├── src/frontend/                # Parser and type inference
 ├── src/middleend/               # Analysis passes
 └── src/backend/                 # Code generators
+
+dist/                            # Transpiled outputs
+├── csharp/Parable.cs
+├── go/parable.go
+├── java/Parable.java
+├── perl/parable.pl
+├── php/parable.php
+├── python/parable.py
+├── ruby/parable.rb
+└── ts/parable.ts
 ```
-
-## Transpiler
-
-The transpiler uses an intermediate representation (IR) to generate code for multiple target languages:
-
-| Language   | Reference    | Homebrew      | GitHub Actions  |
-| ---------- | ------------ | ------------- | --------------- |
-| Go         | Go 1.24      | `go@1.24`     | `setup-go@v5`   |
-| Java       | Temurin 21   | `temurin@21`  | `setup-java@v4` |
-| Python     | CPython 3.12 | `python@3.12` | `setup-uv@v4`   |
-| TypeScript | Node.js 22   | `node@22`     | `setup-node@v4` |
-
-Output code quality is a work in progress. The transpiler prioritizes correctness over readability; generated code may not yet match hand-written idioms.
 
 ## License
 

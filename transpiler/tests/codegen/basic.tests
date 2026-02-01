@@ -9,9 +9,26 @@ func Add(a int, b int) int {
 static int add(int a, int b) {
     return a + b;
 }
---- ts
+--- typescript
 function add(a: number, b: number): number {
   return a + b;
+}
+--- javascript
+function add(a, b) {
+  return a + b;
+}
+--- ruby
+def add(a, b)
+  return a + b
+end
+--- perl
+sub add ($a, $b) {
+    return $a + $b;
+}
+--- php
+function add(int $a, int $b): int
+{
+    return $a + $b;
 }
 ---
 
@@ -45,7 +62,7 @@ static int sign(int x) {
         }
     }
 }
---- ts
+--- typescript
 function sign(x: number): number {
   if (x > 0) {
     return 1;
@@ -56,6 +73,57 @@ function sign(x: number): number {
       return 0;
     }
   }
+}
+--- javascript
+function sign(x) {
+  if (x > 0) {
+    return 1;
+  } else {
+    if (x < 0) {
+      return -1;
+    } else {
+      return 0;
+    }
+  }
+}
+--- ruby
+def sign(x)
+  if x > 0
+    return 1
+  elsif x < 0
+    return -1
+  else
+    return 0
+  end
+end
+--- perl
+sub sign ($x) {
+    if ($x > 0) {
+        return 1;
+    } elsif ($x < 0) {
+        return -1;
+    } else {
+        return 0;
+    }
+}
+--- php
+function sign(int $x): int
+{
+    if ($x > 0)
+    {
+        return 1;
+    }
+    else
+    {
+        if ($x < 0)
+        {
+            return -1;
+        }
+        else
+        {
+            return 0;
+        }
+    }
 }
 ---
 
@@ -84,7 +152,7 @@ static int countdown(int n) {
     }
     return total;
 }
---- ts
+--- typescript
 function countdown(n: number): number {
   var total: any = 0;
   while (n > 0) {
@@ -92,6 +160,44 @@ function countdown(n: number): number {
     n = n - 1;
   }
   return total;
+}
+--- javascript
+function countdown(n) {
+  let total = 0;
+  while (n > 0) {
+    total = total + n;
+    n = n - 1;
+  }
+  return total;
+}
+--- ruby
+def countdown(n)
+  total = 0
+  while n > 0
+    total = total + n
+    n = n - 1
+  end
+  return total
+end
+--- perl
+sub countdown ($n) {
+    my $total = 0;
+    while ($n > 0) {
+        $total = $total + $n;
+        $n = $n - 1;
+    }
+    return $total;
+}
+--- php
+function countdown(int $n): int
+{
+    $total = 0;
+    while ($n > 0)
+    {
+        $total = $total + $n;
+        $n = $n - 1;
+    }
+    return $total;
 }
 ---
 
@@ -106,9 +212,26 @@ func Greet(name string) string {
 static String greet(String name) {
     return "Hello, " + name;
 }
---- ts
+--- typescript
 function greet(name: string): string {
   return "Hello, " + name;
+}
+--- javascript
+function greet(name) {
+  return "Hello, " + name;
+}
+--- ruby
+def greet(name)
+  return "Hello, " + name
+end
+--- perl
+sub greet ($name) {
+    return "Hello, " . $name;
+}
+--- php
+function greet(string $name): string
+{
+    return "Hello, " . $name;
 }
 ---
 
@@ -123,8 +246,25 @@ func Both(a bool, b bool) bool {
 static boolean both(boolean a, boolean b) {
     return a && b;
 }
---- ts
+--- typescript
 function both(a: boolean, b: boolean): boolean {
   return a && b;
+}
+--- javascript
+function both(a, b) {
+  return a && b;
+}
+--- ruby
+def both(a, b)
+  return a && b
+end
+--- perl
+sub both ($a, $b) {
+    return $a && $b;
+}
+--- php
+function both(bool $a, bool $b): bool
+{
+    return $a && $b;
 }
 ---

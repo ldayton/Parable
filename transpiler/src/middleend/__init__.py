@@ -2,6 +2,7 @@
 
 from src.ir import Module
 
+from .callbacks import analyze_callbacks
 from .hoisting import analyze_hoisting
 from .liveness import analyze_liveness
 from .returns import analyze_returns
@@ -14,3 +15,4 @@ def analyze(module: Module) -> None:
     analyze_liveness(module)
     analyze_returns(module)
     analyze_hoisting(module)
+    analyze_callbacks(module)

@@ -830,6 +830,11 @@ class TsBackend:
                 obj_str = self._expr(obj)
                 checks = [f"{obj_str}.{ts_method}({self._expr(e)})" for e in elements]
                 return f"({' || '.join(checks)})"
+            case MethodCall(
+                obj=obj, method="pop", args=[IntLit(value=0)], receiver_type=receiver_type
+            ) if _is_array_type(receiver_type):
+                # Python: list.pop(0) -> TS: list.shift()
+                return f"{self._expr(obj)}.shift()"
             case MethodCall(obj=obj, method=method, args=args, receiver_type=receiver_type):
                 args_str = ", ".join(self._expr(a) for a in args)
                 ts_method = _method_name(method, receiver_type)

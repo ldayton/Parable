@@ -973,10 +973,14 @@ class JavaBackend:
             # Need index - use traditional for loop
             idx = _java_safe_name(index)
             val = _java_safe_name(value)
+            val_hoisted = value in self._hoisted_vars
             if is_string:
                 self._line(f"for (int {idx} = 0; {idx} < {iter_expr}.length(); {idx}++) {{")
                 self.indent += 1
-                self._line(f"String {val} = String.valueOf({iter_expr}.charAt({idx}));")
+                if val_hoisted:
+                    self._line(f"{val} = String.valueOf({iter_expr}.charAt({idx}));")
+                else:
+                    self._line(f"String {val} = String.valueOf({iter_expr}.charAt({idx}));")
             else:
                 self._line(f"for (int {idx} = 0; {idx} < {iter_expr}.size(); {idx}++) {{")
                 self.indent += 1
@@ -986,18 +990,25 @@ class JavaBackend:
                     override_key = (self._current_func, value)
                     if override_key in VAR_TYPE_OVERRIDES:
                         elem_type = self._type(VAR_TYPE_OVERRIDES[override_key])
-                self._line(f"{elem_type} {val} = {iter_expr}.get({idx});")
+                if val_hoisted:
+                    self._line(f"{val} = {iter_expr}.get({idx});")
+                else:
+                    self._line(f"{elem_type} {val} = {iter_expr}.get({idx});")
             for s in body:
                 self._emit_stmt(s)
             self.indent -= 1
             self._line("}")
         elif value is not None:
             val = _java_safe_name(value)
+            val_hoisted = value in self._hoisted_vars
             if is_string:
                 # String iteration needs index-based loop
                 self._line(f"for (int _i = 0; _i < {iter_expr}.length(); _i++) {{")
                 self.indent += 1
-                self._line(f"String {val} = String.valueOf({iter_expr}.charAt(_i));")
+                if val_hoisted:
+                    self._line(f"{val} = String.valueOf({iter_expr}.charAt(_i));")
+                else:
+                    self._line(f"String {val} = String.valueOf({iter_expr}.charAt(_i));")
             else:
                 elem_type = self._element_type(iter_type)
                 # Check if iterating over range() - element type is Integer
@@ -1008,8 +1019,14 @@ class JavaBackend:
                     override_key = (self._current_func, value)
                     if override_key in VAR_TYPE_OVERRIDES:
                         elem_type = self._type(VAR_TYPE_OVERRIDES[override_key])
-                self._line(f"for ({elem_type} {val} : {iter_expr}) {{")
-                self.indent += 1
+                if val_hoisted:
+                    # Can't use enhanced for loop with hoisted var, use indexed loop
+                    self._line(f"for (int _i = 0; _i < {iter_expr}.size(); _i++) {{")
+                    self.indent += 1
+                    self._line(f"{val} = {iter_expr}.get(_i);")
+                else:
+                    self._line(f"for ({elem_type} {val} : {iter_expr}) {{")
+                    self.indent += 1
             for s in body:
                 self._emit_stmt(s)
             self.indent -= 1

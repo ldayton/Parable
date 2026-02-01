@@ -4,19 +4,27 @@ set shell := ["bash", "-o", "pipefail", "-cu"]
 source := "../src/parable.py"
 tests := "../tests"
 dist := "../dist/go"
-backends := "go java py ts"
-testable := "go py ts"
+backends := "c csharp go java javascript lua php perl python ruby typescript"
+testable := "c go javascript lua perl php python ruby typescript"
 
 # Transpile source to stdout
-emit backend="go":
+emit backend:
     uv run python -m src.tongues --target {{backend}} < {{source}}
 
 # Transpile source and check syntax/compilation
-prep backend="go":
+prep backend:
     #!/usr/bin/env bash
     set -euo pipefail
     just style
     case "{{backend}}" in
+        c)
+            uv run python -m src.tongues --target c < {{source}} > /tmp/transpile.c
+            gcc -Wall -Wextra -fsyntax-only -std=c11 /tmp/transpile.c
+            ;;
+        csharp)
+            uv run python -m src.tongues --target csharp < {{source}} > ../dist/csharp/Parable.cs
+            dotnet build ../dist/csharp/csharp.csproj -c Release -v q --nologo
+            ;;
         go)
             uv run python -m src.tongues --target go < {{source}} > /tmp/transpile-ir.go
             gofmt /tmp/transpile-ir.go > {{dist}}/parable.go
@@ -26,13 +34,34 @@ prep backend="go":
             uv run python -m src.tongues --target java < {{source}} > /tmp/Output.java
             javac /tmp/Output.java -d /tmp
             ;;
-        py|python)
-            uv run python -m src.tongues --target py < {{source}} > /tmp/transpile.py
+        javascript)
+            rm -rf /tmp/transpile-js && mkdir -p /tmp/transpile-js
+            uv run python -m src.tongues --target javascript < {{source}} > /tmp/transpile-js/parable.js
+            node --check /tmp/transpile-js/parable.js
             ;;
-        ts|typescript)
+        lua)
+            uv run python -m src.tongues --target lua < {{source}} > /tmp/transpile.lua
+            luac -p /tmp/transpile.lua
+            ;;
+        python)
+            uv run python -m src.tongues --target python < {{source}} > /tmp/transpile.py
+            ;;
+        typescript)
             rm -rf /tmp/transpile-ts && mkdir -p /tmp/transpile-ts/src
-            uv run python -m src.tongues --target ts < {{source}} > /tmp/transpile-ts/src/output.ts
+            uv run python -m src.tongues --target typescript < {{source}} > /tmp/transpile-ts/src/output.ts
             tsc --outDir /tmp/transpile-ts/src --lib es2019 --module commonjs --esModuleInterop /tmp/transpile-ts/src/output.ts
+            ;;
+        perl)
+            uv run python -m src.tongues --target perl < {{source}} > /tmp/transpile.pl
+            perl -c /tmp/transpile.pl
+            ;;
+        php)
+            uv run python -m src.tongues --target php < {{source}} > /tmp/transpile.php
+            php -l /tmp/transpile.php
+            ;;
+        ruby)
+            uv run python -m src.tongues --target ruby < {{source}} > /tmp/transpile.rb
+            ruby -c /tmp/transpile.rb
             ;;
         *)
             echo "Unknown backend: {{backend}}"
@@ -41,24 +70,59 @@ prep backend="go":
     esac
 
 # Run full parser test suite (4574 tests)
-test backend="go":
+test backend:
     #!/usr/bin/env bash
     set -euo pipefail
     # Convert relative paths to absolute for subprocesses
     tests_abs=$(cd "$(dirname "{{tests}}")" && pwd)/$(basename "{{tests}}")
     case "{{backend}}" in
+        c)
+            rm -rf /tmp/transpile-test-c && mkdir /tmp/transpile-test-c
+            uv run python -m src.tongues --target c < {{source}} > /tmp/transpile-test-c/parable.c
+            cp {{tests}}/bin/run-tests.c /tmp/transpile-test-c/ 2>/dev/null || cp ../dist/c/run_tests.c /tmp/transpile-test-c/
+            gcc -Wall -Wextra -O2 -std=c11 -o /tmp/transpile-test-c/run_tests /tmp/transpile-test-c/run_tests.c
+            /tmp/transpile-test-c/run_tests "$tests_abs"
+            ;;
         go)
             just prep go
             go run -C {{dist}} ./cmd/run-tests "$tests_abs"
             ;;
-        py|python)
+        javascript)
+            just prep javascript
+            node {{tests}}/bin/run-js-tests.js /tmp/transpile-js
+            ;;
+        lua)
+            rm -rf /tmp/transpile-test-lua && mkdir /tmp/transpile-test-lua
+            uv run python -m src.tongues --target lua < {{source}} > /tmp/transpile-test-lua/parable.lua
+            luac -p /tmp/transpile-test-lua/parable.lua
+            lua -l /tmp/transpile-test-lua/parable {{tests}}/bin/run-tests.lua {{tests}}
+            ;;
+        python)
             rm -rf /tmp/transpile-test && mkdir /tmp/transpile-test
-            uv run python -m src.tongues --target py < {{source}} > /tmp/transpile-test/parable.py
+            uv run python -m src.tongues --target python < {{source}} > /tmp/transpile-test/parable.py
             PYTHONPATH=/tmp/transpile-test python3 {{tests}}/bin/run-tests.py {{tests}}
             ;;
-        ts|typescript)
-            just prep ts
+        typescript)
+            just prep typescript
             node {{tests}}/bin/run-js-tests.js /tmp/transpile-ts
+            ;;
+        perl)
+            rm -rf /tmp/transpile-test-pl && mkdir /tmp/transpile-test-pl
+            uv run python -m src.tongues --target perl < {{source}} > /tmp/transpile-test-pl/parable.pl
+            perl -c /tmp/transpile-test-pl/parable.pl
+            PERL5LIB=/tmp/transpile-test-pl perl {{tests}}/bin/run-tests.pl {{tests}}
+            ;;
+        php)
+            rm -rf /tmp/transpile-test-php && mkdir /tmp/transpile-test-php
+            uv run python -m src.tongues --target php < {{source}} > /tmp/transpile-test-php/parable.php
+            php -l /tmp/transpile-test-php/parable.php
+            php {{tests}}/bin/run-tests.php {{tests}}
+            ;;
+        ruby)
+            rm -rf /tmp/transpile-test-rb && mkdir /tmp/transpile-test-rb
+            uv run python -m src.tongues --target ruby < {{source}} > /tmp/transpile-test-rb/parable.rb
+            ruby -c /tmp/transpile-test-rb/parable.rb
+            ruby -r /tmp/transpile-test-rb/parable.rb {{tests}}/bin/run-tests.rb {{tests}}
             ;;
         *)
             echo "No test runner for backend: {{backend}}"
@@ -86,7 +150,7 @@ test-all:
     done
 
 # Show compilation errors for debugging
-errors backend="go":
+errors backend:
     @uv run python -m src.tongues --target {{backend}} < {{source}} > /tmp/transpile-out 2>&1 || true
     @echo "=== Transpiler output (first 20 lines) ==="
     @head -20 /tmp/transpile-out || true

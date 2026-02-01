@@ -3,7 +3,7 @@ set shell := ["bash", "-o", "pipefail", "-cu"]
 # --- Configuration ---
 project := "parable"
 run_id := `head -c 16 /dev/urandom | xxd -p`
-backends := "go python ts"  # Testable transpiled backends
+backends := "c csharp go java javascript lua perl php python ruby typescript"  # All backends
 
 # --- Helpers ---
 
@@ -57,22 +57,50 @@ backend-transpile backend:
     set -euo pipefail
     printf '{{BOLD}}{{CYAN}}==> backend-transpile %s{{NORMAL}}\n' '{{backend}}'
     case "{{backend}}" in
+        c)
+            mkdir -p dist/c
+            uv run --directory transpiler python -m src.tongues --target c < "$(pwd)/src/parable.py" > dist/c/parable.c
+            ;;
+        csharp)
+            mkdir -p dist/csharp
+            uv run --directory transpiler python -m src.tongues --target csharp < "$(pwd)/src/parable.py" > dist/csharp/Parable.cs
+            ;;
         go)
             out="dist/go/parable.go"
             uv run --directory transpiler python -m src.tongues --target go < "$(pwd)/src/parable.py" > /tmp/parable-ir.go
             gofmt /tmp/parable-ir.go > "$out"
             ;;
-        python)
-            mkdir -p dist/python
-            uv run --directory transpiler python -m src.tongues --target py < "$(pwd)/src/parable.py" > dist/python/parable.py
-            ;;
-        ts)
-            mkdir -p dist/ts
-            uv run --directory transpiler python -m src.tongues --target ts < "$(pwd)/src/parable.py" > dist/ts/parable.ts
-            ;;
         java)
             mkdir -p dist/java
             uv run --directory transpiler python -m src.tongues --target java < "$(pwd)/src/parable.py" > dist/java/Parable.java
+            ;;
+        javascript)
+            mkdir -p dist/js
+            uv run --directory transpiler python -m src.tongues --target javascript < "$(pwd)/src/parable.py" > dist/js/parable.js
+            ;;
+        lua)
+            mkdir -p dist/lua
+            uv run --directory transpiler python -m src.tongues --target lua < "$(pwd)/src/parable.py" > dist/lua/parable.lua
+            ;;
+        perl)
+            mkdir -p dist/perl
+            uv run --directory transpiler python -m src.tongues --target perl < "$(pwd)/src/parable.py" > dist/perl/parable.pl
+            ;;
+        php)
+            mkdir -p dist/php
+            uv run --directory transpiler python -m src.tongues --target php < "$(pwd)/src/parable.py" > dist/php/parable.php
+            ;;
+        python)
+            mkdir -p dist/python
+            uv run --directory transpiler python -m src.tongues --target python < "$(pwd)/src/parable.py" > dist/python/parable.py
+            ;;
+        ruby)
+            mkdir -p dist/ruby
+            uv run --directory transpiler python -m src.tongues --target ruby < "$(pwd)/src/parable.py" > dist/ruby/parable.rb
+            ;;
+        typescript)
+            mkdir -p dist/typescript
+            uv run --directory transpiler python -m src.tongues --target typescript < "$(pwd)/src/parable.py" > dist/typescript/parable.ts
             ;;
         *)
             echo "Unknown backend: {{backend}}"
@@ -88,25 +116,57 @@ backend-test backend:
     printf '{{BOLD}}{{CYAN}}==> backend-test %s{{NORMAL}}\n' '{{backend}}'
     tests_abs="$(pwd)/tests"
     case "{{backend}}" in
+        c)
+            just backend-transpile c
+            just -f dist/c/justfile check "$tests_abs"
+            ;;
+        csharp)
+            just backend-transpile csharp
+            dotnet build dist/csharp/csharp.csproj -o dist/csharp/bin --verbosity quiet
+            dotnet dist/csharp/bin/csharp.dll "$tests_abs"
+            ;;
         go)
             just backend-transpile go
             go build -C dist/go -o /dev/null .
             go run -C dist/go ./cmd/run-tests "$tests_abs"
-            ;;
-        python)
-            just backend-transpile python
-            PYTHONPATH=dist/python python3 tests/bin/run-tests.py
-            ;;
-        ts)
-            just backend-transpile ts
-            tsc --outDir dist/js --lib es2019 --module commonjs --esModuleInterop dist/ts/parable.ts
-            node tests/bin/run-js-tests.js dist/js
             ;;
         java)
             just backend-transpile java
             mkdir -p dist/java/classes
             javac -d dist/java/classes dist/java/Parable.java dist/java/RunTests.java
             java -cp dist/java/classes RunTests "$tests_abs"
+            ;;
+        javascript)
+            just backend-transpile javascript
+            node tests/bin/run-js-tests.js dist/js
+            ;;
+        lua)
+            just backend-transpile lua
+            luac -p dist/lua/parable.lua
+            lua -l ./dist/lua/parable tests/bin/run-tests.lua "$(pwd)/tests"
+            ;;
+        perl)
+            just backend-transpile perl
+            perl -c dist/perl/parable.pl
+            PERL5LIB=dist/perl perl tests/bin/run-tests.pl "$tests_abs"
+            ;;
+        php)
+            just backend-transpile php
+            php -l dist/php/parable.php
+            php tests/bin/run-tests.php "$tests_abs"
+            ;;
+        python)
+            just backend-transpile python
+            PYTHONPATH=dist/python python3 tests/bin/run-tests.py
+            ;;
+        ruby)
+            just backend-transpile ruby
+            ruby -r ./dist/ruby/parable.rb tests/bin/run-tests.rb "$tests_abs"
+            ;;
+        typescript)
+            just backend-transpile typescript
+            tsc --outDir dist/js --lib es2019 --module commonjs --esModuleInterop dist/typescript/parable.ts
+            node tests/bin/run-js-tests.js dist/js
             ;;
         *)
             echo "No test runner for backend: {{backend}}"
@@ -117,10 +177,16 @@ backend-test backend:
 
 # --- CI/Check ---
 
+# Check that C backend compiles (without running tests)
+[group: 'ci']
+c-compile:
+    just backend-transpile c
+    just -f dist/c/justfile build
+
 # Internal: run all parallel checks
 [private]
 [parallel]
-_check-parallel: src-test src-lint src-fmt src-verify-lock src-subset transpiler-subset transpiler-test check-dump-ast (backend-test "go") (backend-test "python") (backend-test "ts") (backend-test "java")
+_check-parallel: src-test src-lint src-fmt src-verify-lock src-subset transpiler-subset transpiler-test check-dump-ast c-compile (backend-test "csharp") (backend-test "go") (backend-test "java") (backend-test "javascript") (backend-test "lua") (backend-test "perl") (backend-test "php") (backend-test "python") (backend-test "ruby") (backend-test "typescript")
 
 # Ensure biome is installed (prevents race condition in parallel JS checks)
 [private]

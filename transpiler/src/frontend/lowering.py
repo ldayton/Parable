@@ -660,7 +660,10 @@ def lower_expr_Attribute(
             )
     # Infer field type for self.field accesses
     field_type: "Type" = InterfaceRef("any")
-    if is_type(node_value, ["Name"]) and node_value.get("id") == "self":
+    # Node interface field types (kind is defined as string)
+    if is_node_interface_type(obj_type) and node_attr == "kind":
+        field_type = STRING
+    elif is_type(node_value, ["Name"]) and node_value.get("id") == "self":
         if current_class_name in symbols.structs:
             struct_info = symbols.structs[current_class_name]
             field_info = struct_info.fields.get(node_attr)
@@ -670,7 +673,13 @@ def lower_expr_Attribute(
             elif node_attr in struct_info.methods:
                 method_info = struct_info.methods[node_attr]
                 param_types = tuple(p.typ for p in method_info.params)
-                func_type = FuncType(params=param_types, ret=method_info.return_type, captures=True)
+                receiver_type = Pointer(StructRef(current_class_name))
+                func_type = FuncType(
+                    params=param_types,
+                    ret=method_info.return_type,
+                    captures=True,
+                    receiver=receiver_type,
+                )
                 return ir.FuncRef(name=node_attr, obj=obj, typ=func_type, loc=loc_from_node(node))
     # Also look up field type from the asserted struct type
     if isinstance(obj, ir.TypeAssert):

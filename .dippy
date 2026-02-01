@@ -3,6 +3,7 @@
 #---- Just targets ----#
 allow just
 deny just -C "Don't use -C, run bare targets"
+allow uv run pytest
 
 #---- Scripts ----#
 allow bin/parable-dump.py
@@ -14,7 +15,14 @@ deny-redirect * "Redirects only allowed to /tmp/* or to stdin/stderr"
 allow-redirect /tmp/**
 
 #---- Langs ----#
-allow node
+allow dotnet
 allow go
+allow java
+allow javac
+allow node
+allow perl
+allow php
 allow python
 allow python3
+allow ruby
+allow tsc

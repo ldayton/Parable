@@ -120,6 +120,8 @@ def escape_string(value: str) -> str:
         .replace("\n", "\\n")
         .replace("\t", "\\t")
         .replace("\r", "\\r")
+        .replace("\x01", "\\u0001")
+        .replace("\x7f", "\\u007f")
     )
 
 

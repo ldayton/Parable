@@ -1981,7 +1981,7 @@ func (self *Word) ToSexp() string {
 	value = self.normalizeParamExpansionNewlines(value)
 	value = self.stripArithLineContinuations(value)
 	value = self.doubleCtlescSmart(value)
-	value = strings.ReplaceAll(value, "", "")
+	value = strings.ReplaceAll(value, "\u007f", "\u0001\u007f")
 	value = strings.ReplaceAll(value, "\\", "\\\\")
 	if strings.HasSuffix(value, "\\\\") && !strings.HasSuffix(value, "\\\\\\\\") {
 		value = value + "\\\\"
@@ -2015,10 +2015,10 @@ func (self *Word) doubleCtlescSmart(value string) string {
 					}
 				}
 				if (bsCount % 2) == 0 {
-					result = append(result, "")
+					result = append(result, "\u0001")
 				}
 			} else {
-				result = append(result, "")
+				result = append(result, "\u0001")
 			}
 		}
 	}
@@ -2330,7 +2330,7 @@ func (self *Word) expandAllAnsiCQuotes(value string) string {
 			outerInDquote := quote.OuterDouble()
 			if braceDepth > 0 && outerInDquote && strings.HasPrefix(expanded, "'") && strings.HasSuffix(expanded, "'") {
 				inner := substring(expanded, 1, _runeLen(expanded)-1)
-				if strings.Index(inner, "") == -1 {
+				if strings.Index(inner, "\u0001") == -1 {
 					resultStr := strings.Join(result, "")
 					inPattern := false
 					lastBraceIdx := strings.LastIndex(resultStr, "${")
@@ -3428,7 +3428,7 @@ func (self *Word) GetCondFormattedValue() string {
 	value = self.stripLocaleStringDollars(value)
 	value = self.formatCommandSubstitutions(value, false)
 	value = self.normalizeExtglobWhitespace(value)
-	value = strings.ReplaceAll(value, "", "")
+	value = strings.ReplaceAll(value, "\u0001", "\u0001\u0001")
 	return strings.TrimRight(value, "\n")
 }
 
@@ -5368,6 +5368,7 @@ func (self *Parser) parseBacktickSubstitution() (Node, string) {
 	inHeredocBody := false
 	currentHeredocDelim := ""
 	currentHeredocStrip := false
+	var ch string
 	for !self.AtEnd() && (inHeredocBody || self.Peek() != "`") {
 		if inHeredocBody {
 			lineStart := self.Pos
@@ -5431,7 +5432,6 @@ func (self *Parser) parseBacktickSubstitution() (Node, string) {
 			continue
 		}
 		c := self.Peek()
-		var ch string
 		if c == "\\" && self.Pos+1 < self.Length {
 			nextC := _runeAt(self.Source, self.Pos+1)
 			if nextC == "\n" {
@@ -9430,9 +9430,9 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 }
 
 func formatRedirect(r Node, compact bool, heredocOpOnly bool) string {
+	var op string
 	switch r := r.(type) {
 	case *HereDoc:
-		var op string
 		if r.StripTabs {
 			op = "<<-"
 		} else {
@@ -9452,7 +9452,7 @@ func formatRedirect(r Node, compact bool, heredocOpOnly bool) string {
 		}
 		return op + delim + "\n" + r.Content + r.Delimiter + "\n"
 	}
-	op := r.(*Redirect).Op
+	op = r.(*Redirect).Op
 	if op == "1>" {
 		op = ">"
 	} else if op == "0<" {

@@ -2177,7 +2177,7 @@ sub expand_ansi_c_escapes ($self, $value) {
     }
     my $inner = main::substring($value, 1, length($value) - 1);
     my $literal_bytes = $self->ansi_c_to_bytes($inner);
-    my $literal_str = pack("C*", @{$literal_bytes});
+    my $literal_str = Encode::encode("UTF-8", Encode::decode("UTF-8", pack("C*", @{$literal_bytes}), Encode::FB_DEFAULT));
     return $self->sh_single_quote($literal_str);
 }
 

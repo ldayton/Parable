@@ -1228,7 +1228,9 @@ class PerlBackend:
                 return f"({self._cond_expr(cond)} ? {self._expr(then_expr)} : {self._expr(else_expr)})"
             case Cast(expr=inner, to_type=to_type):
                 if to_type == Primitive(kind="string") and isinstance(inner.typ, Slice):
-                    return f'pack("C*", @{{{self._expr(inner)}}})'
+                    # Decode UTF-8 with replacement, then re-encode to bytes
+                    # This matches Python's bytes.decode("utf-8", errors="replace")
+                    return f'Encode::encode("UTF-8", Encode::decode("UTF-8", pack("C*", @{{{self._expr(inner)}}}), Encode::FB_DEFAULT))'
                 if to_type == Primitive(kind="string") and inner.typ == Primitive(kind="rune"):
                     return f"chr({self._expr(inner)})"
                 if isinstance(to_type, Slice) and to_type.element == Primitive(kind="byte"):

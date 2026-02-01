@@ -1251,7 +1251,7 @@ class LuaBackend:
             case SliceConvert(source=source):
                 return self._expr(source)
             case _:
-                raise NotImplementedError(f"Unknown expression: {type(expr)}")
+                raise NotImplementedError("Unknown expression")
 
     def _could_be_falsy(self, expr: Expr) -> bool:
         """Check if expression could evaluate to false or nil."""

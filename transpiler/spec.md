@@ -34,7 +34,7 @@ Sequential pipeline with clean phase boundaries. Each phase completes before the
 | Dict       | `dict[K, V]`                           | Bare `dict` banned          |
 | Set        | `set[T]`                               | Bare `set` banned           |
 | Tuple      | `tuple[A, B, C]`                       | Fixed-length, heterogeneous |
-| Callable   | `Callable[[A, B], R]`                  | Function types              |
+| Callable   | `Callable[[A, B], R]`                  | Function types; bound methods include receiver |
 
 ## Overview
 
@@ -399,7 +399,7 @@ Translate TypedAST to IR. Lowering primarily reads types from Phase 8, but may i
 - IR Module complete; all IR nodes typed; no AST remnants in output
 - Truthy checks (`if x`, `if s`) emit `Truthy(expr)`, not `BinaryOp(Len(x), ">", 0)`
 - No marker variables (`_pass`, `_skip_docstring`); use `NoOp` or omit
-- Bound method references emit `FuncRef(obj, method)`, not `FieldAccess`
+- Bound method references emit `FuncRef(obj, method)` with `FuncType.receiver` set; backends emit correct function pointer signatures
 - String operations emit semantic IR: `CharAt`, `CharLen`, `Substring` (not Python method names)
 - Character classification emits semantic IR: `IsAlnum`, `IsDigit`, `IsAlpha`, `IsSpace`, `IsUpper`, `IsLower`; backends map to `unicode.IsLetter`/`Character.isDigit`/regex
 - String trimming with char set emits `TrimChars(expr, chars, mode)` where mode is `left`/`right`/`both`; backends map to regex or stdlib

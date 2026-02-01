@@ -1124,7 +1124,7 @@ class PerlBackend:
                             new_val = self._expr(args[1])
                         return f"({obj_str} =~ s/{old_val}/{new_val}/gr)"
                 # Fallback: if type is unknown but method is a common string method, treat as string
-                if method in ("endswith", "startswith", "find", "rfind", "upper", "lower", "split"):
+                if method in ("endswith", "startswith", "find", "rfind", "upper", "lower", "split", "join"):
                     if method == "endswith":
                         return f"(substr({obj_str}, -length({args_str})) eq {args_str})"
                     if method == "startswith":
@@ -1145,6 +1145,8 @@ class PerlBackend:
                         return f"lc({obj_str})"
                     if method == "split":
                         return f"[split({args_str}, {obj_str})]"
+                    if method == "join":
+                        return f"join({obj_str}, @{{{args_str}}})"
                 if method == "replace" and len(args) == 2:
                     # Fallback for replace with unknown type
                     if isinstance(args[0], StringLit):

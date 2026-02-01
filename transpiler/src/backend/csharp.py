@@ -1296,7 +1296,11 @@ class CSharpBackend:
     def _format_string(self, template: str, args: list[Expr]) -> str:
         from re import sub as re_sub
         result = re_sub(r"\{(\d+)\}", r"{\1}", template)
-        result = result.replace("%v", "{0}")
+        # Convert %v placeholders to {0}, {1}, {2}, etc.
+        idx = 0
+        while "%v" in result:
+            result = result.replace("%v", f"{{{idx}}}", 1)
+            idx += 1
         escaped = escape_string(result)
         args_str = ", ".join(self._expr(a) for a in args)
         if args_str:

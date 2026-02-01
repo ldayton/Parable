@@ -126,13 +126,13 @@ public class ParseError : Exception
     {
         if (this.Line != 0 && this.Pos != 0)
         {
-            return string.Format("Parse error at line {0}, position {0}: {0}", this.Line, this.Pos, this.Message);
+            return string.Format("Parse error at line {0}, position {1}: {2}", this.Line, this.Pos, this.Message);
         }
         else
         {
             if (this.Pos != 0)
             {
-                return string.Format("Parse error at position {0}: {0}", this.Pos, this.Message);
+                return string.Format("Parse error at position {0}: {1}", this.Pos, this.Message);
             }
         }
         return string.Format("Parse error: {0}", this.Message);
@@ -169,13 +169,13 @@ public class Token
     {
         if (this.Word != null)
         {
-            return string.Format("Token({0}, {0}, {0}, word={0})", this.Type, this.Value, this.Pos, this.Word);
+            return string.Format("Token({0}, {1}, {2}, word={3})", this.Type, this.Value, this.Pos, this.Word);
         }
         if ((this.Parts.Count > 0))
         {
-            return string.Format("Token({0}, {0}, {0}, parts={0})", this.Type, this.Value, this.Pos, this.Parts.Count);
+            return string.Format("Token({0}, {1}, {2}, parts={3})", this.Type, this.Value, this.Pos, this.Parts.Count);
         }
-        return string.Format("Token({0}, {0}, {0})", this.Type, this.Value, this.Pos);
+        return string.Format("Token({0}, {1}, {2})", this.Type, this.Value, this.Pos);
     }
 }
 
@@ -5126,7 +5126,7 @@ public class HereDoc : INode
         {
             content = content + "\\";
         }
-        return string.Format("(redirect \"{0}\" \"{0}\")", op, content);
+        return string.Format("(redirect \"{0}\" \"{1}\")", op, content);
     }
 
     public string GetKind()
@@ -5376,7 +5376,7 @@ public class ForArith : INode
         string condStr = ParableFunctions._FormatArithVal(condVal);
         string incrStr = ParableFunctions._FormatArithVal(incrVal);
         string bodyStr = ((INode)this.Body).ToSexp();
-        return string.Format("(arith-for (init (word \"{0}\")) (test (word \"{0}\")) (step (word \"{0}\")) {0}){0}", initStr, condStr, incrStr, bodyStr, suffix);
+        return string.Format("(arith-for (init (word \"{0}\")) (test (word \"{1}\")) (step (word \"{2}\")) {3}){4}", initStr, condStr, incrStr, bodyStr, suffix);
     }
 
     public string GetKind()
@@ -12818,7 +12818,7 @@ public static class ParableFunctions
                 string name = nodeFunction.Name;
                 INode innerBody = (nodeFunction.Body.Kind == "brace-group" ? ((BraceGroup)nodeFunction.Body).Body : nodeFunction.Body);
                 string body = ParableFunctions._FormatCmdsubNode(innerBody, indent + 4, false, false, false).TrimEnd(";".ToCharArray());
-                return string.Format("function {0} () \n{ \n{0}{0}\n}", name, innerSp, body);
+                return string.Format("function {0} () \n{ \n{1}{2}\n}", name, innerSp, body);
         }
         switch (node)
         {

@@ -3656,11 +3656,11 @@ class Pipeline implements Node {
     }
 }
 
-class ListNode implements Node {
+class List_ implements Node {
     List<Node> parts;
     String kind;
 
-    ListNode(List<Node> parts, String kind) {
+    List_(List<Node> parts, String kind) {
         this.parts = parts;
         this.kind = kind;
     }
@@ -3681,13 +3681,13 @@ class ListNode implements Node {
                     List<Node> right = ParableFunctions._sublist(parts, i + 1, parts.size() - 1);
                     String leftSexp = "";
                     if (left.size() > 1) {
-                        leftSexp = new ListNode(left, "list").toSexp();
+                        leftSexp = new List_(left, "list").toSexp();
                     } else {
                         leftSexp = left.get(0).toSexp();
                     }
                     String rightSexp = "";
                     if (right.size() > 1) {
-                        rightSexp = new ListNode(right, "list").toSexp();
+                        rightSexp = new List_(right, "list").toSexp();
                     } else {
                         rightSexp = right.get(0).toSexp();
                     }
@@ -3698,7 +3698,7 @@ class ListNode implements Node {
             if (innerParts.size() == 1) {
                 return "(background " + innerParts.get(0).toSexp() + ")";
             }
-            ListNode innerList = new ListNode(innerParts, "list");
+            List_ innerList = new List_(innerParts, "list");
             return "(background " + innerList.toSexp() + ")";
         }
         return this._toSexpWithPrecedence(parts, opNames);
@@ -8840,7 +8840,7 @@ class Parser {
         if (parts.size() == 1) {
             return parts.get(0);
         }
-        return new ListNode(parts, "list");
+        return new List_(parts, "list");
     }
 
     public Node parseCompoundCommand() {
@@ -9096,7 +9096,7 @@ class Parser {
         }
         List<Node> parts = new ArrayList<>(Arrays.asList(pipeline));
         if (this._inState(Constants.PARSERSTATEFLAGS_PST_EOFTOKEN) && this._atEofToken()) {
-            return (parts.size() == 1 ? parts.get(0) : new ListNode(parts, "list"));
+            return (parts.size() == 1 ? parts.get(0) : new List_(parts, "list"));
         }
         while (true) {
             this.skipWhitespace();
@@ -9178,7 +9178,7 @@ class Parser {
         if (parts.size() == 1) {
             return parts.get(0);
         }
-        return new ListNode(parts, "list");
+        return new List_(parts, "list");
     }
 
     public Node parseComment() {
@@ -9288,9 +9288,9 @@ class Parser {
                 return this._findLastWord(nodePipeline.commands.get(nodePipeline.commands.size() - 1));
             }
         }
-        if (node instanceof ListNode nodeList) {
-            if ((!nodeList.parts.isEmpty())) {
-                return this._findLastWord(nodeList.parts.get(nodeList.parts.size() - 1));
+        if (node instanceof List_ nodeList_) {
+            if ((!nodeList_.parts.isEmpty())) {
+                return this._findLastWord(nodeList_.parts.get(nodeList_.parts.size() - 1));
             }
         }
         return null;
@@ -9571,8 +9571,8 @@ final class ParableFunctions {
         if (node instanceof Subshell nodeSubshell) {
             return true;
         }
-        if (node instanceof ListNode nodeList) {
-            for (Node p : nodeList.parts) {
+        if (node instanceof List_ nodeList_) {
+            for (Node p : nodeList_.parts) {
                 if (!p.getKind().equals("operator")) {
                     return ParableFunctions._startsWithSubshell(p);
                 }
@@ -9708,9 +9708,9 @@ final class ParableFunctions {
             }
             return result;
         }
-        if (node instanceof ListNode nodeList) {
+        if (node instanceof List_ nodeList_) {
             boolean hasHeredoc = false;
-            for (Node p : nodeList.parts) {
+            for (Node p : nodeList_.parts) {
                 if (p.getKind().equals("command") && (!((Command) p).redirects.isEmpty())) {
                     for (Node r : ((Command) p).redirects) {
                         if (r instanceof HereDoc rHereDoc) {
@@ -9739,7 +9739,7 @@ final class ParableFunctions {
             List<String> result = new ArrayList<>();
             boolean skippedSemi = false;
             int cmdCount = 0;
-            for (Node p : nodeList.parts) {
+            for (Node p : nodeList_.parts) {
                 if (p instanceof Operator pOperator) {
                     if (pOperator.op.equals(";")) {
                         if ((!result.isEmpty()) && result.get(result.size() - 1).endsWith("\n")) {

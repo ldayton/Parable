@@ -2281,12 +2281,12 @@ static bool _map_contains(void *map, const char *key) {
             # Check if element types differ and need cast
             needs_cast = False
             if isinstance(source_elem, StructRef) and isinstance(target_elem, (StructRef, InterfaceRef)):
-                needs_cast = source_elem.name != getattr(target_elem, "name", "")
+                needs_cast = source_elem.name != target_elem.name
             elif isinstance(source_elem, Pointer) and isinstance(target_elem, (StructRef, InterfaceRef)):
                 # Pointer(StructRef) -> StructRef/InterfaceRef
                 inner = source_elem.target
                 if isinstance(inner, StructRef):
-                    needs_cast = inner.name != getattr(target_elem, "name", "")
+                    needs_cast = inner.name != target_elem.name
             if needs_cast:
                 target_vec = self._type_to_c(target_type)
                 return f"*({target_vec} *)&{source}"
@@ -2699,7 +2699,7 @@ static bool _map_contains(void *map, const char *key) {
         to_elem = to_type.element
         # Different struct/interface element types need cast
         if isinstance(from_elem, StructRef) and isinstance(to_elem, (StructRef, InterfaceRef)):
-            return from_elem.name != (to_elem.name if hasattr(to_elem, "name") else "")
+            return from_elem.name != to_elem.name
         if isinstance(from_elem, InterfaceRef) and isinstance(to_elem, InterfaceRef):
             return from_elem.name != to_elem.name
         return False

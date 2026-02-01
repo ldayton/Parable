@@ -1011,7 +1011,7 @@ class PerlBackend:
                     return f"hex({self._expr(s)})"
                 return f"int({self._expr(s)})"
             case IntToStr(value=v):
-                return f'"{self._expr(v)}"'
+                return f'("" . {self._expr(v)})'
             case CharClassify(kind=kind, char=char):
                 char_expr = self._expr(char)
                 method_map = {
@@ -1032,6 +1032,16 @@ class PerlBackend:
                         return f"({s_expr} =~ s/\\s+$//r)"
                     else:
                         return f"({s_expr} =~ s/^\\s+|\\s+$//gr)"
+                if isinstance(chars, StringLit):
+                    # Use raw value escaped for regex character class
+                    raw_chars = _escape_regex_charclass(chars.value)
+                    if mode == "left":
+                        return f"({s_expr} =~ s/^[{raw_chars}]+//r)"
+                    elif mode == "right":
+                        return f"({s_expr} =~ s/[{raw_chars}]+$//r)"
+                    else:
+                        return f"({s_expr} =~ s/^[{raw_chars}]+|[{raw_chars}]+$//gr)"
+                # Non-literal: dynamic pattern (rare)
                 chars_expr = self._expr(chars)
                 if mode == "left":
                     return f"({s_expr} =~ s/^[{chars_expr}]+//r)"
@@ -1556,6 +1566,25 @@ def _escape_perl_replacement(s: str) -> str:
             result.append("\\r")
         elif ord(ch) < 32 or ord(ch) > 126:
             # Use \x{XX} for control chars and non-ASCII
+            result.append(f"\\x{{{ord(ch):02x}}}")
+        else:
+            result.append(ch)
+    return "".join(result)
+
+
+def _escape_regex_charclass(s: str) -> str:
+    """Escape chars for use in Perl regex character class [...]."""
+    result = []
+    for ch in s:
+        if ch in r"]\^-":
+            result.append("\\" + ch)
+        elif ch == "\n":
+            result.append("\\n")
+        elif ch == "\t":
+            result.append("\\t")
+        elif ch == "\r":
+            result.append("\\r")
+        elif ord(ch) < 32 or ord(ch) > 126:
             result.append(f"\\x{{{ord(ch):02x}}}")
         else:
             result.append(ch)

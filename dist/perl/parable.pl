@@ -1890,12 +1890,12 @@ sub to_sexp ($self) {
     $value = $self->normalize_param_expansion_newlines($value);
     $value = $self->strip_arith_line_continuations($value);
     $value = $self->double_ctlesc_smart($value);
-    $value = ($value =~ s/""/""/gr);
-    $value = ($value =~ s/"\\"/"\\\\"/gr);
+    $value = ($value =~ s/\x{7f}/\x{01}\x{7f}/gr);
+    $value = ($value =~ s/\\/\\\\/gr);
     if ((substr($value, -length("\\\\")) eq "\\\\") && !(substr($value, -length("\\\\\\\\")) eq "\\\\\\\\")) {
         $value = $value . "\\\\";
     }
-    my $escaped = ((($value =~ s/"\""/"\\\""/gr) =~ s/"\n"/"\\n"/gr) =~ s/"\t"/"\\t"/gr);
+    my $escaped = ((($value =~ s/"/\\"/gr) =~ s/\n/\\n/gr) =~ s/\t/\\t/gr);
     return "(word \"" . $escaped . "\")";
 }
 
@@ -3122,11 +3122,11 @@ sub format_command_substitutions ($self, $value, $in_arith) {
                     $stripped = substr($raw_content, $leading_ws_end);
                     if ((index($stripped, "(") == 0)) {
                         if ((length($leading_ws) > 0)) {
-                            $normalized_ws = (($leading_ws =~ s/"\n"/" "/gr) =~ s/"\t"/" "/gr);
+                            $normalized_ws = (($leading_ws =~ s/\n/ /gr) =~ s/\t/ /gr);
                             $spaced = main::format_cmdsub_node($node->{command}, 0, 0, 0, 0);
                             push(@{$result}, $direction . "(" . $normalized_ws . $spaced . ")");
                         } else {
-                            $raw_content = ($raw_content =~ s/"\\\n"/""/gr);
+                            $raw_content = ($raw_content =~ s/\\\n//gr);
                             push(@{$result}, $direction . "(" . $raw_content . ")");
                         }
                         $procsub_idx += 1;
@@ -3135,7 +3135,7 @@ sub format_command_substitutions ($self, $value, $in_arith) {
                     }
                 }
                 $raw_content = main::substring($value, $i + 2, $j - 1);
-                $raw_stripped = ($raw_content =~ s/"\\\n"/""/gr);
+                $raw_stripped = ($raw_content =~ s/\\\n//gr);
                 if (main::starts_with_subshell($node->{command}) && $formatted ne $raw_stripped) {
                     push(@{$result}, $direction . "(" . $raw_stripped . ")");
                 } else {
@@ -3180,7 +3180,7 @@ sub format_command_substitutions ($self, $value, $in_arith) {
                 if ($in_arith) {
                     push(@{$result}, $direction . "(" . $inner . ")");
                 } elsif ((length(($inner =~ s/^\s+|\s+$//gr)) > 0)) {
-                    $stripped = ($inner =~ s/^[" \t"]+//r);
+                    $stripped = ($inner =~ s/^[ \t]+//r);
                     push(@{$result}, $direction . "(" . $stripped . ")");
                 } else {
                     push(@{$result}, $direction . "(" . $inner . ")");
@@ -3191,7 +3191,7 @@ sub format_command_substitutions ($self, $value, $in_arith) {
                 $i += 1;
             }
         } elsif ((main::is_expansion_start($value, $i, "\${ ") || main::is_expansion_start($value, $i, "\${\t") || main::is_expansion_start($value, $i, "\${\n") || main::is_expansion_start($value, $i, "\${|")) && !main::is_backslash_escaped($value, $i)) {
-            $prefix = ((main::substring($value, $i, $i + 3) =~ s/"\t"/" "/gr) =~ s/"\n"/" "/gr);
+            $prefix = ((main::substring($value, $i, $i + 3) =~ s/\t/ /gr) =~ s/\n/ /gr);
             $j = $i + 3;
             $depth = 1;
             while ($j < length($value) && $depth > 0) {
@@ -3207,13 +3207,13 @@ sub format_command_substitutions ($self, $value, $in_arith) {
                 push(@{$result}, "\${ }");
             } else {
                 eval {
-                    $parser = main::new_parser(($inner =~ s/^[" \t\n|"]+//r), 0, 0);
+                    $parser = main::new_parser(($inner =~ s/^[ \t\n|]+//r), 0, 0);
                     $parsed = $parser->parse_list(1);
                     if (defined($parsed)) {
                         $formatted = main::format_cmdsub_node($parsed, 0, 0, 0, 0);
-                        $formatted = ($formatted =~ s/[";"]+$//r);
+                        $formatted = ($formatted =~ s/[;]+$//r);
                         my $terminator = "";
-                        if ((substr(($inner =~ s/[" \t"]+$//r), -length("\n")) eq "\n")) {
+                        if ((substr(($inner =~ s/[ \t]+$//r), -length("\n")) eq "\n")) {
                             $terminator = "\n }";
                         } elsif ((substr($formatted, -length(" &")) eq " &")) {
                             $terminator = " }";
@@ -3395,8 +3395,8 @@ sub get_cond_formatted_value ($self) {
     $value = $self->strip_locale_string_dollars($value);
     $value = $self->format_command_substitutions($value, 0);
     $value = $self->normalize_extglob_whitespace($value);
-    $value = ($value =~ s/""/""/gr);
-    return ($value =~ s/["\n"]+$//r);
+    $value = ($value =~ s/\x{01}/\x{01}\x{01}/gr);
+    return ($value =~ s/[\n]+$//r);
 }
 
 sub get_kind ($self) {
@@ -3756,7 +3756,7 @@ sub to_sexp ($self) {
     my $j;
     my $out_val;
     my $raw;
-    my $op = ($self->{op} =~ s/^["0123456789"]+//r);
+    my $op = ($self->{op} =~ s/^[0123456789]+//r);
     if ((index($op, "{") == 0)) {
         $j = 1;
         if ($j < length($op) && ((substr($op, $j, 1) =~ /^[a-zA-Z]$/) || substr($op, $j, 1) eq "_")) {
@@ -3794,10 +3794,10 @@ sub to_sexp ($self) {
         }
         $raw = main::substring($target_val, 1, length($target_val));
         if (($raw =~ /^\d$/) && int($raw) <= 2147483647) {
-            return "(redirect \"" . $op . "\" " . "int($raw)" . ")";
+            return "(redirect \"" . $op . "\" " . ("" . int($raw)) . ")";
         }
         if ((substr($raw, -length("-")) eq "-") && (substr($raw, 0, length($raw) - 1 - 0) =~ /^\d$/) && int(substr($raw, 0, length($raw) - 1 - 0)) <= 2147483647) {
-            return "(redirect \"" . $op . "\" " . "int(substr($raw, 0, length($raw) - 1 - 0))" . ")";
+            return "(redirect \"" . $op . "\" " . ("" . int(substr($raw, 0, length($raw) - 1 - 0))) . ")";
         }
         if ($target_val eq "&-") {
             return "(redirect \">&-\" 0)";
@@ -3807,13 +3807,13 @@ sub to_sexp ($self) {
     }
     if ($op eq ">&" || $op eq "<&") {
         if (($target_val =~ /^\d$/) && int($target_val) <= 2147483647) {
-            return "(redirect \"" . $op . "\" " . "int($target_val)" . ")";
+            return "(redirect \"" . $op . "\" " . ("" . int($target_val)) . ")";
         }
         if ($target_val eq "-") {
             return "(redirect \">&-\" 0)";
         }
         if ((substr($target_val, -length("-")) eq "-") && (substr($target_val, 0, length($target_val) - 1 - 0) =~ /^\d$/) && int(substr($target_val, 0, length($target_val) - 1 - 0)) <= 2147483647) {
-            return "(redirect \"" . $op . "\" " . "int(substr($target_val, 0, length($target_val) - 1 - 0))" . ")";
+            return "(redirect \"" . $op . "\" " . ("" . int(substr($target_val, 0, length($target_val) - 1 - 0))) . ")";
         }
         $out_val = ((substr($target_val, -length("-")) eq "-") ? substr($target_val, 0, length($target_val) - 1 - 0) : $target_val);
         return "(redirect \"" . $op . "\" \"" . $out_val . "\")";
@@ -3999,7 +3999,7 @@ sub to_sexp ($self) {
     }
     my $temp_word = Word->new($self->{var}, [], "word");
     my $var_formatted = $temp_word->format_command_substitutions($self->{var}, 0);
-    my $var_escaped = (($var_formatted =~ s/"\\"/"\\\\"/gr) =~ s/"\""/"\\\""/gr);
+    my $var_escaped = (($var_formatted =~ s/\\/\\\\/gr) =~ s/"/\\"/gr);
     if (!defined($self->{words})) {
         return "(for (word \"" . $var_escaped . "\") (in (word \"\\\"\$\@\\\"\")) " . $self->{body}->to_sexp() . ")" . $suffix;
     } elsif (scalar(@{$self->{words}}) == 0) {
@@ -4084,7 +4084,7 @@ sub to_sexp ($self) {
         }
         $suffix = " " . join(" ", @{$redirect_parts});
     }
-    my $var_escaped = (($self->{var} =~ s/"\\"/"\\\\"/gr) =~ s/"\""/"\\\""/gr);
+    my $var_escaped = (($self->{var} =~ s/\\/\\\\/gr) =~ s/"/\\"/gr);
     my $in_clause = "";
     if (defined($self->{words})) {
         $word_parts = [];
@@ -4257,16 +4257,16 @@ sub to_sexp ($self) {
     my $arg_val;
     my $escaped_arg;
     my $escaped_op;
-    my $escaped_param = (($self->{param} =~ s/"\\"/"\\\\"/gr) =~ s/"\""/"\\\""/gr);
+    my $escaped_param = (($self->{param} =~ s/\\/\\\\/gr) =~ s/"/\\"/gr);
     if ($self->{op} ne "") {
-        $escaped_op = (($self->{op} =~ s/"\\"/"\\\\"/gr) =~ s/"\""/"\\\""/gr);
+        $escaped_op = (($self->{op} =~ s/\\/\\\\/gr) =~ s/"/\\"/gr);
         my $arg_val = "";
         if ($self->{arg} ne "") {
             $arg_val = $self->{arg};
         } else {
             $arg_val = "";
         }
-        $escaped_arg = (($arg_val =~ s/"\\"/"\\\\"/gr) =~ s/"\""/"\\\""/gr);
+        $escaped_arg = (($arg_val =~ s/\\/\\\\/gr) =~ s/"/\\"/gr);
         return "(param \"" . $escaped_param . "\" \"" . $escaped_op . "\" \"" . $escaped_arg . "\")";
     }
     return "(param \"" . $escaped_param . "\")";
@@ -4288,7 +4288,7 @@ sub param ($self) { $self->{param} }
 sub kind ($self) { $self->{kind} }
 
 sub to_sexp ($self) {
-    my $escaped = (($self->{param} =~ s/"\\"/"\\\\"/gr) =~ s/"\""/"\\\""/gr);
+    my $escaped = (($self->{param} =~ s/\\/\\\\/gr) =~ s/"/\\"/gr);
     return "(param-len \"" . $escaped . "\")";
 }
 
@@ -4313,16 +4313,16 @@ sub to_sexp ($self) {
     my $arg_val;
     my $escaped_arg;
     my $escaped_op;
-    my $escaped = (($self->{param} =~ s/"\\"/"\\\\"/gr) =~ s/"\""/"\\\""/gr);
+    my $escaped = (($self->{param} =~ s/\\/\\\\/gr) =~ s/"/\\"/gr);
     if ($self->{op} ne "") {
-        $escaped_op = (($self->{op} =~ s/"\\"/"\\\\"/gr) =~ s/"\""/"\\\""/gr);
+        $escaped_op = (($self->{op} =~ s/\\/\\\\/gr) =~ s/"/\\"/gr);
         my $arg_val = "";
         if ($self->{arg} ne "") {
             $arg_val = $self->{arg};
         } else {
             $arg_val = "";
         }
-        $escaped_arg = (($arg_val =~ s/"\\"/"\\\\"/gr) =~ s/"\""/"\\\""/gr);
+        $escaped_arg = (($arg_val =~ s/\\/\\\\/gr) =~ s/"/\\"/gr);
         return "(param-indirect \"" . $escaped . "\" \"" . $escaped_op . "\" \"" . $escaped_arg . "\")";
     }
     return "(param-indirect \"" . $escaped . "\")";
@@ -4394,7 +4394,7 @@ sub to_sexp ($self) {
     my $redirect_parts;
     my $redirect_sexps;
     my $formatted = Word->new($self->{raw_content}, undef, "word")->format_command_substitutions($self->{raw_content}, 1);
-    my $escaped = (((($formatted =~ s/"\\"/"\\\\"/gr) =~ s/"\""/"\\\""/gr) =~ s/"\n"/"\\n"/gr) =~ s/"\t"/"\\t"/gr);
+    my $escaped = (((($formatted =~ s/\\/\\\\/gr) =~ s/"/\\"/gr) =~ s/\n/\\n/gr) =~ s/\t/\\t/gr);
     my $result = "(arith (word \"" . $escaped . "\"))";
     if ((scalar(@{($self->{redirects} // [])}) > 0)) {
         $redirect_parts = [];
@@ -4697,7 +4697,7 @@ sub expression ($self) { $self->{expression} }
 sub kind ($self) { $self->{kind} }
 
 sub to_sexp ($self) {
-    my $escaped = ((($self->{expression} =~ s/"\\"/"\\\\"/gr) =~ s/"\""/"\\\""/gr) =~ s/"\n"/"\\n"/gr);
+    my $escaped = ((($self->{expression} =~ s/\\/\\\\/gr) =~ s/"/\\"/gr) =~ s/\n/\\n/gr);
     return "(arith-deprecated \"" . $escaped . "\")";
 }
 
@@ -4740,7 +4740,7 @@ sub content ($self) { $self->{content} }
 sub kind ($self) { $self->{kind} }
 
 sub to_sexp ($self) {
-    my $escaped = ((($self->{content} =~ s/"\\"/"\\\\"/gr) =~ s/"\""/"\\\""/gr) =~ s/"\n"/"\\n"/gr);
+    my $escaped = ((($self->{content} =~ s/\\/\\\\/gr) =~ s/"/\\"/gr) =~ s/\n/\\n/gr);
     return "(ansi-c \"" . $escaped . "\")";
 }
 
@@ -4760,7 +4760,7 @@ sub content ($self) { $self->{content} }
 sub kind ($self) { $self->{kind} }
 
 sub to_sexp ($self) {
-    my $escaped = ((($self->{content} =~ s/"\\"/"\\\\"/gr) =~ s/"\""/"\\\""/gr) =~ s/"\n"/"\\n"/gr);
+    my $escaped = ((($self->{content} =~ s/\\/\\\\/gr) =~ s/"/\\"/gr) =~ s/\n/\\n/gr);
     return "(locale \"" . $escaped . "\")";
 }
 
@@ -4861,7 +4861,7 @@ sub to_sexp ($self) {
     my $result = "";
     if (ref($body) eq 'string') {
         my $body = $body;
-        $escaped = ((($body =~ s/"\\"/"\\\\"/gr) =~ s/"\""/"\\\""/gr) =~ s/"\n"/"\\n"/gr);
+        $escaped = ((($body =~ s/\\/\\\\/gr) =~ s/"/\\"/gr) =~ s/\n/\\n/gr);
         $result = "(cond \"" . $escaped . "\")";
     } else {
         $result = "(cond " . $body->to_sexp() . ")";
@@ -5707,7 +5707,7 @@ sub parse_backtick_substitution ($self) {
                 $line_end += 1;
             }
             $line = main::substring($self->{source}, $line_start, $line_end);
-            $check_line = ($current_heredoc_strip ? ($line =~ s/^["\t"]+//r) : $line);
+            $check_line = ($current_heredoc_strip ? ($line =~ s/^[\t]+//r) : $line);
             if ($check_line eq $current_heredoc_delim) {
                 for my $ch (split(//, $line)) {
                     push(@{$content_chars}, $ch);
@@ -5974,22 +5974,28 @@ sub parse_process_substitution ($self) {
     $self->{in_process_sub} = 1;
     $self->set_state(main::PARSERSTATEFLAGS_PST_EOFTOKEN());
     $self->{eof_token} = ")";
+    my $_try_result;
+    my $_try_returned = 0;
     eval {
-        $cmd = $self->parse_list(1);
-        if (!defined($cmd)) {
-            $cmd = Empty->new("empty");
+        TRYBLOCK: for (1) {
+            $cmd = $self->parse_list(1);
+            if (!defined($cmd)) {
+                $cmd = Empty->new("empty");
+            }
+            $self->skip_whitespace_and_newlines();
+            if ($self->at_end() || $self->peek() ne ")") {
+                die "Invalid process substitution";
+            }
+            $self->advance();
+            $text_end = $self->{pos_};
+            $text = main::substring($self->{source}, $start, $text_end);
+            $text = main::strip_line_continuations_comment_aware($text);
+            $self->restore_parser_state($saved);
+            $self->{in_process_sub} = $old_in_process_sub;
+            $_try_result = [ProcessSubstitution->new($direction, $cmd, "procsub"), $text];
+            $_try_returned = 1;
+            last TRYBLOCK;
         }
-        $self->skip_whitespace_and_newlines();
-        if ($self->at_end() || $self->peek() ne ")") {
-            die "Invalid process substitution";
-        }
-        $self->advance();
-        $text_end = $self->{pos_};
-        $text = main::substring($self->{source}, $start, $text_end);
-        $text = main::strip_line_continuations_comment_aware($text);
-        $self->restore_parser_state($saved);
-        $self->{in_process_sub} = $old_in_process_sub;
-        return [ProcessSubstitution->new($direction, $cmd, "procsub"), $text];
     };
     if (my $e = $@) {
         $self->restore_parser_state($saved);
@@ -6006,6 +6012,7 @@ sub parse_process_substitution ($self) {
         $text = main::strip_line_continuations_comment_aware($text);
         return [undef, $text];
     }
+    return $_try_result if $_try_returned;
 }
 
 sub parse_array_literal ($self) {
@@ -7078,7 +7085,7 @@ sub parse_redirect ($self) {
     if ($varfd ne "") {
         $op = "{" . $varfd . "}" . $op;
     } elsif ($fd != -1) {
-        $op = "$fd" . $op;
+        $op = ("" . $fd) . $op;
     }
     if (!$self->at_end() && $self->peek() eq "&") {
         $self->advance();
@@ -7384,7 +7391,7 @@ sub read_heredoc_line ($self, $quoted) {
 }
 
 sub line_matches_delimiter ($self, $line, $delimiter, $strip_tabs) {
-    my $check_line = ($strip_tabs ? ($line =~ s/^["\t"]+//r) : $line);
+    my $check_line = ($strip_tabs ? ($line =~ s/^[\t]+//r) : $line);
     my $normalized_check = main::normalize_heredoc_delimiter($check_line);
     my $normalized_delim = main::normalize_heredoc_delimiter($delimiter);
     return [$normalized_check eq $normalized_delim, $check_line];
@@ -7425,7 +7432,7 @@ sub gather_heredoc_bodies ($self) {
                 last;
             }
             if ($heredoc->{strip_tabs}) {
-                $line = ($line =~ s/^["\t"]+//r);
+                $line = ($line =~ s/^[\t]+//r);
             }
             if ($line_end < $self->{length_}) {
                 push(@{$content_lines}, $line . "\n");
@@ -7589,7 +7596,7 @@ sub parse_arithmetic_command ($self) {
         return undef;
     }
     my $content = main::substring($self->{source}, $content_start, $self->{pos_});
-    $content = ($content =~ s/"\\\n"/""/gr);
+    $content = ($content =~ s/\\\n//gr);
     $self->advance();
     $self->advance();
     my $expr = $self->parse_arith_expr($content);
@@ -8037,7 +8044,7 @@ sub parse_for_arith ($self) {
                 $paren_depth -= 1;
                 push(@{$current}, $self->advance());
             } elsif ($self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq ")") {
-                push(@{$parts}, (join("", @{$current}) =~ s/^[" \t"]+//r));
+                push(@{$parts}, (join("", @{$current}) =~ s/^[ \t]+//r));
                 $self->advance();
                 $self->advance();
                 last;
@@ -8045,7 +8052,7 @@ sub parse_for_arith ($self) {
                 push(@{$current}, $self->advance());
             }
         } elsif ($ch eq ";" && $paren_depth == 0) {
-            push(@{$parts}, (join("", @{$current}) =~ s/^[" \t"]+//r));
+            push(@{$parts}, (join("", @{$current}) =~ s/^[ \t]+//r));
             $current = [];
             $self->advance();
         } else {
@@ -9262,8 +9269,8 @@ sub format_arith_val ($s_) {
     my $val = $w->expand_all_ansi_c_quotes($s_);
     $val = $w->strip_locale_string_dollars($val);
     $val = $w->format_command_substitutions($val, 0);
-    $val = (($val =~ s/"\\"/"\\\\"/gr) =~ s/"\""/"\\\""/gr);
-    $val = (($val =~ s/"\n"/"\\n"/gr) =~ s/"\t"/"\\t"/gr);
+    $val = (($val =~ s/\\/\\\\/gr) =~ s/"/\\"/gr);
+    $val = (($val =~ s/\n/\\n/gr) =~ s/\t/\\t/gr);
     return $val;
 }
 
@@ -9568,7 +9575,7 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
         while ($idx < scalar(@{$result_parts})) {
             $part = $result_parts->[$idx];
             if ($idx > 0) {
-                if ($result->endswith("\n")) {
+                if ((substr($result, -length("\n")) eq "\n")) {
                     $result = $result . "  " . $part;
                 } elsif ($compact_pipe) {
                     $result = $result . "|" . $part;
@@ -9775,7 +9782,7 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
         $i = 0;
         while ($i < scalar(@{$node->{patterns}})) {
             $p = $node->{patterns}->[$i];
-            $pat = $p->{pattern}->replace("|", " | ");
+            $pat = ($p->{pattern} =~ s/\|/ | /gr);
             my $body = "";
             if (defined($p->{body})) {
                 $body = format_cmdsub_node($p->{body}, $indent + 8, 0, 0, 0);
@@ -9808,7 +9815,7 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
         my $node = $node;
         $name = $node->{name};
         $inner_body = ($node->{body}->{kind} eq "brace-group" ? $node->{body}->{body} : $node->{body});
-        $body = (format_cmdsub_node($inner_body, $indent + 4, 0, 0, 0) =~ s/[";"]+$//r);
+        $body = (format_cmdsub_node($inner_body, $indent + 4, 0, 0, 0) =~ s/[;]+$//r);
         return sprintf("function %s () 
 { 
 %s%s
@@ -9839,7 +9846,7 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
     if (ref($node) eq 'BraceGroup') {
         my $node = $node;
         $body = format_cmdsub_node($node->{body}, $indent, 0, 0, 0);
-        $body = ($body =~ s/[";"]+$//r);
+        $body = ($body =~ s/[;]+$//r);
         $terminator = ((substr($body, -length(" &")) eq " &") ? " }" : "; }");
         $redirects = "";
         if ((scalar(@{($node->{redirects} // [])}) > 0)) {
@@ -9896,7 +9903,7 @@ sub format_redirect ($r, $compact, $heredoc_op_only) {
             $op = "<<";
         }
         if (defined($r->{fd}) && $r->{fd} > 0) {
-            $op = "$r->{fd}" . $op;
+            $op = ("" . $r->{fd}) . $op;
         }
         my $delim = "";
         if ($r->{quoted}) {
@@ -10456,7 +10463,7 @@ sub skip_heredoc ($value, $start) {
         }
         my $stripped = "";
         if ($start + 2 < length($value) && substr($value, $start + 2, 1) eq "-") {
-            $stripped = ($line =~ s/^["\t"]+//r);
+            $stripped = ($line =~ s/^[\t]+//r);
         } else {
             $stripped = $line;
         }
@@ -10534,7 +10541,7 @@ sub find_heredoc_content_end ($source, $start, $delimiters) {
             }
             my $line_stripped = "";
             if ($strip_tabs) {
-                $line_stripped = ($line =~ s/^["\t"]+//r);
+                $line_stripped = ($line =~ s/^[\t]+//r);
             } else {
                 $line_stripped = $line;
             }
@@ -10590,7 +10597,7 @@ sub collapse_whitespace ($s_) {
         }
     }
     my $joined = join("", @{$result});
-    return ($joined =~ s/^[" \t"]+|[" \t"]+$//gr);
+    return ($joined =~ s/^[ \t]+|[ \t]+$//gr);
 }
 
 sub count_trailing_backslashes ($s_) {

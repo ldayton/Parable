@@ -281,9 +281,9 @@ class JsBackend:
             case VarDecl(name=name, typ=typ, value=value):
                 if value is not None:
                     val = self._expr(value)
-                    self._line(f"var {_camel(name)} = {val};")
+                    self._line(f"let {_camel(name)} = {val};")
                 else:
-                    self._line(f"var {_camel(name)};")
+                    self._line(f"let {_camel(name)};")
             case Assign(target=target, value=value):
                 lv = self._lvalue(target)
                 val = self._expr(value)
@@ -291,7 +291,7 @@ class JsBackend:
                 var_name = target.name if isinstance(target, VarLV) else None
                 is_hoisted = var_name is not None and var_name in self._hoisted_vars
                 if stmt.is_declaration and not is_hoisted:
-                    self._line(f"var {lv} = {val};")
+                    self._line(f"let {lv} = {val};")
                 else:
                     self._line(f"{lv} = {val};")
             case TupleAssign(targets=targets, value=value):
@@ -303,12 +303,12 @@ class JsBackend:
                     for t in targets
                 )
                 if stmt.is_declaration and not all_hoisted:
-                    self._line(f"var [{lvalues}] = {val};")
+                    self._line(f"let [{lvalues}] = {val};")
                 else:
                     new_targets = stmt.new_targets
                     for name in new_targets:
                         if name not in self._hoisted_vars:
-                            self._line(f"var {_camel(name)};")
+                            self._line(f"let {_camel(name)};")
                     self._line(f"[{lvalues}] = {val};")
             case OpAssign(target=target, op=op, value=value):
                 lv = self._lvalue(target)
@@ -370,12 +370,8 @@ class JsBackend:
                 else:
                     self._line("continue;")
             case Block(body=body):
-                self._line("{")
-                self.indent += 1
                 for s in body:
                     self._emit_stmt(s)
-                self.indent -= 1
-                self._line("}")
             case TryCatch(body=body, catch_var=catch_var, catch_body=catch_body, reraise=reraise):
                 self._emit_hoisted_vars(stmt.hoisted_vars)
                 self._emit_try_catch(body, catch_var, catch_body, reraise)
@@ -578,8 +574,8 @@ class JsBackend:
         match stmt:
             case VarDecl(name=name, typ=typ, value=value):
                 if value is not None:
-                    return f"var {_camel(name)} = {self._expr(value)}"
-                return f"var {_camel(name)}"
+                    return f"let {_camel(name)} = {self._expr(value)}"
+                return f"let {_camel(name)}"
             case Assign(
                 target=VarLV(name=name),
                 value=BinaryOp(op=op, left=Var(name=left_name), right=IntLit(value=1)),
@@ -589,7 +585,7 @@ class JsBackend:
                 lv = self._lvalue(target)
                 val = self._expr(value)
                 if stmt.is_declaration:
-                    return f"var {lv} = {val}"
+                    return f"let {lv} = {val}"
                 return f"{lv} = {val}"
             case OpAssign(target=target, op=op, value=value):
                 return f"{self._lvalue(target)} {op}= {self._expr(value)}"

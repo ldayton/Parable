@@ -163,7 +163,7 @@ function countdown(n: number): number {
 }
 --- javascript
 function countdown(n) {
-  var total = 0;
+  let total = 0;
   while (n > 0) {
     total = total + n;
     n = n - 1;

@@ -1018,7 +1018,7 @@ class PhpBackend:
             if low and high:
                 lo = self._expr(low)
                 hi = self._expr(high)
-                return f"mb_substr({obj_str}, {lo}, {hi} - {lo})"
+                return f"mb_substr({obj_str}, {lo}, ({hi}) - ({lo}))"
             elif low:
                 return f"mb_substr({obj_str}, {self._expr(low)})"
             elif high:
@@ -1027,7 +1027,7 @@ class PhpBackend:
         if low and high:
             lo = self._expr(low)
             hi = self._expr(high)
-            return f"array_slice({obj_str}, {lo}, {hi} - {lo})"
+            return f"array_slice({obj_str}, {lo}, ({hi}) - ({lo}))"
         elif low:
             return f"array_slice({obj_str}, {self._expr(low)})"
         elif high:

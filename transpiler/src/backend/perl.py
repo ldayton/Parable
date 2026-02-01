@@ -505,11 +505,17 @@ class PerlBackend:
                 self._line()
             self._emit_struct(struct)
             need_blank = True
+        if module.structs and module.functions:
+            self._line()
+            self._line("package main;")
+            need_blank = True
         for func in module.functions:
             if need_blank:
                 self._line()
             self._emit_function(func)
             need_blank = True
+        self._line()
+        self._line("1;")
 
     def _emit_constant(self, const: Constant) -> None:
         name = const.name.upper()
@@ -547,11 +553,17 @@ class PerlBackend:
         self.current_package = None
 
     def _emit_constructor(self, struct: Struct) -> None:
-        params = ", ".join(f"${_safe_name(f.name)}" for f in struct.fields)
-        self._line(f"sub new ($class, {params}) {{")
+        params = ", ".join(f"${_safe_name(f.name)}=undef" for f in struct.fields)
+        if params:
+            self._line(f"sub new ($class, {params}) {{")
+        else:
+            self._line("sub new ($class) {")
         self.indent += 1
         field_inits = ", ".join(f"{_safe_name(f.name)} => ${_safe_name(f.name)}" for f in struct.fields)
-        self._line(f"return bless {{ {field_inits} }}, $class;")
+        if field_inits:
+            self._line(f"return bless {{ {field_inits} }}, $class;")
+        else:
+            self._line("return bless {}, $class;")
         self.indent -= 1
         self._line("}")
 
@@ -752,11 +764,28 @@ class PerlBackend:
         body: list[Stmt],
     ) -> None:
         iter_expr = self._expr(iterable)
+        is_string = _is_string_type(iterable.typ)
         if isinstance(iterable.typ, Optional) or isinstance(iterable, FieldAccess):
             iter_expr = f"({iter_expr} // [])"
         idx = _safe_name(index) if index else None
         val = _safe_name(value) if value else None
-        if idx is not None and val is not None:
+        if is_string:
+            if idx is not None and val is not None:
+                tmp = "_chars"
+                self._line(f"my @{tmp} = split(//, {iter_expr});")
+                self._line(f"for my ${idx} (0 .. $#{tmp}) {{")
+                self.indent += 1
+                self._line(f"my ${val} = ${tmp}[${idx}];")
+            elif val is not None:
+                self._line(f"for my ${val} (split(//, {iter_expr})) {{")
+                self.indent += 1
+            elif idx is not None:
+                self._line(f"for my ${idx} (0 .. length({iter_expr}) - 1) {{")
+                self.indent += 1
+            else:
+                self._line(f"for (split(//, {iter_expr})) {{")
+                self.indent += 1
+        elif idx is not None and val is not None:
             self._line(f"for my ${idx} (0 .. $#{{{iter_expr}}}) {{")
             self.indent += 1
             self._line(f"my ${val} = {iter_expr}->[${idx}];")
@@ -888,7 +917,10 @@ class PerlBackend:
                 if name == self.receiver_name:
                     return "$self"
                 if name in self.constants:
-                    return name.upper() + "()"
+                    const_call = name.upper() + "()"
+                    if self.current_package is not None:
+                        return f"main::{const_call}"
+                    return const_call
                 return f"${_safe_name(name)}"
             case FieldAccess(obj=obj, field=field):
                 if field.startswith("F") and field[1:].isdigit():
@@ -902,6 +934,8 @@ class PerlBackend:
                 obj_type = obj.typ
                 if isinstance(obj_type, Map):
                     return f"{self._expr(obj)}->{{{self._expr(index)}}}"
+                if _is_string_type(obj_type):
+                    return f"substr({self._expr(obj)}, {self._expr(index)}, 1)"
                 if neg_idx := self._negative_index(obj, index):
                     return f"{self._expr(obj)}->[{neg_idx}]"
                 return f"{self._expr(obj)}->[{self._expr(index)}]"
@@ -947,13 +981,41 @@ class PerlBackend:
                     return f"({s_expr} =~ s/^[{chars_expr}]+|[{chars_expr}]+$//gr)"
             case Call(func=func, args=args):
                 args_str = ", ".join(self._expr(a) for a in args)
-                return f"{_safe_name(func)}({args_str})"
+                safe_func = _safe_name(func)
+                if self.current_package is not None:
+                    return f"main::{safe_func}({args_str})"
+                return f"{safe_func}({args_str})"
             case MethodCall(obj=obj, method=method, args=args, receiver_type=receiver_type):
                 args_str = ", ".join(self._expr(a) for a in args)
-                pl_method = _method_name(method, receiver_type)
                 obj_str = self._expr(obj)
                 if isinstance(obj, (BinaryOp, UnaryOp, Ternary)):
                     obj_str = f"({obj_str})"
+                if isinstance(receiver_type, Slice):
+                    if method == "append":
+                        return f"push(@{{{obj_str}}}, {args_str})"
+                    if method == "pop":
+                        return f"pop(@{{{obj_str}}})"
+                    if method == "copy":
+                        return f"[@{{{obj_str}}}]"
+                if _is_string_type(receiver_type):
+                    if method == "join":
+                        return f"join({obj_str}, @{{{args_str}}})"
+                    if method == "find":
+                        return f"index({obj_str}, {args_str})"
+                    if method == "startswith":
+                        return f"(index({obj_str}, {args_str}) == 0)"
+                    if method == "endswith":
+                        return f"(substr({obj_str}, -length({args_str})) eq {args_str})"
+                    if method == "split":
+                        return f"[split({args_str}, {obj_str})]"
+                    if method == "upper":
+                        return f"uc({obj_str})"
+                    if method == "lower":
+                        return f"lc({obj_str})"
+                    if method == "replace":
+                        arg_list = [self._expr(a) for a in args]
+                        return f"({obj_str} =~ s/{arg_list[0]}/{arg_list[1]}/gr)"
+                pl_method = _method_name(method, receiver_type)
                 if args_str:
                     return f"{obj_str}->{pl_method}({args_str})"
                 return f"{obj_str}->{pl_method}()"
@@ -965,9 +1027,16 @@ class PerlBackend:
                 inner_type = e.typ
                 if isinstance(inner_type, (Slice, Map, Set)):
                     if isinstance(inner_type, Map):
-                        return f"(scalar(keys %{{{self._expr(e)}}}) > 0)"
-                    return f"(scalar(@{{{self._expr(e)}}}) > 0)"
-                if isinstance(inner_type, Optional) or isinstance(inner_type, Pointer):
+                        return f"(scalar(keys %{{({self._expr(e)} // {{}})}}) > 0)"
+                    return f"(scalar(@{{({self._expr(e)} // [])}}) > 0)"
+                if isinstance(inner_type, Optional):
+                    wrapped = inner_type.inner
+                    if isinstance(wrapped, (Slice, Map, Set)):
+                        if isinstance(wrapped, Map):
+                            return f"(scalar(keys %{{({self._expr(e)} // {{}})}}) > 0)"
+                        return f"(scalar(@{{({self._expr(e)} // [])}}) > 0)"
+                    return f"defined({self._expr(e)})"
+                if isinstance(inner_type, Pointer):
                     return f"defined({self._expr(e)})"
                 if inner_type == Primitive(kind="string"):
                     return f"(length({self._expr(e)}) > 0)"
@@ -977,7 +1046,7 @@ class PerlBackend:
                     return self._containment_check(left, right, negated=False)
                 if op == "not in":
                     return self._containment_check(left, right, negated=True)
-                pl_op = _binary_op(op, left.typ)
+                pl_op = _binary_op(op, left.typ, right.typ)
                 left_str = self._maybe_paren(left, op, is_left=True)
                 right_str = self._maybe_paren(right, op, is_left=False)
                 return f"{left_str} {pl_op} {right_str}"
@@ -1039,8 +1108,7 @@ class PerlBackend:
                 pairs = ", ".join(f"{self._expr(e)} => 1" for e in elements)
                 return f"{{{pairs}}}"
             case StructLit(struct_name=struct_name, fields=fields):
-                non_none = [(k, v) for k, v in fields.items() if not isinstance(v, NilLit)]
-                args = ", ".join(f"{self._expr(v)}" for k, v in non_none)
+                args = ", ".join(f"{self._expr(v)}" for v in fields.values())
                 return f"{struct_name}->new({args})"
             case TupleLit(elements=elements):
                 elems = ", ".join(self._expr(e) for e in elements)
@@ -1225,9 +1293,9 @@ def _method_name(method: str, receiver_type: Type) -> str:
     return _safe_name(method)
 
 
-def _binary_op(op: str, left_type: Type) -> str:
+def _binary_op(op: str, left_type: Type, right_type: Type | None = None) -> str:
     """Convert binary operator, using string operators for string types."""
-    is_string = _is_string_type(left_type)
+    is_string = _is_string_type(left_type) or (right_type is not None and _is_string_type(right_type))
     match op:
         case "and" | "&&":
             return "&&"

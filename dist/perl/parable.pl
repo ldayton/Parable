@@ -107,7 +107,7 @@ use constant WORD_CTX_REGEX => 2;
 package ParseError;
 use parent -norequire, 'Exception';
 
-sub new ($class, $message, $pos_, $line) {
+sub new ($class, $message=undef, $pos_=undef, $line=undef) {
     return bless { message => $message, pos_ => $pos_, line => $line }, $class;
 }
 
@@ -134,7 +134,7 @@ use parent -norequire, 'Exception';
 
 package Token;
 
-sub new ($class, $type, $value, $pos_, $parts, $word) {
+sub new ($class, $type=undef, $value=undef, $pos_=undef, $parts=undef, $word=undef) {
     return bless { type => $type, value => $value, pos_ => $pos_, parts => $parts, word => $word }, $class;
 }
 
@@ -148,7 +148,7 @@ sub _repr__ ($self) {
     if (defined($self->{word})) {
         return sprintf("Token(%s, %s, %s, word=%s)", $self->{type}, $self->{value}, $self->{pos_}, $self->{word});
     }
-    if ((scalar(@{$self->{parts}}) > 0)) {
+    if ((scalar(@{($self->{parts} // [])}) > 0)) {
         return sprintf("Token(%s, %s, %s, parts=%s)", $self->{type}, $self->{value}, $self->{pos_}, scalar(@{$self->{parts}}));
     }
     return sprintf("Token(%s, %s, %s)", $self->{type}, $self->{value}, $self->{pos_});
@@ -161,7 +161,7 @@ sub _repr__ ($self) {
 
 package SavedParserState;
 
-sub new ($class, $parser_state, $dolbrace_state, $pending_heredocs, $ctx_stack, $eof_token) {
+sub new ($class, $parser_state=undef, $dolbrace_state=undef, $pending_heredocs=undef, $ctx_stack=undef, $eof_token=undef) {
     return bless { parser_state => $parser_state, dolbrace_state => $dolbrace_state, pending_heredocs => $pending_heredocs, ctx_stack => $ctx_stack, eof_token => $eof_token }, $class;
 }
 
@@ -175,7 +175,7 @@ sub eof_token ($self) { $self->{eof_token} }
 
 package QuoteState;
 
-sub new ($class, $single, $double, $stack) {
+sub new ($class, $single=undef, $double=undef, $stack=undef) {
     return bless { single => $single, double => $double, stack => $stack }, $class;
 }
 
@@ -184,14 +184,14 @@ sub double ($self) { $self->{double} }
 sub stack ($self) { $self->{stack} }
 
 sub push_ ($self) {
-    $self->{stack}->push([$self->{single}, $self->{double}]);
+    push(@{$self->{stack}}, [$self->{single}, $self->{double}]);
     $self->{single} = 0;
     $self->{double} = 0;
 }
 
 sub pop_ ($self) {
-    if ((scalar(@{$self->{stack}}) > 0)) {
-        ($self->{single}, $self->{double}) = @{$self->{stack}->pop_()};
+    if ((scalar(@{($self->{stack} // [])}) > 0)) {
+        ($self->{single}, $self->{double}) = @{pop(@{$self->{stack}})};
     }
 }
 
@@ -200,10 +200,10 @@ sub in_quotes ($self) {
 }
 
 sub copy ($self) {
-    my $qs = new_quote_state();
+    my $qs = main::new_quote_state();
     $qs->{single} = $self->{single};
     $qs->{double} = $self->{double};
-    $qs->{stack} = $self->{stack}->copy();
+    $qs->{stack} = [@{$self->{stack}}];
     return $qs;
 }
 
@@ -218,7 +218,7 @@ sub outer_double ($self) {
 
 package ParseContext;
 
-sub new ($class, $kind, $paren_depth, $brace_depth, $bracket_depth, $case_depth, $arith_depth, $arith_paren_depth, $quote) {
+sub new ($class, $kind=undef, $paren_depth=undef, $brace_depth=undef, $bracket_depth=undef, $case_depth=undef, $arith_depth=undef, $arith_paren_depth=undef, $quote=undef) {
     return bless { kind => $kind, paren_depth => $paren_depth, brace_depth => $brace_depth, bracket_depth => $bracket_depth, case_depth => $case_depth, arith_depth => $arith_depth, arith_paren_depth => $arith_paren_depth, quote => $quote }, $class;
 }
 
@@ -232,7 +232,7 @@ sub arith_paren_depth ($self) { $self->{arith_paren_depth} }
 sub quote ($self) { $self->{quote} }
 
 sub copy ($self) {
-    my $ctx = new_parse_context($self->{kind});
+    my $ctx = main::new_parse_context($self->{kind});
     $ctx->{paren_depth} = $self->{paren_depth};
     $ctx->{brace_depth} = $self->{brace_depth};
     $ctx->{bracket_depth} = $self->{bracket_depth};
@@ -247,7 +247,7 @@ sub copy ($self) {
 
 package ContextStack;
 
-sub new ($class, $stack) {
+sub new ($class, $stack=undef) {
     return bless { stack => $stack }, $class;
 }
 
@@ -258,12 +258,12 @@ sub get_current ($self) {
 }
 
 sub push_ ($self, $kind) {
-    $self->{stack}->push(new_parse_context($kind));
+    push(@{$self->{stack}}, main::new_parse_context($kind));
 }
 
 sub pop_ ($self) {
     if (scalar(@{$self->{stack}}) > 1) {
-        return $self->{stack}->pop_();
+        return pop(@{$self->{stack}});
     }
     return $self->{stack}->[0];
 }
@@ -271,7 +271,7 @@ sub pop_ ($self) {
 sub copy_stack ($self) {
     my $result = [];
     for my $ctx (@{($self->{stack} // [])}) {
-        $result->push($ctx->copy());
+        push(@{$result}, $ctx->copy());
     }
     return $result;
 }
@@ -279,7 +279,7 @@ sub copy_stack ($self) {
 sub restore_from ($self, $saved_stack) {
     my $result = [];
     for my $ctx (@{$saved_stack}) {
-        $result->push($ctx->copy());
+        push(@{$result}, $ctx->copy());
     }
     $self->{stack} = $result;
 }
@@ -288,7 +288,7 @@ sub restore_from ($self, $saved_stack) {
 
 package Lexer;
 
-sub new ($class, $reserved_words, $source, $pos_, $length_, $quote, $token_cache, $parser_state, $dolbrace_state, $pending_heredocs, $extglob, $parser, $eof_token, $last_read_token, $word_context, $at_command_start, $in_array_literal, $in_assign_builtin, $post_read_pos, $cached_word_context, $cached_at_command_start, $cached_in_array_literal, $cached_in_assign_builtin) {
+sub new ($class, $reserved_words=undef, $source=undef, $pos_=undef, $length_=undef, $quote=undef, $token_cache=undef, $parser_state=undef, $dolbrace_state=undef, $pending_heredocs=undef, $extglob=undef, $parser=undef, $eof_token=undef, $last_read_token=undef, $word_context=undef, $at_command_start=undef, $in_array_literal=undef, $in_assign_builtin=undef, $post_read_pos=undef, $cached_word_context=undef, $cached_at_command_start=undef, $cached_in_array_literal=undef, $cached_in_assign_builtin=undef) {
     return bless { reserved_words => $reserved_words, source => $source, pos_ => $pos_, length_ => $length_, quote => $quote, token_cache => $token_cache, parser_state => $parser_state, dolbrace_state => $dolbrace_state, pending_heredocs => $pending_heredocs, extglob => $extglob, parser => $parser, eof_token => $eof_token, last_read_token => $last_read_token, word_context => $word_context, at_command_start => $at_command_start, in_array_literal => $in_array_literal, in_assign_builtin => $in_assign_builtin, post_read_pos => $post_read_pos, cached_word_context => $cached_word_context, cached_at_command_start => $cached_at_command_start, cached_in_array_literal => $cached_in_array_literal, cached_in_assign_builtin => $cached_in_assign_builtin }, $class;
 }
 
@@ -319,14 +319,14 @@ sub peek ($self) {
     if ($self->{pos_} >= $self->{length_}) {
         return "";
     }
-    return $self->{source}->[$self->{pos_}];
+    return substr($self->{source}, $self->{pos_}, 1);
 }
 
 sub advance ($self) {
     if ($self->{pos_} >= $self->{length_}) {
         return "";
     }
-    my $c = $self->{source}->[$self->{pos_}];
+    my $c = substr($self->{source}, $self->{pos_}, 1);
     $self->{pos_} += 1;
     return $c;
 }
@@ -336,7 +336,7 @@ sub at_end ($self) {
 }
 
 sub lookahead ($self, $n) {
-    return substring($self->{source}, $self->{pos_}, $self->{pos_} + $n);
+    return main::substring($self->{source}, $self->{pos_}, $self->{pos_} + $n);
 }
 
 sub is_metachar ($self, $c) {
@@ -353,111 +353,111 @@ sub read_operator ($self) {
     my $three = $self->lookahead(3);
     if ($three eq ";;&") {
         $self->{pos_} += 3;
-        return Token->new(TOKENTYPE_SEMI_SEMI_AMP(), $three, $start);
+        return Token->new(main::TOKENTYPE_SEMI_SEMI_AMP(), $three, $start);
     }
     if ($three eq "<<-") {
         $self->{pos_} += 3;
-        return Token->new(TOKENTYPE_LESS_LESS_MINUS(), $three, $start);
+        return Token->new(main::TOKENTYPE_LESS_LESS_MINUS(), $three, $start);
     }
     if ($three eq "<<<") {
         $self->{pos_} += 3;
-        return Token->new(TOKENTYPE_LESS_LESS_LESS(), $three, $start);
+        return Token->new(main::TOKENTYPE_LESS_LESS_LESS(), $three, $start);
     }
     if ($three eq "&>>") {
         $self->{pos_} += 3;
-        return Token->new(TOKENTYPE_AMP_GREATER_GREATER(), $three, $start);
+        return Token->new(main::TOKENTYPE_AMP_GREATER_GREATER(), $three, $start);
     }
     if ($two eq "&&") {
         $self->{pos_} += 2;
-        return Token->new(TOKENTYPE_AND_AND(), $two, $start);
+        return Token->new(main::TOKENTYPE_AND_AND(), $two, $start);
     }
     if ($two eq "||") {
         $self->{pos_} += 2;
-        return Token->new(TOKENTYPE_OR_OR(), $two, $start);
+        return Token->new(main::TOKENTYPE_OR_OR(), $two, $start);
     }
     if ($two eq ";;") {
         $self->{pos_} += 2;
-        return Token->new(TOKENTYPE_SEMI_SEMI(), $two, $start);
+        return Token->new(main::TOKENTYPE_SEMI_SEMI(), $two, $start);
     }
     if ($two eq ";&") {
         $self->{pos_} += 2;
-        return Token->new(TOKENTYPE_SEMI_AMP(), $two, $start);
+        return Token->new(main::TOKENTYPE_SEMI_AMP(), $two, $start);
     }
     if ($two eq "<<") {
         $self->{pos_} += 2;
-        return Token->new(TOKENTYPE_LESS_LESS(), $two, $start);
+        return Token->new(main::TOKENTYPE_LESS_LESS(), $two, $start);
     }
     if ($two eq ">>") {
         $self->{pos_} += 2;
-        return Token->new(TOKENTYPE_GREATER_GREATER(), $two, $start);
+        return Token->new(main::TOKENTYPE_GREATER_GREATER(), $two, $start);
     }
     if ($two eq "<&") {
         $self->{pos_} += 2;
-        return Token->new(TOKENTYPE_LESS_AMP(), $two, $start);
+        return Token->new(main::TOKENTYPE_LESS_AMP(), $two, $start);
     }
     if ($two eq ">&") {
         $self->{pos_} += 2;
-        return Token->new(TOKENTYPE_GREATER_AMP(), $two, $start);
+        return Token->new(main::TOKENTYPE_GREATER_AMP(), $two, $start);
     }
     if ($two eq "<>") {
         $self->{pos_} += 2;
-        return Token->new(TOKENTYPE_LESS_GREATER(), $two, $start);
+        return Token->new(main::TOKENTYPE_LESS_GREATER(), $two, $start);
     }
     if ($two eq ">|") {
         $self->{pos_} += 2;
-        return Token->new(TOKENTYPE_GREATER_PIPE(), $two, $start);
+        return Token->new(main::TOKENTYPE_GREATER_PIPE(), $two, $start);
     }
     if ($two eq "&>") {
         $self->{pos_} += 2;
-        return Token->new(TOKENTYPE_AMP_GREATER(), $two, $start);
+        return Token->new(main::TOKENTYPE_AMP_GREATER(), $two, $start);
     }
     if ($two eq "|&") {
         $self->{pos_} += 2;
-        return Token->new(TOKENTYPE_PIPE_AMP(), $two, $start);
+        return Token->new(main::TOKENTYPE_PIPE_AMP(), $two, $start);
     }
     if ($c eq ";") {
         $self->{pos_} += 1;
-        return Token->new(TOKENTYPE_SEMI(), $c, $start);
+        return Token->new(main::TOKENTYPE_SEMI(), $c, $start);
     }
     if ($c eq "|") {
         $self->{pos_} += 1;
-        return Token->new(TOKENTYPE_PIPE(), $c, $start);
+        return Token->new(main::TOKENTYPE_PIPE(), $c, $start);
     }
     if ($c eq "&") {
         $self->{pos_} += 1;
-        return Token->new(TOKENTYPE_AMP(), $c, $start);
+        return Token->new(main::TOKENTYPE_AMP(), $c, $start);
     }
     if ($c eq "(") {
-        if ($self->{word_context} == WORD_CTX_REGEX()) {
+        if ($self->{word_context} == main::WORD_CTX_REGEX()) {
             return undef;
         }
         $self->{pos_} += 1;
-        return Token->new(TOKENTYPE_LPAREN(), $c, $start);
+        return Token->new(main::TOKENTYPE_LPAREN(), $c, $start);
     }
     if ($c eq ")") {
-        if ($self->{word_context} == WORD_CTX_REGEX()) {
+        if ($self->{word_context} == main::WORD_CTX_REGEX()) {
             return undef;
         }
         $self->{pos_} += 1;
-        return Token->new(TOKENTYPE_RPAREN(), $c, $start);
+        return Token->new(main::TOKENTYPE_RPAREN(), $c, $start);
     }
     if ($c eq "<") {
-        if ($self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "(") {
+        if ($self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "(") {
             return undef;
         }
         $self->{pos_} += 1;
-        return Token->new(TOKENTYPE_LESS(), $c, $start);
+        return Token->new(main::TOKENTYPE_LESS(), $c, $start);
     }
     if ($c eq ">") {
-        if ($self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "(") {
+        if ($self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "(") {
             return undef;
         }
         $self->{pos_} += 1;
-        return Token->new(TOKENTYPE_GREATER(), $c, $start);
+        return Token->new(main::TOKENTYPE_GREATER(), $c, $start);
     }
     if ($c eq "\n") {
         $self->{pos_} += 1;
-        return Token->new(TOKENTYPE_NEWLINE(), $c, $start);
+        return Token->new(main::TOKENTYPE_NEWLINE(), $c, $start);
     }
     return undef;
 }
@@ -465,7 +465,7 @@ sub read_operator ($self) {
 sub skip_blanks ($self) {
     my $c;
     while ($self->{pos_} < $self->{length_}) {
-        $c = $self->{source}->[$self->{pos_}];
+        $c = substr($self->{source}, $self->{pos_}, 1);
         if ($c ne " " && $c ne "\t") {
             last;
         }
@@ -478,19 +478,19 @@ sub skip_comment ($self) {
     if ($self->{pos_} >= $self->{length_}) {
         return 0;
     }
-    if ($self->{source}->[$self->{pos_}] ne "#") {
+    if (substr($self->{source}, $self->{pos_}, 1) ne "#") {
         return 0;
     }
     if ($self->{quote}->in_quotes()) {
         return 0;
     }
     if ($self->{pos_} > 0) {
-        $prev = $self->{source}->[$self->{pos_} - 1];
+        $prev = substr($self->{source}, $self->{pos_} - 1, 1);
         if ((index(" \t\n;|&(){}", $prev) == -1)) {
             return 0;
         }
     }
-    while ($self->{pos_} < $self->{length_} && $self->{source}->[$self->{pos_}] ne "\n") {
+    while ($self->{pos_} < $self->{length_} && substr($self->{source}, $self->{pos_}, 1) ne "\n") {
         $self->{pos_} += 1;
     }
     return 1;
@@ -501,34 +501,34 @@ sub read_single_quote ($self, $start) {
     my $chars = ["'"];
     my $saw_newline = 0;
     while ($self->{pos_} < $self->{length_}) {
-        $c = $self->{source}->[$self->{pos_}];
+        $c = substr($self->{source}, $self->{pos_}, 1);
         if ($c eq "\n") {
             $saw_newline = 1;
         }
-        $chars->push($c);
+        push(@{$chars}, $c);
         $self->{pos_} += 1;
         if ($c eq "'") {
-            return [""->join_($chars), $saw_newline];
+            return [join("", @{$chars}), $saw_newline];
         }
     }
     die "Unterminated single quote";
 }
 
 sub is_word_terminator ($self, $ctx, $ch, $bracket_depth, $paren_depth) {
-    if ($ctx == WORD_CTX_REGEX()) {
-        if ($ch eq "]" && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "]") {
+    if ($ctx == main::WORD_CTX_REGEX()) {
+        if ($ch eq "]" && $self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "]") {
             return 1;
         }
-        if ($ch eq "&" && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "&") {
+        if ($ch eq "&" && $self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "&") {
             return 1;
         }
         if ($ch eq ")" && $paren_depth == 0) {
             return 1;
         }
-        return is_whitespace($ch) && $paren_depth == 0;
+        return main::is_whitespace($ch) && $paren_depth == 0;
     }
-    if ($ctx == WORD_CTX_COND()) {
-        if ($ch eq "]" && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "]") {
+    if ($ctx == main::WORD_CTX_COND()) {
+        if ($ch eq "]" && $self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "]") {
             return 1;
         }
         if ($ch eq ")") {
@@ -543,18 +543,18 @@ sub is_word_terminator ($self, $ctx, $ch, $bracket_depth, $paren_depth) {
         if ($ch eq ";") {
             return 1;
         }
-        if (is_redirect_char($ch) && !($self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "(")) {
+        if (main::is_redirect_char($ch) && !($self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "(")) {
             return 1;
         }
-        return is_whitespace($ch);
+        return main::is_whitespace($ch);
     }
-    if (($self->{parser_state} & PARSERSTATEFLAGS_PST_EOFTOKEN() ? 1 : 0) && $self->{eof_token} ne "" && $ch eq $self->{eof_token} && $bracket_depth == 0) {
+    if (($self->{parser_state} & main::PARSERSTATEFLAGS_PST_EOFTOKEN() ? 1 : 0) && $self->{eof_token} ne "" && $ch eq $self->{eof_token} && $bracket_depth == 0) {
         return 1;
     }
-    if (is_redirect_char($ch) && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "(") {
+    if (main::is_redirect_char($ch) && $self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "(") {
         return 0;
     }
-    return is_metachar($ch) && $bracket_depth == 0;
+    return main::is_metachar($ch) && $bracket_depth == 0;
 }
 
 sub read_bracket_expression ($self, $chars, $parts, $for_regex, $paren_depth) {
@@ -565,31 +565,31 @@ sub read_bracket_expression ($self, $chars, $parts, $for_regex, $paren_depth) {
     my $scan;
     if ($for_regex) {
         $scan = $self->{pos_} + 1;
-        if ($scan < $self->{length_} && $self->{source}->[$scan] eq "^") {
+        if ($scan < $self->{length_} && substr($self->{source}, $scan, 1) eq "^") {
             $scan += 1;
         }
-        if ($scan < $self->{length_} && $self->{source}->[$scan] eq "]") {
+        if ($scan < $self->{length_} && substr($self->{source}, $scan, 1) eq "]") {
             $scan += 1;
         }
         $bracket_will_close = 0;
         while ($scan < $self->{length_}) {
-            $sc = $self->{source}->[$scan];
-            if ($sc eq "]" && $scan + 1 < $self->{length_} && $self->{source}->[$scan + 1] eq "]") {
+            $sc = substr($self->{source}, $scan, 1);
+            if ($sc eq "]" && $scan + 1 < $self->{length_} && substr($self->{source}, $scan + 1, 1) eq "]") {
                 last;
             }
             if ($sc eq ")" && $paren_depth > 0) {
                 last;
             }
-            if ($sc eq "&" && $scan + 1 < $self->{length_} && $self->{source}->[$scan + 1] eq "&") {
+            if ($sc eq "&" && $scan + 1 < $self->{length_} && substr($self->{source}, $scan + 1, 1) eq "&") {
                 last;
             }
             if ($sc eq "]") {
                 $bracket_will_close = 1;
                 last;
             }
-            if ($sc eq "[" && $scan + 1 < $self->{length_} && $self->{source}->[$scan + 1] eq ":") {
+            if ($sc eq "[" && $scan + 1 < $self->{length_} && substr($self->{source}, $scan + 1, 1) eq ":") {
                 $scan += 2;
-                while ($scan < $self->{length_} && !($self->{source}->[$scan] eq ":" && $scan + 1 < $self->{length_} && $self->{source}->[$scan + 1] eq "]")) {
+                while ($scan < $self->{length_} && !(substr($self->{source}, $scan, 1) eq ":" && $scan + 1 < $self->{length_} && substr($self->{source}, $scan + 1, 1) eq "]")) {
                     $scan += 1;
                 }
                 if ($scan < $self->{length_}) {
@@ -606,8 +606,8 @@ sub read_bracket_expression ($self, $chars, $parts, $for_regex, $paren_depth) {
         if ($self->{pos_} + 1 >= $self->{length_}) {
             return 0;
         }
-        $next_ch = $self->{source}->[$self->{pos_} + 1];
-        if (is_whitespace_no_newline($next_ch) || $next_ch eq "&" || $next_ch eq "|") {
+        $next_ch = substr($self->{source}, $self->{pos_} + 1, 1);
+        if (main::is_whitespace_no_newline($next_ch) || $next_ch eq "&" || $next_ch eq "|") {
             return 0;
         }
     }
@@ -624,30 +624,30 @@ sub read_bracket_expression ($self, $chars, $parts, $for_regex, $paren_depth) {
             $chars->append($self->advance());
             last;
         }
-        if ($c eq "[" && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq ":") {
+        if ($c eq "[" && $self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq ":") {
             $chars->append($self->advance());
             $chars->append($self->advance());
-            while (!$self->at_end() && !($self->peek() eq ":" && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "]")) {
+            while (!$self->at_end() && !($self->peek() eq ":" && $self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "]")) {
                 $chars->append($self->advance());
             }
             if (!$self->at_end()) {
                 $chars->append($self->advance());
                 $chars->append($self->advance());
             }
-        } elsif (!$for_regex && $c eq "[" && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "=") {
+        } elsif (!$for_regex && $c eq "[" && $self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "=") {
             $chars->append($self->advance());
             $chars->append($self->advance());
-            while (!$self->at_end() && !($self->peek() eq "=" && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "]")) {
+            while (!$self->at_end() && !($self->peek() eq "=" && $self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "]")) {
                 $chars->append($self->advance());
             }
             if (!$self->at_end()) {
                 $chars->append($self->advance());
                 $chars->append($self->advance());
             }
-        } elsif (!$for_regex && $c eq "[" && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq ".") {
+        } elsif (!$for_regex && $c eq "[" && $self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq ".") {
             $chars->append($self->advance());
             $chars->append($self->advance());
-            while (!$self->at_end() && !($self->peek() eq "." && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "]")) {
+            while (!$self->at_end() && !($self->peek() eq "." && $self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "]")) {
                 $chars->append($self->advance());
             }
             if (!$self->at_end()) {
@@ -696,14 +696,14 @@ sub parse_matched_pair ($self, $open_char, $close_char, $flags, $initial_was_dol
             die sprintf("unexpected EOF while looking for matching `%s'", $close_char);
         }
         $ch = $self->advance();
-        if (($flags & MATCHEDPAIRFLAGS_DOLBRACE() ? 1 : 0) && $self->{dolbrace_state} == DOLBRACESTATE_OP()) {
+        if (($flags & main::MATCHEDPAIRFLAGS_DOLBRACE() ? 1 : 0) && $self->{dolbrace_state} == main::DOLBRACESTATE_OP()) {
             if ((index("#%^,~:-=?+/", $ch) == -1)) {
-                $self->{dolbrace_state} = DOLBRACESTATE_WORD();
+                $self->{dolbrace_state} = main::DOLBRACESTATE_WORD();
             }
         }
         if ($pass_next) {
             $pass_next = 0;
-            $chars->push($ch);
+            push(@{$chars}, $ch);
             $was_dollar = $ch eq "\$";
             $was_gtlt = (index("<>", $ch) >= 0);
             next;
@@ -715,10 +715,10 @@ sub parse_matched_pair ($self, $open_char, $close_char, $flags, $initial_was_dol
                     last;
                 }
             }
-            if ($ch eq "\\" && ($flags & MATCHEDPAIRFLAGS_ALLOWESC() ? 1 : 0)) {
+            if ($ch eq "\\" && ($flags & main::MATCHEDPAIRFLAGS_ALLOWESC() ? 1 : 0)) {
                 $pass_next = 1;
             }
-            $chars->push($ch);
+            push(@{$chars}, $ch);
             $was_dollar = 0;
             $was_gtlt = 0;
             next;
@@ -731,7 +731,7 @@ sub parse_matched_pair ($self, $open_char, $close_char, $flags, $initial_was_dol
                 next;
             }
             $pass_next = 1;
-            $chars->push($ch);
+            push(@{$chars}, $ch);
             $was_dollar = 0;
             $was_gtlt = 0;
             next;
@@ -741,16 +741,16 @@ sub parse_matched_pair ($self, $open_char, $close_char, $flags, $initial_was_dol
             if ($count == 0) {
                 last;
             }
-            $chars->push($ch);
+            push(@{$chars}, $ch);
             $was_dollar = 0;
             $was_gtlt = (index("<>", $ch) >= 0);
             next;
         }
         if ($ch eq $open_char && $open_char ne $close_char) {
-            if (!(($flags & MATCHEDPAIRFLAGS_DOLBRACE() ? 1 : 0) && $open_char eq "{")) {
+            if (!(($flags & main::MATCHEDPAIRFLAGS_DOLBRACE() ? 1 : 0) && $open_char eq "{")) {
                 $count += 1;
             }
-            $chars->push($ch);
+            push(@{$chars}, $ch);
             $was_dollar = 0;
             $was_gtlt = (index("<>", $ch) >= 0);
             next;
@@ -758,45 +758,45 @@ sub parse_matched_pair ($self, $open_char, $close_char, $flags, $initial_was_dol
         if (((index("'\"`", $ch) >= 0)) && $open_char ne $close_char) {
             my $nested = "";
             if ($ch eq "'") {
-                $chars->push($ch);
-                $quote_flags = ($was_dollar ? $flags | MATCHEDPAIRFLAGS_ALLOWESC() : $flags);
+                push(@{$chars}, $ch);
+                $quote_flags = ($was_dollar ? $flags | main::MATCHEDPAIRFLAGS_ALLOWESC() : $flags);
                 $nested = $self->parse_matched_pair("'", "'", $quote_flags, 0);
-                $chars->push($nested);
-                $chars->push("'");
+                push(@{$chars}, $nested);
+                push(@{$chars}, "'");
                 $was_dollar = 0;
                 $was_gtlt = 0;
                 next;
             } elsif ($ch eq "\"") {
-                $chars->push($ch);
-                $nested = $self->parse_matched_pair("\"", "\"", $flags | MATCHEDPAIRFLAGS_DQUOTE(), 0);
-                $chars->push($nested);
-                $chars->push("\"");
+                push(@{$chars}, $ch);
+                $nested = $self->parse_matched_pair("\"", "\"", $flags | main::MATCHEDPAIRFLAGS_DQUOTE(), 0);
+                push(@{$chars}, $nested);
+                push(@{$chars}, "\"");
                 $was_dollar = 0;
                 $was_gtlt = 0;
                 next;
             } elsif ($ch eq "`") {
-                $chars->push($ch);
+                push(@{$chars}, $ch);
                 $nested = $self->parse_matched_pair("`", "`", $flags, 0);
-                $chars->push($nested);
-                $chars->push("`");
+                push(@{$chars}, $nested);
+                push(@{$chars}, "`");
                 $was_dollar = 0;
                 $was_gtlt = 0;
                 next;
             }
         }
-        if ($ch eq "\$" && !$self->at_end() && !($flags & MATCHEDPAIRFLAGS_EXTGLOB() ? 1 : 0)) {
+        if ($ch eq "\$" && !$self->at_end() && !($flags & main::MATCHEDPAIRFLAGS_EXTGLOB() ? 1 : 0)) {
             $next_ch = $self->peek();
             if ($was_dollar) {
-                $chars->push($ch);
+                push(@{$chars}, $ch);
                 $was_dollar = 0;
                 $was_gtlt = 0;
                 next;
             }
             if ($next_ch eq "{") {
-                if (($flags & MATCHEDPAIRFLAGS_ARITH() ? 1 : 0)) {
+                if (($flags & main::MATCHEDPAIRFLAGS_ARITH() ? 1 : 0)) {
                     $after_brace_pos = $self->{pos_} + 1;
-                    if ($after_brace_pos >= $self->{length_} || !is_funsub_char($self->{source}->[$after_brace_pos])) {
-                        $chars->push($ch);
+                    if ($after_brace_pos >= $self->{length_} || !main::is_funsub_char(substr($self->{source}, $after_brace_pos, 1))) {
+                        push(@{$chars}, $ch);
                         $was_dollar = 1;
                         $was_gtlt = 0;
                         next;
@@ -804,15 +804,15 @@ sub parse_matched_pair ($self, $open_char, $close_char, $flags, $initial_was_dol
                 }
                 $self->{pos_} -= 1;
                 $self->sync_to_parser();
-                $in_dquote = ($flags & MATCHEDPAIRFLAGS_DQUOTE()) != 0;
+                $in_dquote = ($flags & main::MATCHEDPAIRFLAGS_DQUOTE()) != 0;
                 ($param_node, $param_text) = @{$self->{parser}->parse_param_expansion($in_dquote)};
                 $self->sync_from_parser();
                 if (defined($param_node)) {
-                    $chars->push($param_text);
+                    push(@{$chars}, $param_text);
                     $was_dollar = 0;
                     $was_gtlt = 0;
                 } else {
-                    $chars->push($self->advance());
+                    push(@{$chars}, $self->advance());
                     $was_dollar = 1;
                     $was_gtlt = 0;
                 }
@@ -822,11 +822,11 @@ sub parse_matched_pair ($self, $open_char, $close_char, $flags, $initial_was_dol
                 $self->sync_to_parser();
                 my $cmd_node = undef;
                 my $cmd_text = "";
-                if ($self->{pos_} + 2 < $self->{length_} && $self->{source}->[$self->{pos_} + 2] eq "(") {
+                if ($self->{pos_} + 2 < $self->{length_} && substr($self->{source}, $self->{pos_} + 2, 1) eq "(") {
                     ($arith_node, $arith_text) = @{$self->{parser}->parse_arithmetic_expansion()};
                     $self->sync_from_parser();
                     if (defined($arith_node)) {
-                        $chars->push($arith_text);
+                        push(@{$chars}, $arith_text);
                         $was_dollar = 0;
                         $was_gtlt = 0;
                     } else {
@@ -834,12 +834,12 @@ sub parse_matched_pair ($self, $open_char, $close_char, $flags, $initial_was_dol
                         ($cmd_node, $cmd_text) = @{$self->{parser}->parse_command_substitution()};
                         $self->sync_from_parser();
                         if (defined($cmd_node)) {
-                            $chars->push($cmd_text);
+                            push(@{$chars}, $cmd_text);
                             $was_dollar = 0;
                             $was_gtlt = 0;
                         } else {
-                            $chars->push($self->advance());
-                            $chars->push($self->advance());
+                            push(@{$chars}, $self->advance());
+                            push(@{$chars}, $self->advance());
                             $was_dollar = 0;
                             $was_gtlt = 0;
                         }
@@ -848,12 +848,12 @@ sub parse_matched_pair ($self, $open_char, $close_char, $flags, $initial_was_dol
                     ($cmd_node, $cmd_text) = @{$self->{parser}->parse_command_substitution()};
                     $self->sync_from_parser();
                     if (defined($cmd_node)) {
-                        $chars->push($cmd_text);
+                        push(@{$chars}, $cmd_text);
                         $was_dollar = 0;
                         $was_gtlt = 0;
                     } else {
-                        $chars->push($self->advance());
-                        $chars->push($self->advance());
+                        push(@{$chars}, $self->advance());
+                        push(@{$chars}, $self->advance());
                         $was_dollar = 0;
                         $was_gtlt = 0;
                     }
@@ -865,18 +865,18 @@ sub parse_matched_pair ($self, $open_char, $close_char, $flags, $initial_was_dol
                 ($arith_node, $arith_text) = @{$self->{parser}->parse_deprecated_arithmetic()};
                 $self->sync_from_parser();
                 if (defined($arith_node)) {
-                    $chars->push($arith_text);
+                    push(@{$chars}, $arith_text);
                     $was_dollar = 0;
                     $was_gtlt = 0;
                 } else {
-                    $chars->push($self->advance());
+                    push(@{$chars}, $self->advance());
                     $was_dollar = 1;
                     $was_gtlt = 0;
                 }
                 next;
             }
         }
-        if ($ch eq "(" && $was_gtlt && ($flags & MATCHEDPAIRFLAGS_DOLBRACE() | MATCHEDPAIRFLAGS_ARRAYSUB() ? 1 : 0)) {
+        if ($ch eq "(" && $was_gtlt && ($flags & main::MATCHEDPAIRFLAGS_DOLBRACE() | main::MATCHEDPAIRFLAGS_ARRAYSUB() ? 1 : 0)) {
             $direction = $chars->[-1];
             $chars = [@{$chars}[0 .. scalar(@{$chars}) - 1 - 1]];
             $self->{pos_} -= 1;
@@ -884,26 +884,26 @@ sub parse_matched_pair ($self, $open_char, $close_char, $flags, $initial_was_dol
             ($procsub_node, $procsub_text) = @{$self->{parser}->parse_process_substitution()};
             $self->sync_from_parser();
             if (defined($procsub_node)) {
-                $chars->push($procsub_text);
+                push(@{$chars}, $procsub_text);
                 $was_dollar = 0;
                 $was_gtlt = 0;
             } else {
-                $chars->push($direction);
-                $chars->push($self->advance());
+                push(@{$chars}, $direction);
+                push(@{$chars}, $self->advance());
                 $was_dollar = 0;
                 $was_gtlt = 0;
             }
             next;
         }
-        $chars->push($ch);
+        push(@{$chars}, $ch);
         $was_dollar = $ch eq "\$";
         $was_gtlt = (index("<>", $ch) >= 0);
     }
-    return ""->join_($chars);
+    return join("", @{$chars});
 }
 
 sub collect_param_argument ($self, $flags, $was_dollar) {
-    return $self->parse_matched_pair("{", "}", $flags | MATCHEDPAIRFLAGS_DOLBRACE(), $was_dollar);
+    return $self->parse_matched_pair("{", "}", $flags | main::MATCHEDPAIRFLAGS_DOLBRACE(), $was_dollar);
 }
 
 sub read_word_internal ($self, $ctx, $at_command_start, $in_array_literal, $in_assign_builtin) {
@@ -939,88 +939,88 @@ sub read_word_internal ($self, $ctx, $at_command_start, $in_array_literal, $in_a
     my $paren_depth = 0;
     while (!$self->at_end()) {
         $ch = $self->peek();
-        if ($ctx == WORD_CTX_REGEX()) {
-            if ($ch eq "\\" && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "\n") {
+        if ($ctx == main::WORD_CTX_REGEX()) {
+            if ($ch eq "\\" && $self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "\n") {
                 $self->advance();
                 $self->advance();
                 next;
             }
         }
-        if ($ctx != WORD_CTX_NORMAL() && $self->is_word_terminator($ctx, $ch, $bracket_depth, $paren_depth)) {
+        if ($ctx != main::WORD_CTX_NORMAL() && $self->is_word_terminator($ctx, $ch, $bracket_depth, $paren_depth)) {
             last;
         }
-        if ($ctx == WORD_CTX_NORMAL() && $ch eq "[") {
+        if ($ctx == main::WORD_CTX_NORMAL() && $ch eq "[") {
             if ($bracket_depth > 0) {
                 $bracket_depth += 1;
-                $chars->push($self->advance());
+                push(@{$chars}, $self->advance());
                 next;
             }
-            if ((scalar(@{$chars}) > 0) && $at_command_start && !$seen_equals && is_array_assignment_prefix($chars)) {
+            if ((scalar(@{($chars // [])}) > 0) && $at_command_start && !$seen_equals && main::is_array_assignment_prefix($chars)) {
                 $prev_char = $chars->[-1];
                 if (($prev_char =~ /^[a-zA-Z0-9]$/) || $prev_char eq "_") {
                     $bracket_start_pos = $self->{pos_};
                     $bracket_depth += 1;
-                    $chars->push($self->advance());
+                    push(@{$chars}, $self->advance());
                     next;
                 }
             }
-            if (!(scalar(@{$chars}) > 0) && !$seen_equals && $in_array_literal) {
+            if (!(scalar(@{($chars // [])}) > 0) && !$seen_equals && $in_array_literal) {
                 $bracket_start_pos = $self->{pos_};
                 $bracket_depth += 1;
-                $chars->push($self->advance());
+                push(@{$chars}, $self->advance());
                 next;
             }
         }
-        if ($ctx == WORD_CTX_NORMAL() && $ch eq "]" && $bracket_depth > 0) {
+        if ($ctx == main::WORD_CTX_NORMAL() && $ch eq "]" && $bracket_depth > 0) {
             $bracket_depth -= 1;
-            $chars->push($self->advance());
+            push(@{$chars}, $self->advance());
             next;
         }
-        if ($ctx == WORD_CTX_NORMAL() && $ch eq "=" && $bracket_depth == 0) {
+        if ($ctx == main::WORD_CTX_NORMAL() && $ch eq "=" && $bracket_depth == 0) {
             $seen_equals = 1;
         }
-        if ($ctx == WORD_CTX_REGEX() && $ch eq "(") {
+        if ($ctx == main::WORD_CTX_REGEX() && $ch eq "(") {
             $paren_depth += 1;
-            $chars->push($self->advance());
+            push(@{$chars}, $self->advance());
             next;
         }
-        if ($ctx == WORD_CTX_REGEX() && $ch eq ")") {
+        if ($ctx == main::WORD_CTX_REGEX() && $ch eq ")") {
             if ($paren_depth > 0) {
                 $paren_depth -= 1;
-                $chars->push($self->advance());
+                push(@{$chars}, $self->advance());
                 next;
             }
             last;
         }
-        if (($ctx == WORD_CTX_COND() || $ctx == WORD_CTX_REGEX()) && $ch eq "[") {
-            $for_regex = $ctx == WORD_CTX_REGEX();
+        if (($ctx == main::WORD_CTX_COND() || $ctx == main::WORD_CTX_REGEX()) && $ch eq "[") {
+            $for_regex = $ctx == main::WORD_CTX_REGEX();
             if ($self->read_bracket_expression($chars, $parts, $for_regex, $paren_depth)) {
                 next;
             }
-            $chars->push($self->advance());
+            push(@{$chars}, $self->advance());
             next;
         }
         my $content = "";
-        if ($ctx == WORD_CTX_COND() && $ch eq "(") {
-            if ($self->{extglob} && (scalar(@{$chars}) > 0) && is_extglob_prefix($chars->[-1])) {
-                $chars->push($self->advance());
-                $content = $self->parse_matched_pair("(", ")", MATCHEDPAIRFLAGS_EXTGLOB(), 0);
-                $chars->push($content);
-                $chars->push(")");
+        if ($ctx == main::WORD_CTX_COND() && $ch eq "(") {
+            if ($self->{extglob} && (scalar(@{($chars // [])}) > 0) && main::is_extglob_prefix($chars->[-1])) {
+                push(@{$chars}, $self->advance());
+                $content = $self->parse_matched_pair("(", ")", main::MATCHEDPAIRFLAGS_EXTGLOB(), 0);
+                push(@{$chars}, $content);
+                push(@{$chars}, ")");
                 next;
             } else {
                 last;
             }
         }
-        if ($ctx == WORD_CTX_REGEX() && is_whitespace($ch) && $paren_depth > 0) {
-            $chars->push($self->advance());
+        if ($ctx == main::WORD_CTX_REGEX() && main::is_whitespace($ch) && $paren_depth > 0) {
+            push(@{$chars}, $self->advance());
             next;
         }
         if ($ch eq "'") {
             $self->advance();
-            $track_newline = $ctx == WORD_CTX_NORMAL();
+            $track_newline = $ctx == main::WORD_CTX_NORMAL();
             ($content, $saw_newline) = @{$self->read_single_quote($start)};
-            $chars->push($content);
+            push(@{$chars}, $content);
             if ($track_newline && $saw_newline && defined($self->{parser})) {
                 $self->{parser}->{saw_newline_in_single_quote} = 1;
             }
@@ -1030,32 +1030,32 @@ sub read_word_internal ($self, $ctx, $at_command_start, $in_array_literal, $in_a
         my $cmdsub_result1 = "";
         if ($ch eq "\"") {
             $self->advance();
-            if ($ctx == WORD_CTX_NORMAL()) {
-                $chars->push("\"");
+            if ($ctx == main::WORD_CTX_NORMAL()) {
+                push(@{$chars}, "\"");
                 $in_single_in_dquote = 0;
                 while (!$self->at_end() && ($in_single_in_dquote || $self->peek() ne "\"")) {
                     $c = $self->peek();
                     if ($in_single_in_dquote) {
-                        $chars->push($self->advance());
+                        push(@{$chars}, $self->advance());
                         if ($c eq "'") {
                             $in_single_in_dquote = 0;
                         }
                         next;
                     }
                     if ($c eq "\\" && $self->{pos_} + 1 < $self->{length_}) {
-                        $next_c = $self->{source}->[$self->{pos_} + 1];
+                        $next_c = substr($self->{source}, $self->{pos_} + 1, 1);
                         if ($next_c eq "\n") {
                             $self->advance();
                             $self->advance();
                         } else {
-                            $chars->push($self->advance());
-                            $chars->push($self->advance());
+                            push(@{$chars}, $self->advance());
+                            push(@{$chars}, $self->advance());
                         }
                     } elsif ($c eq "\$") {
                         $self->sync_to_parser();
                         if (!$self->{parser}->parse_dollar_expansion($chars, $parts, 1)) {
                             $self->sync_from_parser();
-                            $chars->push($self->advance());
+                            push(@{$chars}, $self->advance());
                         } else {
                             $self->sync_from_parser();
                         }
@@ -1064,21 +1064,21 @@ sub read_word_internal ($self, $ctx, $at_command_start, $in_array_literal, $in_a
                         ($cmdsub_result0, $cmdsub_result1) = @{$self->{parser}->parse_backtick_substitution()};
                         $self->sync_from_parser();
                         if (defined($cmdsub_result0)) {
-                            $parts->push($cmdsub_result0);
-                            $chars->push($cmdsub_result1);
+                            push(@{$parts}, $cmdsub_result0);
+                            push(@{$chars}, $cmdsub_result1);
                         } else {
-                            $chars->push($self->advance());
+                            push(@{$chars}, $self->advance());
                         }
                     } else {
-                        $chars->push($self->advance());
+                        push(@{$chars}, $self->advance());
                     }
                 }
                 if ($self->at_end()) {
                     die "Unterminated double quote";
                 }
-                $chars->push($self->advance());
+                push(@{$chars}, $self->advance());
             } else {
-                $handle_line_continuation = $ctx == WORD_CTX_COND();
+                $handle_line_continuation = $ctx == main::WORD_CTX_COND();
                 $self->sync_to_parser();
                 $self->{parser}->scan_double_quote($chars, $parts, $start, $handle_line_continuation);
                 $self->sync_from_parser();
@@ -1086,34 +1086,34 @@ sub read_word_internal ($self, $ctx, $at_command_start, $in_array_literal, $in_a
             next;
         }
         if ($ch eq "\\" && $self->{pos_} + 1 < $self->{length_}) {
-            $next_ch = $self->{source}->[$self->{pos_} + 1];
-            if ($ctx != WORD_CTX_REGEX() && $next_ch eq "\n") {
+            $next_ch = substr($self->{source}, $self->{pos_} + 1, 1);
+            if ($ctx != main::WORD_CTX_REGEX() && $next_ch eq "\n") {
                 $self->advance();
                 $self->advance();
             } else {
-                $chars->push($self->advance());
-                $chars->push($self->advance());
+                push(@{$chars}, $self->advance());
+                push(@{$chars}, $self->advance());
             }
             next;
         }
-        if ($ctx != WORD_CTX_REGEX() && $ch eq "\$" && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "'") {
+        if ($ctx != main::WORD_CTX_REGEX() && $ch eq "\$" && $self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "'") {
             ($ansi_result0, $ansi_result1) = @{$self->read_ansi_c_quote()};
             if (defined($ansi_result0)) {
-                $parts->push($ansi_result0);
-                $chars->push($ansi_result1);
+                push(@{$parts}, $ansi_result0);
+                push(@{$chars}, $ansi_result1);
             } else {
-                $chars->push($self->advance());
+                push(@{$chars}, $self->advance());
             }
             next;
         }
-        if ($ctx != WORD_CTX_REGEX() && $ch eq "\$" && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "\"") {
+        if ($ctx != main::WORD_CTX_REGEX() && $ch eq "\$" && $self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "\"") {
             ($locale_result0, $locale_result1, $locale_result2) = @{$self->read_locale_string()};
             if (defined($locale_result0)) {
-                $parts->push($locale_result0);
+                push(@{$parts}, $locale_result0);
                 $parts->extend($locale_result2);
-                $chars->push($locale_result1);
+                push(@{$chars}, $locale_result1);
             } else {
-                $chars->push($self->advance());
+                push(@{$chars}, $self->advance());
             }
             next;
         }
@@ -1121,96 +1121,96 @@ sub read_word_internal ($self, $ctx, $at_command_start, $in_array_literal, $in_a
             $self->sync_to_parser();
             if (!$self->{parser}->parse_dollar_expansion($chars, $parts, 0)) {
                 $self->sync_from_parser();
-                $chars->push($self->advance());
+                push(@{$chars}, $self->advance());
             } else {
                 $self->sync_from_parser();
-                if ($self->{extglob} && $ctx == WORD_CTX_NORMAL() && (scalar(@{$chars}) > 0) && length($chars->[-1]) == 2 && $chars->[-1]->[0] eq "\$" && ((index("?*\@", $chars->[-1]->[1]) >= 0)) && !$self->at_end() && $self->peek() eq "(") {
-                    $chars->push($self->advance());
-                    $content = $self->parse_matched_pair("(", ")", MATCHEDPAIRFLAGS_EXTGLOB(), 0);
-                    $chars->push($content);
-                    $chars->push(")");
+                if ($self->{extglob} && $ctx == main::WORD_CTX_NORMAL() && (scalar(@{($chars // [])}) > 0) && length($chars->[-1]) == 2 && substr($chars->[-1], 0, 1) eq "\$" && ((index("?*\@", substr($chars->[-1], 1, 1)) >= 0)) && !$self->at_end() && $self->peek() eq "(") {
+                    push(@{$chars}, $self->advance());
+                    $content = $self->parse_matched_pair("(", ")", main::MATCHEDPAIRFLAGS_EXTGLOB(), 0);
+                    push(@{$chars}, $content);
+                    push(@{$chars}, ")");
                 }
             }
             next;
         }
-        if ($ctx != WORD_CTX_REGEX() && $ch eq "`") {
+        if ($ctx != main::WORD_CTX_REGEX() && $ch eq "`") {
             $self->sync_to_parser();
             ($cmdsub_result0, $cmdsub_result1) = @{$self->{parser}->parse_backtick_substitution()};
             $self->sync_from_parser();
             if (defined($cmdsub_result0)) {
-                $parts->push($cmdsub_result0);
-                $chars->push($cmdsub_result1);
+                push(@{$parts}, $cmdsub_result0);
+                push(@{$chars}, $cmdsub_result1);
             } else {
-                $chars->push($self->advance());
+                push(@{$chars}, $self->advance());
             }
             next;
         }
-        if ($ctx != WORD_CTX_REGEX() && is_redirect_char($ch) && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "(") {
+        if ($ctx != main::WORD_CTX_REGEX() && main::is_redirect_char($ch) && $self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "(") {
             $self->sync_to_parser();
             ($procsub_result0, $procsub_result1) = @{$self->{parser}->parse_process_substitution()};
             $self->sync_from_parser();
             if (defined($procsub_result0)) {
-                $parts->push($procsub_result0);
-                $chars->push($procsub_result1);
+                push(@{$parts}, $procsub_result0);
+                push(@{$chars}, $procsub_result1);
             } elsif ((length($procsub_result1) > 0)) {
-                $chars->push($procsub_result1);
+                push(@{$chars}, $procsub_result1);
             } else {
-                $chars->push($self->advance());
-                if ($ctx == WORD_CTX_NORMAL()) {
-                    $chars->push($self->advance());
+                push(@{$chars}, $self->advance());
+                if ($ctx == main::WORD_CTX_NORMAL()) {
+                    push(@{$chars}, $self->advance());
                 }
             }
             next;
         }
-        if ($ctx == WORD_CTX_NORMAL() && $ch eq "(" && (scalar(@{$chars}) > 0) && $bracket_depth == 0) {
+        if ($ctx == main::WORD_CTX_NORMAL() && $ch eq "(" && (scalar(@{($chars // [])}) > 0) && $bracket_depth == 0) {
             $is_array_assign = 0;
             if (scalar(@{$chars}) >= 3 && $chars->[-2] eq "+" && $chars->[-1] eq "=") {
-                $is_array_assign = is_array_assignment_prefix([@{$chars}[0 .. scalar(@{$chars}) - 2 - 1]]);
+                $is_array_assign = main::is_array_assignment_prefix([@{$chars}[0 .. scalar(@{$chars}) - 2 - 1]]);
             } elsif ($chars->[-1] eq "=" && scalar(@{$chars}) >= 2) {
-                $is_array_assign = is_array_assignment_prefix([@{$chars}[0 .. scalar(@{$chars}) - 1 - 1]]);
+                $is_array_assign = main::is_array_assignment_prefix([@{$chars}[0 .. scalar(@{$chars}) - 1 - 1]]);
             }
             if ($is_array_assign && ($at_command_start || $in_assign_builtin)) {
                 $self->sync_to_parser();
                 ($array_result0, $array_result1) = @{$self->{parser}->parse_array_literal()};
                 $self->sync_from_parser();
                 if (defined($array_result0)) {
-                    $parts->push($array_result0);
-                    $chars->push($array_result1);
+                    push(@{$parts}, $array_result0);
+                    push(@{$chars}, $array_result1);
                 } else {
                     last;
                 }
                 next;
             }
         }
-        if ($self->{extglob} && $ctx == WORD_CTX_NORMAL() && is_extglob_prefix($ch) && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "(") {
-            $chars->push($self->advance());
-            $chars->push($self->advance());
-            $content = $self->parse_matched_pair("(", ")", MATCHEDPAIRFLAGS_EXTGLOB(), 0);
-            $chars->push($content);
-            $chars->push(")");
+        if ($self->{extglob} && $ctx == main::WORD_CTX_NORMAL() && main::is_extglob_prefix($ch) && $self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "(") {
+            push(@{$chars}, $self->advance());
+            push(@{$chars}, $self->advance());
+            $content = $self->parse_matched_pair("(", ")", main::MATCHEDPAIRFLAGS_EXTGLOB(), 0);
+            push(@{$chars}, $content);
+            push(@{$chars}, ")");
             next;
         }
-        if ($ctx == WORD_CTX_NORMAL() && ($self->{parser_state} & PARSERSTATEFLAGS_PST_EOFTOKEN() ? 1 : 0) && $self->{eof_token} ne "" && $ch eq $self->{eof_token} && $bracket_depth == 0) {
-            if (!(scalar(@{$chars}) > 0)) {
-                $chars->push($self->advance());
+        if ($ctx == main::WORD_CTX_NORMAL() && ($self->{parser_state} & main::PARSERSTATEFLAGS_PST_EOFTOKEN() ? 1 : 0) && $self->{eof_token} ne "" && $ch eq $self->{eof_token} && $bracket_depth == 0) {
+            if (!(scalar(@{($chars // [])}) > 0)) {
+                push(@{$chars}, $self->advance());
             }
             last;
         }
-        if ($ctx == WORD_CTX_NORMAL() && is_metachar($ch) && $bracket_depth == 0) {
+        if ($ctx == main::WORD_CTX_NORMAL() && main::is_metachar($ch) && $bracket_depth == 0) {
             last;
         }
-        $chars->push($self->advance());
+        push(@{$chars}, $self->advance());
     }
     if ($bracket_depth > 0 && $bracket_start_pos != -1 && $self->at_end()) {
         die "unexpected EOF looking for `]'";
     }
-    if (!(scalar(@{$chars}) > 0)) {
+    if (!(scalar(@{($chars // [])}) > 0)) {
         return undef;
     }
-    if ((scalar(@{$parts}) > 0)) {
-        return Word->new(""->join_($chars), $parts, "word");
+    if ((scalar(@{($parts // [])}) > 0)) {
+        return Word->new(join("", @{$chars}), $parts, "word");
     }
-    return Word->new(""->join_($chars), "word");
+    return Word->new(join("", @{$chars}), undef, "word");
 }
 
 sub read_word ($self) {
@@ -1222,8 +1222,8 @@ sub read_word ($self) {
     if ($c eq "") {
         return undef;
     }
-    my $is_procsub = ($c eq "<" || $c eq ">") && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "(";
-    my $is_regex_paren = $self->{word_context} == WORD_CTX_REGEX() && ($c eq "(" || $c eq ")");
+    my $is_procsub = ($c eq "<" || $c eq ">") && $self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "(";
+    my $is_regex_paren = $self->{word_context} == main::WORD_CTX_REGEX() && ($c eq "(" || $c eq ")");
     if ($self->is_metachar($c) && !$is_procsub && !$is_regex_paren) {
         return undef;
     }
@@ -1231,7 +1231,7 @@ sub read_word ($self) {
     if (!defined($word)) {
         return undef;
     }
-    return Token->new(TOKENTYPE_WORD(), $word->{value}, $start, $word);
+    return Token->new(main::TOKENTYPE_WORD(), $word->{value}, $start, undef, $word);
 }
 
 sub next_token ($self) {
@@ -1245,24 +1245,24 @@ sub next_token ($self) {
     }
     $self->skip_blanks();
     if ($self->at_end()) {
-        $tok = Token->new(TOKENTYPE_EOF(), "", $self->{pos_});
+        $tok = Token->new(main::TOKENTYPE_EOF(), "", $self->{pos_});
         $self->{last_read_token} = $tok;
         return $tok;
     }
-    if ($self->{eof_token} ne "" && $self->peek() eq $self->{eof_token} && !($self->{parser_state} & PARSERSTATEFLAGS_PST_CASEPAT() ? 1 : 0) && !($self->{parser_state} & PARSERSTATEFLAGS_PST_EOFTOKEN() ? 1 : 0)) {
-        $tok = Token->new(TOKENTYPE_EOF(), "", $self->{pos_});
+    if ($self->{eof_token} ne "" && $self->peek() eq $self->{eof_token} && !($self->{parser_state} & main::PARSERSTATEFLAGS_PST_CASEPAT() ? 1 : 0) && !($self->{parser_state} & main::PARSERSTATEFLAGS_PST_EOFTOKEN() ? 1 : 0)) {
+        $tok = Token->new(main::TOKENTYPE_EOF(), "", $self->{pos_});
         $self->{last_read_token} = $tok;
         return $tok;
     }
     while ($self->skip_comment()) {
         $self->skip_blanks();
         if ($self->at_end()) {
-            $tok = Token->new(TOKENTYPE_EOF(), "", $self->{pos_});
+            $tok = Token->new(main::TOKENTYPE_EOF(), "", $self->{pos_});
             $self->{last_read_token} = $tok;
             return $tok;
         }
-        if ($self->{eof_token} ne "" && $self->peek() eq $self->{eof_token} && !($self->{parser_state} & PARSERSTATEFLAGS_PST_CASEPAT() ? 1 : 0) && !($self->{parser_state} & PARSERSTATEFLAGS_PST_EOFTOKEN() ? 1 : 0)) {
-            $tok = Token->new(TOKENTYPE_EOF(), "", $self->{pos_});
+        if ($self->{eof_token} ne "" && $self->peek() eq $self->{eof_token} && !($self->{parser_state} & main::PARSERSTATEFLAGS_PST_CASEPAT() ? 1 : 0) && !($self->{parser_state} & main::PARSERSTATEFLAGS_PST_EOFTOKEN() ? 1 : 0)) {
+            $tok = Token->new(main::TOKENTYPE_EOF(), "", $self->{pos_});
             $self->{last_read_token} = $tok;
             return $tok;
         }
@@ -1277,7 +1277,7 @@ sub next_token ($self) {
         $self->{last_read_token} = $tok;
         return $tok;
     }
-    $tok = Token->new(TOKENTYPE_EOF(), "", $self->{pos_});
+    $tok = Token->new(main::TOKENTYPE_EOF(), "", $self->{pos_});
     $self->{last_read_token} = $tok;
     return $tok;
 }
@@ -1297,7 +1297,7 @@ sub read_ansi_c_quote ($self) {
     if ($self->at_end() || $self->peek() ne "\$") {
         return [undef, ""];
     }
-    if ($self->{pos_} + 1 >= $self->{length_} || $self->{source}->[$self->{pos_} + 1] ne "'") {
+    if ($self->{pos_} + 1 >= $self->{length_} || substr($self->{source}, $self->{pos_} + 1, 1) ne "'") {
         return [undef, ""];
     }
     my $start = $self->{pos_};
@@ -1312,19 +1312,19 @@ sub read_ansi_c_quote ($self) {
             $found_close = 1;
             last;
         } elsif ($ch eq "\\") {
-            $content_chars->push($self->advance());
+            push(@{$content_chars}, $self->advance());
             if (!$self->at_end()) {
-                $content_chars->push($self->advance());
+                push(@{$content_chars}, $self->advance());
             }
         } else {
-            $content_chars->push($self->advance());
+            push(@{$content_chars}, $self->advance());
         }
     }
     if (!$found_close) {
         die "unexpected EOF while looking for matching `''";
     }
-    my $text = substring($self->{source}, $start, $self->{pos_});
-    my $content = ""->join_($content_chars);
+    my $text = main::substring($self->{source}, $start, $self->{pos_});
+    my $content = join("", @{$content_chars});
     my $node = AnsiCQuote->new($content, "ansi-c");
     return [$node, $text];
 }
@@ -1353,7 +1353,7 @@ sub read_locale_string ($self) {
     if ($self->at_end() || $self->peek() ne "\$") {
         return [undef, "", []];
     }
-    if ($self->{pos_} + 1 >= $self->{length_} || $self->{source}->[$self->{pos_} + 1] ne "\"") {
+    if ($self->{pos_} + 1 >= $self->{length_} || substr($self->{source}, $self->{pos_} + 1, 1) ne "\"") {
         return [undef, "", []];
     }
     my $start = $self->{pos_};
@@ -1369,96 +1369,96 @@ sub read_locale_string ($self) {
             $found_close = 1;
             last;
         } elsif ($ch eq "\\" && $self->{pos_} + 1 < $self->{length_}) {
-            $next_ch = $self->{source}->[$self->{pos_} + 1];
+            $next_ch = substr($self->{source}, $self->{pos_} + 1, 1);
             if ($next_ch eq "\n") {
                 $self->advance();
                 $self->advance();
             } else {
-                $content_chars->push($self->advance());
-                $content_chars->push($self->advance());
+                push(@{$content_chars}, $self->advance());
+                push(@{$content_chars}, $self->advance());
             }
-        } elsif ($ch eq "\$" && $self->{pos_} + 2 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "(" && $self->{source}->[$self->{pos_} + 2] eq "(") {
+        } elsif ($ch eq "\$" && $self->{pos_} + 2 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "(" && substr($self->{source}, $self->{pos_} + 2, 1) eq "(") {
             $self->sync_to_parser();
             ($arith_node, $arith_text) = @{$self->{parser}->parse_arithmetic_expansion()};
             $self->sync_from_parser();
             if (defined($arith_node)) {
-                $inner_parts->push($arith_node);
-                $content_chars->push($arith_text);
+                push(@{$inner_parts}, $arith_node);
+                push(@{$content_chars}, $arith_text);
             } else {
                 $self->sync_to_parser();
                 ($cmdsub_node, $cmdsub_text) = @{$self->{parser}->parse_command_substitution()};
                 $self->sync_from_parser();
                 if (defined($cmdsub_node)) {
-                    $inner_parts->push($cmdsub_node);
-                    $content_chars->push($cmdsub_text);
+                    push(@{$inner_parts}, $cmdsub_node);
+                    push(@{$content_chars}, $cmdsub_text);
                 } else {
-                    $content_chars->push($self->advance());
+                    push(@{$content_chars}, $self->advance());
                 }
             }
-        } elsif (is_expansion_start($self->{source}, $self->{pos_}, "\$(")) {
+        } elsif (main::is_expansion_start($self->{source}, $self->{pos_}, "\$(")) {
             $self->sync_to_parser();
             ($cmdsub_node, $cmdsub_text) = @{$self->{parser}->parse_command_substitution()};
             $self->sync_from_parser();
             if (defined($cmdsub_node)) {
-                $inner_parts->push($cmdsub_node);
-                $content_chars->push($cmdsub_text);
+                push(@{$inner_parts}, $cmdsub_node);
+                push(@{$content_chars}, $cmdsub_text);
             } else {
-                $content_chars->push($self->advance());
+                push(@{$content_chars}, $self->advance());
             }
         } elsif ($ch eq "\$") {
             $self->sync_to_parser();
             ($param_node, $param_text) = @{$self->{parser}->parse_param_expansion(0)};
             $self->sync_from_parser();
             if (defined($param_node)) {
-                $inner_parts->push($param_node);
-                $content_chars->push($param_text);
+                push(@{$inner_parts}, $param_node);
+                push(@{$content_chars}, $param_text);
             } else {
-                $content_chars->push($self->advance());
+                push(@{$content_chars}, $self->advance());
             }
         } elsif ($ch eq "`") {
             $self->sync_to_parser();
             ($cmdsub_node, $cmdsub_text) = @{$self->{parser}->parse_backtick_substitution()};
             $self->sync_from_parser();
             if (defined($cmdsub_node)) {
-                $inner_parts->push($cmdsub_node);
-                $content_chars->push($cmdsub_text);
+                push(@{$inner_parts}, $cmdsub_node);
+                push(@{$content_chars}, $cmdsub_text);
             } else {
-                $content_chars->push($self->advance());
+                push(@{$content_chars}, $self->advance());
             }
         } else {
-            $content_chars->push($self->advance());
+            push(@{$content_chars}, $self->advance());
         }
     }
     if (!$found_close) {
         $self->{pos_} = $start;
         return [undef, "", []];
     }
-    my $content = ""->join_($content_chars);
+    my $content = join("", @{$content_chars});
     my $text = "\$\"" . $content . "\"";
     return [LocaleString->new($content, "locale"), $text, $inner_parts];
 }
 
 sub update_dolbrace_for_op ($self, $op, $has_param) {
-    if ($self->{dolbrace_state} == DOLBRACESTATE_NONE()) {
+    if ($self->{dolbrace_state} == main::DOLBRACESTATE_NONE()) {
         return;
     }
     if ($op eq "" || length($op) == 0) {
         return;
     }
-    my $first_char = $op->[0];
-    if ($self->{dolbrace_state} == DOLBRACESTATE_PARAM() && $has_param) {
+    my $first_char = substr($op, 0, 1);
+    if ($self->{dolbrace_state} == main::DOLBRACESTATE_PARAM() && $has_param) {
         if ((index("%#^,", $first_char) >= 0)) {
-            $self->{dolbrace_state} = DOLBRACESTATE_QUOTE();
+            $self->{dolbrace_state} = main::DOLBRACESTATE_QUOTE();
             return;
         }
         if ($first_char eq "/") {
-            $self->{dolbrace_state} = DOLBRACESTATE_QUOTE2();
+            $self->{dolbrace_state} = main::DOLBRACESTATE_QUOTE2();
             return;
         }
     }
-    if ($self->{dolbrace_state} == DOLBRACESTATE_PARAM()) {
+    if ($self->{dolbrace_state} == main::DOLBRACESTATE_PARAM()) {
         if ((index("#%^,~:-=?+/", $first_char) >= 0)) {
-            $self->{dolbrace_state} = DOLBRACESTATE_OP();
+            $self->{dolbrace_state} = main::DOLBRACESTATE_OP();
         }
     }
 }
@@ -1476,13 +1476,13 @@ sub consume_param_operator ($self) {
             return ":";
         }
         $next_ch = $self->peek();
-        if (is_simple_param_op($next_ch)) {
+        if (main::is_simple_param_op($next_ch)) {
             $self->advance();
             return ":" . $next_ch;
         }
         return ":";
     }
-    if (is_simple_param_op($ch)) {
+    if (main::is_simple_param_op($ch)) {
         $self->advance();
         return $ch;
     }
@@ -1546,9 +1546,9 @@ sub param_subscript_has_close ($self, $start_pos) {
     my $c;
     my $depth = 1;
     my $i = $start_pos + 1;
-    my $quote = new_quote_state();
+    my $quote = main::new_quote_state();
     while ($i < $self->{length_}) {
-        $c = $self->{source}->[$i];
+        $c = substr($self->{source}, $i, 1);
         if ($quote->{single}) {
             if ($c eq "'") {
                 $quote->{single} = 0;
@@ -1605,8 +1605,8 @@ sub consume_param_name ($self) {
         return "";
     }
     my $ch = $self->peek();
-    if (is_special_param($ch)) {
-        if ($ch eq "\$" && $self->{pos_} + 1 < $self->{length_} && ((index("{'\"", $self->{source}->[$self->{pos_} + 1]) >= 0))) {
+    if (main::is_special_param($ch)) {
+        if ($ch eq "\$" && $self->{pos_} + 1 < $self->{length_} && ((index("{'\"", substr($self->{source}, $self->{pos_} + 1, 1)) >= 0))) {
             return "";
         }
         $self->advance();
@@ -1615,31 +1615,31 @@ sub consume_param_name ($self) {
     if (($ch =~ /^\d$/)) {
         my $name_chars = [];
         while (!$self->at_end() && ($self->peek() =~ /^\d$/)) {
-            $name_chars->push($self->advance());
+            push(@{$name_chars}, $self->advance());
         }
-        return ""->join_($name_chars);
+        return join("", @{$name_chars});
     }
     if (($ch =~ /^[a-zA-Z]$/) || $ch eq "_") {
         $name_chars = [];
         while (!$self->at_end()) {
             $c = $self->peek();
             if (($c =~ /^[a-zA-Z0-9]$/) || $c eq "_") {
-                $name_chars->push($self->advance());
+                push(@{$name_chars}, $self->advance());
             } elsif ($c eq "[") {
                 if (!$self->param_subscript_has_close($self->{pos_})) {
                     last;
                 }
-                $name_chars->push($self->advance());
-                $content = $self->parse_matched_pair("[", "]", MATCHEDPAIRFLAGS_ARRAYSUB(), 0);
-                $name_chars->push($content);
-                $name_chars->push("]");
+                push(@{$name_chars}, $self->advance());
+                $content = $self->parse_matched_pair("[", "]", main::MATCHEDPAIRFLAGS_ARRAYSUB(), 0);
+                push(@{$name_chars}, $content);
+                push(@{$name_chars}, "]");
                 last;
             } else {
                 last;
             }
         }
-        if ((scalar(@{$name_chars}) > 0)) {
-            return ""->join_($name_chars);
+        if ((scalar(@{($name_chars // [])}) > 0)) {
+            return join("", @{$name_chars});
         } else {
             return "";
         }
@@ -1667,9 +1667,9 @@ sub read_param_expansion ($self, $in_dquote) {
         return $self->read_braced_param($start, $in_dquote);
     }
     my $text = "";
-    if (is_special_param_unbraced($ch) || is_digit($ch) || $ch eq "#") {
+    if (main::is_special_param_unbraced($ch) || main::is_digit($ch) || $ch eq "#") {
         $self->advance();
-        $text = substring($self->{source}, $start, $self->{pos_});
+        $text = main::substring($self->{source}, $start, $self->{pos_});
         return [ParamExpansion->new($ch, "param"), $text];
     }
     if (($ch =~ /^[a-zA-Z]$/) || $ch eq "_") {
@@ -1682,8 +1682,8 @@ sub read_param_expansion ($self, $in_dquote) {
                 last;
             }
         }
-        $name = substring($self->{source}, $name_start, $self->{pos_});
-        $text = substring($self->{source}, $start, $self->{pos_});
+        $name = main::substring($self->{source}, $name_start, $self->{pos_});
+        $text = main::substring($self->{source}, $start, $self->{pos_});
         return [ParamExpansion->new($name, "param"), $text];
     }
     $self->{pos_} = $start;
@@ -1712,9 +1712,9 @@ sub read_braced_param ($self, $start, $in_dquote) {
         die "unexpected EOF looking for `}'";
     }
     my $saved_dolbrace = $self->{dolbrace_state};
-    $self->{dolbrace_state} = DOLBRACESTATE_PARAM();
+    $self->{dolbrace_state} = main::DOLBRACESTATE_PARAM();
     my $ch = $self->peek();
-    if (is_funsub_char($ch)) {
+    if (main::is_funsub_char($ch)) {
         $self->{dolbrace_state} = $saved_dolbrace;
         return $self->read_funsub($start);
     }
@@ -1725,7 +1725,7 @@ sub read_braced_param ($self, $start, $in_dquote) {
         $param = $self->consume_param_name();
         if ((length($param) > 0) && !$self->at_end() && $self->peek() eq "}") {
             $self->advance();
-            $text = substring($self->{source}, $start, $self->{pos_});
+            $text = main::substring($self->{source}, $start, $self->{pos_});
             $self->{dolbrace_state} = $saved_dolbrace;
             return [ParamLength->new($param, "param-len"), $text];
         }
@@ -1735,24 +1735,24 @@ sub read_braced_param ($self, $start, $in_dquote) {
     my $arg = "";
     if ($ch eq "!") {
         $self->advance();
-        while (!$self->at_end() && is_whitespace_no_newline($self->peek())) {
+        while (!$self->at_end() && main::is_whitespace_no_newline($self->peek())) {
             $self->advance();
         }
         $param = $self->consume_param_name();
         if ((length($param) > 0)) {
-            while (!$self->at_end() && is_whitespace_no_newline($self->peek())) {
+            while (!$self->at_end() && main::is_whitespace_no_newline($self->peek())) {
                 $self->advance();
             }
             if (!$self->at_end() && $self->peek() eq "}") {
                 $self->advance();
-                $text = substring($self->{source}, $start, $self->{pos_});
+                $text = main::substring($self->{source}, $start, $self->{pos_});
                 $self->{dolbrace_state} = $saved_dolbrace;
                 return [ParamIndirect->new($param, "param-indirect"), $text];
             }
-            if (!$self->at_end() && is_at_or_star($self->peek())) {
+            if (!$self->at_end() && main::is_at_or_star($self->peek())) {
                 $suffix = $self->advance();
-                $trailing = $self->parse_matched_pair("{", "}", MATCHEDPAIRFLAGS_DOLBRACE(), 0);
-                $text = substring($self->{source}, $start, $self->{pos_});
+                $trailing = $self->parse_matched_pair("{", "}", main::MATCHEDPAIRFLAGS_DOLBRACE(), 0);
+                $text = main::substring($self->{source}, $start, $self->{pos_});
                 $self->{dolbrace_state} = $saved_dolbrace;
                 return [ParamIndirect->new($param . $suffix . $trailing, "param-indirect"), $text];
             }
@@ -1761,8 +1761,8 @@ sub read_braced_param ($self, $start, $in_dquote) {
                 $op = $self->advance();
             }
             if ($op ne "" && ((index("\"'`", $op) == -1))) {
-                $arg = $self->parse_matched_pair("{", "}", MATCHEDPAIRFLAGS_DOLBRACE(), 0);
-                $text = substring($self->{source}, $start, $self->{pos_});
+                $arg = $self->parse_matched_pair("{", "}", main::MATCHEDPAIRFLAGS_DOLBRACE(), 0);
+                $text = main::substring($self->{source}, $start, $self->{pos_});
                 $self->{dolbrace_state} = $saved_dolbrace;
                 return [ParamIndirect->new($param, $op, $arg, "param-indirect"), $text];
             }
@@ -1777,10 +1777,10 @@ sub read_braced_param ($self, $start, $in_dquote) {
     }
     $param = $self->consume_param_name();
     if (!(length($param) > 0)) {
-        if (!$self->at_end() && (((index("-=+?", $self->peek()) >= 0)) || $self->peek() eq ":" && $self->{pos_} + 1 < $self->{length_} && is_simple_param_op($self->{source}->[$self->{pos_} + 1]))) {
+        if (!$self->at_end() && (((index("-=+?", $self->peek()) >= 0)) || $self->peek() eq ":" && $self->{pos_} + 1 < $self->{length_} && main::is_simple_param_op(substr($self->{source}, $self->{pos_} + 1, 1)))) {
             $param = "";
         } else {
-            $content = $self->parse_matched_pair("{", "}", MATCHEDPAIRFLAGS_DOLBRACE(), 0);
+            $content = $self->parse_matched_pair("{", "}", main::MATCHEDPAIRFLAGS_DOLBRACE(), 0);
             $text = "\${" . $content . "}";
             $self->{dolbrace_state} = $saved_dolbrace;
             return [ParamExpansion->new($content, "param"), $text];
@@ -1792,14 +1792,14 @@ sub read_braced_param ($self, $start, $in_dquote) {
     }
     if ($self->peek() eq "}") {
         $self->advance();
-        $text = substring($self->{source}, $start, $self->{pos_});
+        $text = main::substring($self->{source}, $start, $self->{pos_});
         $self->{dolbrace_state} = $saved_dolbrace;
         return [ParamExpansion->new($param, "param"), $text];
     }
     $op = $self->consume_param_operator();
     if ($op eq "") {
-        if (!$self->at_end() && $self->peek() eq "\$" && $self->{pos_} + 1 < $self->{length_} && ($self->{source}->[$self->{pos_} + 1] eq "\"" || $self->{source}->[$self->{pos_} + 1] eq "'")) {
-            $dollar_count = 1 + count_consecutive_dollars_before($self->{source}, $self->{pos_});
+        if (!$self->at_end() && $self->peek() eq "\$" && $self->{pos_} + 1 < $self->{length_} && (substr($self->{source}, $self->{pos_} + 1, 1) eq "\"" || substr($self->{source}, $self->{pos_} + 1, 1) eq "'")) {
+            $dollar_count = 1 + main::count_consecutive_dollars_before($self->{source}, $self->{pos_});
             if ($dollar_count % 2 == 1) {
                 $op = "";
             } else {
@@ -1811,8 +1811,8 @@ sub read_braced_param ($self, $start, $in_dquote) {
             while (!$self->at_end() && $self->peek() ne "`") {
                 $bc = $self->peek();
                 if ($bc eq "\\" && $self->{pos_} + 1 < $self->{length_}) {
-                    $next_c = $self->{source}->[$self->{pos_} + 1];
-                    if (is_escape_char_in_backtick($next_c)) {
+                    $next_c = substr($self->{source}, $self->{pos_} + 1, 1);
+                    if (main::is_escape_char_in_backtick($next_c)) {
                         $self->advance();
                     }
                 }
@@ -1824,7 +1824,7 @@ sub read_braced_param ($self, $start, $in_dquote) {
             }
             $self->advance();
             $op = "`";
-        } elsif (!$self->at_end() && $self->peek() eq "\$" && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "{") {
+        } elsif (!$self->at_end() && $self->peek() eq "\$" && $self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "{") {
             $op = "";
         } elsif (!$self->at_end() && ($self->peek() eq "'" || $self->peek() eq "\"")) {
             $op = "";
@@ -1839,21 +1839,21 @@ sub read_braced_param ($self, $start, $in_dquote) {
     }
     $self->update_dolbrace_for_op($op, length($param) > 0);
     eval {
-        $flags = ($in_dquote ? MATCHEDPAIRFLAGS_DQUOTE() : MATCHEDPAIRFLAGS_NONE());
-        $param_ends_with_dollar = $param ne "" && $param->endswith("\$");
+        $flags = ($in_dquote ? main::MATCHEDPAIRFLAGS_DQUOTE() : main::MATCHEDPAIRFLAGS_NONE());
+        $param_ends_with_dollar = $param ne "" && (substr($param, -length("\$")) eq "\$");
         $arg = $self->collect_param_argument($flags, $param_ends_with_dollar);
     };
     if (my $e = $@) {
         $self->{dolbrace_state} = $saved_dolbrace;
         die $e;
     }
-    if (($op eq "<" || $op eq ">") && $arg->startswith("(") && $arg->endswith(")")) {
+    if (($op eq "<" || $op eq ">") && (index($arg, "(") == 0) && (substr($arg, -length(")")) eq ")")) {
         $inner = substr($arg, 1, length($arg) - 1 - 1);
         eval {
-            $sub_parser = new_parser($inner, 1, $self->{parser}->{extglob});
+            $sub_parser = main::new_parser($inner, 1, $self->{parser}->{extglob});
             $parsed = $sub_parser->parse_list(1);
             if (defined($parsed) && $sub_parser->at_end()) {
-                $formatted = format_cmdsub_node($parsed, 0, 1, 0, 1);
+                $formatted = main::format_cmdsub_node($parsed, 0, 1, 0, 1);
                 $arg = "(" . $formatted . ")";
             }
         };
@@ -1873,7 +1873,7 @@ sub read_funsub ($self, $start) {
 
 package Word;
 
-sub new ($class, $value, $parts, $kind) {
+sub new ($class, $value=undef, $parts=undef, $kind=undef) {
     return bless { value => $value, parts => $parts, kind => $kind }, $class;
 }
 
@@ -1890,12 +1890,12 @@ sub to_sexp ($self) {
     $value = $self->normalize_param_expansion_newlines($value);
     $value = $self->strip_arith_line_continuations($value);
     $value = $self->double_ctlesc_smart($value);
-    $value = $value->replace("", "");
-    $value = $value->replace("\\", "\\\\");
-    if ($value->endswith("\\\\") && !$value->endswith("\\\\\\\\")) {
+    $value = ($value =~ s/""/""/gr);
+    $value = ($value =~ s/"\\"/"\\\\"/gr);
+    if ((substr($value, -length("\\\\")) eq "\\\\") && !(substr($value, -length("\\\\\\\\")) eq "\\\\\\\\")) {
         $value = $value . "\\\\";
     }
-    my $escaped = $value->replace("\"", "\\\"")->replace("\n", "\\n")->replace("\t", "\\t");
+    my $escaped = ((($value =~ s/"\""/"\\\""/gr) =~ s/"\n"/"\\n"/gr) =~ s/"\t"/"\\t"/gr);
     return "(word \"" . $escaped . "\")";
 }
 
@@ -1906,15 +1906,15 @@ sub append_with_ctlesc ($self, $result, $byte_val) {
 sub double_ctlesc_smart ($self, $value) {
     my $bs_count;
     my $result = [];
-    my $quote = new_quote_state();
-    for my $c (@{$value}) {
-        if ($c == "'" && !$quote->{double}) {
+    my $quote = main::new_quote_state();
+    for my $c (split(//, $value)) {
+        if ($c eq "'" && !$quote->{double}) {
             $quote->{single} = !$quote->{single};
-        } elsif ($c == "\"" && !$quote->{single}) {
+        } elsif ($c eq "\"" && !$quote->{single}) {
             $quote->{double} = !$quote->{double};
         }
-        $result->push($c);
-        if ($c == "") {
+        push(@{$result}, $c);
+        if ($c eq "") {
             if ($quote->{double}) {
                 $bs_count = 0;
                 for (my $j = scalar(@{$result}) - 2; $j > -1; $j += -1) {
@@ -1925,14 +1925,14 @@ sub double_ctlesc_smart ($self, $value) {
                     }
                 }
                 if ($bs_count % 2 == 0) {
-                    $result->push("");
+                    push(@{$result}, "");
                 }
             } else {
-                $result->push("");
+                push(@{$result}, "");
             }
         }
     }
-    return ""->join_($result);
+    return join("", @{$result});
 }
 
 sub normalize_param_expansion_newlines ($self, $value) {
@@ -1942,36 +1942,36 @@ sub normalize_param_expansion_newlines ($self, $value) {
     my $had_leading_newline;
     my $result = [];
     my $i = 0;
-    my $quote = new_quote_state();
+    my $quote = main::new_quote_state();
     while ($i < length($value)) {
-        $c = $value->[$i];
+        $c = substr($value, $i, 1);
         if ($c eq "'" && !$quote->{double}) {
             $quote->{single} = !$quote->{single};
-            $result->push($c);
+            push(@{$result}, $c);
             $i += 1;
         } elsif ($c eq "\"" && !$quote->{single}) {
             $quote->{double} = !$quote->{double};
-            $result->push($c);
+            push(@{$result}, $c);
             $i += 1;
-        } elsif (is_expansion_start($value, $i, "\${") && !$quote->{single}) {
-            $result->push("\$");
-            $result->push("{");
+        } elsif (main::is_expansion_start($value, $i, "\${") && !$quote->{single}) {
+            push(@{$result}, "\$");
+            push(@{$result}, "{");
             $i += 2;
-            $had_leading_newline = $i < length($value) && $value->[$i] eq "\n";
+            $had_leading_newline = $i < length($value) && substr($value, $i, 1) eq "\n";
             if ($had_leading_newline) {
-                $result->push(" ");
+                push(@{$result}, " ");
                 $i += 1;
             }
             $depth = 1;
             while ($i < length($value) && $depth > 0) {
-                $ch = $value->[$i];
+                $ch = substr($value, $i, 1);
                 if ($ch eq "\\" && $i + 1 < length($value) && !$quote->{single}) {
-                    if ($value->[$i + 1] eq "\n") {
+                    if (substr($value, $i + 1, 1) eq "\n") {
                         $i += 2;
                         next;
                     }
-                    $result->push($ch);
-                    $result->push($value->[$i + 1]);
+                    push(@{$result}, $ch);
+                    push(@{$result}, substr($value, $i + 1, 1));
                     $i += 2;
                     next;
                 }
@@ -1986,23 +1986,23 @@ sub normalize_param_expansion_newlines ($self, $value) {
                         $depth -= 1;
                         if ($depth == 0) {
                             if ($had_leading_newline) {
-                                $result->push(" ");
+                                push(@{$result}, " ");
                             }
-                            $result->push($ch);
+                            push(@{$result}, $ch);
                             $i += 1;
                             last;
                         }
                     }
                 }
-                $result->push($ch);
+                push(@{$result}, $ch);
                 $i += 1;
             }
         } else {
-            $result->push($c);
+            push(@{$result}, $c);
             $i += 1;
         }
     }
-    return ""->join_($result);
+    return join("", @{$result});
 }
 
 sub sh_single_quote ($self, $s_) {
@@ -2013,15 +2013,15 @@ sub sh_single_quote ($self, $s_) {
         return "\\'";
     }
     my $result = ["'"];
-    for my $c (@{$s_}) {
-        if ($c == "'") {
-            $result->push("'\\''");
+    for my $c (split(//, $s_)) {
+        if ($c eq "'") {
+            push(@{$result}, "'\\''");
         } else {
-            $result->push($c);
+            push(@{$result}, $c);
         }
     }
-    $result->push("'");
-    return ""->join_($result);
+    push(@{$result}, "'");
+    return join("", @{$result});
 }
 
 sub ansi_c_to_bytes ($self, $inner) {
@@ -2037,23 +2037,23 @@ sub ansi_c_to_bytes ($self, $inner) {
     my $result = [];
     my $i = 0;
     while ($i < length($inner)) {
-        if ($inner->[$i] eq "\\" && $i + 1 < length($inner)) {
-            $c = $inner->[$i + 1];
-            $simple = get_ansi_escape($c);
+        if (substr($inner, $i, 1) eq "\\" && $i + 1 < length($inner)) {
+            $c = substr($inner, $i + 1, 1);
+            $simple = main::get_ansi_escape($c);
             if ($simple >= 0) {
-                $result->push($simple);
+                push(@{$result}, $simple);
                 $i += 2;
             } elsif ($c eq "'") {
-                $result->push(39);
+                push(@{$result}, 39);
                 $i += 2;
             } elsif ($c eq "x") {
-                if ($i + 2 < length($inner) && $inner->[$i + 2] eq "{") {
+                if ($i + 2 < length($inner) && substr($inner, $i + 2, 1) eq "{") {
                     $j = $i + 3;
-                    while ($j < length($inner) && is_hex_digit($inner->[$j])) {
+                    while ($j < length($inner) && main::is_hex_digit(substr($inner, $j, 1))) {
                         $j += 1;
                     }
-                    $hex_str = substring($inner, $i + 3, $j);
-                    if ($j < length($inner) && $inner->[$j] eq "}") {
+                    $hex_str = main::substring($inner, $i + 3, $j);
+                    if ($j < length($inner) && substr($inner, $j, 1) eq "}") {
                         $j += 1;
                     }
                     if (!(length($hex_str) > 0)) {
@@ -2067,77 +2067,77 @@ sub ansi_c_to_bytes ($self, $inner) {
                     $i = $j;
                 } else {
                     $j = $i + 2;
-                    while ($j < length($inner) && $j < $i + 4 && is_hex_digit($inner->[$j])) {
+                    while ($j < length($inner) && $j < $i + 4 && main::is_hex_digit(substr($inner, $j, 1))) {
                         $j += 1;
                     }
                     if ($j > $i + 2) {
-                        $byte_val = hex(substring($inner, $i + 2, $j));
+                        $byte_val = hex(main::substring($inner, $i + 2, $j));
                         if ($byte_val == 0) {
                             return $result;
                         }
                         $self->append_with_ctlesc($result, $byte_val);
                         $i = $j;
                     } else {
-                        $result->push(ord($inner->[$i]->[0]));
+                        push(@{$result}, ord(substr(substr($inner, $i, 1), 0, 1)));
                         $i += 1;
                     }
                 }
             } elsif ($c eq "u") {
                 $j = $i + 2;
-                while ($j < length($inner) && $j < $i + 6 && is_hex_digit($inner->[$j])) {
+                while ($j < length($inner) && $j < $i + 6 && main::is_hex_digit(substr($inner, $j, 1))) {
                     $j += 1;
                 }
                 if ($j > $i + 2) {
-                    $codepoint = hex(substring($inner, $i + 2, $j));
+                    $codepoint = hex(main::substring($inner, $i + 2, $j));
                     if ($codepoint == 0) {
                         return $result;
                     }
                     $result->extend([unpack('C*', chr($codepoint))]);
                     $i = $j;
                 } else {
-                    $result->push(ord($inner->[$i]->[0]));
+                    push(@{$result}, ord(substr(substr($inner, $i, 1), 0, 1)));
                     $i += 1;
                 }
             } elsif ($c eq "U") {
                 $j = $i + 2;
-                while ($j < length($inner) && $j < $i + 10 && is_hex_digit($inner->[$j])) {
+                while ($j < length($inner) && $j < $i + 10 && main::is_hex_digit(substr($inner, $j, 1))) {
                     $j += 1;
                 }
                 if ($j > $i + 2) {
-                    $codepoint = hex(substring($inner, $i + 2, $j));
+                    $codepoint = hex(main::substring($inner, $i + 2, $j));
                     if ($codepoint == 0) {
                         return $result;
                     }
                     $result->extend([unpack('C*', chr($codepoint))]);
                     $i = $j;
                 } else {
-                    $result->push(ord($inner->[$i]->[0]));
+                    push(@{$result}, ord(substr(substr($inner, $i, 1), 0, 1)));
                     $i += 1;
                 }
             } elsif ($c eq "c") {
                 if ($i + 3 <= length($inner)) {
-                    $ctrl_char = $inner->[$i + 2];
+                    $ctrl_char = substr($inner, $i + 2, 1);
                     $skip_extra = 0;
-                    if ($ctrl_char eq "\\" && $i + 4 <= length($inner) && $inner->[$i + 3] eq "\\") {
+                    if ($ctrl_char eq "\\" && $i + 4 <= length($inner) && substr($inner, $i + 3, 1) eq "\\") {
                         $skip_extra = 1;
                     }
-                    $ctrl_val = ord($ctrl_char->[0]) & 31;
+                    $ctrl_val = ord(substr($ctrl_char, 0, 1)) & 31;
                     if ($ctrl_val == 0) {
                         return $result;
                     }
                     $self->append_with_ctlesc($result, $ctrl_val);
                     $i += 3 + $skip_extra;
                 } else {
-                    $result->push(ord($inner->[$i]->[0]));
+                    push(@{$result}, ord(substr(substr($inner, $i, 1), 0, 1)));
                     $i += 1;
                 }
             } elsif ($c eq "0") {
                 $j = $i + 2;
-                while ($j < length($inner) && $j < $i + 4 && is_octal_digit($inner->[$j])) {
+                while ($j < length($inner) && $j < $i + 4 && main::is_octal_digit(substr($inner, $j, 1))) {
                     $j += 1;
                 }
                 if ($j > $i + 2) {
-                    $byte_val = oct(substring($inner, $i + 1, $j)) & 255;
+                    $byte_val = oct(main::substring($inner, $i + 1, $j)) & 255;
                     if ($byte_val == 0) {
                         return $result;
                     }
@@ -2148,22 +2148,22 @@ sub ansi_c_to_bytes ($self, $inner) {
                 }
             } elsif ($c ge "1" && $c le "7") {
                 $j = $i + 1;
-                while ($j < length($inner) && $j < $i + 4 && is_octal_digit($inner->[$j])) {
+                while ($j < length($inner) && $j < $i + 4 && main::is_octal_digit(substr($inner, $j, 1))) {
                     $j += 1;
                 }
-                $byte_val = oct(substring($inner, $i + 1, $j)) & 255;
+                $byte_val = oct(main::substring($inner, $i + 1, $j)) & 255;
                 if ($byte_val == 0) {
                     return $result;
                 }
                 $self->append_with_ctlesc($result, $byte_val);
                 $i = $j;
             } else {
-                $result->push(92);
-                $result->push(ord($c->[0]));
+                push(@{$result}, 92);
+                push(@{$result}, ord(substr($c, 0, 1)));
                 $i += 2;
             }
         } else {
-            $result->extend([unpack('C*', $inner->[$i])]);
+            $result->extend([unpack('C*', substr($inner, $i, 1))]);
             $i += 1;
         }
     }
@@ -2171,10 +2171,10 @@ sub ansi_c_to_bytes ($self, $inner) {
 }
 
 sub expand_ansi_c_escapes ($self, $value) {
-    if (!($value->startswith("'") && $value->endswith("'"))) {
+    if (!((index($value, "'") == 0) && (substr($value, -length("'")) eq "'"))) {
         return $value;
     }
-    my $inner = substring($value, 1, length($value) - 1);
+    my $inner = main::substring($value, 1, length($value) - 1);
     my $literal_bytes = $self->ansi_c_to_bytes($inner);
     my $literal_str = pack("C*", @{$literal_bytes});
     return $self->sh_single_quote($literal_str);
@@ -2200,38 +2200,38 @@ sub expand_all_ansi_c_quotes ($self, $value) {
     my $var_name_len;
     my $result = [];
     my $i = 0;
-    my $quote = new_quote_state();
+    my $quote = main::new_quote_state();
     my $in_backtick = 0;
     my $brace_depth = 0;
     while ($i < length($value)) {
-        $ch = $value->[$i];
+        $ch = substr($value, $i, 1);
         if ($ch eq "`" && !$quote->{single}) {
             $in_backtick = !$in_backtick;
-            $result->push($ch);
+            push(@{$result}, $ch);
             $i += 1;
             next;
         }
         if ($in_backtick) {
             if ($ch eq "\\" && $i + 1 < length($value)) {
-                $result->push($ch);
-                $result->push($value->[$i + 1]);
+                push(@{$result}, $ch);
+                push(@{$result}, substr($value, $i + 1, 1));
                 $i += 2;
             } else {
-                $result->push($ch);
+                push(@{$result}, $ch);
                 $i += 1;
             }
             next;
         }
         if (!$quote->{single}) {
-            if (is_expansion_start($value, $i, "\${")) {
+            if (main::is_expansion_start($value, $i, "\${")) {
                 $brace_depth += 1;
                 $quote->push_();
-                $result->push("\${");
+                push(@{$result}, "\${");
                 $i += 2;
                 next;
             } elsif ($ch eq "}" && $brace_depth > 0 && !$quote->{double}) {
                 $brace_depth -= 1;
-                $result->push($ch);
+                push(@{$result}, $ch);
                 $quote->pop_();
                 $i += 1;
                 next;
@@ -2239,50 +2239,50 @@ sub expand_all_ansi_c_quotes ($self, $value) {
         }
         $effective_in_dquote = $quote->{double};
         if ($ch eq "'" && !$effective_in_dquote) {
-            $is_ansi_c = !$quote->{single} && $i > 0 && $value->[$i - 1] eq "\$" && count_consecutive_dollars_before($value, $i - 1) % 2 == 0;
+            $is_ansi_c = !$quote->{single} && $i > 0 && substr($value, $i - 1, 1) eq "\$" && main::count_consecutive_dollars_before($value, $i - 1) % 2 == 0;
             if (!$is_ansi_c) {
                 $quote->{single} = !$quote->{single};
             }
-            $result->push($ch);
+            push(@{$result}, $ch);
             $i += 1;
         } elsif ($ch eq "\"" && !$quote->{single}) {
             $quote->{double} = !$quote->{double};
-            $result->push($ch);
+            push(@{$result}, $ch);
             $i += 1;
         } elsif ($ch eq "\\" && $i + 1 < length($value) && !$quote->{single}) {
-            $result->push($ch);
-            $result->push($value->[$i + 1]);
+            push(@{$result}, $ch);
+            push(@{$result}, substr($value, $i + 1, 1));
             $i += 2;
-        } elsif (starts_with_at($value, $i, "\$'") && !$quote->{single} && !$effective_in_dquote && count_consecutive_dollars_before($value, $i) % 2 == 0) {
+        } elsif (main::starts_with_at($value, $i, "\$'") && !$quote->{single} && !$effective_in_dquote && main::count_consecutive_dollars_before($value, $i) % 2 == 0) {
             $j = $i + 2;
             while ($j < length($value)) {
-                if ($value->[$j] eq "\\" && $j + 1 < length($value)) {
+                if (substr($value, $j, 1) eq "\\" && $j + 1 < length($value)) {
                     $j += 2;
-                } elsif ($value->[$j] eq "'") {
+                } elsif (substr($value, $j, 1) eq "'") {
                     $j += 1;
                     last;
                 } else {
                     $j += 1;
                 }
             }
-            $ansi_str = substring($value, $i, $j);
-            $expanded = $self->expand_ansi_c_escapes(substring($ansi_str, 1, length($ansi_str)));
+            $ansi_str = main::substring($value, $i, $j);
+            $expanded = $self->expand_ansi_c_escapes(main::substring($ansi_str, 1, length($ansi_str)));
             $outer_in_dquote = $quote->outer_double();
-            if ($brace_depth > 0 && $outer_in_dquote && $expanded->startswith("'") && $expanded->endswith("'")) {
-                $inner = substring($expanded, 1, length($expanded) - 1);
-                if ($inner->find("") == -1) {
-                    $result_str = ""->join_($result);
+            if ($brace_depth > 0 && $outer_in_dquote && (index($expanded, "'") == 0) && (substr($expanded, -length("'")) eq "'")) {
+                $inner = main::substring($expanded, 1, length($expanded) - 1);
+                if (index($inner, "") == -1) {
+                    $result_str = join("", @{$result});
                     $in_pattern = 0;
                     $last_brace_idx = $result_str->rfind("\${");
                     if ($last_brace_idx >= 0) {
                         $after_brace = substr($result_str, $last_brace_idx + 2);
                         $var_name_len = 0;
                         if ((length($after_brace) > 0)) {
-                            if ((index("\@*#?-\$!0123456789_", $after_brace->[0]) >= 0)) {
+                            if ((index("\@*#?-\$!0123456789_", substr($after_brace, 0, 1)) >= 0)) {
                                 $var_name_len = 1;
-                            } elsif (($after_brace->[0] =~ /^[a-zA-Z]$/) || $after_brace->[0] eq "_") {
+                            } elsif ((substr($after_brace, 0, 1) =~ /^[a-zA-Z]$/) || substr($after_brace, 0, 1) eq "_") {
                                 while ($var_name_len < length($after_brace)) {
-                                    $c = $after_brace->[$var_name_len];
+                                    $c = substr($after_brace, $var_name_len, 1);
                                     if (!(($c =~ /^[a-zA-Z0-9]$/) || $c eq "_")) {
                                         last;
                                     }
@@ -2290,18 +2290,18 @@ sub expand_all_ansi_c_quotes ($self, $value) {
                                 }
                             }
                         }
-                        if ($var_name_len > 0 && $var_name_len < length($after_brace) && ((index("#?-", $after_brace->[0]) == -1))) {
+                        if ($var_name_len > 0 && $var_name_len < length($after_brace) && ((index("#?-", substr($after_brace, 0, 1)) == -1))) {
                             $op_start = substr($after_brace, $var_name_len);
-                            if ($op_start->startswith("\@") && length($op_start) > 1) {
+                            if ((index($op_start, "\@") == 0) && length($op_start) > 1) {
                                 $op_start = substr($op_start, 1);
                             }
                             for my $op (@{["//", "%%", "##", "/", "%", "#", "^", "^^", ",", ",,"]}) {
-                                if ($op_start->startswith($op)) {
+                                if ((index($op_start, $op) == 0)) {
                                     $in_pattern = 1;
                                     last;
                                 }
                             }
-                            if (!$in_pattern && (length($op_start) > 0) && ((index("%#/^,~:+-=?", $op_start->[0]) == -1))) {
+                            if (!$in_pattern && (length($op_start) > 0) && ((index("%#/^,~:+-=?", substr($op_start, 0, 1)) == -1))) {
                                 for my $op (@{["//", "%%", "##", "/", "%", "#", "^", "^^", ",", ",,"]}) {
                                     if ((index($op_start, $op) >= 0)) {
                                         $in_pattern = 1;
@@ -2310,7 +2310,7 @@ sub expand_all_ansi_c_quotes ($self, $value) {
                                 }
                             }
                         } elsif ($var_name_len == 0 && length($after_brace) > 1) {
-                            $first_char = $after_brace->[0];
+                            $first_char = substr($after_brace, 0, 1);
                             if ((index("%#/^,", $first_char) == -1)) {
                                 $rest = substr($after_brace, 1);
                                 for my $op (@{["//", "%%", "##", "/", "%", "#", "^", "^^", ",", ",,"]}) {
@@ -2327,14 +2327,14 @@ sub expand_all_ansi_c_quotes ($self, $value) {
                     }
                 }
             }
-            $result->push($expanded);
+            push(@{$result}, $expanded);
             $i = $j;
         } else {
-            $result->push($ch);
+            push(@{$result}, $ch);
             $i += 1;
         }
     }
-    return ""->join_($result);
+    return join("", @{$result});
 }
 
 sub strip_locale_string_dollars ($self, $value) {
@@ -2344,59 +2344,59 @@ sub strip_locale_string_dollars ($self, $value) {
     my $i = 0;
     my $brace_depth = 0;
     my $bracket_depth = 0;
-    my $quote = new_quote_state();
-    my $brace_quote = new_quote_state();
+    my $quote = main::new_quote_state();
+    my $brace_quote = main::new_quote_state();
     my $bracket_in_double_quote = 0;
     while ($i < length($value)) {
-        $ch = $value->[$i];
+        $ch = substr($value, $i, 1);
         if ($ch eq "\\" && $i + 1 < length($value) && !$quote->{single} && !$brace_quote->{single}) {
-            $result->push($ch);
-            $result->push($value->[$i + 1]);
+            push(@{$result}, $ch);
+            push(@{$result}, substr($value, $i + 1, 1));
             $i += 2;
-        } elsif (starts_with_at($value, $i, "\${") && !$quote->{single} && !$brace_quote->{single} && ($i == 0 || $value->[$i - 1] ne "\$")) {
+        } elsif (main::starts_with_at($value, $i, "\${") && !$quote->{single} && !$brace_quote->{single} && ($i == 0 || substr($value, $i - 1, 1) ne "\$")) {
             $brace_depth += 1;
             $brace_quote->{double} = 0;
             $brace_quote->{single} = 0;
-            $result->push("\$");
-            $result->push("{");
+            push(@{$result}, "\$");
+            push(@{$result}, "{");
             $i += 2;
         } elsif ($ch eq "}" && $brace_depth > 0 && !$quote->{single} && !$brace_quote->{double} && !$brace_quote->{single}) {
             $brace_depth -= 1;
-            $result->push($ch);
+            push(@{$result}, $ch);
             $i += 1;
         } elsif ($ch eq "[" && $brace_depth > 0 && !$quote->{single} && !$brace_quote->{double}) {
             $bracket_depth += 1;
             $bracket_in_double_quote = 0;
-            $result->push($ch);
+            push(@{$result}, $ch);
             $i += 1;
         } elsif ($ch eq "]" && $bracket_depth > 0 && !$quote->{single} && !$bracket_in_double_quote) {
             $bracket_depth -= 1;
-            $result->push($ch);
+            push(@{$result}, $ch);
             $i += 1;
         } elsif ($ch eq "'" && !$quote->{double} && $brace_depth == 0) {
             $quote->{single} = !$quote->{single};
-            $result->push($ch);
+            push(@{$result}, $ch);
             $i += 1;
         } elsif ($ch eq "\"" && !$quote->{single} && $brace_depth == 0) {
             $quote->{double} = !$quote->{double};
-            $result->push($ch);
+            push(@{$result}, $ch);
             $i += 1;
         } elsif ($ch eq "\"" && !$quote->{single} && $bracket_depth > 0) {
             $bracket_in_double_quote = !$bracket_in_double_quote;
-            $result->push($ch);
+            push(@{$result}, $ch);
             $i += 1;
         } elsif ($ch eq "\"" && !$quote->{single} && !$brace_quote->{single} && $brace_depth > 0) {
             $brace_quote->{double} = !$brace_quote->{double};
-            $result->push($ch);
+            push(@{$result}, $ch);
             $i += 1;
         } elsif ($ch eq "'" && !$quote->{double} && !$brace_quote->{double} && $brace_depth > 0) {
             $brace_quote->{single} = !$brace_quote->{single};
-            $result->push($ch);
+            push(@{$result}, $ch);
             $i += 1;
-        } elsif (starts_with_at($value, $i, "\$\"") && !$quote->{single} && !$brace_quote->{single} && ($brace_depth > 0 || $bracket_depth > 0 || !$quote->{double}) && !$brace_quote->{double} && !$bracket_in_double_quote) {
-            $dollar_count = 1 + count_consecutive_dollars_before($value, $i);
+        } elsif (main::starts_with_at($value, $i, "\$\"") && !$quote->{single} && !$brace_quote->{single} && ($brace_depth > 0 || $bracket_depth > 0 || !$quote->{double}) && !$brace_quote->{double} && !$bracket_in_double_quote) {
+            $dollar_count = 1 + main::count_consecutive_dollars_before($value, $i);
             if ($dollar_count % 2 == 1) {
-                $result->push("\"");
+                push(@{$result}, "\"");
                 if ($bracket_depth > 0) {
                     $bracket_in_double_quote = 1;
                 } elsif ($brace_depth > 0) {
@@ -2406,35 +2406,35 @@ sub strip_locale_string_dollars ($self, $value) {
                 }
                 $i += 2;
             } else {
-                $result->push($ch);
+                push(@{$result}, $ch);
                 $i += 1;
             }
         } else {
-            $result->push($ch);
+            push(@{$result}, $ch);
             $i += 1;
         }
     }
-    return ""->join_($result);
+    return join("", @{$result});
 }
 
 sub normalize_array_whitespace ($self, $value) {
     my $close_paren_pos;
     my $depth;
     my $i = 0;
-    if (!($i < length($value) && (($value->[$i] =~ /^[a-zA-Z]$/) || $value->[$i] eq "_"))) {
+    if (!($i < length($value) && ((substr($value, $i, 1) =~ /^[a-zA-Z]$/) || substr($value, $i, 1) eq "_"))) {
         return $value;
     }
     $i += 1;
-    while ($i < length($value) && (($value->[$i] =~ /^[a-zA-Z0-9]$/) || $value->[$i] eq "_")) {
+    while ($i < length($value) && ((substr($value, $i, 1) =~ /^[a-zA-Z0-9]$/) || substr($value, $i, 1) eq "_")) {
         $i += 1;
     }
-    while ($i < length($value) && $value->[$i] eq "[") {
+    while ($i < length($value) && substr($value, $i, 1) eq "[") {
         $depth = 1;
         $i += 1;
         while ($i < length($value) && $depth > 0) {
-            if ($value->[$i] eq "[") {
+            if (substr($value, $i, 1) eq "[") {
                 $depth += 1;
-            } elsif ($value->[$i] eq "]") {
+            } elsif (substr($value, $i, 1) eq "]") {
                 $depth -= 1;
             }
             $i += 1;
@@ -2443,16 +2443,16 @@ sub normalize_array_whitespace ($self, $value) {
             return $value;
         }
     }
-    if ($i < length($value) && $value->[$i] eq "+") {
+    if ($i < length($value) && substr($value, $i, 1) eq "+") {
         $i += 1;
     }
-    if (!($i + 1 < length($value) && $value->[$i] eq "=" && $value->[$i + 1] eq "(")) {
+    if (!($i + 1 < length($value) && substr($value, $i, 1) eq "=" && substr($value, $i + 1, 1) eq "(")) {
         return $value;
     }
-    my $prefix = substring($value, 0, $i + 1);
+    my $prefix = main::substring($value, 0, $i + 1);
     my $open_paren_pos = $i + 1;
     my $close_paren_pos = 0;
-    if ($value->endswith(")")) {
+    if ((substr($value, -length(")")) eq ")")) {
         $close_paren_pos = length($value) - 1;
     } else {
         $close_paren_pos = $self->find_matching_paren($value, $open_paren_pos);
@@ -2460,22 +2460,22 @@ sub normalize_array_whitespace ($self, $value) {
             return $value;
         }
     }
-    my $inner = substring($value, $open_paren_pos + 1, $close_paren_pos);
-    my $suffix = substring($value, $close_paren_pos + 1, length($value));
+    my $inner = main::substring($value, $open_paren_pos + 1, $close_paren_pos);
+    my $suffix = main::substring($value, $close_paren_pos + 1, length($value));
     my $result = $self->normalize_array_inner($inner);
     return $prefix . "(" . $result . ")" . $suffix;
 }
 
 sub find_matching_paren ($self, $value, $open_pos) {
     my $ch;
-    if ($open_pos >= length($value) || $value->[$open_pos] ne "(") {
+    if ($open_pos >= length($value) || substr($value, $open_pos, 1) ne "(") {
         return -1;
     }
     my $i = $open_pos + 1;
     my $depth = 1;
-    my $quote = new_quote_state();
+    my $quote = main::new_quote_state();
     while ($i < length($value) && $depth > 0) {
-        $ch = $value->[$i];
+        $ch = substr($value, $i, 1);
         if ($ch eq "\\" && $i + 1 < length($value) && !$quote->{single}) {
             $i += 2;
             next;
@@ -2495,7 +2495,7 @@ sub find_matching_paren ($self, $value, $open_pos) {
             next;
         }
         if ($ch eq "#") {
-            while ($i < length($value) && $value->[$i] ne "\n") {
+            while ($i < length($value) && substr($value, $i, 1) ne "\n") {
                 $i += 1;
             }
             next;
@@ -2525,23 +2525,23 @@ sub normalize_array_inner ($self, $inner) {
     my $brace_depth = 0;
     my $bracket_depth = 0;
     while ($i < length($inner)) {
-        $ch = $inner->[$i];
-        if (is_whitespace($ch)) {
-            if (!$in_whitespace && (scalar(@{$normalized}) > 0) && $brace_depth == 0 && $bracket_depth == 0) {
-                $normalized->push(" ");
+        $ch = substr($inner, $i, 1);
+        if (main::is_whitespace($ch)) {
+            if (!$in_whitespace && (scalar(@{($normalized // [])}) > 0) && $brace_depth == 0 && $bracket_depth == 0) {
+                push(@{$normalized}, " ");
                 $in_whitespace = 1;
             }
             if ($brace_depth > 0 || $bracket_depth > 0) {
-                $normalized->push($ch);
+                push(@{$normalized}, $ch);
             }
             $i += 1;
         } elsif ($ch eq "'") {
             $in_whitespace = 0;
             $j = $i + 1;
-            while ($j < length($inner) && $inner->[$j] ne "'") {
+            while ($j < length($inner) && substr($inner, $j, 1) ne "'") {
                 $j += 1;
             }
-            $normalized->push(substring($inner, $i, $j + 1));
+            push(@{$normalized}, main::substring($inner, $i, $j + 1));
             $i = $j + 1;
         } elsif ($ch eq "\"") {
             $in_whitespace = 0;
@@ -2549,80 +2549,80 @@ sub normalize_array_inner ($self, $inner) {
             $dq_content = ["\""];
             $dq_brace_depth = 0;
             while ($j < length($inner)) {
-                if ($inner->[$j] eq "\\" && $j + 1 < length($inner)) {
-                    if ($inner->[$j + 1] eq "\n") {
+                if (substr($inner, $j, 1) eq "\\" && $j + 1 < length($inner)) {
+                    if (substr($inner, $j + 1, 1) eq "\n") {
                         $j += 2;
                     } else {
-                        $dq_content->push($inner->[$j]);
-                        $dq_content->push($inner->[$j + 1]);
+                        push(@{$dq_content}, substr($inner, $j, 1));
+                        push(@{$dq_content}, substr($inner, $j + 1, 1));
                         $j += 2;
                     }
-                } elsif (is_expansion_start($inner, $j, "\${")) {
-                    $dq_content->push("\${");
+                } elsif (main::is_expansion_start($inner, $j, "\${")) {
+                    push(@{$dq_content}, "\${");
                     $dq_brace_depth += 1;
                     $j += 2;
-                } elsif ($inner->[$j] eq "}" && $dq_brace_depth > 0) {
-                    $dq_content->push("}");
+                } elsif (substr($inner, $j, 1) eq "}" && $dq_brace_depth > 0) {
+                    push(@{$dq_content}, "}");
                     $dq_brace_depth -= 1;
                     $j += 1;
-                } elsif ($inner->[$j] eq "\"" && $dq_brace_depth == 0) {
-                    $dq_content->push("\"");
+                } elsif (substr($inner, $j, 1) eq "\"" && $dq_brace_depth == 0) {
+                    push(@{$dq_content}, "\"");
                     $j += 1;
                     last;
                 } else {
-                    $dq_content->push($inner->[$j]);
+                    push(@{$dq_content}, substr($inner, $j, 1));
                     $j += 1;
                 }
             }
-            $normalized->push(""->join_($dq_content));
+            push(@{$normalized}, join("", @{$dq_content}));
             $i = $j;
         } elsif ($ch eq "\\" && $i + 1 < length($inner)) {
-            if ($inner->[$i + 1] eq "\n") {
+            if (substr($inner, $i + 1, 1) eq "\n") {
                 $i += 2;
             } else {
                 $in_whitespace = 0;
-                $normalized->push(substring($inner, $i, $i + 2));
+                push(@{$normalized}, main::substring($inner, $i, $i + 2));
                 $i += 2;
             }
-        } elsif (is_expansion_start($inner, $i, "\$((")) {
+        } elsif (main::is_expansion_start($inner, $i, "\$((")) {
             $in_whitespace = 0;
             $j = $i + 3;
             $depth = 1;
             while ($j < length($inner) && $depth > 0) {
-                if ($j + 1 < length($inner) && $inner->[$j] eq "(" && $inner->[$j + 1] eq "(") {
+                if ($j + 1 < length($inner) && substr($inner, $j, 1) eq "(" && substr($inner, $j + 1, 1) eq "(") {
                     $depth += 1;
                     $j += 2;
-                } elsif ($j + 1 < length($inner) && $inner->[$j] eq ")" && $inner->[$j + 1] eq ")") {
+                } elsif ($j + 1 < length($inner) && substr($inner, $j, 1) eq ")" && substr($inner, $j + 1, 1) eq ")") {
                     $depth -= 1;
                     $j += 2;
                 } else {
                     $j += 1;
                 }
             }
-            $normalized->push(substring($inner, $i, $j));
+            push(@{$normalized}, main::substring($inner, $i, $j));
             $i = $j;
-        } elsif (is_expansion_start($inner, $i, "\$(")) {
+        } elsif (main::is_expansion_start($inner, $i, "\$(")) {
             $in_whitespace = 0;
             $j = $i + 2;
             $depth = 1;
             while ($j < length($inner) && $depth > 0) {
-                if ($inner->[$j] eq "(" && $j > 0 && $inner->[$j - 1] eq "\$") {
+                if (substr($inner, $j, 1) eq "(" && $j > 0 && substr($inner, $j - 1, 1) eq "\$") {
                     $depth += 1;
-                } elsif ($inner->[$j] eq ")") {
+                } elsif (substr($inner, $j, 1) eq ")") {
                     $depth -= 1;
-                } elsif ($inner->[$j] eq "'") {
+                } elsif (substr($inner, $j, 1) eq "'") {
                     $j += 1;
-                    while ($j < length($inner) && $inner->[$j] ne "'") {
+                    while ($j < length($inner) && substr($inner, $j, 1) ne "'") {
                         $j += 1;
                     }
-                } elsif ($inner->[$j] eq "\"") {
+                } elsif (substr($inner, $j, 1) eq "\"") {
                     $j += 1;
                     while ($j < length($inner)) {
-                        if ($inner->[$j] eq "\\" && $j + 1 < length($inner)) {
+                        if (substr($inner, $j, 1) eq "\\" && $j + 1 < length($inner)) {
                             $j += 2;
                             next;
                         }
-                        if ($inner->[$j] eq "\"") {
+                        if (substr($inner, $j, 1) eq "\"") {
                             last;
                         }
                         $j += 1;
@@ -2630,30 +2630,30 @@ sub normalize_array_inner ($self, $inner) {
                 }
                 $j += 1;
             }
-            $normalized->push(substring($inner, $i, $j));
+            push(@{$normalized}, main::substring($inner, $i, $j));
             $i = $j;
-        } elsif (($ch eq "<" || $ch eq ">") && $i + 1 < length($inner) && $inner->[$i + 1] eq "(") {
+        } elsif (($ch eq "<" || $ch eq ">") && $i + 1 < length($inner) && substr($inner, $i + 1, 1) eq "(") {
             $in_whitespace = 0;
             $j = $i + 2;
             $depth = 1;
             while ($j < length($inner) && $depth > 0) {
-                if ($inner->[$j] eq "(") {
+                if (substr($inner, $j, 1) eq "(") {
                     $depth += 1;
-                } elsif ($inner->[$j] eq ")") {
+                } elsif (substr($inner, $j, 1) eq ")") {
                     $depth -= 1;
-                } elsif ($inner->[$j] eq "'") {
+                } elsif (substr($inner, $j, 1) eq "'") {
                     $j += 1;
-                    while ($j < length($inner) && $inner->[$j] ne "'") {
+                    while ($j < length($inner) && substr($inner, $j, 1) ne "'") {
                         $j += 1;
                     }
-                } elsif ($inner->[$j] eq "\"") {
+                } elsif (substr($inner, $j, 1) eq "\"") {
                     $j += 1;
                     while ($j < length($inner)) {
-                        if ($inner->[$j] eq "\\" && $j + 1 < length($inner)) {
+                        if (substr($inner, $j, 1) eq "\\" && $j + 1 < length($inner)) {
                             $j += 2;
                             next;
                         }
-                        if ($inner->[$j] eq "\"") {
+                        if (substr($inner, $j, 1) eq "\"") {
                             last;
                         }
                         $j += 1;
@@ -2661,23 +2661,23 @@ sub normalize_array_inner ($self, $inner) {
                 }
                 $j += 1;
             }
-            $normalized->push(substring($inner, $i, $j));
+            push(@{$normalized}, main::substring($inner, $i, $j));
             $i = $j;
-        } elsif (is_expansion_start($inner, $i, "\${")) {
+        } elsif (main::is_expansion_start($inner, $i, "\${")) {
             $in_whitespace = 0;
-            $normalized->push("\${");
+            push(@{$normalized}, "\${");
             $brace_depth += 1;
             $i += 2;
         } elsif ($ch eq "{" && $brace_depth > 0) {
-            $normalized->push($ch);
+            push(@{$normalized}, $ch);
             $brace_depth += 1;
             $i += 1;
         } elsif ($ch eq "}" && $brace_depth > 0) {
-            $normalized->push($ch);
+            push(@{$normalized}, $ch);
             $brace_depth -= 1;
             $i += 1;
         } elsif ($ch eq "#" && $brace_depth == 0 && $in_whitespace) {
-            while ($i < length($inner) && $inner->[$i] ne "\n") {
+            while ($i < length($inner) && substr($inner, $i, 1) ne "\n") {
                 $i += 1;
             }
         } elsif ($ch eq "[") {
@@ -2685,19 +2685,19 @@ sub normalize_array_inner ($self, $inner) {
                 $bracket_depth += 1;
             }
             $in_whitespace = 0;
-            $normalized->push($ch);
+            push(@{$normalized}, $ch);
             $i += 1;
         } elsif ($ch eq "]" && $bracket_depth > 0) {
-            $normalized->push($ch);
+            push(@{$normalized}, $ch);
             $bracket_depth -= 1;
             $i += 1;
         } else {
             $in_whitespace = 0;
-            $normalized->push($ch);
+            push(@{$normalized}, $ch);
             $i += 1;
         }
     }
-    return (""->join_($normalized) =~ s/\s+$//r);
+    return (join("", @{$normalized}) =~ s/\s+$//r);
 }
 
 sub strip_arith_line_continuations ($self, $value) {
@@ -2712,30 +2712,30 @@ sub strip_arith_line_continuations ($self, $value) {
     my $result = [];
     my $i = 0;
     while ($i < length($value)) {
-        if (is_expansion_start($value, $i, "\$((")) {
+        if (main::is_expansion_start($value, $i, "\$((")) {
             $start = $i;
             $i += 3;
             $depth = 2;
             $arith_content = [];
             my $first_close_idx = -1;
             while ($i < length($value) && $depth > 0) {
-                if ($value->[$i] eq "(") {
-                    $arith_content->push("(");
+                if (substr($value, $i, 1) eq "(") {
+                    push(@{$arith_content}, "(");
                     $depth += 1;
                     $i += 1;
                     if ($depth > 1) {
                         $first_close_idx = -1;
                     }
-                } elsif ($value->[$i] eq ")") {
+                } elsif (substr($value, $i, 1) eq ")") {
                     if ($depth == 2) {
                         $first_close_idx = scalar(@{$arith_content});
                     }
                     $depth -= 1;
                     if ($depth > 0) {
-                        $arith_content->push(")");
+                        push(@{$arith_content}, ")");
                     }
                     $i += 1;
-                } elsif ($value->[$i] eq "\\" && $i + 1 < length($value) && $value->[$i + 1] eq "\n") {
+                } elsif (substr($value, $i, 1) eq "\\" && $i + 1 < length($value) && substr($value, $i + 1, 1) eq "\n") {
                     $num_backslashes = 0;
                     $j = scalar(@{$arith_content}) - 1;
                     while ($j >= 0 && $arith_content->[$j] eq "\n") {
@@ -2746,8 +2746,8 @@ sub strip_arith_line_continuations ($self, $value) {
                         $j -= 1;
                     }
                     if ($num_backslashes % 2 == 1) {
-                        $arith_content->push("\\");
-                        $arith_content->push("\n");
+                        push(@{$arith_content}, "\\");
+                        push(@{$arith_content}, "\n");
                         $i += 2;
                     } else {
                         $i += 2;
@@ -2756,7 +2756,7 @@ sub strip_arith_line_continuations ($self, $value) {
                         $first_close_idx = -1;
                     }
                 } else {
-                    $arith_content->push($value->[$i]);
+                    push(@{$arith_content}, substr($value, $i, 1));
                     $i += 1;
                     if ($depth == 1) {
                         $first_close_idx = -1;
@@ -2764,37 +2764,37 @@ sub strip_arith_line_continuations ($self, $value) {
                 }
             }
             if ($depth == 0 || $depth == 1 && $first_close_idx != -1) {
-                $content = ""->join_($arith_content);
+                $content = join("", @{$arith_content});
                 if ($first_close_idx != -1) {
                     $content = substr($content, 0, $first_close_idx - 0);
                     $closing = ($depth == 0 ? "))" : ")");
-                    $result->push("\$((" . $content . $closing);
+                    push(@{$result}, "\$((" . $content . $closing);
                 } else {
-                    $result->push("\$((" . $content . ")");
+                    push(@{$result}, "\$((" . $content . ")");
                 }
             } else {
-                $result->push(substring($value, $start, $i));
+                push(@{$result}, main::substring($value, $start, $i));
             }
         } else {
-            $result->push($value->[$i]);
+            push(@{$result}, substr($value, $i, 1));
             $i += 1;
         }
     }
-    return ""->join_($result);
+    return join("", @{$result});
 }
 
 sub collect_cmdsubs ($self, $node) {
     my $result = [];
     if (ref($node) eq 'CommandSubstitution') {
         my $node = $node;
-        $result->push($node);
+        push(@{$result}, $node);
     } elsif (ref($node) eq 'Array') {
         my $node = $node;
         for my $elem (@{($node->{elements} // [])}) {
             for my $p (@{($elem->{parts} // [])}) {
                 if (ref($p) eq 'CommandSubstitution') {
                     my $p = $p;
-                    $result->push($p);
+                    push(@{$result}, $p);
                 } else {
                     $result->extend($self->collect_cmdsubs($p));
                 }
@@ -2845,14 +2845,14 @@ sub collect_procsubs ($self, $node) {
     my $result = [];
     if (ref($node) eq 'ProcessSubstitution') {
         my $node = $node;
-        $result->push($node);
+        push(@{$result}, $node);
     } elsif (ref($node) eq 'Array') {
         my $node = $node;
         for my $elem (@{($node->{elements} // [])}) {
             for my $p (@{($elem->{parts} // [])}) {
                 if (ref($p) eq 'ProcessSubstitution') {
                     my $p = $p;
-                    $result->push($p);
+                    push(@{$result}, $p);
                 } else {
                     $result->extend($self->collect_procsubs($p));
                 }
@@ -2897,10 +2897,10 @@ sub format_command_substitutions ($self, $value, $in_arith) {
     for my $p (@{($self->{parts} // [])}) {
         if (ref($p) eq 'CommandSubstitution') {
             my $p = $p;
-            $cmdsub_parts->push($p);
+            push(@{$cmdsub_parts}, $p);
         } elsif (ref($p) eq 'ProcessSubstitution') {
             my $p = $p;
-            $procsub_parts->push($p);
+            push(@{$procsub_parts}, $p);
         } elsif (ref($p) eq 'ArithmeticExpansion') {
             my $p = $p;
             $has_arith = 1;
@@ -2909,28 +2909,28 @@ sub format_command_substitutions ($self, $value, $in_arith) {
             $procsub_parts->extend($self->collect_procsubs($p));
         }
     }
-    my $has_brace_cmdsub = $value->find("\${ ") != -1 || $value->find("\${\t") != -1 || $value->find("\${\n") != -1 || $value->find("\${|") != -1;
+    my $has_brace_cmdsub = index($value, "\${ ") != -1 || index($value, "\${\t") != -1 || index($value, "\${\n") != -1 || index($value, "\${|") != -1;
     my $has_untracked_cmdsub = 0;
     my $has_untracked_procsub = 0;
     my $idx = 0;
-    my $scan_quote = new_quote_state();
+    my $scan_quote = main::new_quote_state();
     while ($idx < length($value)) {
-        if ($value->[$idx] eq "\"") {
+        if (substr($value, $idx, 1) eq "\"") {
             $scan_quote->{double} = !$scan_quote->{double};
             $idx += 1;
-        } elsif ($value->[$idx] eq "'" && !$scan_quote->{double}) {
+        } elsif (substr($value, $idx, 1) eq "'" && !$scan_quote->{double}) {
             $idx += 1;
-            while ($idx < length($value) && $value->[$idx] ne "'") {
+            while ($idx < length($value) && substr($value, $idx, 1) ne "'") {
                 $idx += 1;
             }
             if ($idx < length($value)) {
                 $idx += 1;
             }
-        } elsif (starts_with_at($value, $idx, "\$(") && !starts_with_at($value, $idx, "\$((") && !is_backslash_escaped($value, $idx) && !is_dollar_dollar_paren($value, $idx)) {
+        } elsif (main::starts_with_at($value, $idx, "\$(") && !main::starts_with_at($value, $idx, "\$((") && !main::is_backslash_escaped($value, $idx) && !main::is_dollar_dollar_paren($value, $idx)) {
             $has_untracked_cmdsub = 1;
             last;
-        } elsif ((starts_with_at($value, $idx, "<(") || starts_with_at($value, $idx, ">(")) && !$scan_quote->{double}) {
-            if ($idx == 0 || !($value->[$idx - 1] =~ /^[a-zA-Z0-9]$/) && ((index("\"'", $value->[$idx - 1]) == -1))) {
+        } elsif ((main::starts_with_at($value, $idx, "<(") || main::starts_with_at($value, $idx, ">(")) && !$scan_quote->{double}) {
+            if ($idx == 0 || !(substr($value, $idx - 1, 1) =~ /^[a-zA-Z0-9]$/) && ((index("\"'", substr($value, $idx - 1, 1)) == -1))) {
                 $has_untracked_procsub = 1;
                 last;
             }
@@ -2940,74 +2940,74 @@ sub format_command_substitutions ($self, $value, $in_arith) {
         }
     }
     my $has_param_with_procsub_pattern = ((index($value, "\${") >= 0)) && (((index($value, "<(") >= 0)) || ((index($value, ">(") >= 0)));
-    if (!(scalar(@{$cmdsub_parts}) > 0) && !(scalar(@{$procsub_parts}) > 0) && !$has_brace_cmdsub && !$has_untracked_cmdsub && !$has_untracked_procsub && !$has_param_with_procsub_pattern) {
+    if (!(scalar(@{($cmdsub_parts // [])}) > 0) && !(scalar(@{($procsub_parts // [])}) > 0) && !$has_brace_cmdsub && !$has_untracked_cmdsub && !$has_untracked_procsub && !$has_param_with_procsub_pattern) {
         return $value;
     }
     my $result = [];
     my $i = 0;
     my $cmdsub_idx = 0;
     my $procsub_idx = 0;
-    my $main_quote = new_quote_state();
+    my $main_quote = main::new_quote_state();
     my $extglob_depth = 0;
     my $deprecated_arith_depth = 0;
     my $arith_depth = 0;
     my $arith_paren_depth = 0;
     while ($i < length($value)) {
-        if ($i > 0 && is_extglob_prefix($value->[$i - 1]) && $value->[$i] eq "(" && !is_backslash_escaped($value, $i - 1)) {
+        if ($i > 0 && main::is_extglob_prefix(substr($value, $i - 1, 1)) && substr($value, $i, 1) eq "(" && !main::is_backslash_escaped($value, $i - 1)) {
             $extglob_depth += 1;
-            $result->push($value->[$i]);
+            push(@{$result}, substr($value, $i, 1));
             $i += 1;
             next;
         }
-        if ($value->[$i] eq ")" && $extglob_depth > 0) {
+        if (substr($value, $i, 1) eq ")" && $extglob_depth > 0) {
             $extglob_depth -= 1;
-            $result->push($value->[$i]);
+            push(@{$result}, substr($value, $i, 1));
             $i += 1;
             next;
         }
-        if (starts_with_at($value, $i, "\$[") && !is_backslash_escaped($value, $i)) {
+        if (main::starts_with_at($value, $i, "\$[") && !main::is_backslash_escaped($value, $i)) {
             $deprecated_arith_depth += 1;
-            $result->push($value->[$i]);
+            push(@{$result}, substr($value, $i, 1));
             $i += 1;
             next;
         }
-        if ($value->[$i] eq "]" && $deprecated_arith_depth > 0) {
+        if (substr($value, $i, 1) eq "]" && $deprecated_arith_depth > 0) {
             $deprecated_arith_depth -= 1;
-            $result->push($value->[$i]);
+            push(@{$result}, substr($value, $i, 1));
             $i += 1;
             next;
         }
-        if (is_expansion_start($value, $i, "\$((") && !is_backslash_escaped($value, $i) && $has_arith) {
+        if (main::is_expansion_start($value, $i, "\$((") && !main::is_backslash_escaped($value, $i) && $has_arith) {
             $arith_depth += 1;
             $arith_paren_depth += 2;
-            $result->push("\$((");
+            push(@{$result}, "\$((");
             $i += 3;
             next;
         }
-        if ($arith_depth > 0 && $arith_paren_depth == 2 && starts_with_at($value, $i, "))")) {
+        if ($arith_depth > 0 && $arith_paren_depth == 2 && main::starts_with_at($value, $i, "))")) {
             $arith_depth -= 1;
             $arith_paren_depth -= 2;
-            $result->push("))");
+            push(@{$result}, "))");
             $i += 2;
             next;
         }
         if ($arith_depth > 0) {
-            if ($value->[$i] eq "(") {
+            if (substr($value, $i, 1) eq "(") {
                 $arith_paren_depth += 1;
-                $result->push($value->[$i]);
+                push(@{$result}, substr($value, $i, 1));
                 $i += 1;
                 next;
-            } elsif ($value->[$i] eq ")") {
+            } elsif (substr($value, $i, 1) eq ")") {
                 $arith_paren_depth -= 1;
-                $result->push($value->[$i]);
+                push(@{$result}, substr($value, $i, 1));
                 $i += 1;
                 next;
             }
         }
         my $j = 0;
-        if (is_expansion_start($value, $i, "\$((") && !$has_arith) {
-            $j = find_cmdsub_end($value, $i + 2);
-            $result->push(substring($value, $i, $j));
+        if (main::is_expansion_start($value, $i, "\$((") && !$has_arith) {
+            $j = main::find_cmdsub_end($value, $i + 2);
+            push(@{$result}, main::substring($value, $i, $j));
             if ($cmdsub_idx < scalar(@{$cmdsub_parts})) {
                 $cmdsub_idx += 1;
             }
@@ -3019,84 +3019,84 @@ sub format_command_substitutions ($self, $value, $in_arith) {
         my $formatted = "";
         my $parser = undef;
         my $parsed = undef;
-        if (starts_with_at($value, $i, "\$(") && !starts_with_at($value, $i, "\$((") && !is_backslash_escaped($value, $i) && !is_dollar_dollar_paren($value, $i)) {
-            $j = find_cmdsub_end($value, $i + 2);
+        if (main::starts_with_at($value, $i, "\$(") && !main::starts_with_at($value, $i, "\$((") && !main::is_backslash_escaped($value, $i) && !main::is_dollar_dollar_paren($value, $i)) {
+            $j = main::find_cmdsub_end($value, $i + 2);
             if ($extglob_depth > 0) {
-                $result->push(substring($value, $i, $j));
+                push(@{$result}, main::substring($value, $i, $j));
                 if ($cmdsub_idx < scalar(@{$cmdsub_parts})) {
                     $cmdsub_idx += 1;
                 }
                 $i = $j;
                 next;
             }
-            $inner = substring($value, $i + 2, $j - 1);
+            $inner = main::substring($value, $i + 2, $j - 1);
             if ($cmdsub_idx < scalar(@{$cmdsub_parts})) {
                 $node = $cmdsub_parts->[$cmdsub_idx];
-                $formatted = format_cmdsub_node($node->{command}, 0, 0, 0, 0);
+                $formatted = main::format_cmdsub_node($node->{command}, 0, 0, 0, 0);
                 $cmdsub_idx += 1;
             } else {
                 eval {
-                    $parser = new_parser($inner, 0, 0);
+                    $parser = main::new_parser($inner, 0, 0);
                     $parsed = $parser->parse_list(1);
-                    $formatted = (defined($parsed) ? format_cmdsub_node($parsed, 0, 0, 0, 0) : "");
+                    $formatted = (defined($parsed) ? main::format_cmdsub_node($parsed, 0, 0, 0, 0) : "");
                 };
                 if (my $_e = $@) {
                     $formatted = $inner;
                 }
             }
-            if ($formatted->startswith("(")) {
-                $result->push("\$( " . $formatted . ")");
+            if ((index($formatted, "(") == 0)) {
+                push(@{$result}, "\$( " . $formatted . ")");
             } else {
-                $result->push("\$(" . $formatted . ")");
+                push(@{$result}, "\$(" . $formatted . ")");
             }
             $i = $j;
-        } elsif ($value->[$i] eq "`" && $cmdsub_idx < scalar(@{$cmdsub_parts})) {
+        } elsif (substr($value, $i, 1) eq "`" && $cmdsub_idx < scalar(@{$cmdsub_parts})) {
             $j = $i + 1;
             while ($j < length($value)) {
-                if ($value->[$j] eq "\\" && $j + 1 < length($value)) {
+                if (substr($value, $j, 1) eq "\\" && $j + 1 < length($value)) {
                     $j += 2;
                     next;
                 }
-                if ($value->[$j] eq "`") {
+                if (substr($value, $j, 1) eq "`") {
                     $j += 1;
                     last;
                 }
                 $j += 1;
             }
-            $result->push(substring($value, $i, $j));
+            push(@{$result}, main::substring($value, $i, $j));
             $cmdsub_idx += 1;
             $i = $j;
-        } elsif (is_expansion_start($value, $i, "\${") && $i + 2 < length($value) && is_funsub_char($value->[$i + 2]) && !is_backslash_escaped($value, $i)) {
-            $j = find_funsub_end($value, $i + 2);
+        } elsif (main::is_expansion_start($value, $i, "\${") && $i + 2 < length($value) && main::is_funsub_char(substr($value, $i + 2, 1)) && !main::is_backslash_escaped($value, $i)) {
+            $j = main::find_funsub_end($value, $i + 2);
             $cmdsub_node = ($cmdsub_idx < scalar(@{$cmdsub_parts}) ? $cmdsub_parts->[$cmdsub_idx] : undef);
             if ((ref($cmdsub_node) eq 'CommandSubstitution') && $cmdsub_node->{brace}) {
                 $node = $cmdsub_node;
-                $formatted = format_cmdsub_node($node->{command}, 0, 0, 0, 0);
-                $has_pipe = $value->[$i + 2] eq "|";
+                $formatted = main::format_cmdsub_node($node->{command}, 0, 0, 0, 0);
+                $has_pipe = substr($value, $i + 2, 1) eq "|";
                 $prefix = ($has_pipe ? "\${|" : "\${ ");
-                $orig_inner = substring($value, $i + 2, $j - 1);
-                $ends_with_newline = $orig_inner->endswith("\n");
+                $orig_inner = main::substring($value, $i + 2, $j - 1);
+                $ends_with_newline = (substr($orig_inner, -length("\n")) eq "\n");
                 my $suffix = "";
                 if (!(length($formatted) > 0) || ($formatted =~ /^\s$/)) {
                     $suffix = "}";
-                } elsif ($formatted->endswith("&") || $formatted->endswith("& ")) {
-                    $suffix = ($formatted->endswith("&") ? " }" : "}");
+                } elsif ((substr($formatted, -length("&")) eq "&") || (substr($formatted, -length("& ")) eq "& ")) {
+                    $suffix = ((substr($formatted, -length("&")) eq "&") ? " }" : "}");
                 } elsif ($ends_with_newline) {
                     $suffix = "\n }";
                 } else {
                     $suffix = "; }";
                 }
-                $result->push($prefix . $formatted . $suffix);
+                push(@{$result}, $prefix . $formatted . $suffix);
                 $cmdsub_idx += 1;
             } else {
-                $result->push(substring($value, $i, $j));
+                push(@{$result}, main::substring($value, $i, $j));
             }
             $i = $j;
-        } elsif ((starts_with_at($value, $i, ">(") || starts_with_at($value, $i, "<(")) && !$main_quote->{double} && $deprecated_arith_depth == 0 && $arith_depth == 0) {
-            $is_procsub = $i == 0 || !($value->[$i - 1] =~ /^[a-zA-Z0-9]$/) && ((index("\"'", $value->[$i - 1]) == -1));
+        } elsif ((main::starts_with_at($value, $i, ">(") || main::starts_with_at($value, $i, "<(")) && !$main_quote->{double} && $deprecated_arith_depth == 0 && $arith_depth == 0) {
+            $is_procsub = $i == 0 || !(substr($value, $i - 1, 1) =~ /^[a-zA-Z0-9]$/) && ((index("\"'", substr($value, $i - 1, 1)) == -1));
             if ($extglob_depth > 0) {
-                $j = find_cmdsub_end($value, $i + 2);
-                $result->push(substring($value, $i, $j));
+                $j = main::find_cmdsub_end($value, $i + 2);
+                push(@{$result}, main::substring($value, $i, $j));
                 if ($procsub_idx < scalar(@{$procsub_parts})) {
                     $procsub_idx += 1;
                 }
@@ -3107,58 +3107,58 @@ sub format_command_substitutions ($self, $value, $in_arith) {
             my $compact = 0;
             my $stripped = "";
             if ($procsub_idx < scalar(@{$procsub_parts})) {
-                $direction = $value->[$i];
-                $j = find_cmdsub_end($value, $i + 2);
+                $direction = substr($value, $i, 1);
+                $j = main::find_cmdsub_end($value, $i + 2);
                 $node = $procsub_parts->[$procsub_idx];
-                $compact = starts_with_subshell($node->{command});
-                $formatted = format_cmdsub_node($node->{command}, 0, 1, $compact, 1);
-                $raw_content = substring($value, $i + 2, $j - 1);
-                if ($node->{command}->{kind} == "subshell") {
+                $compact = main::starts_with_subshell($node->{command});
+                $formatted = main::format_cmdsub_node($node->{command}, 0, 1, $compact, 1);
+                $raw_content = main::substring($value, $i + 2, $j - 1);
+                if ($node->{command}->{kind} eq "subshell") {
                     $leading_ws_end = 0;
-                    while ($leading_ws_end < length($raw_content) && ((index(" \t\n", $raw_content->[$leading_ws_end]) >= 0))) {
+                    while ($leading_ws_end < length($raw_content) && ((index(" \t\n", substr($raw_content, $leading_ws_end, 1)) >= 0))) {
                         $leading_ws_end += 1;
                     }
                     $leading_ws = substr($raw_content, 0, $leading_ws_end - 0);
                     $stripped = substr($raw_content, $leading_ws_end);
-                    if ($stripped->startswith("(")) {
+                    if ((index($stripped, "(") == 0)) {
                         if ((length($leading_ws) > 0)) {
-                            $normalized_ws = $leading_ws->replace("\n", " ")->replace("\t", " ");
-                            $spaced = format_cmdsub_node($node->{command}, 0, 0, 0, 0);
-                            $result->push($direction . "(" . $normalized_ws . $spaced . ")");
+                            $normalized_ws = (($leading_ws =~ s/"\n"/" "/gr) =~ s/"\t"/" "/gr);
+                            $spaced = main::format_cmdsub_node($node->{command}, 0, 0, 0, 0);
+                            push(@{$result}, $direction . "(" . $normalized_ws . $spaced . ")");
                         } else {
-                            $raw_content = $raw_content->replace("\\\n", "");
-                            $result->push($direction . "(" . $raw_content . ")");
+                            $raw_content = ($raw_content =~ s/"\\\n"/""/gr);
+                            push(@{$result}, $direction . "(" . $raw_content . ")");
                         }
                         $procsub_idx += 1;
                         $i = $j;
                         next;
                     }
                 }
-                $raw_content = substring($value, $i + 2, $j - 1);
-                $raw_stripped = $raw_content->replace("\\\n", "");
-                if (starts_with_subshell($node->{command}) && $formatted ne $raw_stripped) {
-                    $result->push($direction . "(" . $raw_stripped . ")");
+                $raw_content = main::substring($value, $i + 2, $j - 1);
+                $raw_stripped = ($raw_content =~ s/"\\\n"/""/gr);
+                if (main::starts_with_subshell($node->{command}) && $formatted ne $raw_stripped) {
+                    push(@{$result}, $direction . "(" . $raw_stripped . ")");
                 } else {
                     $final_output = $direction . "(" . $formatted . ")";
-                    $result->push($final_output);
+                    push(@{$result}, $final_output);
                 }
                 $procsub_idx += 1;
                 $i = $j;
             } elsif ($is_procsub && (scalar(@{$self->{parts}}) ? 1 : 0)) {
-                $direction = $value->[$i];
-                $j = find_cmdsub_end($value, $i + 2);
-                if ($j > length($value) || $j > 0 && $j <= length($value) && $value->[$j - 1] ne ")") {
-                    $result->push($value->[$i]);
+                $direction = substr($value, $i, 1);
+                $j = main::find_cmdsub_end($value, $i + 2);
+                if ($j > length($value) || $j > 0 && $j <= length($value) && substr($value, $j - 1, 1) ne ")") {
+                    push(@{$result}, substr($value, $i, 1));
                     $i += 1;
                     next;
                 }
-                $inner = substring($value, $i + 2, $j - 1);
+                $inner = main::substring($value, $i + 2, $j - 1);
                 eval {
-                    $parser = new_parser($inner, 0, 0);
+                    $parser = main::new_parser($inner, 0, 0);
                     $parsed = $parser->parse_list(1);
                     if (defined($parsed) && $parser->{pos_} == length($inner) && ((index($inner, "\n") == -1))) {
-                        $compact = starts_with_subshell($parsed);
-                        $formatted = format_cmdsub_node($parsed, 0, 1, $compact, 1);
+                        $compact = main::starts_with_subshell($parsed);
+                        $formatted = main::format_cmdsub_node($parsed, 0, 1, $compact, 1);
                     } else {
                         $formatted = $inner;
                     }
@@ -3166,76 +3166,76 @@ sub format_command_substitutions ($self, $value, $in_arith) {
                 if (my $_e = $@) {
                     $formatted = $inner;
                 }
-                $result->push($direction . "(" . $formatted . ")");
+                push(@{$result}, $direction . "(" . $formatted . ")");
                 $i = $j;
             } elsif ($is_procsub) {
-                $direction = $value->[$i];
-                $j = find_cmdsub_end($value, $i + 2);
-                if ($j > length($value) || $j > 0 && $j <= length($value) && $value->[$j - 1] ne ")") {
-                    $result->push($value->[$i]);
+                $direction = substr($value, $i, 1);
+                $j = main::find_cmdsub_end($value, $i + 2);
+                if ($j > length($value) || $j > 0 && $j <= length($value) && substr($value, $j - 1, 1) ne ")") {
+                    push(@{$result}, substr($value, $i, 1));
                     $i += 1;
                     next;
                 }
-                $inner = substring($value, $i + 2, $j - 1);
+                $inner = main::substring($value, $i + 2, $j - 1);
                 if ($in_arith) {
-                    $result->push($direction . "(" . $inner . ")");
+                    push(@{$result}, $direction . "(" . $inner . ")");
                 } elsif ((length(($inner =~ s/^\s+|\s+$//gr)) > 0)) {
                     $stripped = ($inner =~ s/^[" \t"]+//r);
-                    $result->push($direction . "(" . $stripped . ")");
+                    push(@{$result}, $direction . "(" . $stripped . ")");
                 } else {
-                    $result->push($direction . "(" . $inner . ")");
+                    push(@{$result}, $direction . "(" . $inner . ")");
                 }
                 $i = $j;
             } else {
-                $result->push($value->[$i]);
+                push(@{$result}, substr($value, $i, 1));
                 $i += 1;
             }
-        } elsif ((is_expansion_start($value, $i, "\${ ") || is_expansion_start($value, $i, "\${\t") || is_expansion_start($value, $i, "\${\n") || is_expansion_start($value, $i, "\${|")) && !is_backslash_escaped($value, $i)) {
-            $prefix = substring($value, $i, $i + 3)->replace("\t", " ")->replace("\n", " ");
+        } elsif ((main::is_expansion_start($value, $i, "\${ ") || main::is_expansion_start($value, $i, "\${\t") || main::is_expansion_start($value, $i, "\${\n") || main::is_expansion_start($value, $i, "\${|")) && !main::is_backslash_escaped($value, $i)) {
+            $prefix = ((main::substring($value, $i, $i + 3) =~ s/"\t"/" "/gr) =~ s/"\n"/" "/gr);
             $j = $i + 3;
             $depth = 1;
             while ($j < length($value) && $depth > 0) {
-                if ($value->[$j] eq "{") {
+                if (substr($value, $j, 1) eq "{") {
                     $depth += 1;
-                } elsif ($value->[$j] eq "}") {
+                } elsif (substr($value, $j, 1) eq "}") {
                     $depth -= 1;
                 }
                 $j += 1;
             }
-            $inner = substring($value, $i + 2, $j - 1);
+            $inner = main::substring($value, $i + 2, $j - 1);
             if (($inner =~ s/^\s+|\s+$//gr) eq "") {
-                $result->push("\${ }");
+                push(@{$result}, "\${ }");
             } else {
                 eval {
-                    $parser = new_parser(($inner =~ s/^[" \t\n|"]+//r), 0, 0);
+                    $parser = main::new_parser(($inner =~ s/^[" \t\n|"]+//r), 0, 0);
                     $parsed = $parser->parse_list(1);
                     if (defined($parsed)) {
-                        $formatted = format_cmdsub_node($parsed, 0, 0, 0, 0);
+                        $formatted = main::format_cmdsub_node($parsed, 0, 0, 0, 0);
                         $formatted = ($formatted =~ s/[";"]+$//r);
                         my $terminator = "";
-                        if (($inner =~ s/[" \t"]+$//r)->endswith("\n")) {
+                        if ((substr(($inner =~ s/[" \t"]+$//r), -length("\n")) eq "\n")) {
                             $terminator = "\n }";
-                        } elsif ($formatted->endswith(" &")) {
+                        } elsif ((substr($formatted, -length(" &")) eq " &")) {
                             $terminator = " }";
                         } else {
                             $terminator = "; }";
                         }
-                        $result->push($prefix . $formatted . $terminator);
+                        push(@{$result}, $prefix . $formatted . $terminator);
                     } else {
-                        $result->push("\${ }");
+                        push(@{$result}, "\${ }");
                     }
                 };
                 if (my $_e = $@) {
-                    $result->push(substring($value, $i, $j));
+                    push(@{$result}, main::substring($value, $i, $j));
                 }
             }
             $i = $j;
-        } elsif (is_expansion_start($value, $i, "\${") && !is_backslash_escaped($value, $i)) {
+        } elsif (main::is_expansion_start($value, $i, "\${") && !main::is_backslash_escaped($value, $i)) {
             $j = $i + 2;
             $depth = 1;
-            $brace_quote = new_quote_state();
+            $brace_quote = main::new_quote_state();
             while ($j < length($value) && $depth > 0) {
-                $c = $value->[$j];
+                $c = substr($value, $j, 1);
                 if ($c eq "\\" && $j + 1 < length($value) && !$brace_quote->{single}) {
                     $j += 2;
                     next;
@@ -3245,8 +3245,8 @@ sub format_command_substitutions ($self, $value, $in_arith) {
                 } elsif ($c eq "\"" && !$brace_quote->{single}) {
                     $brace_quote->{double} = !$brace_quote->{double};
                 } elsif (!$brace_quote->in_quotes()) {
-                    if (is_expansion_start($value, $j, "\$(") && !starts_with_at($value, $j, "\$((")) {
-                        $j = find_cmdsub_end($value, $j + 2);
+                    if (main::is_expansion_start($value, $j, "\$(") && !main::starts_with_at($value, $j, "\$((")) {
+                        $j = main::find_cmdsub_end($value, $j + 2);
                         next;
                     }
                     if ($c eq "{") {
@@ -3258,38 +3258,38 @@ sub format_command_substitutions ($self, $value, $in_arith) {
                 $j += 1;
             }
             if ($depth > 0) {
-                $inner = substring($value, $i + 2, $j);
+                $inner = main::substring($value, $i + 2, $j);
             } else {
-                $inner = substring($value, $i + 2, $j - 1);
+                $inner = main::substring($value, $i + 2, $j - 1);
             }
             $formatted_inner = $self->format_command_substitutions($inner, 0);
             $formatted_inner = $self->normalize_extglob_whitespace($formatted_inner);
             if ($depth == 0) {
-                $result->push("\${" . $formatted_inner . "}");
+                push(@{$result}, "\${" . $formatted_inner . "}");
             } else {
-                $result->push("\${" . $formatted_inner);
+                push(@{$result}, "\${" . $formatted_inner);
             }
             $i = $j;
-        } elsif ($value->[$i] eq "\"") {
+        } elsif (substr($value, $i, 1) eq "\"") {
             $main_quote->{double} = !$main_quote->{double};
-            $result->push($value->[$i]);
+            push(@{$result}, substr($value, $i, 1));
             $i += 1;
-        } elsif ($value->[$i] eq "'" && !$main_quote->{double}) {
+        } elsif (substr($value, $i, 1) eq "'" && !$main_quote->{double}) {
             $j = $i + 1;
-            while ($j < length($value) && $value->[$j] ne "'") {
+            while ($j < length($value) && substr($value, $j, 1) ne "'") {
                 $j += 1;
             }
             if ($j < length($value)) {
                 $j += 1;
             }
-            $result->push(substring($value, $i, $j));
+            push(@{$result}, main::substring($value, $i, $j));
             $i = $j;
         } else {
-            $result->push($value->[$i]);
+            push(@{$result}, substr($value, $i, 1));
             $i += 1;
         }
     }
-    return ""->join_($result);
+    return join("", @{$result});
 }
 
 sub normalize_extglob_whitespace ($self, $value) {
@@ -3301,93 +3301,93 @@ sub normalize_extglob_whitespace ($self, $value) {
     my $prefix_char;
     my $result = [];
     my $i = 0;
-    my $extglob_quote = new_quote_state();
+    my $extglob_quote = main::new_quote_state();
     my $deprecated_arith_depth = 0;
     while ($i < length($value)) {
-        if ($value->[$i] eq "\"") {
+        if (substr($value, $i, 1) eq "\"") {
             $extglob_quote->{double} = !$extglob_quote->{double};
-            $result->push($value->[$i]);
+            push(@{$result}, substr($value, $i, 1));
             $i += 1;
             next;
         }
-        if (starts_with_at($value, $i, "\$[") && !is_backslash_escaped($value, $i)) {
+        if (main::starts_with_at($value, $i, "\$[") && !main::is_backslash_escaped($value, $i)) {
             $deprecated_arith_depth += 1;
-            $result->push($value->[$i]);
+            push(@{$result}, substr($value, $i, 1));
             $i += 1;
             next;
         }
-        if ($value->[$i] eq "]" && $deprecated_arith_depth > 0) {
+        if (substr($value, $i, 1) eq "]" && $deprecated_arith_depth > 0) {
             $deprecated_arith_depth -= 1;
-            $result->push($value->[$i]);
+            push(@{$result}, substr($value, $i, 1));
             $i += 1;
             next;
         }
-        if ($i + 1 < length($value) && $value->[$i + 1] eq "(") {
-            $prefix_char = $value->[$i];
+        if ($i + 1 < length($value) && substr($value, $i + 1, 1) eq "(") {
+            $prefix_char = substr($value, $i, 1);
             if (((index("><", $prefix_char) >= 0)) && !$extglob_quote->{double} && $deprecated_arith_depth == 0) {
-                $result->push($prefix_char);
-                $result->push("(");
+                push(@{$result}, $prefix_char);
+                push(@{$result}, "(");
                 $i += 2;
                 $depth = 1;
                 $pattern_parts = [];
                 $current_part = [];
                 $has_pipe = 0;
                 while ($i < length($value) && $depth > 0) {
-                    if ($value->[$i] eq "\\" && $i + 1 < length($value)) {
-                        $current_part->push(substr($value, $i, $i + 2 - $i));
+                    if (substr($value, $i, 1) eq "\\" && $i + 1 < length($value)) {
+                        push(@{$current_part}, substr($value, $i, $i + 2 - $i));
                         $i += 2;
                         next;
-                    } elsif ($value->[$i] eq "(") {
+                    } elsif (substr($value, $i, 1) eq "(") {
                         $depth += 1;
-                        $current_part->push($value->[$i]);
+                        push(@{$current_part}, substr($value, $i, 1));
                         $i += 1;
-                    } elsif ($value->[$i] eq ")") {
+                    } elsif (substr($value, $i, 1) eq ")") {
                         $depth -= 1;
                         if ($depth == 0) {
-                            $part_content = ""->join_($current_part);
+                            $part_content = join("", @{$current_part});
                             if ((index($part_content, "<<") >= 0)) {
-                                $pattern_parts->push($part_content);
+                                push(@{$pattern_parts}, $part_content);
                             } elsif ($has_pipe) {
-                                $pattern_parts->push(($part_content =~ s/^\s+|\s+$//gr));
+                                push(@{$pattern_parts}, ($part_content =~ s/^\s+|\s+$//gr));
                             } else {
-                                $pattern_parts->push($part_content);
+                                push(@{$pattern_parts}, $part_content);
                             }
                             last;
                         }
-                        $current_part->push($value->[$i]);
+                        push(@{$current_part}, substr($value, $i, 1));
                         $i += 1;
-                    } elsif ($value->[$i] eq "|" && $depth == 1) {
-                        if ($i + 1 < length($value) && $value->[$i + 1] eq "|") {
-                            $current_part->push("||");
+                    } elsif (substr($value, $i, 1) eq "|" && $depth == 1) {
+                        if ($i + 1 < length($value) && substr($value, $i + 1, 1) eq "|") {
+                            push(@{$current_part}, "||");
                             $i += 2;
                         } else {
                             $has_pipe = 1;
-                            $part_content = ""->join_($current_part);
+                            $part_content = join("", @{$current_part});
                             if ((index($part_content, "<<") >= 0)) {
-                                $pattern_parts->push($part_content);
+                                push(@{$pattern_parts}, $part_content);
                             } else {
-                                $pattern_parts->push(($part_content =~ s/^\s+|\s+$//gr));
+                                push(@{$pattern_parts}, ($part_content =~ s/^\s+|\s+$//gr));
                             }
                             $current_part = [];
                             $i += 1;
                         }
                     } else {
-                        $current_part->push($value->[$i]);
+                        push(@{$current_part}, substr($value, $i, 1));
                         $i += 1;
                     }
                 }
-                $result->push(" | "->join_($pattern_parts));
+                push(@{$result}, join(" | ", @{$pattern_parts}));
                 if ($depth == 0) {
-                    $result->push(")");
+                    push(@{$result}, ")");
                     $i += 1;
                 }
                 next;
             }
         }
-        $result->push($value->[$i]);
+        push(@{$result}, substr($value, $i, 1));
         $i += 1;
     }
-    return ""->join_($result);
+    return join("", @{$result});
 }
 
 sub get_cond_formatted_value ($self) {
@@ -3395,7 +3395,7 @@ sub get_cond_formatted_value ($self) {
     $value = $self->strip_locale_string_dollars($value);
     $value = $self->format_command_substitutions($value, 0);
     $value = $self->normalize_extglob_whitespace($value);
-    $value = $value->replace("", "");
+    $value = ($value =~ s/""/""/gr);
     return ($value =~ s/["\n"]+$//r);
 }
 
@@ -3407,7 +3407,7 @@ sub get_kind ($self) {
 
 package Command;
 
-sub new ($class, $words, $redirects, $kind) {
+sub new ($class, $words=undef, $redirects=undef, $kind=undef) {
     return bless { words => $words, redirects => $redirects, kind => $kind }, $class;
 }
 
@@ -3418,12 +3418,12 @@ sub kind ($self) { $self->{kind} }
 sub to_sexp ($self) {
     my $parts = [];
     for my $w (@{($self->{words} // [])}) {
-        $parts->push($w->to_sexp());
+        push(@{$parts}, $w->to_sexp());
     }
     for my $r (@{($self->{redirects} // [])}) {
-        $parts->push($r->to_sexp());
+        push(@{$parts}, $r->to_sexp());
     }
-    my $inner = " "->join_($parts);
+    my $inner = join(" ", @{$parts});
     if (!(length($inner) > 0)) {
         return "(command)";
     }
@@ -3438,7 +3438,7 @@ sub get_kind ($self) {
 
 package Pipeline;
 
-sub new ($class, $commands, $kind) {
+sub new ($class, $commands=undef, $kind=undef) {
     return bless { commands => $commands, kind => $kind }, $class;
 }
 
@@ -3463,8 +3463,8 @@ sub to_sexp ($self) {
             $i += 1;
             next;
         }
-        $needs_redirect = $i + 1 < scalar(@{$self->{commands}}) && $self->{commands}->[$i + 1]->{kind} == "pipe-both";
-        $cmds->push([$cmd, $needs_redirect]);
+        $needs_redirect = $i + 1 < scalar(@{$self->{commands}}) && $self->{commands}->[$i + 1]->{kind} eq "pipe-both";
+        push(@{$cmds}, [$cmd, $needs_redirect]);
         $i += 1;
     }
     my $pair = undef;
@@ -3484,7 +3484,7 @@ sub to_sexp ($self) {
         $pair = $cmds->[$j];
         $cmd = $pair->[0];
         $needs = $pair->[1];
-        if ($needs && $cmd->{kind} != "command") {
+        if ($needs && $cmd->{kind} ne "command") {
             $result = "(pipe " . $cmd->to_sexp() . " (redirect \">&\" 1) " . $result . ")";
         } else {
             $result = "(pipe " . $self->cmd_sexp($cmd, $needs) . " " . $result . ")";
@@ -3503,13 +3503,13 @@ sub cmd_sexp ($self, $cmd, $needs_redirect) {
         my $cmd = $cmd;
         $parts = [];
         for my $w (@{($cmd->{words} // [])}) {
-            $parts->push($w->to_sexp());
+            push(@{$parts}, $w->to_sexp());
         }
         for my $r (@{($cmd->{redirects} // [])}) {
-            $parts->push($r->to_sexp());
+            push(@{$parts}, $r->to_sexp());
         }
-        $parts->push("(redirect \">&\" 1)");
-        return "(command " . " "->join_($parts) . ")";
+        push(@{$parts}, "(redirect \">&\" 1)");
+        return "(command " . join(" ", @{$parts}) . ")";
     }
     return $cmd->to_sexp();
 }
@@ -3522,7 +3522,7 @@ sub get_kind ($self) {
 
 package List;
 
-sub new ($class, $parts, $kind) {
+sub new ($class, $parts=undef, $kind=undef) {
     return bless { parts => $parts, kind => $kind }, $class;
 }
 
@@ -3536,19 +3536,19 @@ sub to_sexp ($self) {
     my $left_sexp;
     my $right;
     my $right_sexp;
-    my $parts = $self->{parts}->copy();
+    my $parts = [@{$self->{parts}}];
     my $op_names = {"&&" => "and", "||" => "or", ";" => "semi", "\n" => "semi", "&" => "background"};
-    while (scalar(@{$parts}) > 1 && $parts->[-1]->{kind} == "operator" && ($parts->[-1]->{op} eq ";" || $parts->[-1]->{op} eq "\n")) {
-        $parts = sublist($parts, 0, scalar(@{$parts}) - 1);
+    while (scalar(@{$parts}) > 1 && $parts->[-1]->{kind} eq "operator" && ($parts->[-1]->{op} eq ";" || $parts->[-1]->{op} eq "\n")) {
+        $parts = main::sublist($parts, 0, scalar(@{$parts}) - 1);
     }
     if (scalar(@{$parts}) == 1) {
         return $parts->[0]->to_sexp();
     }
-    if ($parts->[-1]->{kind} == "operator" && $parts->[-1]->{op} eq "&") {
+    if ($parts->[-1]->{kind} eq "operator" && $parts->[-1]->{op} eq "&") {
         for (my $i = scalar(@{$parts}) - 3; $i > 0; $i += -2) {
-            if ($parts->[$i]->{kind} == "operator" && ($parts->[$i]->{op} eq ";" || $parts->[$i]->{op} eq "\n")) {
-                $left = sublist($parts, 0, $i);
-                $right = sublist($parts, $i + 1, scalar(@{$parts}) - 1);
+            if ($parts->[$i]->{kind} eq "operator" && ($parts->[$i]->{op} eq ";" || $parts->[$i]->{op} eq "\n")) {
+                $left = main::sublist($parts, 0, $i);
+                $right = main::sublist($parts, $i + 1, scalar(@{$parts}) - 1);
                 my $left_sexp = "";
                 if (scalar(@{$left}) > 1) {
                     $left_sexp = List->new($left, "list")->to_sexp();
@@ -3564,7 +3564,7 @@ sub to_sexp ($self) {
                 return "(semi " . $left_sexp . " (background " . $right_sexp . "))";
             }
         }
-        $inner_parts = sublist($parts, 0, scalar(@{$parts}) - 1);
+        $inner_parts = main::sublist($parts, 0, scalar(@{$parts}) - 1);
         if (scalar(@{$inner_parts}) == 1) {
             return "(background " . $inner_parts->[0]->to_sexp() . ")";
         }
@@ -3581,26 +3581,26 @@ sub to_sexp_with_precedence ($self, $parts, $op_names) {
     my $start;
     my $semi_positions = [];
     for my $i (0 .. scalar(@{$parts}) - 1) {
-        if ($parts->[$i]->{kind} == "operator" && ($parts->[$i]->{op} eq ";" || $parts->[$i]->{op} eq "\n")) {
-            $semi_positions->push($i);
+        if ($parts->[$i]->{kind} eq "operator" && ($parts->[$i]->{op} eq ";" || $parts->[$i]->{op} eq "\n")) {
+            push(@{$semi_positions}, $i);
         }
     }
-    if ((scalar(@{$semi_positions}) > 0)) {
+    if ((scalar(@{($semi_positions // [])}) > 0)) {
         $segments = [];
         $start = 0;
         my $seg = undef;
         for my $pos_ (@{$semi_positions}) {
-            $seg = sublist($parts, $start, $pos_);
-            if ((scalar(@{$seg}) > 0) && $seg->[0]->{kind} != "operator") {
-                $segments->push($seg);
+            $seg = main::sublist($parts, $start, $pos_);
+            if ((scalar(@{($seg // [])}) > 0) && $seg->[0]->{kind} ne "operator") {
+                push(@{$segments}, $seg);
             }
             $start = $pos_ + 1;
         }
-        $seg = sublist($parts, $start, scalar(@{$parts}));
-        if ((scalar(@{$seg}) > 0) && $seg->[0]->{kind} != "operator") {
-            $segments->push($seg);
+        $seg = main::sublist($parts, $start, scalar(@{$parts}));
+        if ((scalar(@{($seg // [])}) > 0) && $seg->[0]->{kind} ne "operator") {
+            push(@{$segments}, $seg);
         }
-        if (!(scalar(@{$segments}) > 0)) {
+        if (!(scalar(@{($segments // [])}) > 0)) {
             return "()";
         }
         $result = $self->to_sexp_amp_and_higher($segments->[0], $op_names);
@@ -3621,18 +3621,18 @@ sub to_sexp_amp_and_higher ($self, $parts, $op_names) {
     }
     my $amp_positions = [];
     for (my $i = 1; $i < scalar(@{$parts}) - 1; $i += 2) {
-        if ($parts->[$i]->{kind} == "operator" && $parts->[$i]->{op} eq "&") {
-            $amp_positions->push($i);
+        if ($parts->[$i]->{kind} eq "operator" && $parts->[$i]->{op} eq "&") {
+            push(@{$amp_positions}, $i);
         }
     }
-    if ((scalar(@{$amp_positions}) > 0)) {
+    if ((scalar(@{($amp_positions // [])}) > 0)) {
         $segments = [];
         $start = 0;
         for my $pos_ (@{$amp_positions}) {
-            $segments->push(sublist($parts, $start, $pos_));
+            push(@{$segments}, main::sublist($parts, $start, $pos_));
             $start = $pos_ + 1;
         }
-        $segments->push(sublist($parts, $start, scalar(@{$parts})));
+        push(@{$segments}, main::sublist($parts, $start, scalar(@{$parts})));
         $result = $self->to_sexp_and_or($segments->[0], $op_names);
         for (my $i = 1; $i < scalar(@{$segments}); $i += 1) {
             $result = "(background " . $result . " " . $self->to_sexp_and_or($segments->[$i], $op_names) . ")";
@@ -3654,7 +3654,7 @@ sub to_sexp_and_or ($self, $parts, $op_names) {
         $op = $parts->[$i];
         $cmd = $parts->[$i + 1];
         $op_name = $op_names->get($op->{op}, $op->{op});
-        $result = "(" . $op_name . " " . $result + " " . $cmd->to_sexp() + ")";
+        $result = "(" . $op_name . " " . $result . " " . $cmd->to_sexp() . ")";
     }
     return $result;
 }
@@ -3667,7 +3667,7 @@ sub get_kind ($self) {
 
 package Operator;
 
-sub new ($class, $op, $kind) {
+sub new ($class, $op=undef, $kind=undef) {
     return bless { op => $op, kind => $kind }, $class;
 }
 
@@ -3687,7 +3687,7 @@ sub get_kind ($self) {
 
 package PipeBoth;
 
-sub new ($class, $kind) {
+sub new ($class, $kind=undef) {
     return bless { kind => $kind }, $class;
 }
 
@@ -3705,7 +3705,7 @@ sub get_kind ($self) {
 
 package Empty;
 
-sub new ($class, $kind) {
+sub new ($class, $kind=undef) {
     return bless { kind => $kind }, $class;
 }
 
@@ -3723,7 +3723,7 @@ sub get_kind ($self) {
 
 package Comment;
 
-sub new ($class, $text, $kind) {
+sub new ($class, $text=undef, $kind=undef) {
     return bless { text => $text, kind => $kind }, $class;
 }
 
@@ -3742,7 +3742,7 @@ sub get_kind ($self) {
 
 package Redirect;
 
-sub new ($class, $op, $target, $fd, $kind) {
+sub new ($class, $op=undef, $target=undef, $fd=undef, $kind=undef) {
     return bless { op => $op, target => $target, fd => $fd, kind => $kind }, $class;
 }
 
@@ -3757,24 +3757,24 @@ sub to_sexp ($self) {
     my $out_val;
     my $raw;
     my $op = ($self->{op} =~ s/^["0123456789"]+//r);
-    if ($op->startswith("{")) {
+    if ((index($op, "{") == 0)) {
         $j = 1;
-        if ($j < length($op) && (($op->[$j] =~ /^[a-zA-Z]$/) || $op->[$j] eq "_")) {
+        if ($j < length($op) && ((substr($op, $j, 1) =~ /^[a-zA-Z]$/) || substr($op, $j, 1) eq "_")) {
             $j += 1;
-            while ($j < length($op) && (($op->[$j] =~ /^[a-zA-Z0-9]$/) || $op->[$j] eq "_")) {
+            while ($j < length($op) && ((substr($op, $j, 1) =~ /^[a-zA-Z0-9]$/) || substr($op, $j, 1) eq "_")) {
                 $j += 1;
             }
-            if ($j < length($op) && $op->[$j] eq "[") {
+            if ($j < length($op) && substr($op, $j, 1) eq "[") {
                 $j += 1;
-                while ($j < length($op) && $op->[$j] ne "]") {
+                while ($j < length($op) && substr($op, $j, 1) ne "]") {
                     $j += 1;
                 }
-                if ($j < length($op) && $op->[$j] eq "]") {
+                if ($j < length($op) && substr($op, $j, 1) eq "]") {
                     $j += 1;
                 }
             }
-            if ($j < length($op) && $op->[$j] eq "}") {
-                $op = substring($op, $j + 1, length($op));
+            if ($j < length($op) && substr($op, $j, 1) eq "}") {
+                $op = main::substring($op, $j + 1, length($op));
             }
         }
     }
@@ -3783,27 +3783,27 @@ sub to_sexp ($self) {
     $target_val = $self->{target}->strip_locale_string_dollars($target_val);
     $target_val = $self->{target}->format_command_substitutions($target_val, 0);
     $target_val = $self->{target}->strip_arith_line_continuations($target_val);
-    if ($target_val->endswith("\\") && !$target_val->endswith("\\\\")) {
+    if ((substr($target_val, -length("\\")) eq "\\") && !(substr($target_val, -length("\\\\")) eq "\\\\")) {
         $target_val = $target_val . "\\";
     }
-    if ($target_val->startswith("&")) {
+    if ((index($target_val, "&") == 0)) {
         if ($op eq ">") {
             $op = ">&";
         } elsif ($op eq "<") {
             $op = "<&";
         }
-        $raw = substring($target_val, 1, length($target_val));
+        $raw = main::substring($target_val, 1, length($target_val));
         if (($raw =~ /^\d$/) && int($raw) <= 2147483647) {
             return "(redirect \"" . $op . "\" " . "int($raw)" . ")";
         }
-        if ($raw->endswith("-") && (substr($raw, 0, length($raw) - 1 - 0) =~ /^\d$/) && int(substr($raw, 0, length($raw) - 1 - 0)) <= 2147483647) {
+        if ((substr($raw, -length("-")) eq "-") && (substr($raw, 0, length($raw) - 1 - 0) =~ /^\d$/) && int(substr($raw, 0, length($raw) - 1 - 0)) <= 2147483647) {
             return "(redirect \"" . $op . "\" " . "int(substr($raw, 0, length($raw) - 1 - 0))" . ")";
         }
         if ($target_val eq "&-") {
             return "(redirect \">&-\" 0)";
         }
-        $fd_target = ($raw->endswith("-") ? substr($raw, 0, length($raw) - 1 - 0) : $raw);
-        return "(redirect \"" . $op . "\" \"" . $fd_target + "\")";
+        $fd_target = ((substr($raw, -length("-")) eq "-") ? substr($raw, 0, length($raw) - 1 - 0) : $raw);
+        return "(redirect \"" . $op . "\" \"" . $fd_target . "\")";
     }
     if ($op eq ">&" || $op eq "<&") {
         if (($target_val =~ /^\d$/) && int($target_val) <= 2147483647) {
@@ -3812,11 +3812,11 @@ sub to_sexp ($self) {
         if ($target_val eq "-") {
             return "(redirect \">&-\" 0)";
         }
-        if ($target_val->endswith("-") && (substr($target_val, 0, length($target_val) - 1 - 0) =~ /^\d$/) && int(substr($target_val, 0, length($target_val) - 1 - 0)) <= 2147483647) {
+        if ((substr($target_val, -length("-")) eq "-") && (substr($target_val, 0, length($target_val) - 1 - 0) =~ /^\d$/) && int(substr($target_val, 0, length($target_val) - 1 - 0)) <= 2147483647) {
             return "(redirect \"" . $op . "\" " . "int(substr($target_val, 0, length($target_val) - 1 - 0))" . ")";
         }
-        $out_val = ($target_val->endswith("-") ? substr($target_val, 0, length($target_val) - 1 - 0) : $target_val);
-        return "(redirect \"" . $op . "\" \"" . $out_val + "\")";
+        $out_val = ((substr($target_val, -length("-")) eq "-") ? substr($target_val, 0, length($target_val) - 1 - 0) : $target_val);
+        return "(redirect \"" . $op . "\" \"" . $out_val . "\")";
     }
     return "(redirect \"" . $op . "\" \"" . $target_val . "\")";
 }
@@ -3829,7 +3829,7 @@ sub get_kind ($self) {
 
 package HereDoc;
 
-sub new ($class, $delimiter, $content, $strip_tabs, $quoted, $fd, $complete, $start_pos, $kind) {
+sub new ($class, $delimiter=undef, $content=undef, $strip_tabs=undef, $quoted=undef, $fd=undef, $complete=undef, $start_pos=undef, $kind=undef) {
     return bless { delimiter => $delimiter, content => $content, strip_tabs => $strip_tabs, quoted => $quoted, fd => $fd, complete => $complete, start_pos => $start_pos, kind => $kind }, $class;
 }
 
@@ -3845,7 +3845,7 @@ sub kind ($self) { $self->{kind} }
 sub to_sexp ($self) {
     my $op = ($self->{strip_tabs} ? "<<-" : "<<");
     my $content = $self->{content};
-    if ($content->endswith("\\") && !$content->endswith("\\\\")) {
+    if ((substr($content, -length("\\")) eq "\\") && !(substr($content, -length("\\\\")) eq "\\\\")) {
         $content = $content . "\\";
     }
     return sprintf("(redirect \"%s\" \"%s\")", $op, $content);
@@ -3859,7 +3859,7 @@ sub get_kind ($self) {
 
 package Subshell;
 
-sub new ($class, $body, $redirects, $kind) {
+sub new ($class, $body=undef, $redirects=undef, $kind=undef) {
     return bless { body => $body, redirects => $redirects, kind => $kind }, $class;
 }
 
@@ -3869,7 +3869,7 @@ sub kind ($self) { $self->{kind} }
 
 sub to_sexp ($self) {
     my $base = "(subshell " . $self->{body}->to_sexp() . ")";
-    return append_redirects($base, $self->{redirects});
+    return main::append_redirects($base, $self->{redirects});
 }
 
 sub get_kind ($self) {
@@ -3880,7 +3880,7 @@ sub get_kind ($self) {
 
 package BraceGroup;
 
-sub new ($class, $body, $redirects, $kind) {
+sub new ($class, $body=undef, $redirects=undef, $kind=undef) {
     return bless { body => $body, redirects => $redirects, kind => $kind }, $class;
 }
 
@@ -3890,7 +3890,7 @@ sub kind ($self) { $self->{kind} }
 
 sub to_sexp ($self) {
     my $base = "(brace-group " . $self->{body}->to_sexp() . ")";
-    return append_redirects($base, $self->{redirects});
+    return main::append_redirects($base, $self->{redirects});
 }
 
 sub get_kind ($self) {
@@ -3901,7 +3901,7 @@ sub get_kind ($self) {
 
 package If;
 
-sub new ($class, $condition, $then_body, $else_body, $redirects, $kind) {
+sub new ($class, $condition=undef, $then_body=undef, $else_body=undef, $redirects=undef, $kind=undef) {
     return bless { condition => $condition, then_body => $then_body, else_body => $else_body, redirects => $redirects, kind => $kind }, $class;
 }
 
@@ -3931,7 +3931,7 @@ sub get_kind ($self) {
 
 package While;
 
-sub new ($class, $condition, $body, $redirects, $kind) {
+sub new ($class, $condition=undef, $body=undef, $redirects=undef, $kind=undef) {
     return bless { condition => $condition, body => $body, redirects => $redirects, kind => $kind }, $class;
 }
 
@@ -3942,7 +3942,7 @@ sub kind ($self) { $self->{kind} }
 
 sub to_sexp ($self) {
     my $base = "(while " . $self->{condition}->to_sexp() . " " . $self->{body}->to_sexp() . ")";
-    return append_redirects($base, $self->{redirects});
+    return main::append_redirects($base, $self->{redirects});
 }
 
 sub get_kind ($self) {
@@ -3953,7 +3953,7 @@ sub get_kind ($self) {
 
 package Until;
 
-sub new ($class, $condition, $body, $redirects, $kind) {
+sub new ($class, $condition=undef, $body=undef, $redirects=undef, $kind=undef) {
     return bless { condition => $condition, body => $body, redirects => $redirects, kind => $kind }, $class;
 }
 
@@ -3964,7 +3964,7 @@ sub kind ($self) { $self->{kind} }
 
 sub to_sexp ($self) {
     my $base = "(until " . $self->{condition}->to_sexp() . " " . $self->{body}->to_sexp() . ")";
-    return append_redirects($base, $self->{redirects});
+    return main::append_redirects($base, $self->{redirects});
 }
 
 sub get_kind ($self) {
@@ -3975,7 +3975,7 @@ sub get_kind ($self) {
 
 package For;
 
-sub new ($class, $var, $words, $body, $redirects, $kind) {
+sub new ($class, $var=undef, $words=undef, $body=undef, $redirects=undef, $kind=undef) {
     return bless { var => $var, words => $words, body => $body, redirects => $redirects, kind => $kind }, $class;
 }
 
@@ -3990,16 +3990,16 @@ sub to_sexp ($self) {
     my $word_parts;
     my $word_strs;
     my $suffix = "";
-    if ((scalar(@{$self->{redirects}}) > 0)) {
+    if ((scalar(@{($self->{redirects} // [])}) > 0)) {
         $redirect_parts = [];
         for my $r (@{($self->{redirects} // [])}) {
-            $redirect_parts->push($r->to_sexp());
+            push(@{$redirect_parts}, $r->to_sexp());
         }
-        $suffix = " " . " "->join_($redirect_parts);
+        $suffix = " " . join(" ", @{$redirect_parts});
     }
     my $temp_word = Word->new($self->{var}, [], "word");
     my $var_formatted = $temp_word->format_command_substitutions($self->{var}, 0);
-    my $var_escaped = $var_formatted->replace("\\", "\\\\")->replace("\"", "\\\"");
+    my $var_escaped = (($var_formatted =~ s/"\\"/"\\\\"/gr) =~ s/"\""/"\\\""/gr);
     if (!defined($self->{words})) {
         return "(for (word \"" . $var_escaped . "\") (in (word \"\\\"\$\@\\\"\")) " . $self->{body}->to_sexp() . ")" . $suffix;
     } elsif (scalar(@{$self->{words}}) == 0) {
@@ -4007,9 +4007,9 @@ sub to_sexp ($self) {
     } else {
         $word_parts = [];
         for my $w (@{($self->{words} // [])}) {
-            $word_parts->push($w->to_sexp());
+            push(@{$word_parts}, $w->to_sexp());
         }
-        $word_strs = " "->join_($word_parts);
+        $word_strs = join(" ", @{$word_parts});
         return "(for (word \"" . $var_escaped . "\") (in " . $word_strs . ") " . $self->{body}->to_sexp() . ")" . $suffix;
     }
 }
@@ -4022,7 +4022,7 @@ sub get_kind ($self) {
 
 package ForArith;
 
-sub new ($class, $init, $cond, $incr, $body, $redirects, $kind) {
+sub new ($class, $init=undef, $cond=undef, $incr=undef, $body=undef, $redirects=undef, $kind=undef) {
     return bless { init => $init, cond => $cond, incr => $incr, body => $body, redirects => $redirects, kind => $kind }, $class;
 }
 
@@ -4036,19 +4036,19 @@ sub kind ($self) { $self->{kind} }
 sub to_sexp ($self) {
     my $redirect_parts;
     my $suffix = "";
-    if ((scalar(@{$self->{redirects}}) > 0)) {
+    if ((scalar(@{($self->{redirects} // [])}) > 0)) {
         $redirect_parts = [];
         for my $r (@{($self->{redirects} // [])}) {
-            $redirect_parts->push($r->to_sexp());
+            push(@{$redirect_parts}, $r->to_sexp());
         }
-        $suffix = " " . " "->join_($redirect_parts);
+        $suffix = " " . join(" ", @{$redirect_parts});
     }
     my $init_val = ((length($self->{init}) > 0) ? $self->{init} : "1");
     my $cond_val = ((length($self->{cond}) > 0) ? $self->{cond} : "1");
     my $incr_val = ((length($self->{incr}) > 0) ? $self->{incr} : "1");
-    my $init_str = format_arith_val($init_val);
-    my $cond_str = format_arith_val($cond_val);
-    my $incr_str = format_arith_val($incr_val);
+    my $init_str = main::format_arith_val($init_val);
+    my $cond_str = main::format_arith_val($cond_val);
+    my $incr_str = main::format_arith_val($incr_val);
     my $body_str = $self->{body}->to_sexp();
     return sprintf("(arith-for (init (word \"%s\")) (test (word \"%s\")) (step (word \"%s\")) %s)%s", $init_str, $cond_str, $incr_str, $body_str, $suffix);
 }
@@ -4061,7 +4061,7 @@ sub get_kind ($self) {
 
 package Select;
 
-sub new ($class, $var, $words, $body, $redirects, $kind) {
+sub new ($class, $var=undef, $words=undef, $body=undef, $redirects=undef, $kind=undef) {
     return bless { var => $var, words => $words, body => $body, redirects => $redirects, kind => $kind }, $class;
 }
 
@@ -4077,22 +4077,22 @@ sub to_sexp ($self) {
     my $word_parts;
     my $word_strs;
     my $suffix = "";
-    if ((scalar(@{$self->{redirects}}) > 0)) {
+    if ((scalar(@{($self->{redirects} // [])}) > 0)) {
         $redirect_parts = [];
         for my $r (@{($self->{redirects} // [])}) {
-            $redirect_parts->push($r->to_sexp());
+            push(@{$redirect_parts}, $r->to_sexp());
         }
-        $suffix = " " . " "->join_($redirect_parts);
+        $suffix = " " . join(" ", @{$redirect_parts});
     }
-    my $var_escaped = $self->{var}->replace("\\", "\\\\")->replace("\"", "\\\"");
+    my $var_escaped = (($self->{var} =~ s/"\\"/"\\\\"/gr) =~ s/"\""/"\\\""/gr);
     my $in_clause = "";
     if (defined($self->{words})) {
         $word_parts = [];
         for my $w (@{($self->{words} // [])}) {
-            $word_parts->push($w->to_sexp());
+            push(@{$word_parts}, $w->to_sexp());
         }
-        $word_strs = " "->join_($word_parts);
-        if (defined($self->{words})) {
+        $word_strs = join(" ", @{$word_parts});
+        if ((scalar(@{($self->{words} // [])}) > 0)) {
             $in_clause = "(in " . $word_strs . ")";
         } else {
             $in_clause = "(in)";
@@ -4111,7 +4111,7 @@ sub get_kind ($self) {
 
 package Case;
 
-sub new ($class, $word, $patterns, $redirects, $kind) {
+sub new ($class, $word=undef, $patterns=undef, $redirects=undef, $kind=undef) {
     return bless { word => $word, patterns => $patterns, redirects => $redirects, kind => $kind }, $class;
 }
 
@@ -4122,12 +4122,12 @@ sub kind ($self) { $self->{kind} }
 
 sub to_sexp ($self) {
     my $parts = [];
-    $parts->push("(case " . $self->{word}->to_sexp());
+    push(@{$parts}, "(case " . $self->{word}->to_sexp());
     for my $p (@{($self->{patterns} // [])}) {
-        $parts->push($p->to_sexp());
+        push(@{$parts}, $p->to_sexp());
     }
-    my $base = " "->join_($parts) . ")";
-    return append_redirects($base, $self->{redirects});
+    my $base = join(" ", @{$parts}) . ")";
+    return main::append_redirects($base, $self->{redirects});
 }
 
 sub get_kind ($self) {
@@ -4138,7 +4138,7 @@ sub get_kind ($self) {
 
 package CasePattern;
 
-sub new ($class, $pattern, $body, $terminator, $kind) {
+sub new ($class, $pattern=undef, $body=undef, $terminator=undef, $kind=undef) {
     return bless { pattern => $pattern, body => $body, terminator => $terminator, kind => $kind }, $class;
 }
 
@@ -4157,63 +4157,63 @@ sub to_sexp ($self) {
     my $i = 0;
     my $depth = 0;
     while ($i < length($self->{pattern})) {
-        $ch = $self->{pattern}->[$i];
+        $ch = substr($self->{pattern}, $i, 1);
         if ($ch eq "\\" && $i + 1 < length($self->{pattern})) {
-            $current->push(substring($self->{pattern}, $i, $i + 2));
+            push(@{$current}, main::substring($self->{pattern}, $i, $i + 2));
             $i += 2;
-        } elsif (($ch eq "\@" || $ch eq "?" || $ch eq "*" || $ch eq "+" || $ch eq "!") && $i + 1 < length($self->{pattern}) && $self->{pattern}->[$i + 1] eq "(") {
-            $current->push($ch);
-            $current->push("(");
+        } elsif (($ch eq "\@" || $ch eq "?" || $ch eq "*" || $ch eq "+" || $ch eq "!") && $i + 1 < length($self->{pattern}) && substr($self->{pattern}, $i + 1, 1) eq "(") {
+            push(@{$current}, $ch);
+            push(@{$current}, "(");
             $depth += 1;
             $i += 2;
-        } elsif (is_expansion_start($self->{pattern}, $i, "\$(")) {
-            $current->push($ch);
-            $current->push("(");
+        } elsif (main::is_expansion_start($self->{pattern}, $i, "\$(")) {
+            push(@{$current}, $ch);
+            push(@{$current}, "(");
             $depth += 1;
             $i += 2;
         } elsif ($ch eq "(" && $depth > 0) {
-            $current->push($ch);
+            push(@{$current}, $ch);
             $depth += 1;
             $i += 1;
         } elsif ($ch eq ")" && $depth > 0) {
-            $current->push($ch);
+            push(@{$current}, $ch);
             $depth -= 1;
             $i += 1;
         } elsif ($ch eq "[") {
-            ($result0, $result1, $result2) = @{consume_bracket_class($self->{pattern}, $i, $depth)};
+            ($result0, $result1, $result2) = @{main::consume_bracket_class($self->{pattern}, $i, $depth)};
             $i = $result0;
             $current->extend($result1);
         } elsif ($ch eq "'" && $depth == 0) {
-            ($result0, $result1) = @{consume_single_quote($self->{pattern}, $i)};
+            ($result0, $result1) = @{main::consume_single_quote($self->{pattern}, $i)};
             $i = $result0;
             $current->extend($result1);
         } elsif ($ch eq "\"" && $depth == 0) {
-            ($result0, $result1) = @{consume_double_quote($self->{pattern}, $i)};
+            ($result0, $result1) = @{main::consume_double_quote($self->{pattern}, $i)};
             $i = $result0;
             $current->extend($result1);
         } elsif ($ch eq "|" && $depth == 0) {
-            $alternatives->push(""->join_($current));
+            push(@{$alternatives}, join("", @{$current}));
             $current = [];
             $i += 1;
         } else {
-            $current->push($ch);
+            push(@{$current}, $ch);
             $i += 1;
         }
     }
-    $alternatives->push(""->join_($current));
+    push(@{$alternatives}, join("", @{$current}));
     my $word_list = [];
     for my $alt (@{$alternatives}) {
-        $word_list->push(Word->new($alt, "word")->to_sexp());
+        push(@{$word_list}, Word->new($alt, "word")->to_sexp());
     }
-    my $pattern_str = " "->join_($word_list);
+    my $pattern_str = join(" ", @{$word_list});
     my $parts = ["(pattern (" . $pattern_str . ")"];
     if (defined($self->{body})) {
-        $parts->push(" " . $self->{body}->to_sexp());
+        push(@{$parts}, " " . $self->{body}->to_sexp());
     } else {
-        $parts->push(" ()");
+        push(@{$parts}, " ()");
     }
-    $parts->push(")");
-    return ""->join_($parts);
+    push(@{$parts}, ")");
+    return join("", @{$parts});
 }
 
 sub get_kind ($self) {
@@ -4224,7 +4224,7 @@ sub get_kind ($self) {
 
 package Function;
 
-sub new ($class, $name, $body, $kind) {
+sub new ($class, $name=undef, $body=undef, $kind=undef) {
     return bless { name => $name, body => $body, kind => $kind }, $class;
 }
 
@@ -4244,7 +4244,7 @@ sub get_kind ($self) {
 
 package ParamExpansion;
 
-sub new ($class, $param, $op, $arg, $kind) {
+sub new ($class, $param=undef, $op=undef, $arg=undef, $kind=undef) {
     return bless { param => $param, op => $op, arg => $arg, kind => $kind }, $class;
 }
 
@@ -4257,17 +4257,17 @@ sub to_sexp ($self) {
     my $arg_val;
     my $escaped_arg;
     my $escaped_op;
-    my $escaped_param = $self->{param}->replace("\\", "\\\\")->replace("\"", "\\\"");
+    my $escaped_param = (($self->{param} =~ s/"\\"/"\\\\"/gr) =~ s/"\""/"\\\""/gr);
     if ($self->{op} ne "") {
-        $escaped_op = $self->{op}->replace("\\", "\\\\")->replace("\"", "\\\"");
+        $escaped_op = (($self->{op} =~ s/"\\"/"\\\\"/gr) =~ s/"\""/"\\\""/gr);
         my $arg_val = "";
         if ($self->{arg} ne "") {
             $arg_val = $self->{arg};
         } else {
             $arg_val = "";
         }
-        $escaped_arg = $arg_val->replace("\\", "\\\\")->replace("\"", "\\\"");
-        return "(param \"" . $escaped_param . "\" \"" . $escaped_op + "\" \"" . $escaped_arg + "\")";
+        $escaped_arg = (($arg_val =~ s/"\\"/"\\\\"/gr) =~ s/"\""/"\\\""/gr);
+        return "(param \"" . $escaped_param . "\" \"" . $escaped_op . "\" \"" . $escaped_arg . "\")";
     }
     return "(param \"" . $escaped_param . "\")";
 }
@@ -4280,7 +4280,7 @@ sub get_kind ($self) {
 
 package ParamLength;
 
-sub new ($class, $param, $kind) {
+sub new ($class, $param=undef, $kind=undef) {
     return bless { param => $param, kind => $kind }, $class;
 }
 
@@ -4288,7 +4288,7 @@ sub param ($self) { $self->{param} }
 sub kind ($self) { $self->{kind} }
 
 sub to_sexp ($self) {
-    my $escaped = $self->{param}->replace("\\", "\\\\")->replace("\"", "\\\"");
+    my $escaped = (($self->{param} =~ s/"\\"/"\\\\"/gr) =~ s/"\""/"\\\""/gr);
     return "(param-len \"" . $escaped . "\")";
 }
 
@@ -4300,7 +4300,7 @@ sub get_kind ($self) {
 
 package ParamIndirect;
 
-sub new ($class, $param, $op, $arg, $kind) {
+sub new ($class, $param=undef, $op=undef, $arg=undef, $kind=undef) {
     return bless { param => $param, op => $op, arg => $arg, kind => $kind }, $class;
 }
 
@@ -4313,17 +4313,17 @@ sub to_sexp ($self) {
     my $arg_val;
     my $escaped_arg;
     my $escaped_op;
-    my $escaped = $self->{param}->replace("\\", "\\\\")->replace("\"", "\\\"");
+    my $escaped = (($self->{param} =~ s/"\\"/"\\\\"/gr) =~ s/"\""/"\\\""/gr);
     if ($self->{op} ne "") {
-        $escaped_op = $self->{op}->replace("\\", "\\\\")->replace("\"", "\\\"");
+        $escaped_op = (($self->{op} =~ s/"\\"/"\\\\"/gr) =~ s/"\""/"\\\""/gr);
         my $arg_val = "";
         if ($self->{arg} ne "") {
             $arg_val = $self->{arg};
         } else {
             $arg_val = "";
         }
-        $escaped_arg = $arg_val->replace("\\", "\\\\")->replace("\"", "\\\"");
-        return "(param-indirect \"" . $escaped . "\" \"" . $escaped_op + "\" \"" . $escaped_arg + "\")";
+        $escaped_arg = (($arg_val =~ s/"\\"/"\\\\"/gr) =~ s/"\""/"\\\""/gr);
+        return "(param-indirect \"" . $escaped . "\" \"" . $escaped_op . "\" \"" . $escaped_arg . "\")";
     }
     return "(param-indirect \"" . $escaped . "\")";
 }
@@ -4336,7 +4336,7 @@ sub get_kind ($self) {
 
 package CommandSubstitution;
 
-sub new ($class, $command, $brace, $kind) {
+sub new ($class, $command=undef, $brace=undef, $kind=undef) {
     return bless { command => $command, brace => $brace, kind => $kind }, $class;
 }
 
@@ -4359,7 +4359,7 @@ sub get_kind ($self) {
 
 package ArithmeticExpansion;
 
-sub new ($class, $expression, $kind) {
+sub new ($class, $expression=undef, $kind=undef) {
     return bless { expression => $expression, kind => $kind }, $class;
 }
 
@@ -4381,7 +4381,7 @@ sub get_kind ($self) {
 
 package ArithmeticCommand;
 
-sub new ($class, $expression, $redirects, $raw_content, $kind) {
+sub new ($class, $expression=undef, $redirects=undef, $raw_content=undef, $kind=undef) {
     return bless { expression => $expression, redirects => $redirects, raw_content => $raw_content, kind => $kind }, $class;
 }
 
@@ -4394,14 +4394,14 @@ sub to_sexp ($self) {
     my $redirect_parts;
     my $redirect_sexps;
     my $formatted = Word->new($self->{raw_content}, "word")->format_command_substitutions($self->{raw_content}, 1);
-    my $escaped = $formatted->replace("\\", "\\\\")->replace("\"", "\\\"")->replace("\n", "\\n")->replace("\t", "\\t");
+    my $escaped = (((($formatted =~ s/"\\"/"\\\\"/gr) =~ s/"\""/"\\\""/gr) =~ s/"\n"/"\\n"/gr) =~ s/"\t"/"\\t"/gr);
     my $result = "(arith (word \"" . $escaped . "\"))";
-    if ((scalar(@{$self->{redirects}}) > 0)) {
+    if ((scalar(@{($self->{redirects} // [])}) > 0)) {
         $redirect_parts = [];
         for my $r (@{($self->{redirects} // [])}) {
-            $redirect_parts->push($r->to_sexp());
+            push(@{$redirect_parts}, $r->to_sexp());
         }
-        $redirect_sexps = " "->join_($redirect_parts);
+        $redirect_sexps = join(" ", @{$redirect_parts});
         return $result . " " . $redirect_sexps;
     }
     return $result;
@@ -4415,7 +4415,7 @@ sub get_kind ($self) {
 
 package ArithNumber;
 
-sub new ($class, $value, $kind) {
+sub new ($class, $value=undef, $kind=undef) {
     return bless { value => $value, kind => $kind }, $class;
 }
 
@@ -4434,7 +4434,7 @@ sub get_kind ($self) {
 
 package ArithEmpty;
 
-sub new ($class, $kind) {
+sub new ($class, $kind=undef) {
     return bless { kind => $kind }, $class;
 }
 
@@ -4452,7 +4452,7 @@ sub get_kind ($self) {
 
 package ArithVar;
 
-sub new ($class, $name, $kind) {
+sub new ($class, $name=undef, $kind=undef) {
     return bless { name => $name, kind => $kind }, $class;
 }
 
@@ -4471,7 +4471,7 @@ sub get_kind ($self) {
 
 package ArithBinaryOp;
 
-sub new ($class, $op, $left, $right, $kind) {
+sub new ($class, $op=undef, $left=undef, $right=undef, $kind=undef) {
     return bless { op => $op, left => $left, right => $right, kind => $kind }, $class;
 }
 
@@ -4492,7 +4492,7 @@ sub get_kind ($self) {
 
 package ArithUnaryOp;
 
-sub new ($class, $op, $operand, $kind) {
+sub new ($class, $op=undef, $operand=undef, $kind=undef) {
     return bless { op => $op, operand => $operand, kind => $kind }, $class;
 }
 
@@ -4512,7 +4512,7 @@ sub get_kind ($self) {
 
 package ArithPreIncr;
 
-sub new ($class, $operand, $kind) {
+sub new ($class, $operand=undef, $kind=undef) {
     return bless { operand => $operand, kind => $kind }, $class;
 }
 
@@ -4531,7 +4531,7 @@ sub get_kind ($self) {
 
 package ArithPostIncr;
 
-sub new ($class, $operand, $kind) {
+sub new ($class, $operand=undef, $kind=undef) {
     return bless { operand => $operand, kind => $kind }, $class;
 }
 
@@ -4550,7 +4550,7 @@ sub get_kind ($self) {
 
 package ArithPreDecr;
 
-sub new ($class, $operand, $kind) {
+sub new ($class, $operand=undef, $kind=undef) {
     return bless { operand => $operand, kind => $kind }, $class;
 }
 
@@ -4569,7 +4569,7 @@ sub get_kind ($self) {
 
 package ArithPostDecr;
 
-sub new ($class, $operand, $kind) {
+sub new ($class, $operand=undef, $kind=undef) {
     return bless { operand => $operand, kind => $kind }, $class;
 }
 
@@ -4588,7 +4588,7 @@ sub get_kind ($self) {
 
 package ArithAssign;
 
-sub new ($class, $op, $target, $value, $kind) {
+sub new ($class, $op=undef, $target=undef, $value=undef, $kind=undef) {
     return bless { op => $op, target => $target, value => $value, kind => $kind }, $class;
 }
 
@@ -4609,7 +4609,7 @@ sub get_kind ($self) {
 
 package ArithTernary;
 
-sub new ($class, $condition, $if_true, $if_false, $kind) {
+sub new ($class, $condition=undef, $if_true=undef, $if_false=undef, $kind=undef) {
     return bless { condition => $condition, if_true => $if_true, if_false => $if_false, kind => $kind }, $class;
 }
 
@@ -4630,7 +4630,7 @@ sub get_kind ($self) {
 
 package ArithComma;
 
-sub new ($class, $left, $right, $kind) {
+sub new ($class, $left=undef, $right=undef, $kind=undef) {
     return bless { left => $left, right => $right, kind => $kind }, $class;
 }
 
@@ -4650,7 +4650,7 @@ sub get_kind ($self) {
 
 package ArithSubscript;
 
-sub new ($class, $array, $index_, $kind) {
+sub new ($class, $array=undef, $index_=undef, $kind=undef) {
     return bless { array => $array, index_ => $index_, kind => $kind }, $class;
 }
 
@@ -4670,7 +4670,7 @@ sub get_kind ($self) {
 
 package ArithEscape;
 
-sub new ($class, $char, $kind) {
+sub new ($class, $char=undef, $kind=undef) {
     return bless { char => $char, kind => $kind }, $class;
 }
 
@@ -4689,7 +4689,7 @@ sub get_kind ($self) {
 
 package ArithDeprecated;
 
-sub new ($class, $expression, $kind) {
+sub new ($class, $expression=undef, $kind=undef) {
     return bless { expression => $expression, kind => $kind }, $class;
 }
 
@@ -4697,7 +4697,7 @@ sub expression ($self) { $self->{expression} }
 sub kind ($self) { $self->{kind} }
 
 sub to_sexp ($self) {
-    my $escaped = $self->{expression}->replace("\\", "\\\\")->replace("\"", "\\\"")->replace("\n", "\\n");
+    my $escaped = ((($self->{expression} =~ s/"\\"/"\\\\"/gr) =~ s/"\""/"\\\""/gr) =~ s/"\n"/"\\n"/gr);
     return "(arith-deprecated \"" . $escaped . "\")";
 }
 
@@ -4709,7 +4709,7 @@ sub get_kind ($self) {
 
 package ArithConcat;
 
-sub new ($class, $parts, $kind) {
+sub new ($class, $parts=undef, $kind=undef) {
     return bless { parts => $parts, kind => $kind }, $class;
 }
 
@@ -4719,9 +4719,9 @@ sub kind ($self) { $self->{kind} }
 sub to_sexp ($self) {
     my $sexps = [];
     for my $p (@{($self->{parts} // [])}) {
-        $sexps->push($p->to_sexp());
+        push(@{$sexps}, $p->to_sexp());
     }
-    return "(arith-concat " . " "->join_($sexps) . ")";
+    return "(arith-concat " . join(" ", @{$sexps}) . ")";
 }
 
 sub get_kind ($self) {
@@ -4732,7 +4732,7 @@ sub get_kind ($self) {
 
 package AnsiCQuote;
 
-sub new ($class, $content, $kind) {
+sub new ($class, $content=undef, $kind=undef) {
     return bless { content => $content, kind => $kind }, $class;
 }
 
@@ -4740,7 +4740,7 @@ sub content ($self) { $self->{content} }
 sub kind ($self) { $self->{kind} }
 
 sub to_sexp ($self) {
-    my $escaped = $self->{content}->replace("\\", "\\\\")->replace("\"", "\\\"")->replace("\n", "\\n");
+    my $escaped = ((($self->{content} =~ s/"\\"/"\\\\"/gr) =~ s/"\""/"\\\""/gr) =~ s/"\n"/"\\n"/gr);
     return "(ansi-c \"" . $escaped . "\")";
 }
 
@@ -4752,7 +4752,7 @@ sub get_kind ($self) {
 
 package LocaleString;
 
-sub new ($class, $content, $kind) {
+sub new ($class, $content=undef, $kind=undef) {
     return bless { content => $content, kind => $kind }, $class;
 }
 
@@ -4760,7 +4760,7 @@ sub content ($self) { $self->{content} }
 sub kind ($self) { $self->{kind} }
 
 sub to_sexp ($self) {
-    my $escaped = $self->{content}->replace("\\", "\\\\")->replace("\"", "\\\"")->replace("\n", "\\n");
+    my $escaped = ((($self->{content} =~ s/"\\"/"\\\\"/gr) =~ s/"\""/"\\\""/gr) =~ s/"\n"/"\\n"/gr);
     return "(locale \"" . $escaped . "\")";
 }
 
@@ -4772,7 +4772,7 @@ sub get_kind ($self) {
 
 package ProcessSubstitution;
 
-sub new ($class, $direction, $command, $kind) {
+sub new ($class, $direction=undef, $command=undef, $kind=undef) {
     return bless { direction => $direction, command => $command, kind => $kind }, $class;
 }
 
@@ -4792,7 +4792,7 @@ sub get_kind ($self) {
 
 package Negation;
 
-sub new ($class, $pipeline, $kind) {
+sub new ($class, $pipeline=undef, $kind=undef) {
     return bless { pipeline => $pipeline, kind => $kind }, $class;
 }
 
@@ -4814,7 +4814,7 @@ sub get_kind ($self) {
 
 package Time;
 
-sub new ($class, $pipeline, $posix, $kind) {
+sub new ($class, $pipeline=undef, $posix=undef, $kind=undef) {
     return bless { pipeline => $pipeline, posix => $posix, kind => $kind }, $class;
 }
 
@@ -4844,7 +4844,7 @@ sub get_kind ($self) {
 
 package ConditionalExpr;
 
-sub new ($class, $body, $redirects, $kind) {
+sub new ($class, $body=undef, $redirects=undef, $kind=undef) {
     return bless { body => $body, redirects => $redirects, kind => $kind }, $class;
 }
 
@@ -4861,17 +4861,17 @@ sub to_sexp ($self) {
     my $result = "";
     if (ref($body) eq 'string') {
         my $body = $body;
-        $escaped = $body->replace("\\", "\\\\")->replace("\"", "\\\"")->replace("\n", "\\n");
+        $escaped = ((($body =~ s/"\\"/"\\\\"/gr) =~ s/"\""/"\\\""/gr) =~ s/"\n"/"\\n"/gr);
         $result = "(cond \"" . $escaped . "\")";
     } else {
         $result = "(cond " . $body->to_sexp() . ")";
     }
-    if ((scalar(@{$self->{redirects}}) > 0)) {
+    if ((scalar(@{($self->{redirects} // [])}) > 0)) {
         $redirect_parts = [];
         for my $r (@{($self->{redirects} // [])}) {
-            $redirect_parts->push($r->to_sexp());
+            push(@{$redirect_parts}, $r->to_sexp());
         }
-        $redirect_sexps = " "->join_($redirect_parts);
+        $redirect_sexps = join(" ", @{$redirect_parts});
         return $result . " " . $redirect_sexps;
     }
     return $result;
@@ -4885,7 +4885,7 @@ sub get_kind ($self) {
 
 package UnaryTest;
 
-sub new ($class, $op, $operand, $kind) {
+sub new ($class, $op=undef, $operand=undef, $kind=undef) {
     return bless { op => $op, operand => $operand, kind => $kind }, $class;
 }
 
@@ -4895,7 +4895,7 @@ sub kind ($self) { $self->{kind} }
 
 sub to_sexp ($self) {
     my $operand_val = $self->{operand}->get_cond_formatted_value();
-    return "(cond-unary \"" . $self->{op} . "\" (cond-term \"" . $operand_val + "\"))";
+    return "(cond-unary \"" . $self->{op} . "\" (cond-term \"" . $operand_val . "\"))";
 }
 
 sub get_kind ($self) {
@@ -4906,7 +4906,7 @@ sub get_kind ($self) {
 
 package BinaryTest;
 
-sub new ($class, $op, $left, $right, $kind) {
+sub new ($class, $op=undef, $left=undef, $right=undef, $kind=undef) {
     return bless { op => $op, left => $left, right => $right, kind => $kind }, $class;
 }
 
@@ -4918,7 +4918,7 @@ sub kind ($self) { $self->{kind} }
 sub to_sexp ($self) {
     my $left_val = $self->{left}->get_cond_formatted_value();
     my $right_val = $self->{right}->get_cond_formatted_value();
-    return "(cond-binary \"" . $self->{op} . "\" (cond-term \"" . $left_val + "\") (cond-term \"" . $right_val + "\"))";
+    return "(cond-binary \"" . $self->{op} . "\" (cond-term \"" . $left_val . "\") (cond-term \"" . $right_val . "\"))";
 }
 
 sub get_kind ($self) {
@@ -4929,7 +4929,7 @@ sub get_kind ($self) {
 
 package CondAnd;
 
-sub new ($class, $left, $right, $kind) {
+sub new ($class, $left=undef, $right=undef, $kind=undef) {
     return bless { left => $left, right => $right, kind => $kind }, $class;
 }
 
@@ -4949,7 +4949,7 @@ sub get_kind ($self) {
 
 package CondOr;
 
-sub new ($class, $left, $right, $kind) {
+sub new ($class, $left=undef, $right=undef, $kind=undef) {
     return bless { left => $left, right => $right, kind => $kind }, $class;
 }
 
@@ -4969,7 +4969,7 @@ sub get_kind ($self) {
 
 package CondNot;
 
-sub new ($class, $operand, $kind) {
+sub new ($class, $operand=undef, $kind=undef) {
     return bless { operand => $operand, kind => $kind }, $class;
 }
 
@@ -4988,7 +4988,7 @@ sub get_kind ($self) {
 
 package CondParen;
 
-sub new ($class, $inner, $kind) {
+sub new ($class, $inner=undef, $kind=undef) {
     return bless { inner => $inner, kind => $kind }, $class;
 }
 
@@ -5007,7 +5007,7 @@ sub get_kind ($self) {
 
 package Array;
 
-sub new ($class, $elements, $kind) {
+sub new ($class, $elements=undef, $kind=undef) {
     return bless { elements => $elements, kind => $kind }, $class;
 }
 
@@ -5015,14 +5015,14 @@ sub elements ($self) { $self->{elements} }
 sub kind ($self) { $self->{kind} }
 
 sub to_sexp ($self) {
-    if (!(scalar(@{$self->{elements}}) > 0)) {
+    if (!(scalar(@{($self->{elements} // [])}) > 0)) {
         return "(array)";
     }
     my $parts = [];
     for my $e (@{($self->{elements} // [])}) {
-        $parts->push($e->to_sexp());
+        push(@{$parts}, $e->to_sexp());
     }
-    my $inner = " "->join_($parts);
+    my $inner = join(" ", @{$parts});
     return "(array " . $inner . ")";
 }
 
@@ -5034,7 +5034,7 @@ sub get_kind ($self) {
 
 package Coproc;
 
-sub new ($class, $command, $name, $kind) {
+sub new ($class, $command=undef, $name=undef, $kind=undef) {
     return bless { command => $command, name => $name, kind => $kind }, $class;
 }
 
@@ -5061,7 +5061,7 @@ sub get_kind ($self) {
 
 package Parser;
 
-sub new ($class, $source, $pos_, $length_, $pending_heredocs, $cmdsub_heredoc_end, $saw_newline_in_single_quote, $in_process_sub, $extglob, $ctx, $lexer, $token_history, $parser_state, $dolbrace_state, $eof_token, $word_context, $at_command_start, $in_array_literal, $in_assign_builtin, $arith_src, $arith_pos, $arith_len) {
+sub new ($class, $source=undef, $pos_=undef, $length_=undef, $pending_heredocs=undef, $cmdsub_heredoc_end=undef, $saw_newline_in_single_quote=undef, $in_process_sub=undef, $extglob=undef, $ctx=undef, $lexer=undef, $token_history=undef, $parser_state=undef, $dolbrace_state=undef, $eof_token=undef, $word_context=undef, $at_command_start=undef, $in_array_literal=undef, $in_assign_builtin=undef, $arith_src=undef, $arith_pos=undef, $arith_len=undef) {
     return bless { source => $source, pos_ => $pos_, length_ => $length_, pending_heredocs => $pending_heredocs, cmdsub_heredoc_end => $cmdsub_heredoc_end, saw_newline_in_single_quote => $saw_newline_in_single_quote, in_process_sub => $in_process_sub, extglob => $extglob, ctx => $ctx, lexer => $lexer, token_history => $token_history, parser_state => $parser_state, dolbrace_state => $dolbrace_state, eof_token => $eof_token, word_context => $word_context, at_command_start => $at_command_start, in_array_literal => $in_array_literal, in_assign_builtin => $in_assign_builtin, arith_src => $arith_src, arith_pos => $arith_pos, arith_len => $arith_len }, $class;
 }
 
@@ -5115,26 +5115,26 @@ sub record_token ($self, $tok) {
 }
 
 sub update_dolbrace_for_op ($self, $op, $has_param) {
-    if ($self->{dolbrace_state} == DOLBRACESTATE_NONE()) {
+    if ($self->{dolbrace_state} == main::DOLBRACESTATE_NONE()) {
         return;
     }
     if ($op eq "" || length($op) == 0) {
         return;
     }
-    my $first_char = $op->[0];
-    if ($self->{dolbrace_state} == DOLBRACESTATE_PARAM() && $has_param) {
+    my $first_char = substr($op, 0, 1);
+    if ($self->{dolbrace_state} == main::DOLBRACESTATE_PARAM() && $has_param) {
         if ((index("%#^,", $first_char) >= 0)) {
-            $self->{dolbrace_state} = DOLBRACESTATE_QUOTE();
+            $self->{dolbrace_state} = main::DOLBRACESTATE_QUOTE();
             return;
         }
         if ($first_char eq "/") {
-            $self->{dolbrace_state} = DOLBRACESTATE_QUOTE2();
+            $self->{dolbrace_state} = main::DOLBRACESTATE_QUOTE2();
             return;
         }
     }
-    if ($self->{dolbrace_state} == DOLBRACESTATE_PARAM()) {
+    if ($self->{dolbrace_state} == main::DOLBRACESTATE_PARAM()) {
         if ((index("#%^,~:-=?+/", $first_char) >= 0)) {
-            $self->{dolbrace_state} = DOLBRACESTATE_OP();
+            $self->{dolbrace_state} = main::DOLBRACESTATE_OP();
         }
     }
 }
@@ -5213,13 +5213,13 @@ sub lex_skip_comment ($self) {
 sub lex_is_command_terminator ($self) {
     my $tok = $self->lex_peek_token();
     my $t = $tok->{type};
-    return $t == TOKENTYPE_EOF() || $t == TOKENTYPE_NEWLINE() || $t == TOKENTYPE_PIPE() || $t == TOKENTYPE_SEMI() || $t == TOKENTYPE_LPAREN() || $t == TOKENTYPE_RPAREN() || $t == TOKENTYPE_AMP();
+    return $t == main::TOKENTYPE_EOF() || $t == main::TOKENTYPE_NEWLINE() || $t == main::TOKENTYPE_PIPE() || $t == main::TOKENTYPE_SEMI() || $t == main::TOKENTYPE_LPAREN() || $t == main::TOKENTYPE_RPAREN() || $t == main::TOKENTYPE_AMP();
 }
 
 sub lex_peek_operator ($self) {
     my $tok = $self->lex_peek_token();
     my $t = $tok->{type};
-    if ($t >= TOKENTYPE_SEMI() && $t <= TOKENTYPE_GREATER() || $t >= TOKENTYPE_AND_AND() && $t <= TOKENTYPE_PIPE_AMP()) {
+    if ($t >= main::TOKENTYPE_SEMI() && $t <= main::TOKENTYPE_GREATER() || $t >= main::TOKENTYPE_AND_AND() && $t <= main::TOKENTYPE_PIPE_AMP()) {
         return [$t, $tok->{value}];
     }
     return [0, ""];
@@ -5227,14 +5227,14 @@ sub lex_peek_operator ($self) {
 
 sub lex_peek_reserved_word ($self) {
     my $tok = $self->lex_peek_token();
-    if ($tok->{type} != TOKENTYPE_WORD()) {
+    if ($tok->{type} != main::TOKENTYPE_WORD()) {
         return "";
     }
     my $word = $tok->{value};
-    if ($word->endswith("\\\n")) {
+    if ((substr($word, -length("\\\n")) eq "\\\n")) {
         $word = substr($word, 0, length($word) - 2 - 0);
     }
-    if ((exists(RESERVED_WORDS()->{$word})) || $word eq "{" || $word eq "}" || $word eq "[[" || $word eq "]]" || $word eq "!" || $word eq "time") {
+    if ((exists(main::RESERVED_WORDS()->{$word})) || $word eq "{" || $word eq "}" || $word eq "[[" || $word eq "]]" || $word eq "!" || $word eq "time") {
         return $word;
     }
     return "";
@@ -5247,11 +5247,11 @@ sub lex_is_at_reserved_word ($self, $word) {
 
 sub lex_consume_word ($self, $expected) {
     my $tok = $self->lex_peek_token();
-    if ($tok->{type} != TOKENTYPE_WORD()) {
+    if ($tok->{type} != main::TOKENTYPE_WORD()) {
         return 0;
     }
     my $word = $tok->{value};
-    if ($word->endswith("\\\n")) {
+    if ((substr($word, -length("\\\n")) eq "\\\n")) {
         $word = substr($word, 0, length($word) - 2 - 0);
     }
     if ($word eq $expected) {
@@ -5264,13 +5264,13 @@ sub lex_consume_word ($self, $expected) {
 sub lex_peek_case_terminator ($self) {
     my $tok = $self->lex_peek_token();
     my $t = $tok->{type};
-    if ($t == TOKENTYPE_SEMI_SEMI()) {
+    if ($t == main::TOKENTYPE_SEMI_SEMI()) {
         return ";;";
     }
-    if ($t == TOKENTYPE_SEMI_AMP()) {
+    if ($t == main::TOKENTYPE_SEMI_AMP()) {
         return ";&";
     }
-    if ($t == TOKENTYPE_SEMI_SEMI_AMP()) {
+    if ($t == main::TOKENTYPE_SEMI_SEMI_AMP()) {
         return ";;&";
     }
     return "";
@@ -5284,14 +5284,14 @@ sub peek ($self) {
     if ($self->at_end()) {
         return "";
     }
-    return $self->{source}->[$self->{pos_}];
+    return substr($self->{source}, $self->{pos_}, 1);
 }
 
 sub advance ($self) {
     if ($self->at_end()) {
         return "";
     }
-    my $ch = $self->{source}->[$self->{pos_}];
+    my $ch = substr($self->{source}, $self->{pos_}, 1);
     $self->{pos_} += 1;
     return $ch;
 }
@@ -5301,22 +5301,22 @@ sub peek_at ($self, $offset) {
     if ($pos_ < 0 || $pos_ >= $self->{length_}) {
         return "";
     }
-    return $self->{source}->[$pos_];
+    return substr($self->{source}, $pos_, 1);
 }
 
 sub lookahead ($self, $n) {
-    return substring($self->{source}, $self->{pos_}, $self->{pos_} + $n);
+    return main::substring($self->{source}, $self->{pos_}, $self->{pos_} + $n);
 }
 
 sub is_bang_followed_by_procsub ($self) {
     if ($self->{pos_} + 2 >= $self->{length_}) {
         return 0;
     }
-    my $next_char = $self->{source}->[$self->{pos_} + 1];
+    my $next_char = substr($self->{source}, $self->{pos_} + 1, 1);
     if ($next_char ne ">" && $next_char ne "<") {
         return 0;
     }
-    return $self->{source}->[$self->{pos_} + 2] eq "(";
+    return substr($self->{source}, $self->{pos_} + 2, 1) eq "(";
 }
 
 sub skip_whitespace ($self) {
@@ -5342,7 +5342,7 @@ sub skip_whitespace_and_newlines ($self) {
     my $ch;
     while (!$self->at_end()) {
         $ch = $self->peek();
-        if (is_whitespace($ch)) {
+        if (main::is_whitespace($ch)) {
             $self->advance();
             if ($ch eq "\n") {
                 $self->gather_heredoc_bodies();
@@ -5381,7 +5381,7 @@ sub at_list_terminating_bracket ($self) {
         if ($next_pos >= $self->{length_}) {
             return 1;
         }
-        return is_word_end_context($self->{source}->[$next_pos]);
+        return main::is_word_end_context(substr($self->{source}, $next_pos, 1));
     }
     return 0;
 }
@@ -5392,10 +5392,10 @@ sub at_eof_token ($self) {
     }
     my $tok = $self->lex_peek_token();
     if ($self->{eof_token} eq ")") {
-        return $tok->{type} == TOKENTYPE_RPAREN();
+        return $tok->{type} == main::TOKENTYPE_RPAREN();
     }
     if ($self->{eof_token} eq "}") {
-        return $tok->{type} == TOKENTYPE_WORD() && $tok->{value} eq "}";
+        return $tok->{type} == main::TOKENTYPE_WORD() && $tok->{value} eq "}";
     }
     return 0;
 }
@@ -5409,9 +5409,9 @@ sub collect_redirects ($self) {
         if (!defined($redirect)) {
             last;
         }
-        $redirects->push($redirect);
+        push(@{$redirects}, $redirect);
     }
-    return ((scalar(@{$redirects}) > 0) ? $redirects : undef);
+    return ((scalar(@{($redirects // [])}) > 0) ? $redirects : undef);
 }
 
 sub parse_loop_body ($self, $context) {
@@ -5443,29 +5443,29 @@ sub peek_word ($self) {
     my $word;
     my $saved_pos = $self->{pos_};
     $self->skip_whitespace();
-    if ($self->at_end() || is_metachar($self->peek())) {
+    if ($self->at_end() || main::is_metachar($self->peek())) {
         $self->{pos_} = $saved_pos;
         return "";
     }
     my $chars = [];
-    while (!$self->at_end() && !is_metachar($self->peek())) {
+    while (!$self->at_end() && !main::is_metachar($self->peek())) {
         $ch = $self->peek();
-        if (is_quote($ch)) {
+        if (main::is_quote($ch)) {
             last;
         }
-        if ($ch eq "\\" && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "\n") {
+        if ($ch eq "\\" && $self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "\n") {
             last;
         }
         if ($ch eq "\\" && $self->{pos_} + 1 < $self->{length_}) {
-            $chars->push($self->advance());
-            $chars->push($self->advance());
+            push(@{$chars}, $self->advance());
+            push(@{$chars}, $self->advance());
             next;
         }
-        $chars->push($self->advance());
+        push(@{$chars}, $self->advance());
     }
     my $word = "";
-    if ((scalar(@{$chars}) > 0)) {
-        $word = ""->join_($chars);
+    if ((scalar(@{($chars // [])}) > 0)) {
+        $word = join("", @{$chars});
     } else {
         $word = "";
     }
@@ -5479,7 +5479,7 @@ sub consume_word ($self, $expected) {
     my $word = $self->peek_word();
     my $keyword_word = $word;
     my $has_leading_brace = 0;
-    if ($word ne "" && $self->{in_process_sub} && length($word) > 1 && $word->[0] eq "}") {
+    if ($word ne "" && $self->{in_process_sub} && length($word) > 1 && substr($word, 0, 1) eq "}") {
         $keyword_word = substr($word, 1);
         $has_leading_brace = 1;
     }
@@ -5491,10 +5491,10 @@ sub consume_word ($self, $expected) {
     if ($has_leading_brace) {
         $self->advance();
     }
-    for (@{$expected}) {
+    for (split(//, $expected)) {
         $self->advance();
     }
-    while ($self->peek() eq "\\" && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "\n") {
+    while ($self->peek() eq "\\" && $self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "\n") {
         $self->advance();
         $self->advance();
     }
@@ -5513,7 +5513,7 @@ sub scan_double_quote ($self, $chars, $parts, $start, $handle_line_continuation)
     while (!$self->at_end() && $self->peek() ne "\"") {
         $c = $self->peek();
         if ($c eq "\\" && $self->{pos_} + 1 < $self->{length_}) {
-            $next_c = $self->{source}->[$self->{pos_} + 1];
+            $next_c = substr($self->{source}, $self->{pos_} + 1, 1);
             if ($handle_line_continuation && $next_c eq "\n") {
                 $self->advance();
                 $self->advance();
@@ -5540,7 +5540,7 @@ sub parse_dollar_expansion ($self, $chars, $parts, $in_dquote) {
     my $result1;
     my $result0 = undef;
     my $result1 = "";
-    if ($self->{pos_} + 2 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "(" && $self->{source}->[$self->{pos_} + 2] eq "(") {
+    if ($self->{pos_} + 2 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "(" && substr($self->{source}, $self->{pos_} + 2, 1) eq "(") {
         ($result0, $result1) = @{$self->parse_arithmetic_expansion()};
         if (defined($result0)) {
             $parts->append($result0);
@@ -5555,7 +5555,7 @@ sub parse_dollar_expansion ($self, $chars, $parts, $in_dquote) {
         }
         return 0;
     }
-    if ($self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "[") {
+    if ($self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "[") {
         ($result0, $result1) = @{$self->parse_deprecated_arithmetic()};
         if (defined($result0)) {
             $parts->append($result0);
@@ -5564,7 +5564,7 @@ sub parse_dollar_expansion ($self, $chars, $parts, $in_dquote) {
         }
         return 0;
     }
-    if ($self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "(") {
+    if ($self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "(") {
         ($result0, $result1) = @{$self->parse_command_substitution()};
         if (defined($result0)) {
             $parts->append($result0);
@@ -5596,7 +5596,7 @@ sub parse_word ($self, $at_command_start, $in_array_literal, $in_assign_builtin)
     $self->{in_array_literal} = $in_array_literal;
     $self->{in_assign_builtin} = $in_assign_builtin;
     my $tok = $self->lex_peek_token();
-    if ($tok->{type} != TOKENTYPE_WORD()) {
+    if ($tok->{type} != main::TOKENTYPE_WORD()) {
         $self->{at_command_start} = 0;
         $self->{in_array_literal} = 0;
         $self->{in_assign_builtin} = 0;
@@ -5621,7 +5621,7 @@ sub parse_command_substitution ($self) {
     }
     $self->advance();
     my $saved = $self->save_parser_state();
-    $self->set_state(PARSERSTATEFLAGS_PST_CMDSUBST() | PARSERSTATEFLAGS_PST_EOFTOKEN());
+    $self->set_state(main::PARSERSTATEFLAGS_PST_CMDSUBST() | main::PARSERSTATEFLAGS_PST_EOFTOKEN());
     $self->{eof_token} = ")";
     my $cmd = $self->parse_list(1);
     if (!defined($cmd)) {
@@ -5635,7 +5635,7 @@ sub parse_command_substitution ($self) {
     }
     $self->advance();
     my $text_end = $self->{pos_};
-    my $text = substring($self->{source}, $start, $text_end);
+    my $text = main::substring($self->{source}, $start, $text_end);
     $self->restore_parser_state($saved);
     return [CommandSubstitution->new($cmd, "cmdsub"), $text];
 }
@@ -5646,7 +5646,7 @@ sub parse_funsub ($self, $start) {
         $self->advance();
     }
     my $saved = $self->save_parser_state();
-    $self->set_state(PARSERSTATEFLAGS_PST_CMDSUBST() | PARSERSTATEFLAGS_PST_EOFTOKEN());
+    $self->set_state(main::PARSERSTATEFLAGS_PST_CMDSUBST() | main::PARSERSTATEFLAGS_PST_EOFTOKEN());
     $self->{eof_token} = "}";
     my $cmd = $self->parse_list(1);
     if (!defined($cmd)) {
@@ -5658,14 +5658,14 @@ sub parse_funsub ($self, $start) {
         die "unexpected EOF looking for `}'";
     }
     $self->advance();
-    my $text = substring($self->{source}, $start, $self->{pos_});
+    my $text = main::substring($self->{source}, $start, $self->{pos_});
     $self->restore_parser_state($saved);
     $self->sync_lexer();
     return [CommandSubstitution->new($cmd, 1, "cmdsub"), $text];
 }
 
 sub is_assignment_word ($self, $word) {
-    return assignment($word->{value}, 0) != -1;
+    return main::assignment($word->{value}, 0) != -1;
 }
 
 sub parse_backtick_substitution ($self) {
@@ -5698,247 +5698,247 @@ sub parse_backtick_substitution ($self) {
     my $in_heredoc_body = 0;
     my $current_heredoc_delim = "";
     my $current_heredoc_strip = 0;
+    my $ch = "";
     while (!$self->at_end() && ($in_heredoc_body || $self->peek() ne "`")) {
         if ($in_heredoc_body) {
             $line_start = $self->{pos_};
             $line_end = $line_start;
-            while ($line_end < $self->{length_} && $self->{source}->[$line_end] ne "\n") {
+            while ($line_end < $self->{length_} && substr($self->{source}, $line_end, 1) ne "\n") {
                 $line_end += 1;
             }
-            $line = substring($self->{source}, $line_start, $line_end);
+            $line = main::substring($self->{source}, $line_start, $line_end);
             $check_line = ($current_heredoc_strip ? ($line =~ s/^["\t"]+//r) : $line);
             if ($check_line eq $current_heredoc_delim) {
-                for my $ch (@{$line}) {
-                    $content_chars->push($ch);
-                    $text_chars->push($ch);
+                for my $ch (split(//, $line)) {
+                    push(@{$content_chars}, $ch);
+                    push(@{$text_chars}, $ch);
                 }
                 $self->{pos_} = $line_end;
-                if ($self->{pos_} < $self->{length_} && $self->{source}->[$self->{pos_}] eq "\n") {
-                    $content_chars->push("\n");
-                    $text_chars->push("\n");
+                if ($self->{pos_} < $self->{length_} && substr($self->{source}, $self->{pos_}, 1) eq "\n") {
+                    push(@{$content_chars}, "\n");
+                    push(@{$text_chars}, "\n");
                     $self->advance();
                 }
                 $in_heredoc_body = 0;
                 if (scalar(@{$pending_heredocs}) > 0) {
-                    ($current_heredoc_delim, $current_heredoc_strip) = @{$pending_heredocs->pop_(0)};
+                    ($current_heredoc_delim, $current_heredoc_strip) = @{pop(@{$pending_heredocs})};
                     $in_heredoc_body = 1;
                 }
-            } elsif ($check_line->startswith($current_heredoc_delim) && length($check_line) > length($current_heredoc_delim)) {
+            } elsif ((index($check_line, $current_heredoc_delim) == 0) && length($check_line) > length($current_heredoc_delim)) {
                 $tabs_stripped = length($line) - length($check_line);
                 $end_pos = $tabs_stripped + length($current_heredoc_delim);
                 for (my $i = 0; $i < $end_pos; $i += 1) {
-                    $content_chars->push($line->[$i]);
-                    $text_chars->push($line->[$i]);
+                    push(@{$content_chars}, substr($line, $i, 1));
+                    push(@{$text_chars}, substr($line, $i, 1));
                 }
                 $self->{pos_} = $line_start + $end_pos;
                 $in_heredoc_body = 0;
                 if (scalar(@{$pending_heredocs}) > 0) {
-                    ($current_heredoc_delim, $current_heredoc_strip) = @{$pending_heredocs->pop_(0)};
+                    ($current_heredoc_delim, $current_heredoc_strip) = @{pop(@{$pending_heredocs})};
                     $in_heredoc_body = 1;
                 }
             } else {
-                for my $ch (@{$line}) {
-                    $content_chars->push($ch);
-                    $text_chars->push($ch);
+                for my $ch (split(//, $line)) {
+                    push(@{$content_chars}, $ch);
+                    push(@{$text_chars}, $ch);
                 }
                 $self->{pos_} = $line_end;
-                if ($self->{pos_} < $self->{length_} && $self->{source}->[$self->{pos_}] eq "\n") {
-                    $content_chars->push("\n");
-                    $text_chars->push("\n");
+                if ($self->{pos_} < $self->{length_} && substr($self->{source}, $self->{pos_}, 1) eq "\n") {
+                    push(@{$content_chars}, "\n");
+                    push(@{$text_chars}, "\n");
                     $self->advance();
                 }
             }
             next;
         }
         $c = $self->peek();
-        my $ch = "";
         if ($c eq "\\" && $self->{pos_} + 1 < $self->{length_}) {
-            $next_c = $self->{source}->[$self->{pos_} + 1];
+            $next_c = substr($self->{source}, $self->{pos_} + 1, 1);
             if ($next_c eq "\n") {
                 $self->advance();
                 $self->advance();
-            } elsif (is_escape_char_in_backtick($next_c)) {
+            } elsif (main::is_escape_char_in_backtick($next_c)) {
                 $self->advance();
                 $escaped = $self->advance();
-                $content_chars->push($escaped);
-                $text_chars->push("\\");
-                $text_chars->push($escaped);
+                push(@{$content_chars}, $escaped);
+                push(@{$text_chars}, "\\");
+                push(@{$text_chars}, $escaped);
             } else {
                 $ch = $self->advance();
-                $content_chars->push($ch);
-                $text_chars->push($ch);
+                push(@{$content_chars}, $ch);
+                push(@{$text_chars}, $ch);
             }
             next;
         }
-        if ($c eq "<" && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "<") {
+        if ($c eq "<" && $self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "<") {
             my $quote = "";
-            if ($self->{pos_} + 2 < $self->{length_} && $self->{source}->[$self->{pos_} + 2] eq "<") {
-                $content_chars->push($self->advance());
-                $text_chars->push("<");
-                $content_chars->push($self->advance());
-                $text_chars->push("<");
-                $content_chars->push($self->advance());
-                $text_chars->push("<");
-                while (!$self->at_end() && is_whitespace_no_newline($self->peek())) {
+            if ($self->{pos_} + 2 < $self->{length_} && substr($self->{source}, $self->{pos_} + 2, 1) eq "<") {
+                push(@{$content_chars}, $self->advance());
+                push(@{$text_chars}, "<");
+                push(@{$content_chars}, $self->advance());
+                push(@{$text_chars}, "<");
+                push(@{$content_chars}, $self->advance());
+                push(@{$text_chars}, "<");
+                while (!$self->at_end() && main::is_whitespace_no_newline($self->peek())) {
                     $ch = $self->advance();
-                    $content_chars->push($ch);
-                    $text_chars->push($ch);
+                    push(@{$content_chars}, $ch);
+                    push(@{$text_chars}, $ch);
                 }
-                while (!$self->at_end() && !is_whitespace($self->peek()) && ((index("()", $self->peek()) == -1))) {
+                while (!$self->at_end() && !main::is_whitespace($self->peek()) && ((index("()", $self->peek()) == -1))) {
                     if ($self->peek() eq "\\" && $self->{pos_} + 1 < $self->{length_}) {
                         $ch = $self->advance();
-                        $content_chars->push($ch);
-                        $text_chars->push($ch);
+                        push(@{$content_chars}, $ch);
+                        push(@{$text_chars}, $ch);
                         $ch = $self->advance();
-                        $content_chars->push($ch);
-                        $text_chars->push($ch);
+                        push(@{$content_chars}, $ch);
+                        push(@{$text_chars}, $ch);
                     } elsif ((index("\"'", $self->peek()) >= 0)) {
                         $quote = $self->peek();
                         $ch = $self->advance();
-                        $content_chars->push($ch);
-                        $text_chars->push($ch);
+                        push(@{$content_chars}, $ch);
+                        push(@{$text_chars}, $ch);
                         while (!$self->at_end() && $self->peek() ne $quote) {
                             if ($quote eq "\"" && $self->peek() eq "\\") {
                                 $ch = $self->advance();
-                                $content_chars->push($ch);
-                                $text_chars->push($ch);
+                                push(@{$content_chars}, $ch);
+                                push(@{$text_chars}, $ch);
                             }
                             $ch = $self->advance();
-                            $content_chars->push($ch);
-                            $text_chars->push($ch);
+                            push(@{$content_chars}, $ch);
+                            push(@{$text_chars}, $ch);
                         }
                         if (!$self->at_end()) {
                             $ch = $self->advance();
-                            $content_chars->push($ch);
-                            $text_chars->push($ch);
+                            push(@{$content_chars}, $ch);
+                            push(@{$text_chars}, $ch);
                         }
                     } else {
                         $ch = $self->advance();
-                        $content_chars->push($ch);
-                        $text_chars->push($ch);
+                        push(@{$content_chars}, $ch);
+                        push(@{$text_chars}, $ch);
                     }
                 }
                 next;
             }
-            $content_chars->push($self->advance());
-            $text_chars->push("<");
-            $content_chars->push($self->advance());
-            $text_chars->push("<");
+            push(@{$content_chars}, $self->advance());
+            push(@{$text_chars}, "<");
+            push(@{$content_chars}, $self->advance());
+            push(@{$text_chars}, "<");
             $strip_tabs = 0;
             if (!$self->at_end() && $self->peek() eq "-") {
                 $strip_tabs = 1;
-                $content_chars->push($self->advance());
-                $text_chars->push("-");
+                push(@{$content_chars}, $self->advance());
+                push(@{$text_chars}, "-");
             }
-            while (!$self->at_end() && is_whitespace_no_newline($self->peek())) {
+            while (!$self->at_end() && main::is_whitespace_no_newline($self->peek())) {
                 $ch = $self->advance();
-                $content_chars->push($ch);
-                $text_chars->push($ch);
+                push(@{$content_chars}, $ch);
+                push(@{$text_chars}, $ch);
             }
             my $delimiter_chars = [];
             if (!$self->at_end()) {
                 $ch = $self->peek();
                 my $dch = "";
                 my $closing = "";
-                if (is_quote($ch)) {
+                if (main::is_quote($ch)) {
                     $quote = $self->advance();
-                    $content_chars->push($quote);
-                    $text_chars->push($quote);
+                    push(@{$content_chars}, $quote);
+                    push(@{$text_chars}, $quote);
                     while (!$self->at_end() && $self->peek() ne $quote) {
                         $dch = $self->advance();
-                        $content_chars->push($dch);
-                        $text_chars->push($dch);
-                        $delimiter_chars->push($dch);
+                        push(@{$content_chars}, $dch);
+                        push(@{$text_chars}, $dch);
+                        push(@{$delimiter_chars}, $dch);
                     }
                     if (!$self->at_end()) {
                         $closing = $self->advance();
-                        $content_chars->push($closing);
-                        $text_chars->push($closing);
+                        push(@{$content_chars}, $closing);
+                        push(@{$text_chars}, $closing);
                     }
                 } elsif ($ch eq "\\") {
                     $esc = $self->advance();
-                    $content_chars->push($esc);
-                    $text_chars->push($esc);
+                    push(@{$content_chars}, $esc);
+                    push(@{$text_chars}, $esc);
                     if (!$self->at_end()) {
                         $dch = $self->advance();
-                        $content_chars->push($dch);
-                        $text_chars->push($dch);
-                        $delimiter_chars->push($dch);
+                        push(@{$content_chars}, $dch);
+                        push(@{$text_chars}, $dch);
+                        push(@{$delimiter_chars}, $dch);
                     }
-                    while (!$self->at_end() && !is_metachar($self->peek())) {
+                    while (!$self->at_end() && !main::is_metachar($self->peek())) {
                         $dch = $self->advance();
-                        $content_chars->push($dch);
-                        $text_chars->push($dch);
-                        $delimiter_chars->push($dch);
+                        push(@{$content_chars}, $dch);
+                        push(@{$text_chars}, $dch);
+                        push(@{$delimiter_chars}, $dch);
                     }
                 } else {
-                    while (!$self->at_end() && !is_metachar($self->peek()) && $self->peek() ne "`") {
+                    while (!$self->at_end() && !main::is_metachar($self->peek()) && $self->peek() ne "`") {
                         $ch = $self->peek();
-                        if (is_quote($ch)) {
+                        if (main::is_quote($ch)) {
                             $quote = $self->advance();
-                            $content_chars->push($quote);
-                            $text_chars->push($quote);
+                            push(@{$content_chars}, $quote);
+                            push(@{$text_chars}, $quote);
                             while (!$self->at_end() && $self->peek() ne $quote) {
                                 $dch = $self->advance();
-                                $content_chars->push($dch);
-                                $text_chars->push($dch);
-                                $delimiter_chars->push($dch);
+                                push(@{$content_chars}, $dch);
+                                push(@{$text_chars}, $dch);
+                                push(@{$delimiter_chars}, $dch);
                             }
                             if (!$self->at_end()) {
                                 $closing = $self->advance();
-                                $content_chars->push($closing);
-                                $text_chars->push($closing);
+                                push(@{$content_chars}, $closing);
+                                push(@{$text_chars}, $closing);
                             }
                         } elsif ($ch eq "\\") {
                             $esc = $self->advance();
-                            $content_chars->push($esc);
-                            $text_chars->push($esc);
+                            push(@{$content_chars}, $esc);
+                            push(@{$text_chars}, $esc);
                             if (!$self->at_end()) {
                                 $dch = $self->advance();
-                                $content_chars->push($dch);
-                                $text_chars->push($dch);
-                                $delimiter_chars->push($dch);
+                                push(@{$content_chars}, $dch);
+                                push(@{$text_chars}, $dch);
+                                push(@{$delimiter_chars}, $dch);
                             }
                         } else {
                             $dch = $self->advance();
-                            $content_chars->push($dch);
-                            $text_chars->push($dch);
-                            $delimiter_chars->push($dch);
+                            push(@{$content_chars}, $dch);
+                            push(@{$text_chars}, $dch);
+                            push(@{$delimiter_chars}, $dch);
                         }
                     }
                 }
             }
-            $delimiter = ""->join_($delimiter_chars);
+            $delimiter = join("", @{$delimiter_chars});
             if ((length($delimiter) > 0)) {
-                $pending_heredocs->push([$delimiter, $strip_tabs]);
+                push(@{$pending_heredocs}, [$delimiter, $strip_tabs]);
             }
             next;
         }
         if ($c eq "\n") {
             $ch = $self->advance();
-            $content_chars->push($ch);
-            $text_chars->push($ch);
+            push(@{$content_chars}, $ch);
+            push(@{$text_chars}, $ch);
             if (scalar(@{$pending_heredocs}) > 0) {
-                ($current_heredoc_delim, $current_heredoc_strip) = @{$pending_heredocs->pop_(0)};
+                ($current_heredoc_delim, $current_heredoc_strip) = @{pop(@{$pending_heredocs})};
                 $in_heredoc_body = 1;
             }
             next;
         }
         $ch = $self->advance();
-        $content_chars->push($ch);
-        $text_chars->push($ch);
+        push(@{$content_chars}, $ch);
+        push(@{$text_chars}, $ch);
     }
     if ($self->at_end()) {
         die "Unterminated backtick";
     }
     $self->advance();
-    $text_chars->push("`");
-    my $text = ""->join_($text_chars);
-    my $content = ""->join_($content_chars);
+    push(@{$text_chars}, "`");
+    my $text = join("", @{$text_chars});
+    my $content = join("", @{$content_chars});
     if (scalar(@{$pending_heredocs}) > 0) {
-        ($heredoc_start, $heredoc_end) = @{find_heredoc_content_end($self->{source}, $self->{pos_}, $pending_heredocs)};
+        ($heredoc_start, $heredoc_end) = @{main::find_heredoc_content_end($self->{source}, $self->{pos_}, $pending_heredocs)};
         if ($heredoc_end > $heredoc_start) {
-            $content = $content . substring($self->{source}, $heredoc_start, $heredoc_end);
+            $content = $content . main::substring($self->{source}, $heredoc_start, $heredoc_end);
             if ($self->{cmdsub_heredoc_end} == -1) {
                 $self->{cmdsub_heredoc_end} = $heredoc_end;
             } else {
@@ -5946,7 +5946,7 @@ sub parse_backtick_substitution ($self) {
             }
         }
     }
-    my $sub_parser = new_parser($content, 0, $self->{extglob});
+    my $sub_parser = main::new_parser($content, 0, $self->{extglob});
     my $cmd = $sub_parser->parse_list(1);
     if (!defined($cmd)) {
         $cmd = Empty->new("empty");
@@ -5959,7 +5959,7 @@ sub parse_process_substitution ($self) {
     my $content_start_char;
     my $text;
     my $text_end;
-    if ($self->at_end() || !is_redirect_char($self->peek())) {
+    if ($self->at_end() || !main::is_redirect_char($self->peek())) {
         return [undef, ""];
     }
     my $start = $self->{pos_};
@@ -5972,7 +5972,7 @@ sub parse_process_substitution ($self) {
     my $saved = $self->save_parser_state();
     my $old_in_process_sub = $self->{in_process_sub};
     $self->{in_process_sub} = 1;
-    $self->set_state(PARSERSTATEFLAGS_PST_EOFTOKEN());
+    $self->set_state(main::PARSERSTATEFLAGS_PST_EOFTOKEN());
     $self->{eof_token} = ")";
     eval {
         $cmd = $self->parse_list(1);
@@ -5985,8 +5985,8 @@ sub parse_process_substitution ($self) {
         }
         $self->advance();
         $text_end = $self->{pos_};
-        $text = substring($self->{source}, $start, $text_end);
-        $text = strip_line_continuations_comment_aware($text);
+        $text = main::substring($self->{source}, $start, $text_end);
+        $text = main::strip_line_continuations_comment_aware($text);
         $self->restore_parser_state($saved);
         $self->{in_process_sub} = $old_in_process_sub;
         return [ProcessSubstitution->new($direction, $cmd, "procsub"), $text];
@@ -5994,7 +5994,7 @@ sub parse_process_substitution ($self) {
     if (my $e = $@) {
         $self->restore_parser_state($saved);
         $self->{in_process_sub} = $old_in_process_sub;
-        $content_start_char = ($start + 2 < $self->{length_} ? $self->{source}->[$start + 2] : "");
+        $content_start_char = ($start + 2 < $self->{length_} ? substr($self->{source}, $start + 2, 1) : "");
         if ((index(" \t\n", $content_start_char) >= 0)) {
             die $e;
         }
@@ -6002,8 +6002,8 @@ sub parse_process_substitution ($self) {
         $self->{lexer}->{pos_} = $self->{pos_};
         $self->{lexer}->parse_matched_pair("(", ")", 0, 0);
         $self->{pos_} = $self->{lexer}->{pos_};
-        $text = substring($self->{source}, $start, $self->{pos_});
-        $text = strip_line_continuations_comment_aware($text);
+        $text = main::substring($self->{source}, $start, $self->{pos_});
+        $text = main::strip_line_continuations_comment_aware($text);
         return [undef, $text];
     }
 }
@@ -6015,12 +6015,12 @@ sub parse_array_literal ($self) {
     }
     my $start = $self->{pos_};
     $self->advance();
-    $self->set_state(PARSERSTATEFLAGS_PST_COMPASSIGN());
+    $self->set_state(main::PARSERSTATEFLAGS_PST_COMPASSIGN());
     my $elements = [];
     while (1) {
         $self->skip_whitespace_and_newlines();
         if ($self->at_end()) {
-            $self->clear_state(PARSERSTATEFLAGS_PST_COMPASSIGN());
+            $self->clear_state(main::PARSERSTATEFLAGS_PST_COMPASSIGN());
             die "Unterminated array literal";
         }
         if ($self->peek() eq ")") {
@@ -6031,18 +6031,18 @@ sub parse_array_literal ($self) {
             if ($self->peek() eq ")") {
                 last;
             }
-            $self->clear_state(PARSERSTATEFLAGS_PST_COMPASSIGN());
+            $self->clear_state(main::PARSERSTATEFLAGS_PST_COMPASSIGN());
             die "Expected word in array literal";
         }
-        $elements->push($word);
+        push(@{$elements}, $word);
     }
     if ($self->at_end() || $self->peek() ne ")") {
-        $self->clear_state(PARSERSTATEFLAGS_PST_COMPASSIGN());
+        $self->clear_state(main::PARSERSTATEFLAGS_PST_COMPASSIGN());
         die "Expected ) to close array literal";
     }
     $self->advance();
-    my $text = substring($self->{source}, $start, $self->{pos_});
-    $self->clear_state(PARSERSTATEFLAGS_PST_COMPASSIGN());
+    my $text = main::substring($self->{source}, $start, $self->{pos_});
+    $self->clear_state(main::PARSERSTATEFLAGS_PST_COMPASSIGN());
     return [Array->new($elements, "array"), $text];
 }
 
@@ -6054,7 +6054,7 @@ sub parse_arithmetic_expansion ($self) {
         return [undef, ""];
     }
     my $start = $self->{pos_};
-    if ($self->{pos_} + 2 >= $self->{length_} || $self->{source}->[$self->{pos_} + 1] ne "(" || $self->{source}->[$self->{pos_} + 2] ne "(") {
+    if ($self->{pos_} + 2 >= $self->{length_} || substr($self->{source}, $self->{pos_} + 1, 1) ne "(" || substr($self->{source}, $self->{pos_} + 2, 1) ne "(") {
         return [undef, ""];
     }
     $self->advance();
@@ -6117,12 +6117,12 @@ sub parse_arithmetic_expansion ($self) {
     }
     my $content = "";
     if ($first_close_pos != -1) {
-        $content = substring($self->{source}, $content_start, $first_close_pos);
+        $content = main::substring($self->{source}, $content_start, $first_close_pos);
     } else {
-        $content = substring($self->{source}, $content_start, $self->{pos_});
+        $content = main::substring($self->{source}, $content_start, $self->{pos_});
     }
     $self->advance();
-    my $text = substring($self->{source}, $start, $self->{pos_});
+    my $text = main::substring($self->{source}, $start, $self->{pos_});
     my $expr = undef;
     eval {
         $expr = $self->parse_arith_expr($content);
@@ -6140,7 +6140,7 @@ sub parse_arith_expr ($self, $content) {
     my $saved_arith_pos = $self->{arith_pos};
     my $saved_arith_len = $self->{arith_len};
     my $saved_parser_state = $self->{parser_state};
-    $self->set_state(PARSERSTATEFLAGS_PST_ARITH());
+    $self->set_state(main::PARSERSTATEFLAGS_PST_ARITH());
     $self->{arith_src} = $content;
     $self->{arith_pos} = 0;
     $self->{arith_len} = length($content);
@@ -6169,14 +6169,14 @@ sub arith_peek ($self, $offset) {
     if ($pos_ >= $self->{arith_len}) {
         return "";
     }
-    return $self->{arith_src}->[$pos_];
+    return substr($self->{arith_src}, $pos_, 1);
 }
 
 sub arith_advance ($self) {
     if ($self->arith_at_end()) {
         return "";
     }
-    my $c = $self->{arith_src}->[$self->{arith_pos}];
+    my $c = substr($self->{arith_src}, $self->{arith_pos}, 1);
     $self->{arith_pos} += 1;
     return $c;
 }
@@ -6184,10 +6184,10 @@ sub arith_advance ($self) {
 sub arith_skip_ws ($self) {
     my $c;
     while (!$self->arith_at_end()) {
-        $c = $self->{arith_src}->[$self->{arith_pos}];
-        if (is_whitespace($c)) {
+        $c = substr($self->{arith_src}, $self->{arith_pos}, 1);
+        if (main::is_whitespace($c)) {
             $self->{arith_pos} += 1;
-        } elsif ($c eq "\\" && $self->{arith_pos} + 1 < $self->{arith_len} && $self->{arith_src}->[$self->{arith_pos} + 1] eq "\n") {
+        } elsif ($c eq "\\" && $self->{arith_pos} + 1 < $self->{arith_len} && substr($self->{arith_src}, $self->{arith_pos} + 1, 1) eq "\n") {
             $self->{arith_pos} += 2;
         } else {
             last;
@@ -6196,7 +6196,7 @@ sub arith_skip_ws ($self) {
 }
 
 sub arith_match ($self, $s_) {
-    return starts_with_at($self->{arith_src}, $self->{arith_pos}, $s_);
+    return main::starts_with_at($self->{arith_src}, $self->{arith_pos}, $s_);
 }
 
 sub arith_consume ($self, $s_) {
@@ -6230,7 +6230,7 @@ sub arith_parse_assign ($self) {
     my $assign_ops = ["<<=", ">>=", "+=", "-=", "*=", "/=", "%=", "&=", "^=", "|=", "="];
     for my $op (@{$assign_ops}) {
         if ($self->arith_match($op)) {
-            if ($op == "=" && $self->arith_peek(1) eq "=") {
+            if ($op eq "=" && $self->arith_peek(1) eq "=") {
                 last;
             }
             $self->arith_consume($op);
@@ -6274,7 +6274,7 @@ sub arith_parse_ternary ($self) {
 
 sub arith_parse_left_assoc ($self, $ops, $parsefn) {
     my $matched;
-    my $left = parsefn();
+    my $left = main::parsefn();
     while (1) {
         $self->arith_skip_ws();
         $matched = 0;
@@ -6282,7 +6282,7 @@ sub arith_parse_left_assoc ($self, $ops, $parsefn) {
             if ($self->arith_match($op)) {
                 $self->arith_consume($op);
                 $self->arith_skip_ws();
-                $left = ArithBinaryOp->new($op, $left, parsefn(), "binary-op");
+                $left = ArithBinaryOp->new($op, $left, main::parsefn(), "binary-op");
                 $matched = 1;
                 last;
             }
@@ -6628,18 +6628,18 @@ sub arith_parse_expansion ($self) {
     while (!$self->arith_at_end()) {
         $ch = $self->arith_peek(0);
         if (($ch =~ /^[a-zA-Z0-9]$/) || $ch eq "_") {
-            $name_chars->push($self->arith_advance());
-        } elsif ((is_special_param_or_digit($ch) || $ch eq "#") && !(scalar(@{$name_chars}) > 0)) {
-            $name_chars->push($self->arith_advance());
+            push(@{$name_chars}, $self->arith_advance());
+        } elsif ((main::is_special_param_or_digit($ch) || $ch eq "#") && !(scalar(@{($name_chars // [])}) > 0)) {
+            push(@{$name_chars}, $self->arith_advance());
             last;
         } else {
             last;
         }
     }
-    if (!(scalar(@{$name_chars}) > 0)) {
+    if (!(scalar(@{($name_chars // [])}) > 0)) {
         die "Expected variable name after \$";
     }
-    return ParamExpansion->new(""->join_($name_chars), "param");
+    return ParamExpansion->new(join("", @{$name_chars}), "param");
 }
 
 sub arith_parse_cmdsub ($self) {
@@ -6672,7 +6672,7 @@ sub arith_parse_cmdsub ($self) {
                 $self->arith_advance();
             }
         }
-        $content = substring($self->{arith_src}, $content_start, $self->{arith_pos});
+        $content = main::substring($self->{arith_src}, $content_start, $self->{arith_pos});
         $self->arith_advance();
         $self->arith_advance();
         $inner_expr = $self->parse_arith_expr($content);
@@ -6695,9 +6695,9 @@ sub arith_parse_cmdsub ($self) {
             $self->arith_advance();
         }
     }
-    $content = substring($self->{arith_src}, $content_start, $self->{arith_pos});
+    $content = main::substring($self->{arith_src}, $content_start, $self->{arith_pos});
     $self->arith_advance();
-    my $sub_parser = new_parser($content, 0, $self->{extglob});
+    my $sub_parser = main::new_parser($content, 0, $self->{extglob});
     my $cmd = $sub_parser->parse_list(1);
     return CommandSubstitution->new($cmd, "cmdsub");
 }
@@ -6711,19 +6711,19 @@ sub arith_parse_braced_param ($self) {
         $self->arith_advance();
         $name_chars = [];
         while (!$self->arith_at_end() && $self->arith_peek(0) ne "}") {
-            $name_chars->push($self->arith_advance());
+            push(@{$name_chars}, $self->arith_advance());
         }
         $self->arith_consume("}");
-        return ParamIndirect->new(""->join_($name_chars), "param-indirect");
+        return ParamIndirect->new(join("", @{$name_chars}), "param-indirect");
     }
     if ($self->arith_peek(0) eq "#") {
         $self->arith_advance();
         $name_chars = [];
         while (!$self->arith_at_end() && $self->arith_peek(0) ne "}") {
-            $name_chars->push($self->arith_advance());
+            push(@{$name_chars}, $self->arith_advance());
         }
         $self->arith_consume("}");
-        return ParamLength->new(""->join_($name_chars), "param-len");
+        return ParamLength->new(join("", @{$name_chars}), "param-len");
     }
     $name_chars = [];
     my $ch = "";
@@ -6731,65 +6731,65 @@ sub arith_parse_braced_param ($self) {
         $ch = $self->arith_peek(0);
         if ($ch eq "}") {
             $self->arith_advance();
-            return ParamExpansion->new(""->join_($name_chars), "param");
+            return ParamExpansion->new(join("", @{$name_chars}), "param");
         }
-        if (is_param_expansion_op($ch)) {
+        if (main::is_param_expansion_op($ch)) {
             last;
         }
-        $name_chars->push($self->arith_advance());
+        push(@{$name_chars}, $self->arith_advance());
     }
-    my $name = ""->join_($name_chars);
+    my $name = join("", @{$name_chars});
     my $op_chars = [];
     my $depth = 1;
     while (!$self->arith_at_end() && $depth > 0) {
         $ch = $self->arith_peek(0);
         if ($ch eq "{") {
             $depth += 1;
-            $op_chars->push($self->arith_advance());
+            push(@{$op_chars}, $self->arith_advance());
         } elsif ($ch eq "}") {
             $depth -= 1;
             if ($depth == 0) {
                 last;
             }
-            $op_chars->push($self->arith_advance());
+            push(@{$op_chars}, $self->arith_advance());
         } else {
-            $op_chars->push($self->arith_advance());
+            push(@{$op_chars}, $self->arith_advance());
         }
     }
     $self->arith_consume("}");
-    my $op_str = ""->join_($op_chars);
-    if ($op_str->startswith(":-")) {
-        return ParamExpansion->new($name, ":-", substring($op_str, 2, length($op_str)), "param");
+    my $op_str = join("", @{$op_chars});
+    if ((index($op_str, ":-") == 0)) {
+        return ParamExpansion->new($name, ":-", main::substring($op_str, 2, length($op_str)), "param");
     }
-    if ($op_str->startswith(":=")) {
-        return ParamExpansion->new($name, ":=", substring($op_str, 2, length($op_str)), "param");
+    if ((index($op_str, ":=") == 0)) {
+        return ParamExpansion->new($name, ":=", main::substring($op_str, 2, length($op_str)), "param");
     }
-    if ($op_str->startswith(":+")) {
-        return ParamExpansion->new($name, ":+", substring($op_str, 2, length($op_str)), "param");
+    if ((index($op_str, ":+") == 0)) {
+        return ParamExpansion->new($name, ":+", main::substring($op_str, 2, length($op_str)), "param");
     }
-    if ($op_str->startswith(":?")) {
-        return ParamExpansion->new($name, ":?", substring($op_str, 2, length($op_str)), "param");
+    if ((index($op_str, ":?") == 0)) {
+        return ParamExpansion->new($name, ":?", main::substring($op_str, 2, length($op_str)), "param");
     }
-    if ($op_str->startswith(":")) {
-        return ParamExpansion->new($name, ":", substring($op_str, 1, length($op_str)), "param");
+    if ((index($op_str, ":") == 0)) {
+        return ParamExpansion->new($name, ":", main::substring($op_str, 1, length($op_str)), "param");
     }
-    if ($op_str->startswith("##")) {
-        return ParamExpansion->new($name, "##", substring($op_str, 2, length($op_str)), "param");
+    if ((index($op_str, "##") == 0)) {
+        return ParamExpansion->new($name, "##", main::substring($op_str, 2, length($op_str)), "param");
     }
-    if ($op_str->startswith("#")) {
-        return ParamExpansion->new($name, "#", substring($op_str, 1, length($op_str)), "param");
+    if ((index($op_str, "#") == 0)) {
+        return ParamExpansion->new($name, "#", main::substring($op_str, 1, length($op_str)), "param");
     }
-    if ($op_str->startswith("%%")) {
-        return ParamExpansion->new($name, "%%", substring($op_str, 2, length($op_str)), "param");
+    if ((index($op_str, "%%") == 0)) {
+        return ParamExpansion->new($name, "%%", main::substring($op_str, 2, length($op_str)), "param");
     }
-    if ($op_str->startswith("%")) {
-        return ParamExpansion->new($name, "%", substring($op_str, 1, length($op_str)), "param");
+    if ((index($op_str, "%") == 0)) {
+        return ParamExpansion->new($name, "%", main::substring($op_str, 1, length($op_str)), "param");
     }
-    if ($op_str->startswith("//")) {
-        return ParamExpansion->new($name, "//", substring($op_str, 2, length($op_str)), "param");
+    if ((index($op_str, "//") == 0)) {
+        return ParamExpansion->new($name, "//", main::substring($op_str, 2, length($op_str)), "param");
     }
-    if ($op_str->startswith("/")) {
-        return ParamExpansion->new($name, "/", substring($op_str, 1, length($op_str)), "param");
+    if ((index($op_str, "/") == 0)) {
+        return ParamExpansion->new($name, "/", main::substring($op_str, 1, length($op_str)), "param");
     }
     return ParamExpansion->new($name, "", $op_str, "param");
 }
@@ -6800,7 +6800,7 @@ sub arith_parse_single_quote ($self) {
     while (!$self->arith_at_end() && $self->arith_peek(0) ne "'") {
         $self->arith_advance();
     }
-    my $content = substring($self->{arith_src}, $content_start, $self->{arith_pos});
+    my $content = main::substring($self->{arith_src}, $content_start, $self->{arith_pos});
     if (!$self->arith_consume("'")) {
         die "Unterminated single quote in arithmetic";
     }
@@ -6820,7 +6820,7 @@ sub arith_parse_double_quote ($self) {
             $self->arith_advance();
         }
     }
-    my $content = substring($self->{arith_src}, $content_start, $self->{arith_pos});
+    my $content = main::substring($self->{arith_src}, $content_start, $self->{arith_pos});
     if (!$self->arith_consume("\"")) {
         die "Unterminated double quote in arithmetic";
     }
@@ -6840,11 +6840,11 @@ sub arith_parse_backtick ($self) {
             $self->arith_advance();
         }
     }
-    my $content = substring($self->{arith_src}, $content_start, $self->{arith_pos});
+    my $content = main::substring($self->{arith_src}, $content_start, $self->{arith_pos});
     if (!$self->arith_consume("`")) {
         die "Unterminated backtick in arithmetic";
     }
-    my $sub_parser = new_parser($content, 0, $self->{extglob});
+    my $sub_parser = main::new_parser($content, 0, $self->{extglob});
     my $cmd = $sub_parser->parse_list(1);
     return CommandSubstitution->new($cmd, "cmdsub");
 }
@@ -6861,12 +6861,12 @@ sub arith_parse_number_or_var ($self) {
         while (!$self->arith_at_end()) {
             $ch = $self->arith_peek(0);
             if (($ch =~ /^[a-zA-Z0-9]$/) || $ch eq "#" || $ch eq "_") {
-                $chars->push($self->arith_advance());
+                push(@{$chars}, $self->arith_advance());
             } else {
                 last;
             }
         }
-        $prefix = ""->join_($chars);
+        $prefix = join("", @{$chars});
         if (!$self->arith_at_end() && $self->arith_peek(0) eq "\$") {
             $expansion = $self->arith_parse_expansion();
             return ArithConcat->new([ArithNumber->new($prefix, "number"), $expansion], "arith-concat");
@@ -6877,12 +6877,12 @@ sub arith_parse_number_or_var ($self) {
         while (!$self->arith_at_end()) {
             $ch = $self->arith_peek(0);
             if (($ch =~ /^[a-zA-Z0-9]$/) || $ch eq "_") {
-                $chars->push($self->arith_advance());
+                push(@{$chars}, $self->arith_advance());
             } else {
                 last;
             }
         }
-        return ArithVar->new(""->join_($chars), "var");
+        return ArithVar->new(join("", @{$chars}), "var");
     }
     die "Unexpected character '" . $c . "' in arithmetic expression";
 }
@@ -6892,15 +6892,15 @@ sub parse_deprecated_arithmetic ($self) {
         return [undef, ""];
     }
     my $start = $self->{pos_};
-    if ($self->{pos_} + 1 >= $self->{length_} || $self->{source}->[$self->{pos_} + 1] ne "[") {
+    if ($self->{pos_} + 1 >= $self->{length_} || substr($self->{source}, $self->{pos_} + 1, 1) ne "[") {
         return [undef, ""];
     }
     $self->advance();
     $self->advance();
     $self->{lexer}->{pos_} = $self->{pos_};
-    my $content = $self->{lexer}->parse_matched_pair("[", "]", MATCHEDPAIRFLAGS_ARITH(), 0);
+    my $content = $self->{lexer}->parse_matched_pair("[", "]", main::MATCHEDPAIRFLAGS_ARITH(), 0);
     $self->{pos_} = $self->{lexer}->{pos_};
-    my $text = substring($self->{source}, $start, $self->{pos_});
+    my $text = main::substring($self->{source}, $start, $self->{pos_});
     return [ArithDeprecated->new($content, "arith-deprecated"), $text];
 }
 
@@ -6941,37 +6941,37 @@ sub parse_redirect ($self) {
         $self->advance();
         $varname_chars = [];
         $in_bracket = 0;
-        while (!$self->at_end() && !is_redirect_char($self->peek())) {
+        while (!$self->at_end() && !main::is_redirect_char($self->peek())) {
             $ch = $self->peek();
             if ($ch eq "}" && !$in_bracket) {
                 last;
             } elsif ($ch eq "[") {
                 $in_bracket = 1;
-                $varname_chars->push($self->advance());
+                push(@{$varname_chars}, $self->advance());
             } elsif ($ch eq "]") {
                 $in_bracket = 0;
-                $varname_chars->push($self->advance());
+                push(@{$varname_chars}, $self->advance());
             } elsif (($ch =~ /^[a-zA-Z0-9]$/) || $ch eq "_") {
-                $varname_chars->push($self->advance());
-            } elsif ($in_bracket && !is_metachar($ch)) {
-                $varname_chars->push($self->advance());
+                push(@{$varname_chars}, $self->advance());
+            } elsif ($in_bracket && !main::is_metachar($ch)) {
+                push(@{$varname_chars}, $self->advance());
             } else {
                 last;
             }
         }
-        $varname = ""->join_($varname_chars);
+        $varname = join("", @{$varname_chars});
         $is_valid_varfd = 0;
         if ((length($varname) > 0)) {
-            if (($varname->[0] =~ /^[a-zA-Z]$/) || $varname->[0] eq "_") {
+            if ((substr($varname, 0, 1) =~ /^[a-zA-Z]$/) || substr($varname, 0, 1) eq "_") {
                 if (((index($varname, "[") >= 0)) || ((index($varname, "]") >= 0))) {
-                    $left = $varname->find("[");
+                    $left = index($varname, "[");
                     $right = $varname->rfind("]");
                     if ($left != -1 && $right == length($varname) - 1 && $right > $left + 1) {
                         $base = substr($varname, 0, $left - 0);
-                        if ((length($base) > 0) && (($base->[0] =~ /^[a-zA-Z]$/) || $base->[0] eq "_")) {
+                        if ((length($base) > 0) && ((substr($base, 0, 1) =~ /^[a-zA-Z]$/) || substr($base, 0, 1) eq "_")) {
                             $is_valid_varfd = 1;
-                            for my $c (@{substr($base, 1)}) {
-                                if (!(($c =~ /^[a-zA-Z0-9]$/) || $c == "_")) {
+                            for my $c (split(//, substr($base, 1))) {
+                                if (!(($c =~ /^[a-zA-Z0-9]$/) || $c eq "_")) {
                                     $is_valid_varfd = 0;
                                     last;
                                 }
@@ -6980,8 +6980,8 @@ sub parse_redirect ($self) {
                     }
                 } else {
                     $is_valid_varfd = 1;
-                    for my $c (@{substr($varname, 1)}) {
-                        if (!(($c =~ /^[a-zA-Z0-9]$/) || $c == "_")) {
+                    for my $c (split(//, substr($varname, 1))) {
+                        if (!(($c =~ /^[a-zA-Z0-9]$/) || $c eq "_")) {
                             $is_valid_varfd = 0;
                             last;
                         }
@@ -7000,14 +7000,14 @@ sub parse_redirect ($self) {
     if ($varfd eq "" && (length($self->peek()) > 0) && ($self->peek() =~ /^\d$/)) {
         $fd_chars = [];
         while (!$self->at_end() && ($self->peek() =~ /^\d$/)) {
-            $fd_chars->push($self->advance());
+            push(@{$fd_chars}, $self->advance());
         }
-        $fd = int(""->join_($fd_chars));
+        $fd = int(join("", @{$fd_chars}));
     }
     $ch = $self->peek();
     my $op = "";
     my $target = undef;
-    if ($ch eq "&" && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq ">") {
+    if ($ch eq "&" && $self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq ">") {
         if ($fd != -1 || $varfd ne "") {
             $self->{pos_} = $start;
             return undef;
@@ -7027,11 +7027,11 @@ sub parse_redirect ($self) {
         }
         return Redirect->new($op, $target, "redirect");
     }
-    if ($ch eq "" || !is_redirect_char($ch)) {
+    if ($ch eq "" || !main::is_redirect_char($ch)) {
         $self->{pos_} = $start;
         return undef;
     }
-    if ($fd == -1 && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "(") {
+    if ($fd == -1 && $self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "(") {
         $self->{pos_} = $start;
         return undef;
     }
@@ -7061,19 +7061,19 @@ sub parse_redirect ($self) {
             $self->advance();
             $op = ">|";
         } elsif ($fd == -1 && $varfd eq "" && $op eq ">" && $next_ch eq "&") {
-            if ($self->{pos_} + 1 >= $self->{length_} || !is_digit_or_dash($self->{source}->[$self->{pos_} + 1])) {
+            if ($self->{pos_} + 1 >= $self->{length_} || !main::is_digit_or_dash(substr($self->{source}, $self->{pos_} + 1, 1))) {
                 $self->advance();
                 $op = ">&";
             }
         } elsif ($fd == -1 && $varfd eq "" && $op eq "<" && $next_ch eq "&") {
-            if ($self->{pos_} + 1 >= $self->{length_} || !is_digit_or_dash($self->{source}->[$self->{pos_} + 1])) {
+            if ($self->{pos_} + 1 >= $self->{length_} || !main::is_digit_or_dash(substr($self->{source}, $self->{pos_} + 1, 1))) {
                 $self->advance();
                 $op = "<&";
             }
         }
     }
     if ($op eq "<<") {
-        return $self->parse_heredoc(int_ptr($fd), $strip_tabs);
+        return $self->parse_heredoc(main::int_ptr($fd), $strip_tabs);
     }
     if ($varfd ne "") {
         $op = "{" . $varfd . "}" . $op;
@@ -7084,7 +7084,7 @@ sub parse_redirect ($self) {
         $self->advance();
         $self->skip_whitespace();
         if (!$self->at_end() && $self->peek() eq "-") {
-            if ($self->{pos_} + 1 < $self->{length_} && !is_metachar($self->{source}->[$self->{pos_} + 1])) {
+            if ($self->{pos_} + 1 < $self->{length_} && !main::is_metachar(substr($self->{source}, $self->{pos_} + 1, 1))) {
                 $self->advance();
                 $target = Word->new("&-", "word");
             } else {
@@ -7099,18 +7099,18 @@ sub parse_redirect ($self) {
                 $word_start = $self->{pos_};
                 $fd_chars = [];
                 while (!$self->at_end() && ($self->peek() =~ /^\d$/)) {
-                    $fd_chars->push($self->advance());
+                    push(@{$fd_chars}, $self->advance());
                 }
                 my $fd_target = "";
-                if ((scalar(@{$fd_chars}) > 0)) {
-                    $fd_target = ""->join_($fd_chars);
+                if ((scalar(@{($fd_chars // [])}) > 0)) {
+                    $fd_target = join("", @{$fd_chars});
                 } else {
                     $fd_target = "";
                 }
                 if (!$self->at_end() && $self->peek() eq "-") {
                     $fd_target .= $self->advance();
                 }
-                if ($fd_target ne "-" && !$self->at_end() && !is_metachar($self->peek())) {
+                if ($fd_target ne "-" && !$self->at_end() && !main::is_metachar($self->peek())) {
                     $self->{pos_} = $word_start;
                     $inner_word = $self->parse_word(0, 0, 0);
                     if (defined($inner_word)) {
@@ -7135,7 +7135,7 @@ sub parse_redirect ($self) {
     } else {
         $self->skip_whitespace();
         if (($op eq ">&" || $op eq "<&") && !$self->at_end() && $self->peek() eq "-") {
-            if ($self->{pos_} + 1 < $self->{length_} && !is_metachar($self->{source}->[$self->{pos_} + 1])) {
+            if ($self->{pos_} + 1 < $self->{length_} && !main::is_metachar(substr($self->{source}, $self->{pos_} + 1, 1))) {
                 $self->advance();
                 $target = Word->new("&-", "word");
             } else {
@@ -7166,13 +7166,13 @@ sub parse_heredoc_delimiter ($self) {
     while (1) {
         my $c = "";
         my $depth = 0;
-        while (!$self->at_end() && !is_metachar($self->peek())) {
+        while (!$self->at_end() && !main::is_metachar($self->peek())) {
             $ch = $self->peek();
             if ($ch eq "\"") {
                 $quoted = 1;
                 $self->advance();
                 while (!$self->at_end() && $self->peek() ne "\"") {
-                    $delimiter_chars->push($self->advance());
+                    push(@{$delimiter_chars}, $self->advance());
                 }
                 if (!$self->at_end()) {
                     $self->advance();
@@ -7185,7 +7185,7 @@ sub parse_heredoc_delimiter ($self) {
                     if ($c eq "\n") {
                         $self->{saw_newline_in_single_quote} = 1;
                     }
-                    $delimiter_chars->push($c);
+                    push(@{$delimiter_chars}, $c);
                 }
                 if (!$self->at_end()) {
                     $self->advance();
@@ -7198,10 +7198,10 @@ sub parse_heredoc_delimiter ($self) {
                         $self->advance();
                     } else {
                         $quoted = 1;
-                        $delimiter_chars->push($self->advance());
+                        push(@{$delimiter_chars}, $self->advance());
                     }
                 }
-            } elsif ($ch eq "\$" && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "'") {
+            } elsif ($ch eq "\$" && $self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "'") {
                 $quoted = 1;
                 $self->advance();
                 $self->advance();
@@ -7210,25 +7210,25 @@ sub parse_heredoc_delimiter ($self) {
                     if ($c eq "\\" && $self->{pos_} + 1 < $self->{length_}) {
                         $self->advance();
                         $esc = $self->peek();
-                        $esc_val = get_ansi_escape($esc);
+                        $esc_val = main::get_ansi_escape($esc);
                         if ($esc_val >= 0) {
-                            $delimiter_chars->push(chr($esc_val));
+                            push(@{$delimiter_chars}, chr($esc_val));
                             $self->advance();
                         } elsif ($esc eq "'") {
-                            $delimiter_chars->push($self->advance());
+                            push(@{$delimiter_chars}, $self->advance());
                         } else {
-                            $delimiter_chars->push($self->advance());
+                            push(@{$delimiter_chars}, $self->advance());
                         }
                     } else {
-                        $delimiter_chars->push($self->advance());
+                        push(@{$delimiter_chars}, $self->advance());
                     }
                 }
                 if (!$self->at_end()) {
                     $self->advance();
                 }
-            } elsif (is_expansion_start($self->{source}, $self->{pos_}, "\$(")) {
-                $delimiter_chars->push($self->advance());
-                $delimiter_chars->push($self->advance());
+            } elsif (main::is_expansion_start($self->{source}, $self->{pos_}, "\$(")) {
+                push(@{$delimiter_chars}, $self->advance());
+                push(@{$delimiter_chars}, $self->advance());
                 $depth = 1;
                 while (!$self->at_end() && $depth > 0) {
                     $c = $self->peek();
@@ -7237,57 +7237,57 @@ sub parse_heredoc_delimiter ($self) {
                     } elsif ($c eq ")") {
                         $depth -= 1;
                     }
-                    $delimiter_chars->push($self->advance());
+                    push(@{$delimiter_chars}, $self->advance());
                 }
-            } elsif ($ch eq "\$" && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "{") {
+            } elsif ($ch eq "\$" && $self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "{") {
                 $dollar_count = 0;
                 $j = $self->{pos_} - 1;
-                while ($j >= 0 && $self->{source}->[$j] eq "\$") {
+                while ($j >= 0 && substr($self->{source}, $j, 1) eq "\$") {
                     $dollar_count += 1;
                     $j -= 1;
                 }
-                if ($j >= 0 && $self->{source}->[$j] eq "\\") {
+                if ($j >= 0 && substr($self->{source}, $j, 1) eq "\\") {
                     $dollar_count -= 1;
                 }
                 if ($dollar_count % 2 == 1) {
-                    $delimiter_chars->push($self->advance());
+                    push(@{$delimiter_chars}, $self->advance());
                 } else {
-                    $delimiter_chars->push($self->advance());
-                    $delimiter_chars->push($self->advance());
+                    push(@{$delimiter_chars}, $self->advance());
+                    push(@{$delimiter_chars}, $self->advance());
                     $depth = 0;
                     while (!$self->at_end()) {
                         $c = $self->peek();
                         if ($c eq "{") {
                             $depth += 1;
                         } elsif ($c eq "}") {
-                            $delimiter_chars->push($self->advance());
+                            push(@{$delimiter_chars}, $self->advance());
                             if ($depth == 0) {
                                 last;
                             }
                             $depth -= 1;
-                            if ($depth == 0 && !$self->at_end() && is_metachar($self->peek())) {
+                            if ($depth == 0 && !$self->at_end() && main::is_metachar($self->peek())) {
                                 last;
                             }
                             next;
                         }
-                        $delimiter_chars->push($self->advance());
+                        push(@{$delimiter_chars}, $self->advance());
                     }
                 }
-            } elsif ($ch eq "\$" && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "[") {
+            } elsif ($ch eq "\$" && $self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "[") {
                 $dollar_count = 0;
                 $j = $self->{pos_} - 1;
-                while ($j >= 0 && $self->{source}->[$j] eq "\$") {
+                while ($j >= 0 && substr($self->{source}, $j, 1) eq "\$") {
                     $dollar_count += 1;
                     $j -= 1;
                 }
-                if ($j >= 0 && $self->{source}->[$j] eq "\\") {
+                if ($j >= 0 && substr($self->{source}, $j, 1) eq "\\") {
                     $dollar_count -= 1;
                 }
                 if ($dollar_count % 2 == 1) {
-                    $delimiter_chars->push($self->advance());
+                    push(@{$delimiter_chars}, $self->advance());
                 } else {
-                    $delimiter_chars->push($self->advance());
-                    $delimiter_chars->push($self->advance());
+                    push(@{$delimiter_chars}, $self->advance());
+                    push(@{$delimiter_chars}, $self->advance());
                     $depth = 1;
                     while (!$self->at_end() && $depth > 0) {
                         $c = $self->peek();
@@ -7296,49 +7296,49 @@ sub parse_heredoc_delimiter ($self) {
                         } elsif ($c eq "]") {
                             $depth -= 1;
                         }
-                        $delimiter_chars->push($self->advance());
+                        push(@{$delimiter_chars}, $self->advance());
                     }
                 }
             } elsif ($ch eq "`") {
-                $delimiter_chars->push($self->advance());
+                push(@{$delimiter_chars}, $self->advance());
                 while (!$self->at_end() && $self->peek() ne "`") {
                     $c = $self->peek();
                     if ($c eq "'") {
-                        $delimiter_chars->push($self->advance());
+                        push(@{$delimiter_chars}, $self->advance());
                         while (!$self->at_end() && $self->peek() ne "'" && $self->peek() ne "`") {
-                            $delimiter_chars->push($self->advance());
+                            push(@{$delimiter_chars}, $self->advance());
                         }
                         if (!$self->at_end() && $self->peek() eq "'") {
-                            $delimiter_chars->push($self->advance());
+                            push(@{$delimiter_chars}, $self->advance());
                         }
                     } elsif ($c eq "\"") {
-                        $delimiter_chars->push($self->advance());
+                        push(@{$delimiter_chars}, $self->advance());
                         while (!$self->at_end() && $self->peek() ne "\"" && $self->peek() ne "`") {
                             if ($self->peek() eq "\\" && $self->{pos_} + 1 < $self->{length_}) {
-                                $delimiter_chars->push($self->advance());
+                                push(@{$delimiter_chars}, $self->advance());
                             }
-                            $delimiter_chars->push($self->advance());
+                            push(@{$delimiter_chars}, $self->advance());
                         }
                         if (!$self->at_end() && $self->peek() eq "\"") {
-                            $delimiter_chars->push($self->advance());
+                            push(@{$delimiter_chars}, $self->advance());
                         }
                     } elsif ($c eq "\\" && $self->{pos_} + 1 < $self->{length_}) {
-                        $delimiter_chars->push($self->advance());
-                        $delimiter_chars->push($self->advance());
+                        push(@{$delimiter_chars}, $self->advance());
+                        push(@{$delimiter_chars}, $self->advance());
                     } else {
-                        $delimiter_chars->push($self->advance());
+                        push(@{$delimiter_chars}, $self->advance());
                     }
                 }
                 if (!$self->at_end()) {
-                    $delimiter_chars->push($self->advance());
+                    push(@{$delimiter_chars}, $self->advance());
                 }
             } else {
-                $delimiter_chars->push($self->advance());
+                push(@{$delimiter_chars}, $self->advance());
             }
         }
-        if (!$self->at_end() && ((index("<>", $self->peek()) >= 0)) && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "(") {
-            $delimiter_chars->push($self->advance());
-            $delimiter_chars->push($self->advance());
+        if (!$self->at_end() && ((index("<>", $self->peek()) >= 0)) && $self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "(") {
+            push(@{$delimiter_chars}, $self->advance());
+            push(@{$delimiter_chars}, $self->advance());
             $depth = 1;
             while (!$self->at_end() && $depth > 0) {
                 $c = $self->peek();
@@ -7347,13 +7347,13 @@ sub parse_heredoc_delimiter ($self) {
                 } elsif ($c eq ")") {
                     $depth -= 1;
                 }
-                $delimiter_chars->push($self->advance());
+                push(@{$delimiter_chars}, $self->advance());
             }
             next;
         }
         last;
     }
-    return [""->join_($delimiter_chars), $quoted];
+    return [join("", @{$delimiter_chars}), $quoted];
 }
 
 sub read_heredoc_line ($self, $quoted) {
@@ -7361,23 +7361,23 @@ sub read_heredoc_line ($self, $quoted) {
     my $trailing_bs;
     my $line_start = $self->{pos_};
     my $line_end = $self->{pos_};
-    while ($line_end < $self->{length_} && $self->{source}->[$line_end] ne "\n") {
+    while ($line_end < $self->{length_} && substr($self->{source}, $line_end, 1) ne "\n") {
         $line_end += 1;
     }
-    my $line = substring($self->{source}, $line_start, $line_end);
+    my $line = main::substring($self->{source}, $line_start, $line_end);
     if (!$quoted) {
         while ($line_end < $self->{length_}) {
-            $trailing_bs = count_trailing_backslashes($line);
+            $trailing_bs = main::count_trailing_backslashes($line);
             if ($trailing_bs % 2 == 0) {
                 last;
             }
-            $line = substring($line, 0, length($line) - 1);
+            $line = main::substring($line, 0, length($line) - 1);
             $line_end += 1;
             $next_line_start = $line_end;
-            while ($line_end < $self->{length_} && $self->{source}->[$line_end] ne "\n") {
+            while ($line_end < $self->{length_} && substr($self->{source}, $line_end, 1) ne "\n") {
                 $line_end += 1;
             }
-            $line = $line . substring($self->{source}, $next_line_start, $line_end);
+            $line = $line . main::substring($self->{source}, $next_line_start, $line_end);
         }
     }
     return [$line, $line_end];
@@ -7385,8 +7385,8 @@ sub read_heredoc_line ($self, $quoted) {
 
 sub line_matches_delimiter ($self, $line, $delimiter, $strip_tabs) {
     my $check_line = ($strip_tabs ? ($line =~ s/^["\t"]+//r) : $line);
-    my $normalized_check = normalize_heredoc_delimiter($check_line);
-    my $normalized_delim = normalize_heredoc_delimiter($delimiter);
+    my $normalized_check = main::normalize_heredoc_delimiter($check_line);
+    my $normalized_delim = main::normalize_heredoc_delimiter($delimiter);
     return [$normalized_check eq $normalized_delim, $check_line];
 }
 
@@ -7411,15 +7411,15 @@ sub gather_heredoc_bodies ($self) {
                 $self->{pos_} = ($line_end < $self->{length_} ? $line_end + 1 : $line_end);
                 last;
             }
-            $normalized_check = normalize_heredoc_delimiter($check_line);
-            $normalized_delim = normalize_heredoc_delimiter($heredoc->{delimiter});
+            $normalized_check = main::normalize_heredoc_delimiter($check_line);
+            $normalized_delim = main::normalize_heredoc_delimiter($heredoc->{delimiter});
             my $tabs_stripped = 0;
-            if ($self->{eof_token} eq ")" && $normalized_check->startswith($normalized_delim)) {
+            if ($self->{eof_token} eq ")" && (index($normalized_check, $normalized_delim) == 0)) {
                 $tabs_stripped = length($line) - length($check_line);
                 $self->{pos_} = $line_start + $tabs_stripped + length($heredoc->{delimiter});
                 last;
             }
-            if ($line_end >= $self->{length_} && $normalized_check->startswith($normalized_delim) && $self->{in_process_sub}) {
+            if ($line_end >= $self->{length_} && (index($normalized_check, $normalized_delim) == 0) && $self->{in_process_sub}) {
                 $tabs_stripped = length($line) - length($check_line);
                 $self->{pos_} = $line_start + $tabs_stripped + length($heredoc->{delimiter});
                 last;
@@ -7428,36 +7428,36 @@ sub gather_heredoc_bodies ($self) {
                 $line = ($line =~ s/^["\t"]+//r);
             }
             if ($line_end < $self->{length_}) {
-                $content_lines->push($line . "\n");
+                push(@{$content_lines}, $line . "\n");
                 $self->{pos_} = $line_end + 1;
             } else {
                 $add_newline = 1;
-                if (!$heredoc->{quoted} && count_trailing_backslashes($line) % 2 == 1) {
+                if (!$heredoc->{quoted} && main::count_trailing_backslashes($line) % 2 == 1) {
                     $add_newline = 0;
                 }
-                $content_lines->push($line . (($add_newline ? "\n" : "")));
+                push(@{$content_lines}, $line . (($add_newline ? "\n" : "")));
                 $self->{pos_} = $self->{length_};
             }
         }
-        $heredoc->{content} = ""->join_($content_lines);
+        $heredoc->{content} = join("", @{$content_lines});
     }
     $self->{pending_heredocs} = [];
 }
 
 sub parse_heredoc ($self, $fd, $strip_tabs) {
     my $start_pos = $self->{pos_};
-    $self->set_state(PARSERSTATEFLAGS_PST_HEREDOC());
+    $self->set_state(main::PARSERSTATEFLAGS_PST_HEREDOC());
     my ($delimiter, $quoted) = @{$self->parse_heredoc_delimiter()};
     for my $existing (@{($self->{pending_heredocs} // [])}) {
         if ($existing->{start_pos} == $start_pos && $existing->{delimiter} eq $delimiter) {
-            $self->clear_state(PARSERSTATEFLAGS_PST_HEREDOC());
+            $self->clear_state(main::PARSERSTATEFLAGS_PST_HEREDOC());
             return $existing;
         }
     }
     my $heredoc = HereDoc->new($delimiter, "", $strip_tabs, $quoted, $fd, 0, "heredoc");
     $heredoc->{start_pos} = $start_pos;
-    $self->{pending_heredocs}->push($heredoc);
-    $self->clear_state(PARSERSTATEFLAGS_PST_HEREDOC());
+    push(@{$self->{pending_heredocs}}, $heredoc);
+    $self->clear_state(main::PARSERSTATEFLAGS_PST_HEREDOC());
     return $heredoc;
 }
 
@@ -7482,7 +7482,7 @@ sub parse_command ($self) {
         }
         $redirect = $self->parse_redirect();
         if (defined($redirect)) {
-            $redirects->push($redirect);
+            push(@{$redirects}, $redirect);
             next;
         }
         $all_assignments = 1;
@@ -7492,14 +7492,14 @@ sub parse_command ($self) {
                 last;
             }
         }
-        $in_assign_builtin = scalar(@{$words}) > 0 && (exists(ASSIGNMENT_BUILTINS()->{$words->[0]->{value}}));
-        $word = $self->parse_word(!(scalar(@{$words}) > 0) || $all_assignments && scalar(@{$redirects}) == 0, 0, $in_assign_builtin);
+        $in_assign_builtin = scalar(@{$words}) > 0 && (exists(main::ASSIGNMENT_BUILTINS()->{$words->[0]->{value}}));
+        $word = $self->parse_word(!(scalar(@{($words // [])}) > 0) || $all_assignments && scalar(@{$redirects}) == 0, 0, $in_assign_builtin);
         if (!defined($word)) {
             last;
         }
-        $words->push($word);
+        push(@{$words}, $word);
     }
-    if (!(scalar(@{$words}) > 0) && !(scalar(@{$redirects}) > 0)) {
+    if (!(scalar(@{($words // [])}) > 0) && !(scalar(@{($redirects // [])}) > 0)) {
         return undef;
     }
     return Command->new($words, $redirects, "command");
@@ -7511,26 +7511,26 @@ sub parse_subshell ($self) {
         return undef;
     }
     $self->advance();
-    $self->set_state(PARSERSTATEFLAGS_PST_SUBSHELL());
+    $self->set_state(main::PARSERSTATEFLAGS_PST_SUBSHELL());
     my $body = $self->parse_list(1);
     if (!defined($body)) {
-        $self->clear_state(PARSERSTATEFLAGS_PST_SUBSHELL());
+        $self->clear_state(main::PARSERSTATEFLAGS_PST_SUBSHELL());
         die "Expected command in subshell";
     }
     $self->skip_whitespace();
     if ($self->at_end() || $self->peek() ne ")") {
-        $self->clear_state(PARSERSTATEFLAGS_PST_SUBSHELL());
+        $self->clear_state(main::PARSERSTATEFLAGS_PST_SUBSHELL());
         die "Expected ) to close subshell";
     }
     $self->advance();
-    $self->clear_state(PARSERSTATEFLAGS_PST_SUBSHELL());
+    $self->clear_state(main::PARSERSTATEFLAGS_PST_SUBSHELL());
     return Subshell->new($body, $self->collect_redirects(), "subshell");
 }
 
 sub parse_arithmetic_command ($self) {
     my $c;
     $self->skip_whitespace();
-    if ($self->at_end() || $self->peek() ne "(" || $self->{pos_} + 1 >= $self->{length_} || $self->{source}->[$self->{pos_} + 1] ne "(") {
+    if ($self->at_end() || $self->peek() ne "(" || $self->{pos_} + 1 >= $self->{length_} || substr($self->{source}, $self->{pos_} + 1, 1) ne "(") {
         return undef;
     }
     my $saved_pos = $self->{pos_};
@@ -7568,7 +7568,7 @@ sub parse_arithmetic_command ($self) {
             $depth += 1;
             $self->advance();
         } elsif ($c eq ")") {
-            if ($depth == 1 && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq ")") {
+            if ($depth == 1 && $self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq ")") {
                 last;
             }
             $depth -= 1;
@@ -7588,8 +7588,8 @@ sub parse_arithmetic_command ($self) {
         $self->{pos_} = $saved_pos;
         return undef;
     }
-    my $content = substring($self->{source}, $content_start, $self->{pos_});
-    $content = $content->replace("\\\n", "");
+    my $content = main::substring($self->{source}, $content_start, $self->{pos_});
+    $content = ($content =~ s/"\\\n"/""/gr);
     $self->advance();
     $self->advance();
     my $expr = $self->parse_arith_expr($content);
@@ -7598,38 +7598,38 @@ sub parse_arithmetic_command ($self) {
 
 sub parse_conditional_expr ($self) {
     $self->skip_whitespace();
-    if ($self->at_end() || $self->peek() ne "[" || $self->{pos_} + 1 >= $self->{length_} || $self->{source}->[$self->{pos_} + 1] ne "[") {
+    if ($self->at_end() || $self->peek() ne "[" || $self->{pos_} + 1 >= $self->{length_} || substr($self->{source}, $self->{pos_} + 1, 1) ne "[") {
         return undef;
     }
     my $next_pos = $self->{pos_} + 2;
-    if ($next_pos < $self->{length_} && !(is_whitespace($self->{source}->[$next_pos]) || $self->{source}->[$next_pos] eq "\\" && $next_pos + 1 < $self->{length_} && $self->{source}->[$next_pos + 1] eq "\n")) {
+    if ($next_pos < $self->{length_} && !(main::is_whitespace(substr($self->{source}, $next_pos, 1)) || substr($self->{source}, $next_pos, 1) eq "\\" && $next_pos + 1 < $self->{length_} && substr($self->{source}, $next_pos + 1, 1) eq "\n")) {
         return undef;
     }
     $self->advance();
     $self->advance();
-    $self->set_state(PARSERSTATEFLAGS_PST_CONDEXPR());
-    $self->{word_context} = WORD_CTX_COND();
+    $self->set_state(main::PARSERSTATEFLAGS_PST_CONDEXPR());
+    $self->{word_context} = main::WORD_CTX_COND();
     my $body = $self->parse_cond_or();
-    while (!$self->at_end() && is_whitespace_no_newline($self->peek())) {
+    while (!$self->at_end() && main::is_whitespace_no_newline($self->peek())) {
         $self->advance();
     }
-    if ($self->at_end() || $self->peek() ne "]" || $self->{pos_} + 1 >= $self->{length_} || $self->{source}->[$self->{pos_} + 1] ne "]") {
-        $self->clear_state(PARSERSTATEFLAGS_PST_CONDEXPR());
-        $self->{word_context} = WORD_CTX_NORMAL();
+    if ($self->at_end() || $self->peek() ne "]" || $self->{pos_} + 1 >= $self->{length_} || substr($self->{source}, $self->{pos_} + 1, 1) ne "]") {
+        $self->clear_state(main::PARSERSTATEFLAGS_PST_CONDEXPR());
+        $self->{word_context} = main::WORD_CTX_NORMAL();
         die "Expected ]] to close conditional expression";
     }
     $self->advance();
     $self->advance();
-    $self->clear_state(PARSERSTATEFLAGS_PST_CONDEXPR());
-    $self->{word_context} = WORD_CTX_NORMAL();
+    $self->clear_state(main::PARSERSTATEFLAGS_PST_CONDEXPR());
+    $self->{word_context} = main::WORD_CTX_NORMAL();
     return ConditionalExpr->new($body, $self->collect_redirects(), "cond-expr");
 }
 
 sub cond_skip_whitespace ($self) {
     while (!$self->at_end()) {
-        if (is_whitespace_no_newline($self->peek())) {
+        if (main::is_whitespace_no_newline($self->peek())) {
             $self->advance();
-        } elsif ($self->peek() eq "\\" && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "\n") {
+        } elsif ($self->peek() eq "\\" && $self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "\n") {
             $self->advance();
             $self->advance();
         } elsif ($self->peek() eq "\n") {
@@ -7641,7 +7641,7 @@ sub cond_skip_whitespace ($self) {
 }
 
 sub cond_at_end ($self) {
-    return $self->at_end() || $self->peek() eq "]" && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "]";
+    return $self->at_end() || $self->peek() eq "]" && $self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "]";
 }
 
 sub parse_cond_or ($self) {
@@ -7649,7 +7649,7 @@ sub parse_cond_or ($self) {
     $self->cond_skip_whitespace();
     my $left = $self->parse_cond_and();
     $self->cond_skip_whitespace();
-    if (!$self->cond_at_end() && $self->peek() eq "|" && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "|") {
+    if (!$self->cond_at_end() && $self->peek() eq "|" && $self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "|") {
         $self->advance();
         $self->advance();
         $right = $self->parse_cond_or();
@@ -7663,7 +7663,7 @@ sub parse_cond_and ($self) {
     $self->cond_skip_whitespace();
     my $left = $self->parse_cond_term();
     $self->cond_skip_whitespace();
-    if (!$self->cond_at_end() && $self->peek() eq "&" && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "&") {
+    if (!$self->cond_at_end() && $self->peek() eq "&" && $self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "&") {
         $self->advance();
         $self->advance();
         $right = $self->parse_cond_and();
@@ -7685,7 +7685,7 @@ sub parse_cond_term ($self) {
     }
     my $operand = undef;
     if ($self->peek() eq "!") {
-        if ($self->{pos_} + 1 < $self->{length_} && !is_whitespace_no_newline($self->{source}->[$self->{pos_} + 1])) {
+        if ($self->{pos_} + 1 < $self->{length_} && !main::is_whitespace_no_newline(substr($self->{source}, $self->{pos_} + 1, 1))) {
         } else {
             $self->advance();
             $operand = $self->parse_cond_term();
@@ -7707,7 +7707,7 @@ sub parse_cond_term ($self) {
         die "Expected word in conditional expression";
     }
     $self->cond_skip_whitespace();
-    if (exists(COND_UNARY_OPS()->{$word1->{value}})) {
+    if (exists(main::COND_UNARY_OPS()->{$word1->{value}})) {
         $operand = $self->parse_cond_word();
         if (!defined($operand)) {
             die "Expected operand after " . $word1->{value};
@@ -7716,7 +7716,7 @@ sub parse_cond_term ($self) {
     }
     if (!$self->cond_at_end() && $self->peek() ne "&" && $self->peek() ne "|" && $self->peek() ne ")") {
         my $word2 = undef;
-        if (is_redirect_char($self->peek()) && !($self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "(")) {
+        if (main::is_redirect_char($self->peek()) && !($self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "(")) {
             $op = $self->advance();
             $self->cond_skip_whitespace();
             $word2 = $self->parse_cond_word();
@@ -7727,7 +7727,7 @@ sub parse_cond_term ($self) {
         }
         $saved_pos = $self->{pos_};
         $op_word = $self->parse_cond_word();
-        if (defined($op_word) && (exists(COND_BINARY_OPS()->{$op_word->{value}}))) {
+        if (defined($op_word) && (exists(main::COND_BINARY_OPS()->{$op_word->{value}}))) {
             $self->cond_skip_whitespace();
             if ($op_word->{value} eq "=~") {
                 $word2 = $self->parse_cond_regex_word();
@@ -7751,16 +7751,16 @@ sub parse_cond_word ($self) {
         return undef;
     }
     my $c = $self->peek();
-    if (is_paren($c)) {
+    if (main::is_paren($c)) {
         return undef;
     }
-    if ($c eq "&" && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "&") {
+    if ($c eq "&" && $self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "&") {
         return undef;
     }
-    if ($c eq "|" && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "|") {
+    if ($c eq "|" && $self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "|") {
         return undef;
     }
-    return $self->parse_word_internal(WORD_CTX_COND(), 0, 0);
+    return $self->parse_word_internal(main::WORD_CTX_COND(), 0, 0);
 }
 
 sub parse_cond_regex_word ($self) {
@@ -7768,10 +7768,10 @@ sub parse_cond_regex_word ($self) {
     if ($self->cond_at_end()) {
         return undef;
     }
-    $self->set_state(PARSERSTATEFLAGS_PST_REGEXP());
-    my $result = $self->parse_word_internal(WORD_CTX_REGEX(), 0, 0);
-    $self->clear_state(PARSERSTATEFLAGS_PST_REGEXP());
-    $self->{word_context} = WORD_CTX_COND();
+    $self->set_state(main::PARSERSTATEFLAGS_PST_REGEXP());
+    my $result = $self->parse_word_internal(main::WORD_CTX_REGEX(), 0, 0);
+    $self->clear_state(main::PARSERSTATEFLAGS_PST_REGEXP());
+    $self->{word_context} = main::WORD_CTX_COND();
     return $result;
 }
 
@@ -7941,7 +7941,7 @@ sub parse_for ($self) {
         return undef;
     }
     $self->skip_whitespace();
-    if ($self->peek() eq "(" && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "(") {
+    if ($self->peek() eq "(" && $self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "(") {
         return $self->parse_for_arith();
     }
     my $var_name = "";
@@ -7967,7 +7967,7 @@ sub parse_for ($self) {
     if ($self->lex_is_at_reserved_word("in")) {
         $self->lex_consume_word("in");
         $self->skip_whitespace();
-        $saw_delimiter = is_semicolon_or_newline($self->peek());
+        $saw_delimiter = main::is_semicolon_or_newline($self->peek());
         if ($self->peek() eq ";") {
             $self->advance();
         }
@@ -7978,7 +7978,7 @@ sub parse_for ($self) {
             if ($self->at_end()) {
                 last;
             }
-            if (is_semicolon_or_newline($self->peek())) {
+            if (main::is_semicolon_or_newline($self->peek())) {
                 $saw_delimiter = 1;
                 if ($self->peek() eq ";") {
                     $self->advance();
@@ -7995,7 +7995,7 @@ sub parse_for ($self) {
             if (!defined($word)) {
                 last;
             }
-            $words->push($word);
+            push(@{$words}, $word);
         }
     }
     $self->skip_whitespace_and_newlines();
@@ -8031,25 +8031,25 @@ sub parse_for_arith ($self) {
         $ch = $self->peek();
         if ($ch eq "(") {
             $paren_depth += 1;
-            $current->push($self->advance());
+            push(@{$current}, $self->advance());
         } elsif ($ch eq ")") {
             if ($paren_depth > 0) {
                 $paren_depth -= 1;
-                $current->push($self->advance());
-            } elsif ($self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq ")") {
-                $parts->push((""->join_($current) =~ s/^[" \t"]+//r));
+                push(@{$current}, $self->advance());
+            } elsif ($self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq ")") {
+                push(@{$parts}, (join("", @{$current}) =~ s/^[" \t"]+//r));
                 $self->advance();
                 $self->advance();
                 last;
             } else {
-                $current->push($self->advance());
+                push(@{$current}, $self->advance());
             }
         } elsif ($ch eq ";" && $paren_depth == 0) {
-            $parts->push((""->join_($current) =~ s/^[" \t"]+//r));
+            push(@{$parts}, (join("", @{$current}) =~ s/^[" \t"]+//r));
             $current = [];
             $self->advance();
         } else {
-            $current->push($self->advance());
+            push(@{$current}, $self->advance());
         }
     }
     if (scalar(@{$parts}) != 3) {
@@ -8094,7 +8094,7 @@ sub parse_select ($self) {
             if ($self->at_end()) {
                 last;
             }
-            if (is_semicolon_newline_brace($self->peek())) {
+            if (main::is_semicolon_newline_brace($self->peek())) {
                 if ($self->peek() eq ";") {
                     $self->advance();
                 }
@@ -8107,7 +8107,7 @@ sub parse_select ($self) {
             if (!defined($word)) {
                 last;
             }
-            $words->push($word);
+            push(@{$words}, $word);
         }
     }
     $self->skip_whitespace_and_newlines();
@@ -8146,7 +8146,7 @@ sub parse_case ($self) {
     if (!$self->consume_word("case")) {
         return undef;
     }
-    $self->set_state(PARSERSTATEFLAGS_PST_CASESTMT());
+    $self->set_state(main::PARSERSTATEFLAGS_PST_CASESTMT());
     $self->skip_whitespace();
     my $word = $self->parse_word(0, 0, 0);
     if (!defined($word)) {
@@ -8158,13 +8158,13 @@ sub parse_case ($self) {
     }
     $self->skip_whitespace_and_newlines();
     my $patterns = [];
-    $self->set_state(PARSERSTATEFLAGS_PST_CASEPAT());
+    $self->set_state(main::PARSERSTATEFLAGS_PST_CASEPAT());
     while (1) {
         $self->skip_whitespace_and_newlines();
         if ($self->lex_is_at_reserved_word("esac")) {
             $saved = $self->{pos_};
             $self->skip_whitespace();
-            while (!$self->at_end() && !is_metachar($self->peek()) && !is_quote($self->peek())) {
+            while (!$self->at_end() && !main::is_metachar($self->peek()) && !main::is_quote($self->peek())) {
                 $self->advance();
             }
             $self->skip_whitespace();
@@ -8179,7 +8179,7 @@ sub parse_case ($self) {
                         $next_ch = $self->peek();
                         if ($next_ch eq ";") {
                             $is_pattern = 1;
-                        } elsif (!is_newline_or_right_paren($next_ch)) {
+                        } elsif (!main::is_newline_or_right_paren($next_ch)) {
                             $is_pattern = 1;
                         }
                     }
@@ -8201,27 +8201,27 @@ sub parse_case ($self) {
             $ch = $self->peek();
             if ($ch eq ")") {
                 if ($extglob_depth > 0) {
-                    $pattern_chars->push($self->advance());
+                    push(@{$pattern_chars}, $self->advance());
                     $extglob_depth -= 1;
                 } else {
                     $self->advance();
                     last;
                 }
             } elsif ($ch eq "\\") {
-                if ($self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "\n") {
+                if ($self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "\n") {
                     $self->advance();
                     $self->advance();
                 } else {
-                    $pattern_chars->push($self->advance());
+                    push(@{$pattern_chars}, $self->advance());
                     if (!$self->at_end()) {
-                        $pattern_chars->push($self->advance());
+                        push(@{$pattern_chars}, $self->advance());
                     }
                 }
-            } elsif (is_expansion_start($self->{source}, $self->{pos_}, "\$(")) {
-                $pattern_chars->push($self->advance());
-                $pattern_chars->push($self->advance());
+            } elsif (main::is_expansion_start($self->{source}, $self->{pos_}, "\$(")) {
+                push(@{$pattern_chars}, $self->advance());
+                push(@{$pattern_chars}, $self->advance());
                 if (!$self->at_end() && $self->peek() eq "(") {
-                    $pattern_chars->push($self->advance());
+                    push(@{$pattern_chars}, $self->advance());
                     $paren_depth = 2;
                     while (!$self->at_end() && $paren_depth > 0) {
                         $c = $self->peek();
@@ -8230,34 +8230,34 @@ sub parse_case ($self) {
                         } elsif ($c eq ")") {
                             $paren_depth -= 1;
                         }
-                        $pattern_chars->push($self->advance());
+                        push(@{$pattern_chars}, $self->advance());
                     }
                 } else {
                     $extglob_depth += 1;
                 }
             } elsif ($ch eq "(" && $extglob_depth > 0) {
-                $pattern_chars->push($self->advance());
+                push(@{$pattern_chars}, $self->advance());
                 $extglob_depth += 1;
-            } elsif ($self->{extglob} && is_extglob_prefix($ch) && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "(") {
-                $pattern_chars->push($self->advance());
-                $pattern_chars->push($self->advance());
+            } elsif ($self->{extglob} && main::is_extglob_prefix($ch) && $self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "(") {
+                push(@{$pattern_chars}, $self->advance());
+                push(@{$pattern_chars}, $self->advance());
                 $extglob_depth += 1;
             } elsif ($ch eq "[") {
                 $is_char_class = 0;
                 $scan_pos = $self->{pos_} + 1;
                 $scan_depth = 0;
                 $has_first_bracket_literal = 0;
-                if ($scan_pos < $self->{length_} && is_caret_or_bang($self->{source}->[$scan_pos])) {
+                if ($scan_pos < $self->{length_} && main::is_caret_or_bang(substr($self->{source}, $scan_pos, 1))) {
                     $scan_pos += 1;
                 }
-                if ($scan_pos < $self->{length_} && $self->{source}->[$scan_pos] eq "]") {
-                    if ($self->{source}->find("]", $scan_pos + 1) != -1) {
+                if ($scan_pos < $self->{length_} && substr($self->{source}, $scan_pos, 1) eq "]") {
+                    if (index($self->{source}, "]", $scan_pos + 1) != -1) {
                         $scan_pos += 1;
                         $has_first_bracket_literal = 1;
                     }
                 }
                 while ($scan_pos < $self->{length_}) {
-                    $sc = $self->{source}->[$scan_pos];
+                    $sc = substr($self->{source}, $scan_pos, 1);
                     if ($sc eq "]" && $scan_depth == 0) {
                         $is_char_class = 1;
                         last;
@@ -8271,52 +8271,52 @@ sub parse_case ($self) {
                     $scan_pos += 1;
                 }
                 if ($is_char_class) {
-                    $pattern_chars->push($self->advance());
-                    if (!$self->at_end() && is_caret_or_bang($self->peek())) {
-                        $pattern_chars->push($self->advance());
+                    push(@{$pattern_chars}, $self->advance());
+                    if (!$self->at_end() && main::is_caret_or_bang($self->peek())) {
+                        push(@{$pattern_chars}, $self->advance());
                     }
                     if ($has_first_bracket_literal && !$self->at_end() && $self->peek() eq "]") {
-                        $pattern_chars->push($self->advance());
+                        push(@{$pattern_chars}, $self->advance());
                     }
                     while (!$self->at_end() && $self->peek() ne "]") {
-                        $pattern_chars->push($self->advance());
+                        push(@{$pattern_chars}, $self->advance());
                     }
                     if (!$self->at_end()) {
-                        $pattern_chars->push($self->advance());
+                        push(@{$pattern_chars}, $self->advance());
                     }
                 } else {
-                    $pattern_chars->push($self->advance());
+                    push(@{$pattern_chars}, $self->advance());
                 }
             } elsif ($ch eq "'") {
-                $pattern_chars->push($self->advance());
+                push(@{$pattern_chars}, $self->advance());
                 while (!$self->at_end() && $self->peek() ne "'") {
-                    $pattern_chars->push($self->advance());
+                    push(@{$pattern_chars}, $self->advance());
                 }
                 if (!$self->at_end()) {
-                    $pattern_chars->push($self->advance());
+                    push(@{$pattern_chars}, $self->advance());
                 }
             } elsif ($ch eq "\"") {
-                $pattern_chars->push($self->advance());
+                push(@{$pattern_chars}, $self->advance());
                 while (!$self->at_end() && $self->peek() ne "\"") {
                     if ($self->peek() eq "\\" && $self->{pos_} + 1 < $self->{length_}) {
-                        $pattern_chars->push($self->advance());
+                        push(@{$pattern_chars}, $self->advance());
                     }
-                    $pattern_chars->push($self->advance());
+                    push(@{$pattern_chars}, $self->advance());
                 }
                 if (!$self->at_end()) {
-                    $pattern_chars->push($self->advance());
+                    push(@{$pattern_chars}, $self->advance());
                 }
-            } elsif (is_whitespace($ch)) {
+            } elsif (main::is_whitespace($ch)) {
                 if ($extglob_depth > 0) {
-                    $pattern_chars->push($self->advance());
+                    push(@{$pattern_chars}, $self->advance());
                 } else {
                     $self->advance();
                 }
             } else {
-                $pattern_chars->push($self->advance());
+                push(@{$pattern_chars}, $self->advance());
             }
         }
-        $pattern = ""->join_($pattern_chars);
+        $pattern = join("", @{$pattern_chars});
         if (!(length($pattern) > 0)) {
             die "Expected pattern in case statement";
         }
@@ -8335,15 +8335,15 @@ sub parse_case ($self) {
         }
         $terminator = $self->consume_case_terminator();
         $self->skip_whitespace_and_newlines();
-        $patterns->push(CasePattern->new($pattern, $body, $terminator, "pattern"));
+        push(@{$patterns}, CasePattern->new($pattern, $body, $terminator, "pattern"));
     }
-    $self->clear_state(PARSERSTATEFLAGS_PST_CASEPAT());
+    $self->clear_state(main::PARSERSTATEFLAGS_PST_CASEPAT());
     $self->skip_whitespace_and_newlines();
     if (!$self->lex_consume_word("esac")) {
-        $self->clear_state(PARSERSTATEFLAGS_PST_CASESTMT());
+        $self->clear_state(main::PARSERSTATEFLAGS_PST_CASESTMT());
         die "Expected 'esac' to close case statement";
     }
-    $self->clear_state(PARSERSTATEFLAGS_PST_CASESTMT());
+    $self->clear_state(main::PARSERSTATEFLAGS_PST_CASESTMT());
     return Case->new($word, $patterns, $self->collect_redirects(), "case");
 }
 
@@ -8367,7 +8367,7 @@ sub parse_coproc ($self) {
         }
     }
     if ($ch eq "(") {
-        if ($self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "(") {
+        if ($self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "(") {
             $body = $self->parse_arithmetic_command();
             if (defined($body)) {
                 return Coproc->new($body, $name, "coproc");
@@ -8379,7 +8379,7 @@ sub parse_coproc ($self) {
         }
     }
     my $next_word = $self->lex_peek_reserved_word();
-    if ($next_word ne "" && (exists(COMPOUND_KEYWORDS()->{$next_word}))) {
+    if ($next_word ne "" && (exists(main::COMPOUND_KEYWORDS()->{$next_word}))) {
         $body = $self->parse_compound_command();
         if (defined($body)) {
             return Coproc->new($body, $name, "coproc");
@@ -8388,7 +8388,7 @@ sub parse_coproc ($self) {
     my $word_start = $self->{pos_};
     my $potential_name = $self->peek_word();
     if ((length($potential_name) > 0)) {
-        while (!$self->at_end() && !is_metachar($self->peek()) && !is_quote($self->peek())) {
+        while (!$self->at_end() && !main::is_metachar($self->peek()) && !main::is_quote($self->peek())) {
             $self->advance();
         }
         $self->skip_whitespace();
@@ -8397,7 +8397,7 @@ sub parse_coproc ($self) {
             $ch = $self->peek();
         }
         $next_word = $self->lex_peek_reserved_word();
-        if (is_valid_identifier($potential_name)) {
+        if (main::is_valid_identifier($potential_name)) {
             if ($ch eq "{") {
                 $name = $potential_name;
                 $body = $self->parse_brace_group();
@@ -8406,7 +8406,7 @@ sub parse_coproc ($self) {
                 }
             } elsif ($ch eq "(") {
                 $name = $potential_name;
-                if ($self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "(") {
+                if ($self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "(") {
                     $body = $self->parse_arithmetic_command();
                 } else {
                     $body = $self->parse_subshell();
@@ -8414,7 +8414,7 @@ sub parse_coproc ($self) {
                 if (defined($body)) {
                     return Coproc->new($body, $name, "coproc");
                 }
-            } elsif ($next_word ne "" && (exists(COMPOUND_KEYWORDS()->{$next_word}))) {
+            } elsif ($next_word ne "" && (exists(main::COMPOUND_KEYWORDS()->{$next_word}))) {
                 $name = $potential_name;
                 $body = $self->parse_compound_command();
                 if (defined($body)) {
@@ -8452,7 +8452,7 @@ sub parse_function ($self) {
         $self->consume_word($name);
         $self->skip_whitespace();
         if (!$self->at_end() && $self->peek() eq "(") {
-            if ($self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq ")") {
+            if ($self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq ")") {
                 $self->advance();
                 $self->advance();
             }
@@ -8465,18 +8465,18 @@ sub parse_function ($self) {
         return Function->new($name, $body, "function");
     }
     $name = $self->peek_word();
-    if ($name eq "" || (exists(RESERVED_WORDS()->{$name}))) {
+    if ($name eq "" || (exists(main::RESERVED_WORDS()->{$name}))) {
         return undef;
     }
-    if (looks_like_assignment($name)) {
+    if (main::looks_like_assignment($name)) {
         return undef;
     }
     $self->skip_whitespace();
     my $name_start = $self->{pos_};
-    while (!$self->at_end() && !is_metachar($self->peek()) && !is_quote($self->peek()) && !is_paren($self->peek())) {
+    while (!$self->at_end() && !main::is_metachar($self->peek()) && !main::is_quote($self->peek()) && !main::is_paren($self->peek())) {
         $self->advance();
     }
-    $name = substring($self->{source}, $name_start, $self->{pos_});
+    $name = main::substring($self->{source}, $name_start, $self->{pos_});
     if (!(length($name) > 0)) {
         $self->{pos_} = $saved_pos;
         return undef;
@@ -8484,12 +8484,12 @@ sub parse_function ($self) {
     my $brace_depth = 0;
     my $i = 0;
     while ($i < length($name)) {
-        if (is_expansion_start($name, $i, "\${")) {
+        if (main::is_expansion_start($name, $i, "\${")) {
             $brace_depth += 1;
             $i += 2;
             next;
         }
-        if ($name->[$i] eq "}") {
+        if (substr($name, $i, 1) eq "}") {
             $brace_depth -= 1;
         }
         $i += 1;
@@ -8501,7 +8501,7 @@ sub parse_function ($self) {
     my $pos_after_name = $self->{pos_};
     $self->skip_whitespace();
     my $has_whitespace = $self->{pos_} > $pos_after_name;
-    if (!$has_whitespace && (length($name) > 0) && ((index("*?\@+!\$", $name->[-1]) >= 0))) {
+    if (!$has_whitespace && (length($name) > 0) && ((index("*?\@+!\$", substr($name, length($name) - 1, 1)) >= 0))) {
         $self->{pos_} = $saved_pos;
         return undef;
     }
@@ -8529,7 +8529,7 @@ sub parse_compound_command ($self) {
     if (defined($result)) {
         return $result;
     }
-    if (!$self->at_end() && $self->peek() eq "(" && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "(") {
+    if (!$self->at_end() && $self->peek() eq "(" && $self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "(") {
         $result = $self->parse_arithmetic_command();
         if (defined($result)) {
             return $result;
@@ -8580,7 +8580,7 @@ sub at_list_until_terminator ($self, $stop_words) {
     }
     if ($self->peek() eq "}") {
         $next_pos = $self->{pos_} + 1;
-        if ($next_pos >= $self->{length_} || is_word_end_context($self->{source}->[$next_pos])) {
+        if ($next_pos >= $self->{length_} || main::is_word_end_context(substr($self->{source}, $next_pos, 1))) {
             return 1;
         }
     }
@@ -8639,18 +8639,18 @@ sub parse_list_until ($self, $stop_words) {
             if ($self->at_list_until_terminator($stop_words)) {
                 last;
             }
-            $parts->push(Operator->new($op, "operator"));
+            push(@{$parts}, Operator->new($op, "operator"));
         } elsif ($op eq "&") {
-            $parts->push(Operator->new($op, "operator"));
+            push(@{$parts}, Operator->new($op, "operator"));
             $self->skip_whitespace_and_newlines();
             if ($self->at_list_until_terminator($stop_words)) {
                 last;
             }
         } elsif ($op eq "&&" || $op eq "||") {
-            $parts->push(Operator->new($op, "operator"));
+            push(@{$parts}, Operator->new($op, "operator"));
             $self->skip_whitespace_and_newlines();
         } else {
-            $parts->push(Operator->new($op, "operator"));
+            push(@{$parts}, Operator->new($op, "operator"));
         }
         if ($self->at_list_until_terminator($stop_words)) {
             last;
@@ -8659,7 +8659,7 @@ sub parse_list_until ($self, $stop_words) {
         if (!defined($pipeline)) {
             die "Expected command after " . $op;
         }
-        $parts->push($pipeline);
+        push(@{$parts}, $pipeline);
     }
     if (scalar(@{$parts}) == 1) {
         return $parts->[0];
@@ -8677,7 +8677,7 @@ sub parse_compound_command ($self) {
     }
     my $ch = $self->peek();
     my $result = undef;
-    if ($ch eq "(" && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "(") {
+    if ($ch eq "(" && $self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "(") {
         $result = $self->parse_arithmetic_command();
         if (defined($result)) {
             return $result;
@@ -8692,7 +8692,7 @@ sub parse_compound_command ($self) {
             return $result;
         }
     }
-    if ($ch eq "[" && $self->{pos_} + 1 < $self->{length_} && $self->{source}->[$self->{pos_} + 1] eq "[") {
+    if ($ch eq "[" && $self->{pos_} + 1 < $self->{length_} && substr($self->{source}, $self->{pos_} + 1, 1) eq "[") {
         $result = $self->parse_conditional_expr();
         if (defined($result)) {
             return $result;
@@ -8701,9 +8701,9 @@ sub parse_compound_command ($self) {
     my $reserved = $self->lex_peek_reserved_word();
     if ($reserved eq "" && $self->{in_process_sub}) {
         $word = $self->peek_word();
-        if ($word ne "" && length($word) > 1 && $word->[0] eq "}") {
+        if ($word ne "" && length($word) > 1 && substr($word, 0, 1) eq "}") {
             $keyword_word = substr($word, 1);
-            if ((exists(RESERVED_WORDS()->{$keyword_word})) || $keyword_word eq "{" || $keyword_word eq "}" || $keyword_word eq "[[" || $keyword_word eq "]]" || $keyword_word eq "!" || $keyword_word eq "time") {
+            if ((exists(main::RESERVED_WORDS()->{$keyword_word})) || $keyword_word eq "{" || $keyword_word eq "}" || $keyword_word eq "[[" || $keyword_word eq "]]" || $keyword_word eq "!" || $keyword_word eq "time") {
                 $reserved = $keyword_word;
             }
         }
@@ -8758,7 +8758,7 @@ sub parse_pipeline ($self) {
             $self->advance();
             if (!$self->at_end() && $self->peek() eq "p") {
                 $self->advance();
-                if ($self->at_end() || is_metachar($self->peek())) {
+                if ($self->at_end() || main::is_metachar($self->peek())) {
                     $time_posix = 1;
                 } else {
                     $self->{pos_} = $saved;
@@ -8768,8 +8768,8 @@ sub parse_pipeline ($self) {
             }
         }
         $self->skip_whitespace();
-        if (!$self->at_end() && starts_with_at($self->{source}, $self->{pos_}, "--")) {
-            if ($self->{pos_} + 2 >= $self->{length_} || is_whitespace($self->{source}->[$self->{pos_} + 2])) {
+        if (!$self->at_end() && main::starts_with_at($self->{source}, $self->{pos_}, "--")) {
+            if ($self->{pos_} + 2 >= $self->{length_} || main::is_whitespace(substr($self->{source}, $self->{pos_} + 2, 1))) {
                 $self->advance();
                 $self->advance();
                 $time_posix = 1;
@@ -8784,7 +8784,7 @@ sub parse_pipeline ($self) {
                 $self->advance();
                 if (!$self->at_end() && $self->peek() eq "p") {
                     $self->advance();
-                    if ($self->at_end() || is_metachar($self->peek())) {
+                    if ($self->at_end() || main::is_metachar($self->peek())) {
                         $time_posix = 1;
                     } else {
                         $self->{pos_} = $saved;
@@ -8796,18 +8796,18 @@ sub parse_pipeline ($self) {
         }
         $self->skip_whitespace();
         if (!$self->at_end() && $self->peek() eq "!") {
-            if (($self->{pos_} + 1 >= $self->{length_} || is_negation_boundary($self->{source}->[$self->{pos_} + 1])) && !$self->is_bang_followed_by_procsub()) {
+            if (($self->{pos_} + 1 >= $self->{length_} || main::is_negation_boundary(substr($self->{source}, $self->{pos_} + 1, 1))) && !$self->is_bang_followed_by_procsub()) {
                 $self->advance();
                 $prefix_order = "time_negation";
                 $self->skip_whitespace();
             }
         }
     } elsif (!$self->at_end() && $self->peek() eq "!") {
-        if (($self->{pos_} + 1 >= $self->{length_} || is_negation_boundary($self->{source}->[$self->{pos_} + 1])) && !$self->is_bang_followed_by_procsub()) {
+        if (($self->{pos_} + 1 >= $self->{length_} || main::is_negation_boundary(substr($self->{source}, $self->{pos_} + 1, 1))) && !$self->is_bang_followed_by_procsub()) {
             $self->advance();
             $self->skip_whitespace();
             $inner = $self->parse_pipeline();
-            if (defined($inner) && $inner->{kind} == "negation") {
+            if (defined($inner) && $inner->{kind} eq "negation") {
                 if (defined($inner->{pipeline})) {
                     return $inner->{pipeline};
                 } else {
@@ -8849,20 +8849,20 @@ sub parse_simple_pipeline ($self) {
         if ($token_type == 0) {
             last;
         }
-        if ($token_type != TOKENTYPE_PIPE() && $token_type != TOKENTYPE_PIPE_AMP()) {
+        if ($token_type != main::TOKENTYPE_PIPE() && $token_type != main::TOKENTYPE_PIPE_AMP()) {
             last;
         }
         $self->lex_next_token();
-        $is_pipe_both = $token_type == TOKENTYPE_PIPE_AMP();
+        $is_pipe_both = $token_type == main::TOKENTYPE_PIPE_AMP();
         $self->skip_whitespace_and_newlines();
         if ($is_pipe_both) {
-            $commands->push(PipeBoth->new("pipe-both"));
+            push(@{$commands}, PipeBoth->new("pipe-both"));
         }
         $cmd = $self->parse_compound_command();
         if (!defined($cmd)) {
             die "Expected command after |";
         }
-        $commands->push($cmd);
+        push(@{$commands}, $cmd);
     }
     if (scalar(@{$commands}) == 1) {
         return $commands->[0];
@@ -8876,19 +8876,19 @@ sub parse_list_operator ($self) {
     if ($token_type == 0) {
         return "";
     }
-    if ($token_type == TOKENTYPE_AND_AND()) {
+    if ($token_type == main::TOKENTYPE_AND_AND()) {
         $self->lex_next_token();
         return "&&";
     }
-    if ($token_type == TOKENTYPE_OR_OR()) {
+    if ($token_type == main::TOKENTYPE_OR_OR()) {
         $self->lex_next_token();
         return "||";
     }
-    if ($token_type == TOKENTYPE_SEMI()) {
+    if ($token_type == main::TOKENTYPE_SEMI()) {
         $self->lex_next_token();
         return ";";
     }
-    if ($token_type == TOKENTYPE_AMP()) {
+    if ($token_type == main::TOKENTYPE_AMP()) {
         $self->lex_next_token();
         return "&";
     }
@@ -8915,7 +8915,7 @@ sub parse_list ($self, $newline_as_separator) {
         return undef;
     }
     my $parts = [$pipeline];
-    if ($self->in_state(PARSERSTATEFLAGS_PST_EOFTOKEN()) && $self->at_eof_token()) {
+    if ($self->in_state(main::PARSERSTATEFLAGS_PST_EOFTOKEN()) && $self->at_eof_token()) {
         return (scalar(@{$parts}) == 1 ? $parts->[0] : List->new($parts, "list"));
     }
     while (1) {
@@ -8948,7 +8948,7 @@ sub parse_list ($self, $newline_as_separator) {
         if ($op eq "") {
             last;
         }
-        $parts->push(Operator->new($op, "operator"));
+        push(@{$parts}, Operator->new($op, "operator"));
         if ($op eq "&&" || $op eq "||") {
             $self->skip_whitespace_and_newlines();
         } elsif ($op eq "&") {
@@ -8986,8 +8986,8 @@ sub parse_list ($self, $newline_as_separator) {
         if (!defined($pipeline)) {
             die "Expected command after " . $op;
         }
-        $parts->push($pipeline);
-        if ($self->in_state(PARSERSTATEFLAGS_PST_EOFTOKEN()) && $self->at_eof_token()) {
+        push(@{$parts}, $pipeline);
+        if ($self->in_state(main::PARSERSTATEFLAGS_PST_EOFTOKEN()) && $self->at_eof_token()) {
             last;
         }
     }
@@ -9005,7 +9005,7 @@ sub parse_comment ($self) {
     while (!$self->at_end() && $self->peek() ne "\n") {
         $self->advance();
     }
-    my $text = substring($self->{source}, $start, $self->{pos_});
+    my $text = main::substring($self->{source}, $start, $self->{pos_});
     return Comment->new($text, "comment");
 }
 
@@ -9034,7 +9034,7 @@ sub parse ($self) {
     while (!$self->at_end()) {
         $result = $self->parse_list(0);
         if (defined($result)) {
-            $results->push($result);
+            push(@{$results}, $result);
         }
         $self->skip_whitespace();
         $found_newline = 0;
@@ -9052,10 +9052,10 @@ sub parse ($self) {
             die "Syntax error";
         }
     }
-    if (!(scalar(@{$results}) > 0)) {
+    if (!(scalar(@{($results // [])}) > 0)) {
         return [Empty->new("empty")];
     }
-    if ($self->{saw_newline_in_single_quote} && (length($self->{source}) > 0) && $self->{source}->[-1] eq "\\" && !(length($self->{source}) >= 3 && substr($self->{source}, length($self->{source}) - 3, length($self->{source}) - 1 - length($self->{source}) - 3) eq "\\\n")) {
+    if ($self->{saw_newline_in_single_quote} && (length($self->{source}) > 0) && substr($self->{source}, length($self->{source}) - 1, 1) eq "\\" && !(length($self->{source}) >= 3 && substr($self->{source}, length($self->{source}) - 3, length($self->{source}) - 1 - length($self->{source}) - 3) eq "\\\n")) {
         if (!$self->last_word_on_own_line($results)) {
             $self->strip_trailing_backslash_from_last_word($results);
         }
@@ -9068,15 +9068,15 @@ sub last_word_on_own_line ($self, $nodes) {
 }
 
 sub strip_trailing_backslash_from_last_word ($self, $nodes) {
-    if (!(scalar(@{$nodes}) > 0)) {
+    if (!(scalar(@{($nodes // [])}) > 0)) {
         return;
     }
     my $last_node = $nodes->[-1];
     my $last_word = $self->find_last_word($last_node);
-    if (defined($last_word) && $last_word->{value}->endswith("\\")) {
-        $last_word->{value} = substring($last_word->{value}, 0, length($last_word->{value}) - 1);
-        if (!(length($last_word->{value}) > 0) && (ref($last_node) eq 'Command') && (scalar(@{$last_node->{words}}) > 0)) {
-            $last_node->{words}->pop_();
+    if (defined($last_word) && (substr($last_word->{value}, -length("\\")) eq "\\")) {
+        $last_word->{value} = main::substring($last_word->{value}, 0, length($last_word->{value}) - 1);
+        if (!(length($last_word->{value}) > 0) && (ref($last_node) eq 'Command') && (scalar(@{($last_node->{words} // [])}) > 0)) {
+            pop(@{$last_node->{words}});
         }
     }
 }
@@ -9090,32 +9090,32 @@ sub find_last_word ($self, $node) {
     }
     if (ref($node) eq 'Command') {
         my $node = $node;
-        if ((scalar(@{$node->{words}}) > 0)) {
+        if ((scalar(@{($node->{words} // [])}) > 0)) {
             $last_word = $node->{words}->[-1];
-            if ($last_word->{value}->endswith("\\")) {
+            if ((substr($last_word->{value}, -length("\\")) eq "\\")) {
                 return $last_word;
             }
         }
-        if ((scalar(@{$node->{redirects}}) > 0)) {
+        if ((scalar(@{($node->{redirects} // [])}) > 0)) {
             $last_redirect = $node->{redirects}->[-1];
             if (ref($last_redirect) eq 'Redirect') {
                 my $last_redirect = $last_redirect;
                 return $last_redirect->{target};
             }
         }
-        if ((scalar(@{$node->{words}}) > 0)) {
+        if ((scalar(@{($node->{words} // [])}) > 0)) {
             return $node->{words}->[-1];
         }
     }
     if (ref($node) eq 'Pipeline') {
         my $node = $node;
-        if ((scalar(@{$node->{commands}}) > 0)) {
+        if ((scalar(@{($node->{commands} // [])}) > 0)) {
             return $self->find_last_word($node->{commands}->[-1]);
         }
     }
     if (ref($node) eq 'List') {
         my $node = $node;
-        if ((scalar(@{$node->{parts}}) > 0)) {
+        if ((scalar(@{($node->{parts} // [])}) > 0)) {
             return $self->find_last_word($node->{parts}->[-1]);
         }
     }
@@ -9123,6 +9123,8 @@ sub find_last_word ($self, $node) {
 }
 
 1;
+
+package main;
 
 sub is_hex_digit ($c) {
     return $c ge "0" && $c le "9" || $c ge "a" && $c le "f" || $c ge "A" && $c le "F";
@@ -9141,7 +9143,7 @@ sub is_whitespace ($c) {
 }
 
 sub string_to_bytes ($s_) {
-    return [unpack('C*', $s_)]->copy();
+    return [@{[unpack('C*', $s_)]}];
 }
 
 sub is_whitespace_no_newline ($c) {
@@ -9153,7 +9155,7 @@ sub substring ($s_, $start, $end) {
 }
 
 sub starts_with_at ($s_, $pos_, $prefix) {
-    return $s_->startswith($prefix, $pos_);
+    return (index($s_, $prefix, $pos_) == 0);
 }
 
 sub count_consecutive_dollars_before ($s_, $pos_) {
@@ -9161,10 +9163,10 @@ sub count_consecutive_dollars_before ($s_, $pos_) {
     my $j;
     my $count = 0;
     my $k = $pos_ - 1;
-    while ($k >= 0 && $s_->[$k] eq "\$") {
+    while ($k >= 0 && substr($s_, $k, 1) eq "\$") {
         $bs_count = 0;
         $j = $k - 1;
-        while ($j >= 0 && $s_->[$j] eq "\\") {
+        while ($j >= 0 && substr($s_, $j, 1) eq "\\") {
             $bs_count += 1;
             $j -= 1;
         }
@@ -9192,10 +9194,10 @@ sub repeat_str ($s_, $n) {
     my $result = [];
     my $i = 0;
     while ($i < $n) {
-        $result->push($s_);
+        push(@{$result}, $s_);
         $i += 1;
     }
-    return ""->join_($result);
+    return join("", @{$result});
 }
 
 sub strip_line_continuations_comment_aware ($text) {
@@ -9207,17 +9209,17 @@ sub strip_line_continuations_comment_aware ($text) {
     my $in_comment = 0;
     my $quote = new_quote_state();
     while ($i < length($text)) {
-        $c = $text->[$i];
-        if ($c eq "\\" && $i + 1 < length($text) && $text->[$i + 1] eq "\n") {
+        $c = substr($text, $i, 1);
+        if ($c eq "\\" && $i + 1 < length($text) && substr($text, $i + 1, 1) eq "\n") {
             $num_preceding_backslashes = 0;
             $j = $i - 1;
-            while ($j >= 0 && $text->[$j] eq "\\") {
+            while ($j >= 0 && substr($text, $j, 1) eq "\\") {
                 $num_preceding_backslashes += 1;
                 $j -= 1;
             }
             if ($num_preceding_backslashes % 2 == 0) {
                 if ($in_comment) {
-                    $result->push("\n");
+                    push(@{$result}, "\n");
                 }
                 $i += 2;
                 $in_comment = 0;
@@ -9226,7 +9228,7 @@ sub strip_line_continuations_comment_aware ($text) {
         }
         if ($c eq "\n") {
             $in_comment = 0;
-            $result->push($c);
+            push(@{$result}, $c);
             $i += 1;
             next;
         }
@@ -9237,20 +9239,20 @@ sub strip_line_continuations_comment_aware ($text) {
         } elsif ($c eq "#" && !$quote->{single} && !$in_comment) {
             $in_comment = 1;
         }
-        $result->push($c);
+        push(@{$result}, $c);
         $i += 1;
     }
-    return ""->join_($result);
+    return join("", @{$result});
 }
 
 sub append_redirects ($base, $redirects) {
     my $parts;
-    if ((scalar(@{$redirects}) > 0)) {
+    if ((scalar(@{($redirects // [])}) > 0)) {
         $parts = [];
         for my $r (@{$redirects}) {
-            $parts->push($r->to_sexp());
+            push(@{$parts}, $r->to_sexp());
         }
-        return $base . " " . " "->join_($parts);
+        return $base . " " . join(" ", @{$parts});
     }
     return $base;
 }
@@ -9260,20 +9262,20 @@ sub format_arith_val ($s_) {
     my $val = $w->expand_all_ansi_c_quotes($s_);
     $val = $w->strip_locale_string_dollars($val);
     $val = $w->format_command_substitutions($val, 0);
-    $val = $val->replace("\\", "\\\\")->replace("\"", "\\\"");
-    $val = $val->replace("\n", "\\n")->replace("\t", "\\t");
+    $val = (($val =~ s/"\\"/"\\\\"/gr) =~ s/"\""/"\\\""/gr);
+    $val = (($val =~ s/"\n"/"\\n"/gr) =~ s/"\t"/"\\t"/gr);
     return $val;
 }
 
 sub consume_single_quote ($s_, $start) {
     my $chars = ["'"];
     my $i = $start + 1;
-    while ($i < length($s_) && $s_->[$i] ne "'") {
-        $chars->push($s_->[$i]);
+    while ($i < length($s_) && substr($s_, $i, 1) ne "'") {
+        push(@{$chars}, substr($s_, $i, 1));
         $i += 1;
     }
     if ($i < length($s_)) {
-        $chars->push($s_->[$i]);
+        push(@{$chars}, substr($s_, $i, 1));
         $i += 1;
     }
     return [$i, $chars];
@@ -9282,16 +9284,16 @@ sub consume_single_quote ($s_, $start) {
 sub consume_double_quote ($s_, $start) {
     my $chars = ["\""];
     my $i = $start + 1;
-    while ($i < length($s_) && $s_->[$i] ne "\"") {
-        if ($s_->[$i] eq "\\" && $i + 1 < length($s_)) {
-            $chars->push($s_->[$i]);
+    while ($i < length($s_) && substr($s_, $i, 1) ne "\"") {
+        if (substr($s_, $i, 1) eq "\\" && $i + 1 < length($s_)) {
+            push(@{$chars}, substr($s_, $i, 1));
             $i += 1;
         }
-        $chars->push($s_->[$i]);
+        push(@{$chars}, substr($s_, $i, 1));
         $i += 1;
     }
     if ($i < length($s_)) {
-        $chars->push($s_->[$i]);
+        push(@{$chars}, substr($s_, $i, 1));
         $i += 1;
     }
     return [$i, $chars];
@@ -9300,10 +9302,10 @@ sub consume_double_quote ($s_, $start) {
 sub has_bracket_close ($s_, $start, $depth) {
     my $i = $start;
     while ($i < length($s_)) {
-        if ($s_->[$i] eq "]") {
+        if (substr($s_, $i, 1) eq "]") {
             return 1;
         }
-        if (($s_->[$i] eq "|" || $s_->[$i] eq ")") && $depth == 0) {
+        if ((substr($s_, $i, 1) eq "|" || substr($s_, $i, 1) eq ")") && $depth == 0) {
             return 0;
         }
         $i += 1;
@@ -9313,24 +9315,24 @@ sub has_bracket_close ($s_, $start, $depth) {
 
 sub consume_bracket_class ($s_, $start, $depth) {
     my $scan_pos = $start + 1;
-    if ($scan_pos < length($s_) && ($s_->[$scan_pos] eq "!" || $s_->[$scan_pos] eq "^")) {
+    if ($scan_pos < length($s_) && (substr($s_, $scan_pos, 1) eq "!" || substr($s_, $scan_pos, 1) eq "^")) {
         $scan_pos += 1;
     }
-    if ($scan_pos < length($s_) && $s_->[$scan_pos] eq "]") {
+    if ($scan_pos < length($s_) && substr($s_, $scan_pos, 1) eq "]") {
         if (has_bracket_close($s_, $scan_pos + 1, $depth)) {
             $scan_pos += 1;
         }
     }
     my $is_bracket = 0;
     while ($scan_pos < length($s_)) {
-        if ($s_->[$scan_pos] eq "]") {
+        if (substr($s_, $scan_pos, 1) eq "]") {
             $is_bracket = 1;
             last;
         }
-        if ($s_->[$scan_pos] eq ")" && $depth == 0) {
+        if (substr($s_, $scan_pos, 1) eq ")" && $depth == 0) {
             last;
         }
-        if ($s_->[$scan_pos] eq "|" && $depth == 0) {
+        if (substr($s_, $scan_pos, 1) eq "|" && $depth == 0) {
             last;
         }
         $scan_pos += 1;
@@ -9340,22 +9342,22 @@ sub consume_bracket_class ($s_, $start, $depth) {
     }
     my $chars = ["["];
     my $i = $start + 1;
-    if ($i < length($s_) && ($s_->[$i] eq "!" || $s_->[$i] eq "^")) {
-        $chars->push($s_->[$i]);
+    if ($i < length($s_) && (substr($s_, $i, 1) eq "!" || substr($s_, $i, 1) eq "^")) {
+        push(@{$chars}, substr($s_, $i, 1));
         $i += 1;
     }
-    if ($i < length($s_) && $s_->[$i] eq "]") {
+    if ($i < length($s_) && substr($s_, $i, 1) eq "]") {
         if (has_bracket_close($s_, $i + 1, $depth)) {
-            $chars->push($s_->[$i]);
+            push(@{$chars}, substr($s_, $i, 1));
             $i += 1;
         }
     }
-    while ($i < length($s_) && $s_->[$i] ne "]") {
-        $chars->push($s_->[$i]);
+    while ($i < length($s_) && substr($s_, $i, 1) ne "]") {
+        push(@{$chars}, substr($s_, $i, 1));
         $i += 1;
     }
     if ($i < length($s_)) {
-        $chars->push($s_->[$i]);
+        push(@{$chars}, substr($s_, $i, 1));
         $i += 1;
     }
     return [$i, $chars, 1];
@@ -9366,25 +9368,25 @@ sub format_cond_body ($node) {
     my $operand_val;
     my $right_val;
     my $kind = $node->{kind};
-    if ($kind == "unary-test") {
+    if ($kind eq "unary-test") {
         $operand_val = $node->{operand}->get_cond_formatted_value();
         return $node->{op} . " " . $operand_val;
     }
-    if ($kind == "binary-test") {
+    if ($kind eq "binary-test") {
         $left_val = $node->{left}->get_cond_formatted_value();
         $right_val = $node->{right}->get_cond_formatted_value();
         return $left_val . " " . $node->{op} . " " . $right_val;
     }
-    if ($kind == "cond-and") {
+    if ($kind eq "cond-and") {
         return format_cond_body($node->{left}) . " && " . format_cond_body($node->{right});
     }
-    if ($kind == "cond-or") {
+    if ($kind eq "cond-or") {
         return format_cond_body($node->{left}) . " || " . format_cond_body($node->{right});
     }
-    if ($kind == "cond-not") {
+    if ($kind eq "cond-not") {
         return "! " . format_cond_body($node->{operand});
     }
-    if ($kind == "cond-paren") {
+    if ($kind eq "cond-paren") {
         return "( " . format_cond_body($node->{inner}) . " )";
     }
     return "";
@@ -9398,7 +9400,7 @@ sub starts_with_subshell ($node) {
     if (ref($node) eq 'List') {
         my $node = $node;
         for my $p (@{($node->{parts} // [])}) {
-            if ($p->{kind} != "operator") {
+            if ($p->{kind} ne "operator") {
                 return starts_with_subshell($p);
             }
         }
@@ -9406,7 +9408,7 @@ sub starts_with_subshell ($node) {
     }
     if (ref($node) eq 'Pipeline') {
         my $node = $node;
-        if ((scalar(@{$node->{commands}}) > 0)) {
+        if ((scalar(@{($node->{commands} // [])}) > 0)) {
             return starts_with_subshell($node->{commands}->[0]);
         }
         return 0;
@@ -9476,28 +9478,28 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
             $val = $w->strip_locale_string_dollars($val);
             $val = $w->normalize_array_whitespace($val);
             $val = $w->format_command_substitutions($val, 0);
-            $parts->push($val);
+            push(@{$parts}, $val);
         }
         $heredocs = [];
         for my $r (@{($node->{redirects} // [])}) {
             if (ref($r) eq 'HereDoc') {
                 my $r = $r;
-                $heredocs->push($r);
+                push(@{$heredocs}, $r);
             }
         }
         for my $r (@{($node->{redirects} // [])}) {
-            $parts->push(format_redirect($r, $compact_redirects, 1));
+            push(@{$parts}, format_redirect($r, $compact_redirects, 1));
         }
         my $result = "";
-        if ($compact_redirects && (scalar(@{$node->{words}}) > 0) && (scalar(@{$node->{redirects}}) > 0)) {
+        if ($compact_redirects && (scalar(@{($node->{words} // [])}) > 0) && (scalar(@{($node->{redirects} // [])}) > 0)) {
             $word_parts = [@{$parts}[0 .. scalar(@{$node->{words}}) - 1]];
             $redirect_parts = [@{$parts}[scalar(@{$node->{words}}) .. $#{$parts}]];
-            $result = " "->join_($word_parts) . ""->join_($redirect_parts);
+            $result = join(" ", @{$word_parts}) . join("", @{$redirect_parts});
         } else {
-            $result = " "->join_($parts);
+            $result = join(" ", @{$parts});
         }
         for my $h (@{$heredocs}) {
-            $result = $result + format_heredoc_body($h);
+            $result = $result . format_heredoc_body($h);
         }
         return $result;
     }
@@ -9514,8 +9516,8 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
                 $i += 1;
                 next;
             }
-            $needs_redirect = $i + 1 < scalar(@{$node->{commands}}) && $node->{commands}->[$i + 1]->{kind} == "pipe-both";
-            $cmds->push([$cmd, $needs_redirect]);
+            $needs_redirect = $i + 1 < scalar(@{$node->{commands}}) && $node->{commands}->[$i + 1]->{kind} eq "pipe-both";
+            push(@{$cmds}, [$cmd, $needs_redirect]);
             $i += 1;
         }
         $result_parts = [];
@@ -9527,7 +9529,7 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
             $formatted = format_cmdsub_node($cmd, $indent, $in_procsub, 0, $procsub_first && $idx == 0);
             $is_last = $idx == scalar(@{$cmds}) - 1;
             $has_heredoc = 0;
-            if ($cmd->{kind} == "command" && (scalar(@{$cmd->{redirects}}) > 0)) {
+            if ($cmd->{kind} eq "command" && (scalar(@{($cmd->{redirects} // [])}) > 0)) {
                 for my $r (@{($cmd->{redirects} // [])}) {
                     if (ref($r) eq 'HereDoc') {
                         my $r = $r;
@@ -9539,7 +9541,7 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
             my $first_nl = 0;
             if ($needs_redirect) {
                 if ($has_heredoc) {
-                    $first_nl = $formatted->find("\n");
+                    $first_nl = index($formatted, "\n");
                     if ($first_nl != -1) {
                         $formatted = substr($formatted, 0, $first_nl - 0) . " 2>&1" . substr($formatted, $first_nl);
                     } else {
@@ -9550,28 +9552,28 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
                 }
             }
             if (!$is_last && $has_heredoc) {
-                $first_nl = $formatted->find("\n");
+                $first_nl = index($formatted, "\n");
                 if ($first_nl != -1) {
                     $formatted = substr($formatted, 0, $first_nl - 0) . " |" . substr($formatted, $first_nl);
                 }
-                $result_parts->push($formatted);
+                push(@{$result_parts}, $formatted);
             } else {
-                $result_parts->push($formatted);
+                push(@{$result_parts}, $formatted);
             }
             $idx += 1;
         }
-        $compact_pipe = $in_procsub && (scalar(@{$cmds}) > 0) && $cmds->[0]->[0]->{kind} == "subshell";
+        $compact_pipe = $in_procsub && (scalar(@{($cmds // [])}) > 0) && $cmds->[0]->[0]->{kind} eq "subshell";
         $result = "";
         $idx = 0;
         while ($idx < scalar(@{$result_parts})) {
             $part = $result_parts->[$idx];
             if ($idx > 0) {
                 if ($result->endswith("\n")) {
-                    $result = $result + "  " . $part;
+                    $result = $result . "  " . $part;
                 } elsif ($compact_pipe) {
-                    $result = $result + "|" . $part;
+                    $result = $result . "|" . $part;
                 } else {
-                    $result = $result + " | " . $part;
+                    $result = $result . " | " . $part;
                 }
             } else {
                 $result = $part;
@@ -9584,7 +9586,7 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
         my $node = $node;
         $has_heredoc = 0;
         for my $p (@{($node->{parts} // [])}) {
-            if ($p->{kind} == "command" && (scalar(@{$p->{redirects}}) > 0)) {
+            if ($p->{kind} eq "command" && (scalar(@{($p->{redirects} // [])}) > 0)) {
                 for my $r (@{($p->{redirects} // [])}) {
                     if (ref($r) eq 'HereDoc') {
                         my $r = $r;
@@ -9596,7 +9598,7 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
                 if (ref($p) eq 'Pipeline') {
                     my $p = $p;
                     for my $cmd (@{($p->{commands} // [])}) {
-                        if ($cmd->{kind} == "command" && (scalar(@{$cmd->{redirects}}) > 0)) {
+                        if ($cmd->{kind} eq "command" && (scalar(@{($cmd->{redirects} // [])}) > 0)) {
                             for my $r (@{($cmd->{redirects} // [])}) {
                                 if (ref($r) eq 'HereDoc') {
                                     my $r = $r;
@@ -9619,50 +9621,50 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
             if (ref($p) eq 'Operator') {
                 my $p = $p;
                 if ($p->{op} eq ";") {
-                    if ((scalar(@{$result}) > 0) && $result->[-1]->endswith("\n")) {
+                    if ((scalar(@{($result // [])}) > 0) && (substr($result->[-1], -length("\n")) eq "\n")) {
                         $skipped_semi = 1;
                         next;
                     }
-                    if (scalar(@{$result}) >= 3 && $result->[-2] eq "\n" && $result->[-3]->endswith("\n")) {
+                    if (scalar(@{$result}) >= 3 && $result->[-2] eq "\n" && (substr($result->[-3], -length("\n")) eq "\n")) {
                         $skipped_semi = 1;
                         next;
                     }
-                    $result->push(";");
+                    push(@{$result}, ";");
                     $skipped_semi = 0;
                 } elsif ($p->{op} eq "\n") {
-                    if ((scalar(@{$result}) > 0) && $result->[-1] eq ";") {
+                    if ((scalar(@{($result // [])}) > 0) && $result->[-1] eq ";") {
                         $skipped_semi = 0;
                         next;
                     }
-                    if ((scalar(@{$result}) > 0) && $result->[-1]->endswith("\n")) {
-                        $result->push(($skipped_semi ? " " : "\n"));
+                    if ((scalar(@{($result // [])}) > 0) && (substr($result->[-1], -length("\n")) eq "\n")) {
+                        push(@{$result}, ($skipped_semi ? " " : "\n"));
                         $skipped_semi = 0;
                         next;
                     }
-                    $result->push("\n");
+                    push(@{$result}, "\n");
                     $skipped_semi = 0;
                 } elsif ($p->{op} eq "&") {
-                    if ((scalar(@{$result}) > 0) && ((index($result->[-1], "<<") >= 0)) && ((index($result->[-1], "\n") >= 0))) {
+                    if ((scalar(@{($result // [])}) > 0) && ((index($result->[-1], "<<") >= 0)) && ((index($result->[-1], "\n") >= 0))) {
                         $last_ = $result->[-1];
-                        if (((index($last_, " |") >= 0)) || $last_->startswith("|")) {
+                        if (((index($last_, " |") >= 0)) || (index($last_, "|") == 0)) {
                             $result->[-1] = $last_ . " &";
                         } else {
-                            $first_nl = $last_->find("\n");
+                            $first_nl = index($last_, "\n");
                             $result->[-1] = substr($last_, 0, $first_nl - 0) . " &" . substr($last_, $first_nl);
                         }
                     } else {
-                        $result->push(" &");
+                        push(@{$result}, " &");
                     }
-                } elsif ((scalar(@{$result}) > 0) && ((index($result->[-1], "<<") >= 0)) && ((index($result->[-1], "\n") >= 0))) {
+                } elsif ((scalar(@{($result // [])}) > 0) && ((index($result->[-1], "<<") >= 0)) && ((index($result->[-1], "\n") >= 0))) {
                     $last_ = $result->[-1];
-                    $first_nl = $last_->find("\n");
+                    $first_nl = index($last_, "\n");
                     $result->[-1] = substr($last_, 0, $first_nl - 0) . " " . $p->{op} . " " . substr($last_, $first_nl);
                 } else {
-                    $result->push(" " . $p->{op});
+                    push(@{$result}, " " . $p->{op});
                 }
             } else {
-                if ((scalar(@{$result}) > 0) && !$result->[-1]->endswith([" ", "\n"])) {
-                    $result->push(" ");
+                if ((scalar(@{($result // [])}) > 0) && !(substr($result->[-1], -length([" ", "\n"])) eq [" ", "\n"])) {
+                    push(@{$result}, " ");
                 }
                 $formatted_cmd = format_cmdsub_node($p, $indent, $in_procsub, $compact_redirects, $procsub_first && $cmd_count == 0);
                 if (scalar(@{$result}) > 0) {
@@ -9675,19 +9677,19 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
                     $formatted_cmd = " " . $formatted_cmd;
                     $skipped_semi = 0;
                 }
-                $result->push($formatted_cmd);
+                push(@{$result}, $formatted_cmd);
                 $cmd_count += 1;
             }
         }
-        $s_ = ""->join_($result);
-        if (((index($s_, " &\n") >= 0)) && $s_->endswith("\n")) {
+        $s_ = join("", @{$result});
+        if (((index($s_, " &\n") >= 0)) && (substr($s_, -length("\n")) eq "\n")) {
             return $s_ . " ";
         }
-        while ($s_->endswith(";")) {
+        while ((substr($s_, -length(";")) eq ";")) {
             $s_ = substring($s_, 0, length($s_) - 1);
         }
         if (!$has_heredoc) {
-            while ($s_->endswith("\n")) {
+            while ((substr($s_, -length("\n")) eq "\n")) {
                 $s_ = substring($s_, 0, length($s_) - 1);
             }
         }
@@ -9700,9 +9702,9 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
         $result = "if " . $cond . "; then\n" . $inner_sp . $then_body . ";";
         if (defined($node->{else_body})) {
             $else_body = format_cmdsub_node($node->{else_body}, $indent + 4, 0, 0, 0);
-            $result = $result + "\n" . $sp . "else\n" . $inner_sp . $else_body . ";";
+            $result = $result . "\n" . $sp . "else\n" . $inner_sp . $else_body . ";";
         }
-        $result = $result + "\n" . $sp . "fi";
+        $result = $result . "\n" . $sp . "fi";
         return $result;
     }
     if (ref($node) eq 'While') {
@@ -9710,9 +9712,9 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
         $cond = format_cmdsub_node($node->{condition}, $indent, 0, 0, 0);
         $body = format_cmdsub_node($node->{body}, $indent + 4, 0, 0, 0);
         $result = "while " . $cond . "; do\n" . $inner_sp . $body . ";\n" . $sp . "done";
-        if ((scalar(@{$node->{redirects}}) > 0)) {
+        if ((scalar(@{($node->{redirects} // [])}) > 0)) {
             for my $r (@{($node->{redirects} // [])}) {
-                $result = $result + " " . format_redirect($r, 0, 0);
+                $result = $result . " " . format_redirect($r, 0, 0);
             }
         }
         return $result;
@@ -9722,9 +9724,9 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
         $cond = format_cmdsub_node($node->{condition}, $indent, 0, 0, 0);
         $body = format_cmdsub_node($node->{body}, $indent + 4, 0, 0, 0);
         $result = "until " . $cond . "; do\n" . $inner_sp . $body . ";\n" . $sp . "done";
-        if ((scalar(@{$node->{redirects}}) > 0)) {
+        if ((scalar(@{($node->{redirects} // [])}) > 0)) {
             for my $r (@{($node->{redirects} // [])}) {
-                $result = $result + " " . format_redirect($r, 0, 0);
+                $result = $result . " " . format_redirect($r, 0, 0);
             }
         }
         return $result;
@@ -9737,9 +9739,9 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
         if (defined($node->{words})) {
             $word_vals = [];
             for my $w (@{($node->{words} // [])}) {
-                $word_vals->push($w->{value});
+                push(@{$word_vals}, $w->{value});
             }
-            $words = " "->join_($word_vals);
+            $words = join(" ", @{$word_vals});
             if ((length($words) > 0)) {
                 $result = "for " . $var . " in " . $words . ";\n" . $sp . "do\n" . $inner_sp . $body . ";\n" . $sp . "done";
             } else {
@@ -9748,9 +9750,9 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
         } else {
             $result = "for " . $var . " in \"\$\@\";\n" . $sp . "do\n" . $inner_sp . $body . ";\n" . $sp . "done";
         }
-        if ((scalar(@{$node->{redirects}}) > 0)) {
+        if ((scalar(@{($node->{redirects} // [])}) > 0)) {
             for my $r (@{($node->{redirects} // [])}) {
-                $result = $result + " " . format_redirect($r, 0, 0);
+                $result = $result . " " . format_redirect($r, 0, 0);
             }
         }
         return $result;
@@ -9759,9 +9761,9 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
         my $node = $node;
         $body = format_cmdsub_node($node->{body}, $indent + 4, 0, 0, 0);
         $result = "for ((" . $node->{init} . "; " . $node->{cond} . "; " . $node->{incr} . "))\ndo\n" . $inner_sp . $body . ";\n" . $sp . "done";
-        if ((scalar(@{$node->{redirects}}) > 0)) {
+        if ((scalar(@{($node->{redirects} // [])}) > 0)) {
             for my $r (@{($node->{redirects} // [])}) {
-                $result = $result + " " . format_redirect($r, 0, 0);
+                $result = $result . " " . format_redirect($r, 0, 0);
             }
         }
         return $result;
@@ -9785,27 +9787,27 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
             $term_indent = repeat_str(" ", $indent + 4);
             $body_part = ((length($body) > 0) ? $pat_indent . $body . "\n" : "\n");
             if ($i == 0) {
-                $patterns->push(" " . $pat . ")\n" . $body_part + $term_indent . $term);
+                push(@{$patterns}, " " . $pat . ")\n" . $body_part . $term_indent . $term);
             } else {
-                $patterns->push($pat . ")\n" . $body_part + $term_indent . $term);
+                push(@{$patterns}, $pat . ")\n" . $body_part . $term_indent . $term);
             }
             $i += 1;
         }
         $pattern_str = ("\n" . repeat_str(" ", $indent + 4))->join_($patterns);
         $redirects = "";
-        if ((scalar(@{$node->{redirects}}) > 0)) {
+        if ((scalar(@{($node->{redirects} // [])}) > 0)) {
             $redirect_parts = [];
             for my $r (@{($node->{redirects} // [])}) {
                 $redirect_parts->append(format_redirect($r, 0, 0));
             }
-            $redirects = " " . " "->join_($redirect_parts);
+            $redirects = " " . join(" ", @{$redirect_parts});
         }
-        return "case " . $word . " in" . $pattern_str + "\n" . $sp . "esac" . $redirects;
+        return "case " . $word . " in" . $pattern_str . "\n" . $sp . "esac" . $redirects;
     }
     if (ref($node) eq 'Function') {
         my $node = $node;
         $name = $node->{name};
-        $inner_body = ($node->{body}->{kind} == "brace-group" ? $node->{body}->{body} : $node->{body});
+        $inner_body = ($node->{body}->{kind} eq "brace-group" ? $node->{body}->{body} : $node->{body});
         $body = (format_cmdsub_node($inner_body, $indent + 4, 0, 0, 0) =~ s/[";"]+$//r);
         return sprintf("function %s () 
 { 
@@ -9816,12 +9818,12 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
         my $node = $node;
         $body = format_cmdsub_node($node->{body}, $indent, $in_procsub, $compact_redirects, 0);
         $redirects = "";
-        if ((scalar(@{$node->{redirects}}) > 0)) {
+        if ((scalar(@{($node->{redirects} // [])}) > 0)) {
             $redirect_parts = [];
             for my $r (@{($node->{redirects} // [])}) {
                 $redirect_parts->append(format_redirect($r, 0, 0));
             }
-            $redirects = " "->join_($redirect_parts);
+            $redirects = join(" ", @{$redirect_parts});
         }
         if ($procsub_first) {
             if ((length($redirects) > 0)) {
@@ -9838,17 +9840,17 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
         my $node = $node;
         $body = format_cmdsub_node($node->{body}, $indent, 0, 0, 0);
         $body = ($body =~ s/[";"]+$//r);
-        $terminator = ($body->endswith(" &") ? " }" : "; }");
+        $terminator = ((substr($body, -length(" &")) eq " &") ? " }" : "; }");
         $redirects = "";
-        if ((scalar(@{$node->{redirects}}) > 0)) {
+        if ((scalar(@{($node->{redirects} // [])}) > 0)) {
             $redirect_parts = [];
             for my $r (@{($node->{redirects} // [])}) {
                 $redirect_parts->append(format_redirect($r, 0, 0));
             }
-            $redirects = " "->join_($redirect_parts);
+            $redirects = join(" ", @{$redirect_parts});
         }
         if ((length($redirects) > 0)) {
-            return "{ " . $body . $terminator + " " . $redirects;
+            return "{ " . $body . $terminator . " " . $redirects;
         }
         return "{ " . $body . $terminator;
     }
@@ -9885,9 +9887,9 @@ sub format_redirect ($r, $compact, $heredoc_op_only) {
     my $is_literal_fd;
     my $op;
     my $was_input_close;
+    my $op = "";
     if (ref($r) eq 'HereDoc') {
         my $r = $r;
-        my $op = "";
         if ($r->{strip_tabs}) {
             $op = "<<-";
         } else {
@@ -9917,14 +9919,14 @@ sub format_redirect ($r, $compact, $heredoc_op_only) {
     $target = $r->{target}->expand_all_ansi_c_quotes($target);
     $target = $r->{target}->strip_locale_string_dollars($target);
     $target = $r->{target}->format_command_substitutions($target, 0);
-    if ($target->startswith("&")) {
+    if ((index($target, "&") == 0)) {
         $was_input_close = 0;
-        if ($target eq "&-" && $op->endswith("<")) {
+        if ($target eq "&-" && (substr($op, -length("<")) eq "<")) {
             $was_input_close = 1;
             $op = substring($op, 0, length($op) - 1) . ">";
         }
         $after_amp = substring($target, 1, length($target));
-        $is_literal_fd = $after_amp eq "-" || length($after_amp) > 0 && ($after_amp->[0] =~ /^\d$/);
+        $is_literal_fd = $after_amp eq "-" || length($after_amp) > 0 && (substr($after_amp, 0, 1) =~ /^\d$/);
         if ($is_literal_fd) {
             if ($op eq ">" || $op eq ">&") {
                 $op = ($was_input_close ? "0>" : "1>");
@@ -9938,7 +9940,7 @@ sub format_redirect ($r, $compact, $heredoc_op_only) {
         }
         return $op . $target;
     }
-    if ($op->endswith("&")) {
+    if ((substr($op, -length("&")) eq "&")) {
         return $op . $target;
     }
     if ($compact) {
@@ -9948,7 +9950,7 @@ sub format_redirect ($r, $compact, $heredoc_op_only) {
 }
 
 sub format_heredoc_body ($r) {
-    return "\n" . $r->{content} . $r->{delimiter} + "\n";
+    return "\n" . $r->{content} . $r->{delimiter} . "\n";
 }
 
 sub lookahead_for_esac ($value, $start, $case_depth) {
@@ -9957,7 +9959,7 @@ sub lookahead_for_esac ($value, $start, $case_depth) {
     my $depth = $case_depth;
     my $quote = new_quote_state();
     while ($i < length($value)) {
-        $c = $value->[$i];
+        $c = substr($value, $i, 1);
         if ($c eq "\\" && $i + 1 < length($value) && $quote->{double}) {
             $i += 2;
             next;
@@ -10002,8 +10004,8 @@ sub lookahead_for_esac ($value, $start, $case_depth) {
 
 sub skip_backtick ($value, $start) {
     my $i = $start + 1;
-    while ($i < length($value) && $value->[$i] ne "`") {
-        if ($value->[$i] eq "\\" && $i + 1 < length($value)) {
+    while ($i < length($value) && substr($value, $i, 1) ne "`") {
+        if (substr($value, $i, 1) eq "\\" && $i + 1 < length($value)) {
             $i += 2;
         } else {
             $i += 1;
@@ -10017,7 +10019,7 @@ sub skip_backtick ($value, $start) {
 
 sub skip_single_quoted ($s_, $start) {
     my $i = $start;
-    while ($i < length($s_) && $s_->[$i] ne "'") {
+    while ($i < length($s_) && substr($s_, $i, 1) ne "'") {
         $i += 1;
     }
     return ($i < length($s_) ? $i + 1 : $i);
@@ -10033,7 +10035,7 @@ sub skip_double_quoted ($s_, $start) {
     $pass_next = 0;
     $backq = 0;
     while ($i < $n) {
-        $c = $s_->[$i];
+        $c = substr($s_, $i, 1);
         if ($pass_next) {
             $pass_next = 0;
             $i += 1;
@@ -10057,11 +10059,11 @@ sub skip_double_quoted ($s_, $start) {
             next;
         }
         if ($c eq "\$" && $i + 1 < $n) {
-            if ($s_->[$i + 1] eq "(") {
+            if (substr($s_, $i + 1, 1) eq "(") {
                 $i = find_cmdsub_end($s_, $i + 2);
                 next;
             }
-            if ($s_->[$i + 1] eq "{") {
+            if (substr($s_, $i + 1, 1) eq "{") {
                 $i = find_braced_param_end($s_, $i + 2);
                 next;
             }
@@ -10079,7 +10081,7 @@ sub is_valid_arithmetic_start ($value, $start) {
     my $scan_paren = 0;
     my $scan_i = $start + 3;
     while ($scan_i < length($value)) {
-        $scan_c = $value->[$scan_i];
+        $scan_c = substr($value, $scan_i, 1);
         if (is_expansion_start($value, $scan_i, "\$(")) {
             $scan_i = find_cmdsub_end($value, $scan_i + 2);
             next;
@@ -10089,7 +10091,7 @@ sub is_valid_arithmetic_start ($value, $start) {
         } elsif ($scan_c eq ")") {
             if ($scan_paren > 0) {
                 $scan_paren -= 1;
-            } elsif ($scan_i + 1 < length($value) && $value->[$scan_i + 1] eq ")") {
+            } elsif ($scan_i + 1 < length($value) && substr($value, $scan_i + 1, 1) eq ")") {
                 return 1;
             } else {
                 return 0;
@@ -10106,7 +10108,7 @@ sub find_funsub_end ($value, $start) {
     my $i = $start;
     my $quote = new_quote_state();
     while ($i < length($value) && $depth > 0) {
-        $c = $value->[$i];
+        $c = substr($value, $i, 1);
         if ($c eq "\\" && $i + 1 < length($value) && !$quote->{single}) {
             $i += 2;
             next;
@@ -10148,7 +10150,7 @@ sub find_cmdsub_end ($value, $start) {
     my $arith_depth = 0;
     my $arith_paren_depth = 0;
     while ($i < length($value) && $depth > 0) {
-        $c = $value->[$i];
+        $c = substr($value, $i, 1);
         if ($c eq "\\" && $i + 1 < length($value)) {
             $i += 2;
             next;
@@ -10161,21 +10163,21 @@ sub find_cmdsub_end ($value, $start) {
             $i = skip_double_quoted($value, $i + 1);
             next;
         }
-        if ($c eq "#" && $arith_depth == 0 && ($i == $start || $value->[$i - 1] eq " " || $value->[$i - 1] eq "\t" || $value->[$i - 1] eq "\n" || $value->[$i - 1] eq ";" || $value->[$i - 1] eq "|" || $value->[$i - 1] eq "&" || $value->[$i - 1] eq "(" || $value->[$i - 1] eq ")")) {
-            while ($i < length($value) && $value->[$i] ne "\n") {
+        if ($c eq "#" && $arith_depth == 0 && ($i == $start || substr($value, $i - 1, 1) eq " " || substr($value, $i - 1, 1) eq "\t" || substr($value, $i - 1, 1) eq "\n" || substr($value, $i - 1, 1) eq ";" || substr($value, $i - 1, 1) eq "|" || substr($value, $i - 1, 1) eq "&" || substr($value, $i - 1, 1) eq "(" || substr($value, $i - 1, 1) eq ")")) {
+            while ($i < length($value) && substr($value, $i, 1) ne "\n") {
                 $i += 1;
             }
             next;
         }
         if (starts_with_at($value, $i, "<<<")) {
             $i += 3;
-            while ($i < length($value) && ($value->[$i] eq " " || $value->[$i] eq "\t")) {
+            while ($i < length($value) && (substr($value, $i, 1) eq " " || substr($value, $i, 1) eq "\t")) {
                 $i += 1;
             }
-            if ($i < length($value) && $value->[$i] eq "\"") {
+            if ($i < length($value) && substr($value, $i, 1) eq "\"") {
                 $i += 1;
-                while ($i < length($value) && $value->[$i] ne "\"") {
-                    if ($value->[$i] eq "\\" && $i + 1 < length($value)) {
+                while ($i < length($value) && substr($value, $i, 1) ne "\"") {
+                    if (substr($value, $i, 1) eq "\\" && $i + 1 < length($value)) {
                         $i += 2;
                     } else {
                         $i += 1;
@@ -10184,16 +10186,16 @@ sub find_cmdsub_end ($value, $start) {
                 if ($i < length($value)) {
                     $i += 1;
                 }
-            } elsif ($i < length($value) && $value->[$i] eq "'") {
+            } elsif ($i < length($value) && substr($value, $i, 1) eq "'") {
                 $i += 1;
-                while ($i < length($value) && $value->[$i] ne "'") {
+                while ($i < length($value) && substr($value, $i, 1) ne "'") {
                     $i += 1;
                 }
                 if ($i < length($value)) {
                     $i += 1;
                 }
             } else {
-                while ($i < length($value) && ((index(" \t\n;|&<>()", $value->[$i]) == -1))) {
+                while ($i < length($value) && ((index(" \t\n;|&<>()", substr($value, $i, 1)) == -1))) {
                     $i += 1;
                 }
             }
@@ -10279,7 +10281,7 @@ sub find_braced_param_end ($value, $start) {
     my $in_double = 0;
     my $dolbrace_state = DOLBRACESTATE_PARAM();
     while ($i < length($value) && $depth > 0) {
-        $c = $value->[$i];
+        $c = substr($value, $i, 1);
         if ($c eq "\\" && $i + 1 < length($value)) {
             $i += 2;
             next;
@@ -10309,7 +10311,7 @@ sub find_braced_param_end ($value, $start) {
                 next;
             }
         }
-        if (($c eq "<" || $c eq ">") && $i + 1 < length($value) && $value->[$i + 1] eq "(") {
+        if (($c eq "<" || $c eq ">") && $i + 1 < length($value) && substr($value, $i + 1, 1) eq "(") {
             $i = find_cmdsub_end($value, $i + 2);
             next;
         }
@@ -10345,38 +10347,38 @@ sub skip_heredoc ($value, $start) {
     my $tabs_stripped;
     my $trailing_bs;
     my $i = $start + 2;
-    if ($i < length($value) && $value->[$i] eq "-") {
+    if ($i < length($value) && substr($value, $i, 1) eq "-") {
         $i += 1;
     }
-    while ($i < length($value) && is_whitespace_no_newline($value->[$i])) {
+    while ($i < length($value) && is_whitespace_no_newline(substr($value, $i, 1))) {
         $i += 1;
     }
     my $delim_start = $i;
     my $quote_char = undef;
     my $delimiter = "";
-    if ($i < length($value) && ($value->[$i] eq "\"" || $value->[$i] eq "'")) {
-        $quote_char = $value->[$i];
+    if ($i < length($value) && (substr($value, $i, 1) eq "\"" || substr($value, $i, 1) eq "'")) {
+        $quote_char = substr($value, $i, 1);
         $i += 1;
         $delim_start = $i;
-        while ($i < length($value) && $value->[$i] ne $quote_char) {
+        while ($i < length($value) && substr($value, $i, 1) ne $quote_char) {
             $i += 1;
         }
         $delimiter = substring($value, $delim_start, $i);
         if ($i < length($value)) {
             $i += 1;
         }
-    } elsif ($i < length($value) && $value->[$i] eq "\\") {
+    } elsif ($i < length($value) && substr($value, $i, 1) eq "\\") {
         $i += 1;
         $delim_start = $i;
         if ($i < length($value)) {
             $i += 1;
         }
-        while ($i < length($value) && !is_metachar($value->[$i])) {
+        while ($i < length($value) && !is_metachar(substr($value, $i, 1))) {
             $i += 1;
         }
         $delimiter = substring($value, $delim_start, $i);
     } else {
-        while ($i < length($value) && !is_metachar($value->[$i])) {
+        while ($i < length($value) && !is_metachar(substr($value, $i, 1))) {
             $i += 1;
         }
         $delimiter = substring($value, $delim_start, $i);
@@ -10384,8 +10386,8 @@ sub skip_heredoc ($value, $start) {
     my $paren_depth = 0;
     my $quote = new_quote_state();
     my $in_backtick = 0;
-    while ($i < length($value) && $value->[$i] ne "\n") {
-        $c = $value->[$i];
+    while ($i < length($value) && substr($value, $i, 1) ne "\n") {
+        $c = substr($value, $i, 1);
         if ($c eq "\\" && $i + 1 < length($value) && ($quote->{double} || $in_backtick)) {
             $i += 2;
             next;
@@ -10419,23 +10421,23 @@ sub skip_heredoc ($value, $start) {
         }
         $i += 1;
     }
-    if ($i < length($value) && $value->[$i] eq ")") {
+    if ($i < length($value) && substr($value, $i, 1) eq ")") {
         return $i;
     }
-    if ($i < length($value) && $value->[$i] eq "\n") {
+    if ($i < length($value) && substr($value, $i, 1) eq "\n") {
         $i += 1;
     }
     while ($i < length($value)) {
         $line_start = $i;
         $line_end = $i;
-        while ($line_end < length($value) && $value->[$line_end] ne "\n") {
+        while ($line_end < length($value) && substr($value, $line_end, 1) ne "\n") {
             $line_end += 1;
         }
         $line = substring($value, $line_start, $line_end);
         while ($line_end < length($value)) {
             $trailing_bs = 0;
             for (my $j = length($line) - 1; $j > -1; $j += -1) {
-                if ($line->[$j] eq "\\") {
+                if (substr($line, $j, 1) eq "\\") {
                     $trailing_bs += 1;
                 } else {
                     last;
@@ -10447,13 +10449,13 @@ sub skip_heredoc ($value, $start) {
             $line = substr($line, 0, length($line) - 1 - 0);
             $line_end += 1;
             $next_line_start = $line_end;
-            while ($line_end < length($value) && $value->[$line_end] ne "\n") {
+            while ($line_end < length($value) && substr($value, $line_end, 1) ne "\n") {
                 $line_end += 1;
             }
             $line = $line . substring($value, $next_line_start, $line_end);
         }
         my $stripped = "";
-        if ($start + 2 < length($value) && $value->[$start + 2] eq "-") {
+        if ($start + 2 < length($value) && substr($value, $start + 2, 1) eq "-") {
             $stripped = ($line =~ s/^["\t"]+//r);
         } else {
             $stripped = $line;
@@ -10465,7 +10467,7 @@ sub skip_heredoc ($value, $start) {
                 return $line_end;
             }
         }
-        if ($stripped->startswith($delimiter) && length($stripped) > length($delimiter)) {
+        if ((index($stripped, $delimiter) == 0) && length($stripped) > length($delimiter)) {
             $tabs_stripped = length($line) - length($stripped);
             return $line_start + $tabs_stripped + length($delimiter);
         }
@@ -10488,11 +10490,11 @@ sub find_heredoc_content_end ($source, $start, $delimiters) {
     my $strip_tabs;
     my $tabs_stripped;
     my $trailing_bs;
-    if (!(scalar(@{$delimiters}) > 0)) {
+    if (!(scalar(@{($delimiters // [])}) > 0)) {
         return [$start, $start];
     }
     my $pos_ = $start;
-    while ($pos_ < length($source) && $source->[$pos_] ne "\n") {
+    while ($pos_ < length($source) && substr($source, $pos_, 1) ne "\n") {
         $pos_ += 1;
     }
     if ($pos_ >= length($source)) {
@@ -10506,14 +10508,14 @@ sub find_heredoc_content_end ($source, $start, $delimiters) {
         while ($pos_ < length($source)) {
             $line_start = $pos_;
             $line_end = $pos_;
-            while ($line_end < length($source) && $source->[$line_end] ne "\n") {
+            while ($line_end < length($source) && substr($source, $line_end, 1) ne "\n") {
                 $line_end += 1;
             }
             $line = substring($source, $line_start, $line_end);
             while ($line_end < length($source)) {
                 $trailing_bs = 0;
                 for (my $j = length($line) - 1; $j > -1; $j += -1) {
-                    if ($line->[$j] eq "\\") {
+                    if (substr($line, $j, 1) eq "\\") {
                         $trailing_bs += 1;
                     } else {
                         last;
@@ -10525,7 +10527,7 @@ sub find_heredoc_content_end ($source, $start, $delimiters) {
                 $line = substr($line, 0, length($line) - 1 - 0);
                 $line_end += 1;
                 $next_line_start = $line_end;
-                while ($line_end < length($source) && $source->[$line_end] ne "\n") {
+                while ($line_end < length($source) && substr($source, $line_end, 1) ne "\n") {
                     $line_end += 1;
                 }
                 $line = $line . substring($source, $next_line_start, $line_end);
@@ -10540,7 +10542,7 @@ sub find_heredoc_content_end ($source, $start, $delimiters) {
                 $pos_ = ($line_end < length($source) ? $line_end + 1 : $line_end);
                 last;
             }
-            if ($line_stripped->startswith($delimiter) && length($line_stripped) > length($delimiter)) {
+            if ((index($line_stripped, $delimiter) == 0) && length($line_stripped) > length($delimiter)) {
                 $tabs_stripped = length($line) - length($line_stripped);
                 $pos_ = $line_start + $tabs_stripped + length($delimiter);
                 last;
@@ -10554,7 +10556,7 @@ sub find_heredoc_content_end ($source, $start, $delimiters) {
 sub is_word_boundary ($s_, $pos_, $word_len) {
     my $prev;
     if ($pos_ > 0) {
-        $prev = $s_->[$pos_ - 1];
+        $prev = substr($s_, $pos_ - 1, 1);
         if (($prev =~ /^[a-zA-Z0-9]$/) || $prev eq "_") {
             return 0;
         }
@@ -10563,7 +10565,7 @@ sub is_word_boundary ($s_, $pos_, $word_len) {
         }
     }
     my $end = $pos_ + $word_len;
-    if ($end < length($s_) && (($s_->[$end] =~ /^[a-zA-Z0-9]$/) || $s_->[$end] eq "_")) {
+    if ($end < length($s_) && ((substr($s_, $end, 1) =~ /^[a-zA-Z0-9]$/) || substr($s_, $end, 1) eq "_")) {
         return 0;
     }
     return 1;
@@ -10576,25 +10578,25 @@ sub is_quote ($c) {
 sub collapse_whitespace ($s_) {
     my $result = [];
     my $prev_was_ws = 0;
-    for my $c (@{$s_}) {
-        if ($c == " " || $c == "\t") {
+    for my $c (split(//, $s_)) {
+        if ($c eq " " || $c eq "\t") {
             if (!$prev_was_ws) {
-                $result->push(" ");
+                push(@{$result}, " ");
             }
             $prev_was_ws = 1;
         } else {
-            $result->push($c);
+            push(@{$result}, $c);
             $prev_was_ws = 0;
         }
     }
-    my $joined = ""->join_($result);
+    my $joined = join("", @{$result});
     return ($joined =~ s/^[" \t"]+|[" \t"]+$//gr);
 }
 
 sub count_trailing_backslashes ($s_) {
     my $count = 0;
     for (my $i = length($s_) - 1; $i > -1; $i += -1) {
-        if ($s_->[$i] eq "\\") {
+        if (substr($s_, $i, 1) eq "\\") {
             $count += 1;
         } else {
             last;
@@ -10614,84 +10616,84 @@ sub normalize_heredoc_delimiter ($delimiter) {
         my $inner = undef;
         my $inner_str = "";
         if ($i + 1 < length($delimiter) && substr($delimiter, $i, $i + 2 - $i) eq "\$(") {
-            $result->push("\$(");
+            push(@{$result}, "\$(");
             $i += 2;
             $depth = 1;
             $inner = [];
             while ($i < length($delimiter) && $depth > 0) {
-                if ($delimiter->[$i] eq "(") {
+                if (substr($delimiter, $i, 1) eq "(") {
                     $depth += 1;
-                    $inner->push($delimiter->[$i]);
-                } elsif ($delimiter->[$i] eq ")") {
+                    push(@{$inner}, substr($delimiter, $i, 1));
+                } elsif (substr($delimiter, $i, 1) eq ")") {
                     $depth -= 1;
                     if ($depth == 0) {
-                        $inner_str = ""->join_($inner);
+                        $inner_str = join("", @{$inner});
                         $inner_str = collapse_whitespace($inner_str);
-                        $result->push($inner_str);
-                        $result->push(")");
+                        push(@{$result}, $inner_str);
+                        push(@{$result}, ")");
                     } else {
-                        $inner->push($delimiter->[$i]);
+                        push(@{$inner}, substr($delimiter, $i, 1));
                     }
                 } else {
-                    $inner->push($delimiter->[$i]);
+                    push(@{$inner}, substr($delimiter, $i, 1));
                 }
                 $i += 1;
             }
         } elsif ($i + 1 < length($delimiter) && substr($delimiter, $i, $i + 2 - $i) eq "\${") {
-            $result->push("\${");
+            push(@{$result}, "\${");
             $i += 2;
             $depth = 1;
             $inner = [];
             while ($i < length($delimiter) && $depth > 0) {
-                if ($delimiter->[$i] eq "{") {
+                if (substr($delimiter, $i, 1) eq "{") {
                     $depth += 1;
-                    $inner->push($delimiter->[$i]);
-                } elsif ($delimiter->[$i] eq "}") {
+                    push(@{$inner}, substr($delimiter, $i, 1));
+                } elsif (substr($delimiter, $i, 1) eq "}") {
                     $depth -= 1;
                     if ($depth == 0) {
-                        $inner_str = ""->join_($inner);
+                        $inner_str = join("", @{$inner});
                         $inner_str = collapse_whitespace($inner_str);
-                        $result->push($inner_str);
-                        $result->push("}");
+                        push(@{$result}, $inner_str);
+                        push(@{$result}, "}");
                     } else {
-                        $inner->push($delimiter->[$i]);
+                        push(@{$inner}, substr($delimiter, $i, 1));
                     }
                 } else {
-                    $inner->push($delimiter->[$i]);
+                    push(@{$inner}, substr($delimiter, $i, 1));
                 }
                 $i += 1;
             }
-        } elsif ($i + 1 < length($delimiter) && ((index("<>", $delimiter->[$i]) >= 0)) && $delimiter->[$i + 1] eq "(") {
-            $result->push($delimiter->[$i]);
-            $result->push("(");
+        } elsif ($i + 1 < length($delimiter) && ((index("<>", substr($delimiter, $i, 1)) >= 0)) && substr($delimiter, $i + 1, 1) eq "(") {
+            push(@{$result}, substr($delimiter, $i, 1));
+            push(@{$result}, "(");
             $i += 2;
             $depth = 1;
             $inner = [];
             while ($i < length($delimiter) && $depth > 0) {
-                if ($delimiter->[$i] eq "(") {
+                if (substr($delimiter, $i, 1) eq "(") {
                     $depth += 1;
-                    $inner->push($delimiter->[$i]);
-                } elsif ($delimiter->[$i] eq ")") {
+                    push(@{$inner}, substr($delimiter, $i, 1));
+                } elsif (substr($delimiter, $i, 1) eq ")") {
                     $depth -= 1;
                     if ($depth == 0) {
-                        $inner_str = ""->join_($inner);
+                        $inner_str = join("", @{$inner});
                         $inner_str = collapse_whitespace($inner_str);
-                        $result->push($inner_str);
-                        $result->push(")");
+                        push(@{$result}, $inner_str);
+                        push(@{$result}, ")");
                     } else {
-                        $inner->push($delimiter->[$i]);
+                        push(@{$inner}, substr($delimiter, $i, 1));
                     }
                 } else {
-                    $inner->push($delimiter->[$i]);
+                    push(@{$inner}, substr($delimiter, $i, 1));
                 }
                 $i += 1;
             }
         } else {
-            $result->push($delimiter->[$i]);
+            push(@{$result}, substr($delimiter, $i, 1));
             $i += 1;
         }
     }
-    return ""->join_($result);
+    return join("", @{$result});
 }
 
 sub is_metachar ($c) {
@@ -10739,7 +10741,7 @@ sub skip_matched_pair ($s_, $start, $open_, $close_, $flags) {
     if (($flags & _SMP_PAST_OPEN() ? 1 : 0)) {
         $i = $start;
     } else {
-        if ($start >= $n || $s_->[$start] ne $open_) {
+        if ($start >= $n || substr($s_, $start, 1) ne $open_) {
             return -1;
         }
         $i = $start + 1;
@@ -10748,7 +10750,7 @@ sub skip_matched_pair ($s_, $start, $open_, $close_, $flags) {
     my $pass_next = 0;
     my $backq = 0;
     while ($i < $n && $depth > 0) {
-        $c = $s_->[$i];
+        $c = substr($s_, $i, 1);
         if ($pass_next) {
             $pass_next = 0;
             $i += 1;
@@ -10809,12 +10811,12 @@ sub assignment ($s_, $flags) {
     if (!(length($s_) > 0)) {
         return -1;
     }
-    if (!(($s_->[0] =~ /^[a-zA-Z]$/) || $s_->[0] eq "_")) {
+    if (!((substr($s_, 0, 1) =~ /^[a-zA-Z]$/) || substr($s_, 0, 1) eq "_")) {
         return -1;
     }
     my $i = 1;
     while ($i < length($s_)) {
-        $c = $s_->[$i];
+        $c = substr($s_, $i, 1);
         if ($c eq "=") {
             return $i;
         }
@@ -10825,16 +10827,16 @@ sub assignment ($s_, $flags) {
                 return -1;
             }
             $i = $end;
-            if ($i < length($s_) && $s_->[$i] eq "+") {
+            if ($i < length($s_) && substr($s_, $i, 1) eq "+") {
                 $i += 1;
             }
-            if ($i < length($s_) && $s_->[$i] eq "=") {
+            if ($i < length($s_) && substr($s_, $i, 1) eq "=") {
                 return $i;
             }
             return -1;
         }
         if ($c eq "+") {
-            if ($i + 1 < length($s_) && $s_->[$i + 1] eq "=") {
+            if ($i + 1 < length($s_) && substr($s_, $i + 1, 1) eq "=") {
                 return $i + 1;
             }
             return -1;
@@ -10849,19 +10851,19 @@ sub assignment ($s_, $flags) {
 
 sub is_array_assignment_prefix ($chars) {
     my $end;
-    if (!(scalar(@{$chars}) > 0)) {
+    if (!(scalar(@{($chars // [])}) > 0)) {
         return 0;
     }
     if (!(($chars->[0] =~ /^[a-zA-Z]$/) || $chars->[0] eq "_")) {
         return 0;
     }
-    my $s_ = ""->join_($chars);
+    my $s_ = join("", @{$chars});
     my $i = 1;
-    while ($i < length($s_) && (($s_->[$i] =~ /^[a-zA-Z0-9]$/) || $s_->[$i] eq "_")) {
+    while ($i < length($s_) && ((substr($s_, $i, 1) =~ /^[a-zA-Z0-9]$/) || substr($s_, $i, 1) eq "_")) {
         $i += 1;
     }
     while ($i < length($s_)) {
-        if ($s_->[$i] ne "[") {
+        if (substr($s_, $i, 1) ne "[") {
             return 0;
         }
         $end = skip_subscript($s_, $i, _SMP_LITERAL());
@@ -10896,7 +10898,7 @@ sub is_negation_boundary ($c) {
 sub is_backslash_escaped ($value, $idx) {
     my $bs_count = 0;
     my $j = $idx - 1;
-    while ($j >= 0 && $value->[$j] eq "\\") {
+    while ($j >= 0 && substr($value, $j, 1) eq "\\") {
         $bs_count += 1;
         $j -= 1;
     }
@@ -10906,7 +10908,7 @@ sub is_backslash_escaped ($value, $idx) {
 sub is_dollar_dollar_paren ($value, $idx) {
     my $dollar_count = 0;
     my $j = $idx - 1;
-    while ($j >= 0 && $value->[$j] eq "\$") {
+    while ($j >= 0 && substr($value, $j, 1) eq "\$") {
         $dollar_count += 1;
         $j -= 1;
     }
@@ -10945,11 +10947,11 @@ sub is_valid_identifier ($name) {
     if (!(length($name) > 0)) {
         return 0;
     }
-    if (!(($name->[0] =~ /^[a-zA-Z]$/) || $name->[0] eq "_")) {
+    if (!((substr($name, 0, 1) =~ /^[a-zA-Z]$/) || substr($name, 0, 1) eq "_")) {
         return 0;
     }
-    for my $c (@{substr($name, 1)}) {
-        if (!(($c =~ /^[a-zA-Z0-9]$/) || $c == "_")) {
+    for my $c (split(//, substr($name, 1))) {
+        if (!(($c =~ /^[a-zA-Z0-9]$/) || $c eq "_")) {
             return 0;
         }
     }
@@ -11052,3 +11054,5 @@ sub new_parser ($source, $in_process_sub, $extglob) {
     $self->{arith_len} = 0;
     return $self;
 }
+
+1;

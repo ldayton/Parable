@@ -19,6 +19,8 @@ allow go
 allow java
 allow javac
 allow node
+allow perl
+allow php
 allow python
 allow python3
 allow ruby

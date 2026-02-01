@@ -1623,8 +1623,21 @@ def _needs_parens(child_op: str, parent_op: str, is_left: bool) -> bool:
     return False
 
 
+def _escape_lua_string(value: str) -> str:
+    """Escape a string for Lua (uses \\u{XXXX} syntax for control chars)."""
+    return (
+        value.replace("\\", "\\\\")
+        .replace('"', '\\"')
+        .replace("\n", "\\n")
+        .replace("\t", "\\t")
+        .replace("\r", "\\r")
+        .replace("\x01", "\\u{0001}")
+        .replace("\x7f", "\\u{007f}")
+    )
+
+
 def _string_literal(value: str) -> str:
-    return f'"{escape_string(value)}"'
+    return f'"{_escape_lua_string(value)}"'
 
 
 def _extract_range_pattern(

@@ -1,0 +1,13 @@
+set shell := ["bash", "-o", "pipefail", "-cu"]
+
+cc := env("CC", "gcc")
+cflags := "-Wall -Wextra -O2 -std=c11"
+
+build:
+    {{cc}} {{cflags}} -o run_tests run_tests.c parable.c
+
+check tests_dir: build
+    ./run_tests "{{tests_dir}}"
+
+clean:
+    rm -f run_tests *.o

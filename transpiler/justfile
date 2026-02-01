@@ -4,8 +4,8 @@ set shell := ["bash", "-o", "pipefail", "-cu"]
 source := "../src/parable.py"
 tests := "../tests"
 dist := "../dist/go"
-backends := "csharp go java javascript lua php perl python ruby typescript"
-testable := "go javascript lua perl php python ruby typescript"
+backends := "c csharp go java javascript lua php perl python ruby typescript"
+testable := "c go javascript lua perl php python ruby typescript"
 
 # Transpile source to stdout
 emit backend:
@@ -17,6 +17,10 @@ prep backend:
     set -euo pipefail
     just style
     case "{{backend}}" in
+        c)
+            uv run python -m src.tongues --target c < {{source}} > /tmp/transpile.c
+            gcc -Wall -Wextra -fsyntax-only -std=c11 /tmp/transpile.c
+            ;;
         csharp)
             uv run python -m src.tongues --target csharp < {{source}} > ../dist/csharp/Parable.cs
             dotnet build ../dist/csharp/csharp.csproj -c Release -v q --nologo
@@ -72,6 +76,13 @@ test backend:
     # Convert relative paths to absolute for subprocesses
     tests_abs=$(cd "$(dirname "{{tests}}")" && pwd)/$(basename "{{tests}}")
     case "{{backend}}" in
+        c)
+            rm -rf /tmp/transpile-test-c && mkdir /tmp/transpile-test-c
+            uv run python -m src.tongues --target c < {{source}} > /tmp/transpile-test-c/parable.c
+            cp {{tests}}/bin/run-tests.c /tmp/transpile-test-c/ 2>/dev/null || cp ../dist/c/run_tests.c /tmp/transpile-test-c/
+            gcc -Wall -Wextra -O2 -std=c11 -o /tmp/transpile-test-c/run_tests /tmp/transpile-test-c/run_tests.c
+            /tmp/transpile-test-c/run_tests "$tests_abs"
+            ;;
         go)
             just prep go
             go run -C {{dist}} ./cmd/run-tests "$tests_abs"

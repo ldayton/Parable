@@ -365,11 +365,14 @@ class FuncType(Type):
 
     Invariants:
     - ret is valid Type (use VOID for no return)
+    - When captures=True and receiver is set, receiver contains the type of the
+      bound object (typically Pointer(StructRef(class_name)))
     """
 
     params: tuple[Type, ...]
     ret: Type
     captures: bool = False  # True if closure (captures environment)
+    receiver: Type | None = None  # Receiver type for bound methods
 
 
 # Singleton primitive types

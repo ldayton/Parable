@@ -3,7 +3,7 @@ set shell := ["bash", "-o", "pipefail", "-cu"]
 # --- Configuration ---
 project := "parable"
 run_id := `head -c 16 /dev/urandom | xxd -p`
-backends := "csharp go java javascript lua perl php python ruby typescript"  # All backends
+backends := "c csharp go java javascript lua perl php python ruby typescript"  # All backends
 
 # --- Helpers ---
 
@@ -57,6 +57,10 @@ backend-transpile backend:
     set -euo pipefail
     printf '{{BOLD}}{{CYAN}}==> backend-transpile %s{{NORMAL}}\n' '{{backend}}'
     case "{{backend}}" in
+        c)
+            mkdir -p dist/c
+            uv run --directory transpiler python -m src.tongues --target c < "$(pwd)/src/parable.py" > dist/c/parable.c
+            ;;
         csharp)
             mkdir -p dist/csharp
             uv run --directory transpiler python -m src.tongues --target csharp < "$(pwd)/src/parable.py" > dist/csharp/Parable.cs
@@ -112,6 +116,10 @@ backend-test backend:
     printf '{{BOLD}}{{CYAN}}==> backend-test %s{{NORMAL}}\n' '{{backend}}'
     tests_abs="$(pwd)/tests"
     case "{{backend}}" in
+        c)
+            just backend-transpile c
+            just -f dist/c/justfile check "$tests_abs"
+            ;;
         csharp)
             just backend-transpile csharp
             dotnet build dist/csharp/csharp.csproj -o dist/csharp/bin --verbosity quiet
@@ -172,7 +180,7 @@ backend-test backend:
 # Internal: run all parallel checks
 [private]
 [parallel]
-_check-parallel: src-test src-lint src-fmt src-verify-lock src-subset transpiler-subset transpiler-test check-dump-ast (backend-test "csharp") (backend-test "go") (backend-test "java") (backend-test "javascript") (backend-test "lua") (backend-test "perl") (backend-test "php") (backend-test "python") (backend-test "ruby") (backend-test "typescript")
+_check-parallel: src-test src-lint src-fmt src-verify-lock src-subset transpiler-subset transpiler-test check-dump-ast (backend-test "c") (backend-test "csharp") (backend-test "go") (backend-test "java") (backend-test "javascript") (backend-test "lua") (backend-test "perl") (backend-test "php") (backend-test "python") (backend-test "ruby") (backend-test "typescript")
 
 # Ensure biome is installed (prevents race condition in parallel JS checks)
 [private]

@@ -9,6 +9,7 @@ from .frontend.parse import parse
 from .frontend.subset import verify as verify_subset
 from .frontend.names import resolve_names
 from .middleend import analyze
+from .backend.c import CBackend
 from .backend.go import GoBackend
 from .backend.java import JavaBackend
 from .backend.javascript import JsBackend
@@ -20,7 +21,8 @@ from .backend.typescript import TsBackend
 from .backend.csharp import CSharpBackend
 from .backend.php import PhpBackend
 
-BACKENDS: dict[str, type[GoBackend] | type[JavaBackend] | type[JsBackend] | type[LuaBackend] | type[PerlBackend] | type[PythonBackend] | type[RubyBackend] | type[TsBackend] | type[CSharpBackend] | type[PhpBackend]] = {
+BACKENDS: dict[str, type[CBackend] | type[GoBackend] | type[JavaBackend] | type[JsBackend] | type[LuaBackend] | type[PerlBackend] | type[PythonBackend] | type[RubyBackend] | type[TsBackend] | type[CSharpBackend] | type[PhpBackend]] = {
+    "c": CBackend,
     "go": GoBackend,
     "java": JavaBackend,
     "javascript": JsBackend,
@@ -37,7 +39,7 @@ USAGE: str = """\
 tongues [OPTIONS] < input.py > output.go
 
 Options:
-  --target TARGET   Output language: csharp, go, java, javascript, lua, perl, php, python, ruby, typescript
+  --target TARGET   Output language: c, csharp, go, java, javascript, lua, perl, php, python, ruby, typescript
   --verify [PATH]   Check subset compliance only, no codegen
                     PATH can be a file or directory (reads stdin if omitted)
   --help            Show this help message
@@ -148,8 +150,8 @@ def parse_args() -> tuple[str, bool, str | None]:
         else:
             print("error: unknown option: " + arg, file=sys.stderr)
             sys.exit(1)
-    if target in ("rust", "c"):
-        print("error: backend '" + target + "' is not yet implemented", file=sys.stderr)
+    if target == "rust":
+        print("error: backend 'rust' is not yet implemented", file=sys.stderr)
         sys.exit(1)
     if target not in BACKENDS:
         print("error: unknown target: " + target, file=sys.stderr)

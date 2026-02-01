@@ -957,7 +957,7 @@ sub read_word_internal ($self, $ctx, $at_command_start, $in_array_literal, $in_a
             }
             if ((scalar(@{($chars // [])}) > 0) && $at_command_start && !$seen_equals && main::is_array_assignment_prefix($chars)) {
                 $prev_char = $chars->[-1];
-                if (($prev_char =~ /^[a-zA-Z0-9]$/) || $prev_char eq "_") {
+                if (($prev_char =~ /^[a-zA-Z0-9]+$/) || $prev_char eq "_") {
                     $bracket_start_pos = $self->{pos_};
                     $bracket_depth += 1;
                     push(@{$chars}, $self->advance());
@@ -1612,18 +1612,18 @@ sub consume_param_name ($self) {
         $self->advance();
         return $ch;
     }
-    if (($ch =~ /^\d$/)) {
+    if (($ch =~ /^\d+$/)) {
         my $name_chars = [];
-        while (!$self->at_end() && ($self->peek() =~ /^\d$/)) {
+        while (!$self->at_end() && ($self->peek() =~ /^\d+$/)) {
             push(@{$name_chars}, $self->advance());
         }
         return join("", @{$name_chars});
     }
-    if (($ch =~ /^[a-zA-Z]$/) || $ch eq "_") {
+    if (($ch =~ /^[a-zA-Z]+$/) || $ch eq "_") {
         $name_chars = [];
         while (!$self->at_end()) {
             $c = $self->peek();
-            if (($c =~ /^[a-zA-Z0-9]$/) || $c eq "_") {
+            if (($c =~ /^[a-zA-Z0-9]+$/) || $c eq "_") {
                 push(@{$name_chars}, $self->advance());
             } elsif ($c eq "[") {
                 if (!$self->param_subscript_has_close($self->{pos_})) {
@@ -1672,11 +1672,11 @@ sub read_param_expansion ($self, $in_dquote) {
         $text = main::substring($self->{source}, $start, $self->{pos_});
         return [ParamExpansion->new($ch, "param"), $text];
     }
-    if (($ch =~ /^[a-zA-Z]$/) || $ch eq "_") {
+    if (($ch =~ /^[a-zA-Z]+$/) || $ch eq "_") {
         $name_start = $self->{pos_};
         while (!$self->at_end()) {
             $c = $self->peek();
-            if (($c =~ /^[a-zA-Z0-9]$/) || $c eq "_") {
+            if (($c =~ /^[a-zA-Z0-9]+$/) || $c eq "_") {
                 $self->advance();
             } else {
                 last;
@@ -2280,10 +2280,10 @@ sub expand_all_ansi_c_quotes ($self, $value) {
                         if ((length($after_brace) > 0)) {
                             if ((index("\@*#?-\$!0123456789_", substr($after_brace, 0, 1)) >= 0)) {
                                 $var_name_len = 1;
-                            } elsif ((substr($after_brace, 0, 1) =~ /^[a-zA-Z]$/) || substr($after_brace, 0, 1) eq "_") {
+                            } elsif ((substr($after_brace, 0, 1) =~ /^[a-zA-Z]+$/) || substr($after_brace, 0, 1) eq "_") {
                                 while ($var_name_len < length($after_brace)) {
                                     $c = substr($after_brace, $var_name_len, 1);
-                                    if (!(($c =~ /^[a-zA-Z0-9]$/) || $c eq "_")) {
+                                    if (!(($c =~ /^[a-zA-Z0-9]+$/) || $c eq "_")) {
                                         last;
                                     }
                                     $var_name_len += 1;
@@ -2421,11 +2421,11 @@ sub normalize_array_whitespace ($self, $value) {
     my $close_paren_pos;
     my $depth;
     my $i = 0;
-    if (!($i < length($value) && ((substr($value, $i, 1) =~ /^[a-zA-Z]$/) || substr($value, $i, 1) eq "_"))) {
+    if (!($i < length($value) && ((substr($value, $i, 1) =~ /^[a-zA-Z]+$/) || substr($value, $i, 1) eq "_"))) {
         return $value;
     }
     $i += 1;
-    while ($i < length($value) && ((substr($value, $i, 1) =~ /^[a-zA-Z0-9]$/) || substr($value, $i, 1) eq "_")) {
+    while ($i < length($value) && ((substr($value, $i, 1) =~ /^[a-zA-Z0-9]+$/) || substr($value, $i, 1) eq "_")) {
         $i += 1;
     }
     while ($i < length($value) && substr($value, $i, 1) eq "[") {
@@ -2930,7 +2930,7 @@ sub format_command_substitutions ($self, $value, $in_arith) {
             $has_untracked_cmdsub = 1;
             last;
         } elsif ((main::starts_with_at($value, $idx, "<(") || main::starts_with_at($value, $idx, ">(")) && !$scan_quote->{double}) {
-            if ($idx == 0 || !(substr($value, $idx - 1, 1) =~ /^[a-zA-Z0-9]$/) && ((index("\"'", substr($value, $idx - 1, 1)) == -1))) {
+            if ($idx == 0 || !(substr($value, $idx - 1, 1) =~ /^[a-zA-Z0-9]+$/) && ((index("\"'", substr($value, $idx - 1, 1)) == -1))) {
                 $has_untracked_procsub = 1;
                 last;
             }
@@ -3077,7 +3077,7 @@ sub format_command_substitutions ($self, $value, $in_arith) {
                 $orig_inner = main::substring($value, $i + 2, $j - 1);
                 $ends_with_newline = (substr($orig_inner, -length("\n")) eq "\n");
                 my $suffix = "";
-                if (!(length($formatted) > 0) || ($formatted =~ /^\s$/)) {
+                if (!(length($formatted) > 0) || ($formatted =~ /^\s+$/)) {
                     $suffix = "}";
                 } elsif ((substr($formatted, -length("&")) eq "&") || (substr($formatted, -length("& ")) eq "& ")) {
                     $suffix = ((substr($formatted, -length("&")) eq "&") ? " }" : "}");
@@ -3093,7 +3093,7 @@ sub format_command_substitutions ($self, $value, $in_arith) {
             }
             $i = $j;
         } elsif ((main::starts_with_at($value, $i, ">(") || main::starts_with_at($value, $i, "<(")) && !$main_quote->{double} && $deprecated_arith_depth == 0 && $arith_depth == 0) {
-            $is_procsub = $i == 0 || !(substr($value, $i - 1, 1) =~ /^[a-zA-Z0-9]$/) && ((index("\"'", substr($value, $i - 1, 1)) == -1));
+            $is_procsub = $i == 0 || !(substr($value, $i - 1, 1) =~ /^[a-zA-Z0-9]+$/) && ((index("\"'", substr($value, $i - 1, 1)) == -1));
             if ($extglob_depth > 0) {
                 $j = main::find_cmdsub_end($value, $i + 2);
                 push(@{$result}, main::substring($value, $i, $j));
@@ -3759,9 +3759,9 @@ sub to_sexp ($self) {
     my $op = ($self->{op} =~ s/^[0123456789]+//r);
     if ((index($op, "{") == 0)) {
         $j = 1;
-        if ($j < length($op) && ((substr($op, $j, 1) =~ /^[a-zA-Z]$/) || substr($op, $j, 1) eq "_")) {
+        if ($j < length($op) && ((substr($op, $j, 1) =~ /^[a-zA-Z]+$/) || substr($op, $j, 1) eq "_")) {
             $j += 1;
-            while ($j < length($op) && ((substr($op, $j, 1) =~ /^[a-zA-Z0-9]$/) || substr($op, $j, 1) eq "_")) {
+            while ($j < length($op) && ((substr($op, $j, 1) =~ /^[a-zA-Z0-9]+$/) || substr($op, $j, 1) eq "_")) {
                 $j += 1;
             }
             if ($j < length($op) && substr($op, $j, 1) eq "[") {
@@ -3793,10 +3793,10 @@ sub to_sexp ($self) {
             $op = "<&";
         }
         $raw = main::substring($target_val, 1, length($target_val));
-        if (($raw =~ /^\d$/) && int($raw) <= 2147483647) {
+        if (($raw =~ /^\d+$/) && int($raw) <= 2147483647) {
             return "(redirect \"" . $op . "\" " . ("" . int($raw)) . ")";
         }
-        if ((substr($raw, -length("-")) eq "-") && (substr($raw, 0, length($raw) - 1 - 0) =~ /^\d$/) && int(substr($raw, 0, length($raw) - 1 - 0)) <= 2147483647) {
+        if ((substr($raw, -length("-")) eq "-") && (substr($raw, 0, length($raw) - 1 - 0) =~ /^\d+$/) && int(substr($raw, 0, length($raw) - 1 - 0)) <= 2147483647) {
             return "(redirect \"" . $op . "\" " . ("" . int(substr($raw, 0, length($raw) - 1 - 0))) . ")";
         }
         if ($target_val eq "&-") {
@@ -3806,13 +3806,13 @@ sub to_sexp ($self) {
         return "(redirect \"" . $op . "\" \"" . $fd_target . "\")";
     }
     if ($op eq ">&" || $op eq "<&") {
-        if (($target_val =~ /^\d$/) && int($target_val) <= 2147483647) {
+        if (($target_val =~ /^\d+$/) && int($target_val) <= 2147483647) {
             return "(redirect \"" . $op . "\" " . ("" . int($target_val)) . ")";
         }
         if ($target_val eq "-") {
             return "(redirect \">&-\" 0)";
         }
-        if ((substr($target_val, -length("-")) eq "-") && (substr($target_val, 0, length($target_val) - 1 - 0) =~ /^\d$/) && int(substr($target_val, 0, length($target_val) - 1 - 0)) <= 2147483647) {
+        if ((substr($target_val, -length("-")) eq "-") && (substr($target_val, 0, length($target_val) - 1 - 0) =~ /^\d+$/) && int(substr($target_val, 0, length($target_val) - 1 - 0)) <= 2147483647) {
             return "(redirect \"" . $op . "\" " . ("" . int(substr($target_val, 0, length($target_val) - 1 - 0))) . ")";
         }
         $out_val = ((substr($target_val, -length("-")) eq "-") ? substr($target_val, 0, length($target_val) - 1 - 0) : $target_val);
@@ -6634,7 +6634,7 @@ sub arith_parse_expansion ($self) {
     my $name_chars = [];
     while (!$self->arith_at_end()) {
         $ch = $self->arith_peek(0);
-        if (($ch =~ /^[a-zA-Z0-9]$/) || $ch eq "_") {
+        if (($ch =~ /^[a-zA-Z0-9]+$/) || $ch eq "_") {
             push(@{$name_chars}, $self->arith_advance());
         } elsif ((main::is_special_param_or_digit($ch) || $ch eq "#") && !(scalar(@{($name_chars // [])}) > 0)) {
             push(@{$name_chars}, $self->arith_advance());
@@ -6864,10 +6864,10 @@ sub arith_parse_number_or_var ($self) {
     my $chars = [];
     my $c = $self->arith_peek(0);
     my $ch = "";
-    if (($c =~ /^\d$/)) {
+    if (($c =~ /^\d+$/)) {
         while (!$self->arith_at_end()) {
             $ch = $self->arith_peek(0);
-            if (($ch =~ /^[a-zA-Z0-9]$/) || $ch eq "#" || $ch eq "_") {
+            if (($ch =~ /^[a-zA-Z0-9]+$/) || $ch eq "#" || $ch eq "_") {
                 push(@{$chars}, $self->arith_advance());
             } else {
                 last;
@@ -6880,10 +6880,10 @@ sub arith_parse_number_or_var ($self) {
         }
         return ArithNumber->new($prefix, "number");
     }
-    if (($c =~ /^[a-zA-Z]$/) || $c eq "_") {
+    if (($c =~ /^[a-zA-Z]+$/) || $c eq "_") {
         while (!$self->arith_at_end()) {
             $ch = $self->arith_peek(0);
-            if (($ch =~ /^[a-zA-Z0-9]$/) || $ch eq "_") {
+            if (($ch =~ /^[a-zA-Z0-9]+$/) || $ch eq "_") {
                 push(@{$chars}, $self->arith_advance());
             } else {
                 last;
@@ -6958,7 +6958,7 @@ sub parse_redirect ($self) {
             } elsif ($ch eq "]") {
                 $in_bracket = 0;
                 push(@{$varname_chars}, $self->advance());
-            } elsif (($ch =~ /^[a-zA-Z0-9]$/) || $ch eq "_") {
+            } elsif (($ch =~ /^[a-zA-Z0-9]+$/) || $ch eq "_") {
                 push(@{$varname_chars}, $self->advance());
             } elsif ($in_bracket && !main::is_metachar($ch)) {
                 push(@{$varname_chars}, $self->advance());
@@ -6969,16 +6969,16 @@ sub parse_redirect ($self) {
         $varname = join("", @{$varname_chars});
         $is_valid_varfd = 0;
         if ((length($varname) > 0)) {
-            if ((substr($varname, 0, 1) =~ /^[a-zA-Z]$/) || substr($varname, 0, 1) eq "_") {
+            if ((substr($varname, 0, 1) =~ /^[a-zA-Z]+$/) || substr($varname, 0, 1) eq "_") {
                 if (((index($varname, "[") >= 0)) || ((index($varname, "]") >= 0))) {
                     $left = index($varname, "[");
                     $right = rindex($varname, "]");
                     if ($left != -1 && $right == length($varname) - 1 && $right > $left + 1) {
                         $base = substr($varname, 0, $left - 0);
-                        if ((length($base) > 0) && ((substr($base, 0, 1) =~ /^[a-zA-Z]$/) || substr($base, 0, 1) eq "_")) {
+                        if ((length($base) > 0) && ((substr($base, 0, 1) =~ /^[a-zA-Z]+$/) || substr($base, 0, 1) eq "_")) {
                             $is_valid_varfd = 1;
                             for my $c (split(//, substr($base, 1))) {
-                                if (!(($c =~ /^[a-zA-Z0-9]$/) || $c eq "_")) {
+                                if (!(($c =~ /^[a-zA-Z0-9]+$/) || $c eq "_")) {
                                     $is_valid_varfd = 0;
                                     last;
                                 }
@@ -6988,7 +6988,7 @@ sub parse_redirect ($self) {
                 } else {
                     $is_valid_varfd = 1;
                     for my $c (split(//, substr($varname, 1))) {
-                        if (!(($c =~ /^[a-zA-Z0-9]$/) || $c eq "_")) {
+                        if (!(($c =~ /^[a-zA-Z0-9]+$/) || $c eq "_")) {
                             $is_valid_varfd = 0;
                             last;
                         }
@@ -7004,9 +7004,9 @@ sub parse_redirect ($self) {
         }
     }
     my $fd_chars = undef;
-    if ($varfd eq "" && (length($self->peek()) > 0) && ($self->peek() =~ /^\d$/)) {
+    if ($varfd eq "" && (length($self->peek()) > 0) && ($self->peek() =~ /^\d+$/)) {
         $fd_chars = [];
-        while (!$self->at_end() && ($self->peek() =~ /^\d$/)) {
+        while (!$self->at_end() && ($self->peek() =~ /^\d+$/)) {
             push(@{$fd_chars}, $self->advance());
         }
         $fd = int(join("", @{$fd_chars}));
@@ -7102,10 +7102,10 @@ sub parse_redirect ($self) {
         }
         if (!defined($target)) {
             my $inner_word = undef;
-            if (!$self->at_end() && (($self->peek() =~ /^\d$/) || $self->peek() eq "-")) {
+            if (!$self->at_end() && (($self->peek() =~ /^\d+$/) || $self->peek() eq "-")) {
                 $word_start = $self->{pos_};
                 $fd_chars = [];
-                while (!$self->at_end() && ($self->peek() =~ /^\d$/)) {
+                while (!$self->at_end() && ($self->peek() =~ /^\d+$/)) {
                     push(@{$fd_chars}, $self->advance());
                 }
                 my $fd_target = "";
@@ -9933,7 +9933,7 @@ sub format_redirect ($r, $compact, $heredoc_op_only) {
             $op = substring($op, 0, length($op) - 1) . ">";
         }
         $after_amp = substring($target, 1, length($target));
-        $is_literal_fd = $after_amp eq "-" || length($after_amp) > 0 && (substr($after_amp, 0, 1) =~ /^\d$/);
+        $is_literal_fd = $after_amp eq "-" || length($after_amp) > 0 && (substr($after_amp, 0, 1) =~ /^\d+$/);
         if ($is_literal_fd) {
             if ($op eq ">" || $op eq ">&") {
                 $op = ($was_input_close ? "0>" : "1>");
@@ -10564,7 +10564,7 @@ sub is_word_boundary ($s_, $pos_, $word_len) {
     my $prev;
     if ($pos_ > 0) {
         $prev = substr($s_, $pos_ - 1, 1);
-        if (($prev =~ /^[a-zA-Z0-9]$/) || $prev eq "_") {
+        if (($prev =~ /^[a-zA-Z0-9]+$/) || $prev eq "_") {
             return 0;
         }
         if ((index("{}!", $prev) >= 0)) {
@@ -10572,7 +10572,7 @@ sub is_word_boundary ($s_, $pos_, $word_len) {
         }
     }
     my $end = $pos_ + $word_len;
-    if ($end < length($s_) && ((substr($s_, $end, 1) =~ /^[a-zA-Z0-9]$/) || substr($s_, $end, 1) eq "_")) {
+    if ($end < length($s_) && ((substr($s_, $end, 1) =~ /^[a-zA-Z0-9]+$/) || substr($s_, $end, 1) eq "_")) {
         return 0;
     }
     return 1;
@@ -10818,7 +10818,7 @@ sub assignment ($s_, $flags) {
     if (!(length($s_) > 0)) {
         return -1;
     }
-    if (!((substr($s_, 0, 1) =~ /^[a-zA-Z]$/) || substr($s_, 0, 1) eq "_")) {
+    if (!((substr($s_, 0, 1) =~ /^[a-zA-Z]+$/) || substr($s_, 0, 1) eq "_")) {
         return -1;
     }
     my $i = 1;
@@ -10848,7 +10848,7 @@ sub assignment ($s_, $flags) {
             }
             return -1;
         }
-        if (!(($c =~ /^[a-zA-Z0-9]$/) || $c eq "_")) {
+        if (!(($c =~ /^[a-zA-Z0-9]+$/) || $c eq "_")) {
             return -1;
         }
         $i += 1;
@@ -10861,12 +10861,12 @@ sub is_array_assignment_prefix ($chars) {
     if (!(scalar(@{($chars // [])}) > 0)) {
         return 0;
     }
-    if (!(($chars->[0] =~ /^[a-zA-Z]$/) || $chars->[0] eq "_")) {
+    if (!(($chars->[0] =~ /^[a-zA-Z]+$/) || $chars->[0] eq "_")) {
         return 0;
     }
     my $s_ = join("", @{$chars});
     my $i = 1;
-    while ($i < length($s_) && ((substr($s_, $i, 1) =~ /^[a-zA-Z0-9]$/) || substr($s_, $i, 1) eq "_")) {
+    while ($i < length($s_) && ((substr($s_, $i, 1) =~ /^[a-zA-Z0-9]+$/) || substr($s_, $i, 1) eq "_")) {
         $i += 1;
     }
     while ($i < length($s_)) {
@@ -10954,11 +10954,11 @@ sub is_valid_identifier ($name) {
     if (!(length($name) > 0)) {
         return 0;
     }
-    if (!((substr($name, 0, 1) =~ /^[a-zA-Z]$/) || substr($name, 0, 1) eq "_")) {
+    if (!((substr($name, 0, 1) =~ /^[a-zA-Z]+$/) || substr($name, 0, 1) eq "_")) {
         return 0;
     }
     for my $c (split(//, substr($name, 1))) {
-        if (!(($c =~ /^[a-zA-Z0-9]$/) || $c eq "_")) {
+        if (!(($c =~ /^[a-zA-Z0-9]+$/) || $c eq "_")) {
             return 0;
         }
     }

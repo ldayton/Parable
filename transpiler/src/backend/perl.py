@@ -1014,13 +1014,14 @@ class PerlBackend:
                 return f'("" . {self._expr(v)})'
             case CharClassify(kind=kind, char=char):
                 char_expr = self._expr(char)
+                # Python's isdigit/isalpha/etc check ALL chars, so use + not single char
                 method_map = {
-                    "digit": f"({char_expr} =~ /^\\d$/)",
-                    "alpha": f"({char_expr} =~ /^[a-zA-Z]$/)",
-                    "alnum": f"({char_expr} =~ /^[a-zA-Z0-9]$/)",
-                    "space": f"({char_expr} =~ /^\\s$/)",
-                    "upper": f"({char_expr} =~ /^[A-Z]$/)",
-                    "lower": f"({char_expr} =~ /^[a-z]$/)",
+                    "digit": f"({char_expr} =~ /^\\d+$/)",
+                    "alpha": f"({char_expr} =~ /^[a-zA-Z]+$/)",
+                    "alnum": f"({char_expr} =~ /^[a-zA-Z0-9]+$/)",
+                    "space": f"({char_expr} =~ /^\\s+$/)",
+                    "upper": f"({char_expr} =~ /^[A-Z]+$/)",
+                    "lower": f"({char_expr} =~ /^[a-z]+$/)",
                 }
                 return method_map[kind]
             case TrimChars(string=s, chars=chars, mode=mode):

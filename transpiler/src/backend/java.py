@@ -1315,7 +1315,7 @@ class JavaBackend:
                 if _is_string_type(inner_type) or isinstance(inner_type, (Slice, Map, Set)):
                     return f"(!{inner_str}.isEmpty())"
                 if isinstance(inner_type, Optional) and isinstance(inner_type.inner, (Slice, Map, Set)):
-                    return f"(!{inner_str}.isEmpty())"
+                    return f"({inner_str} != null && !{inner_str}.isEmpty())"
                 if inner_type == Primitive(kind="int"):
                     # Wrap binary ops in parens for correct precedence with !=
                     if isinstance(e, BinaryOp):

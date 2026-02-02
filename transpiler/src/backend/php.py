@@ -797,7 +797,7 @@ class PhpBackend:
                 if isinstance(inner_type, (Slice, Map, Set)):
                     return f"(count({inner_str}) > 0)"
                 if isinstance(inner_type, Optional) and isinstance(inner_type.inner, (Slice, Map, Set)):
-                    return f"(count({inner_str}) > 0)"
+                    return f"({inner_str} !== null && count({inner_str}) > 0)"
                 if isinstance(inner_type, Primitive) and inner_type.kind == "int":
                     return f"({inner_str} !== 0)"
                 return f"({inner_str} !== null)"

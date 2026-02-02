@@ -9244,7 +9244,7 @@ end
 
 function append_redirects(base, redirects)
   local parts, r
-  if (#(redirects) > 0) then
+  if (redirects ~= nil and #(redirects) > 0) then
     parts = {}
     for _, r in ipairs(redirects) do
       ;(function() table.insert(parts, r:to_sexp()); return parts end)()

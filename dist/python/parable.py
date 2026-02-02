@@ -6867,10 +6867,10 @@ def _strip_line_continuations_comment_aware(text: str) -> str:
     return "".join(result)
 
 
-def _append_redirects(base: str, redirects: list[Node]) -> str:
+def _append_redirects(base: str, redirects: list[Node] | None) -> str:
     if redirects:
         parts = []
-        for r in redirects:
+        for r in (redirects or []):
             parts.append(r.to_sexp())
         return base + " " + " ".join(parts)
     return base

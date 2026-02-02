@@ -8678,7 +8678,7 @@ end
 def append_redirects(base, redirects)
   if (redirects && !redirects.empty?)
     parts = []
-    redirects.each do |r|
+    (redirects || []).each do |r|
       parts.push(r.to_sexp)
     end
     return base + " " + parts.join(" ")

@@ -2078,7 +2078,7 @@ def _strip_line_continuations_comment_aware(text: str) -> str:
     return "".join(result)
 
 
-def _append_redirects(base: str, redirects: list[Node]) -> str:
+def _append_redirects(base: str, redirects: list[Node] | None) -> str:
     """Append redirect sexp strings to a base sexp string."""
     if redirects:
         parts = []

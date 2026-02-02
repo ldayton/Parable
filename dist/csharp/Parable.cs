@@ -5424,7 +5424,7 @@ public class Select : INode
                 wordParts.Add(((INode)w).ToSexp());
             }
             string wordStrs = string.Join(" ", wordParts);
-            if ((this.Words.Count > 0))
+            if ((this.Words != null && this.Words.Count > 0))
             {
                 inClause = "(in " + wordStrs + ")";
             }
@@ -12130,12 +12130,12 @@ public static class ParableFunctions
 
     public static string _AppendRedirects(string @base, List<INode> redirects)
     {
-        if ((redirects.Count > 0))
+        if ((redirects != null && redirects.Count > 0))
         {
             List<string> parts = new List<string>();
             foreach (INode r in redirects)
             {
-                parts.Add(r.ToSexp());
+                parts.Add(((INode)r).ToSexp());
             }
             return @base + " " + string.Join(" ", parts);
         }
@@ -12836,7 +12836,7 @@ public static class ParableFunctions
             case Subshell nodeSubshell:
                 string body = ParableFunctions._FormatCmdsubNode(nodeSubshell.Body, indent, inProcsub, compactRedirects, false);
                 string redirects = "";
-                if ((nodeSubshell.Redirects.Count > 0))
+                if ((nodeSubshell.Redirects != null && nodeSubshell.Redirects.Count > 0))
                 {
                     List<string> redirectParts = new List<string>();
                     foreach (INode r in nodeSubshell.Redirects)
@@ -12866,7 +12866,7 @@ public static class ParableFunctions
                 body = body.TrimEnd(";".ToCharArray());
                 string terminator = (body.EndsWith(" &", StringComparison.Ordinal) ? " }" : "; }");
                 string redirects = "";
-                if ((nodeBraceGroup.Redirects.Count > 0))
+                if ((nodeBraceGroup.Redirects != null && nodeBraceGroup.Redirects.Count > 0))
                 {
                     List<string> redirectParts = new List<string>();
                     foreach (INode r in nodeBraceGroup.Redirects)

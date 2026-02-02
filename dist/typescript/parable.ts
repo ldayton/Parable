@@ -4087,7 +4087,7 @@ class Select implements Node {
       var wordParts: any = [];
       wordParts.push(...this.words.map(w => w.toSexp()));
       var wordStrs: any = wordParts.join(" ");
-      if ((this.words.length > 0)) {
+      if ((this.words != null && this.words.length > 0)) {
         var inClause: any = "(in " + wordStrs + ")";
       } else {
         var inClause: any = "(in)";
@@ -9183,8 +9183,8 @@ function StripLineContinuationsCommentAware(text: string): string {
   return result.join("");
 }
 
-function AppendRedirects(base: string, redirects: Node[]): string {
-  if ((redirects.length > 0)) {
+function AppendRedirects(base: string, redirects: Node[] | null): string {
+  if ((redirects != null && redirects.length > 0)) {
     var parts: any = [];
     parts.push(...redirects.map(r => r.toSexp()));
     return base + " " + parts.join(" ");
@@ -9682,7 +9682,7 @@ ${innerSp}${body}
   if (node instanceof Subshell) {
     var body: any = FormatCmdsubNode(node.body, indent, inProcsub, compactRedirects, false);
     var redirects: any = "";
-    if ((node.redirects.length > 0)) {
+    if ((node.redirects != null && node.redirects.length > 0)) {
       var redirectParts: any = [];
       redirectParts.push(...node.redirects.map(r => FormatRedirect(r, false, false)));
       redirects = redirectParts.join(" ");
@@ -9703,7 +9703,7 @@ ${innerSp}${body}
     body = body.replace(/[;]+$/, '');
     var terminator: any = (body.endsWith(" &") ? " }" : "; }");
     var redirects: any = "";
-    if ((node.redirects.length > 0)) {
+    if ((node.redirects != null && node.redirects.length > 0)) {
       var redirectParts: any = [];
       redirectParts.push(...node.redirects.map(r => FormatRedirect(r, false, false)));
       redirects = redirectParts.join(" ");

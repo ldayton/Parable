@@ -9257,7 +9257,7 @@ sub append_redirects ($base, $redirects) {
     my $parts;
     if ((scalar(@{($redirects // [])}) > 0)) {
         $parts = [];
-        for my $r (@{$redirects}) {
+        for my $r (@{($redirects // [])}) {
             push(@{$parts}, $r->to_sexp());
         }
         return $base . " " . join(" ", @{$parts});

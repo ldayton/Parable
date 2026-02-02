@@ -5423,7 +5423,7 @@ class Select implements Node
                 array_push($wordParts, $w->toSexp());
             }
             $wordStrs = implode(" ", $wordParts);
-            if ((count($this->words) > 0))
+            if (($this->words !== null && count($this->words) > 0))
             {
                 $inClause = "(in " . $wordStrs . ")";
             }
@@ -12099,7 +12099,7 @@ function _stripLineContinuationsCommentAware(string $text): string
 
 function _appendRedirects(string $base, ?array $redirects): string
 {
-    if ((count($redirects) > 0))
+    if (($redirects !== null && count($redirects) > 0))
     {
         $parts = [];
         foreach ($redirects as $r)
@@ -12772,7 +12772,7 @@ function _formatCmdsubNode(?Node $node, int $indent, bool $inProcsub, bool $comp
     {
         $body = _formatCmdsubNode($node->body, $indent, $inProcsub, $compactRedirects, false);
         $redirects = "";
-        if ((count($node->redirects) > 0))
+        if (($node->redirects !== null && count($node->redirects) > 0))
         {
             $redirectParts = [];
             foreach ($node->redirects as $r)
@@ -12801,7 +12801,7 @@ function _formatCmdsubNode(?Node $node, int $indent, bool $inProcsub, bool $comp
         $body = rtrim($body, ";");
         $terminator = (str_ends_with($body, " &") ? " }" : "; }");
         $redirects = "";
-        if ((count($node->redirects) > 0))
+        if (($node->redirects !== null && count($node->redirects) > 0))
         {
             $redirectParts = [];
             foreach ($node->redirects as $r)

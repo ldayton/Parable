@@ -749,7 +749,7 @@ class JsBackend:
                 if isinstance(inner_type, (Slice, Map, Set)) or inner_type == STRING:
                     return f"({inner_str}.length > 0)"
                 if isinstance(inner_type, Optional) and isinstance(inner_type.inner, (Slice, Map, Set)):
-                    return f"({inner_str}.length > 0)"
+                    return f"({inner_str} != null && {inner_str}.length > 0)"
                 if inner_type == INT:
                     if isinstance(e, BinaryOp):
                         return f"(({inner_str}) !== 0)"

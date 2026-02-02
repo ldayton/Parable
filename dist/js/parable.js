@@ -4231,7 +4231,7 @@ var Select = /** @class */ (function () {
             var wordParts = [];
             wordParts.push.apply(wordParts, this.words.map(function (w) { return w.toSexp(); }));
             var wordStrs = wordParts.join(" ");
-            if ((this.words.length > 0)) {
+            if ((this.words != null && this.words.length > 0)) {
                 var inClause = "(in " + wordStrs + ")";
             }
             else {
@@ -9287,7 +9287,7 @@ function StripLineContinuationsCommentAware(text) {
     return result.join("");
 }
 function AppendRedirects(base, redirects) {
-    if ((redirects.length > 0)) {
+    if ((redirects != null && redirects.length > 0)) {
         var parts = [];
         parts.push.apply(parts, redirects.map(function (r) { return r.toSexp(); }));
         return base + " " + parts.join(" ");
@@ -9807,7 +9807,7 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
     if (node instanceof Subshell) {
         var body = FormatCmdsubNode(node.body, indent, inProcsub, compactRedirects, false);
         var redirects = "";
-        if ((node.redirects.length > 0)) {
+        if ((node.redirects != null && node.redirects.length > 0)) {
             var redirectParts = [];
             redirectParts.push.apply(redirectParts, node.redirects.map(function (r) { return FormatRedirect(r, false, false); }));
             redirects = redirectParts.join(" ");
@@ -9828,7 +9828,7 @@ function FormatCmdsubNode(node, indent, inProcsub, compactRedirects, procsubFirs
         body = body.replace(/[;]+$/, '');
         var terminator = (body.endsWith(" &") ? " }" : "; }");
         var redirects = "";
-        if ((node.redirects.length > 0)) {
+        if ((node.redirects != null && node.redirects.length > 0)) {
             var redirectParts = [];
             redirectParts.push.apply(redirectParts, node.redirects.map(function (r) { return FormatRedirect(r, false, false); }));
             redirects = redirectParts.join(" ");

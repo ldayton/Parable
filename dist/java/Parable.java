@@ -4215,7 +4215,7 @@ class Select implements Node {
                 wordParts.add(((Node) w).toSexp());
             }
             String wordStrs = String.join(" ", wordParts);
-            if ((!this.words.isEmpty())) {
+            if ((this.words != null && !this.words.isEmpty())) {
                 inClause = "(in " + wordStrs + ")";
             } else {
                 inClause = "(in)";
@@ -9424,10 +9424,10 @@ final class ParableFunctions {
     }
 
     static String _appendRedirects(String base, List<Node> redirects) {
-        if ((!redirects.isEmpty())) {
+        if ((redirects != null && !redirects.isEmpty())) {
             List<String> parts = new ArrayList<>();
             for (Node r : redirects) {
-                parts.add(r.toSexp());
+                parts.add(((Node) r).toSexp());
             }
             return base + " " + String.join(" ", parts);
         }
@@ -9935,7 +9935,7 @@ final class ParableFunctions {
         if (node instanceof Subshell nodeSubshell) {
             String body = ParableFunctions._formatCmdsubNode(nodeSubshell.body, indent, inProcsub, compactRedirects, false);
             String redirects = "";
-            if ((!nodeSubshell.redirects.isEmpty())) {
+            if ((nodeSubshell.redirects != null && !nodeSubshell.redirects.isEmpty())) {
                 List<String> redirectParts = new ArrayList<>();
                 for (Node r : nodeSubshell.redirects) {
                     redirectParts.add(ParableFunctions._formatRedirect(r, false, false));
@@ -9958,7 +9958,7 @@ final class ParableFunctions {
             body = body.replaceFirst("[" + ";" + "]+$", "");
             String terminator = (body.endsWith(" &") ? " }" : "; }");
             String redirects = "";
-            if ((!nodeBraceGroup.redirects.isEmpty())) {
+            if ((nodeBraceGroup.redirects != null && !nodeBraceGroup.redirects.isEmpty())) {
                 List<String> redirectParts = new ArrayList<>();
                 for (Node r : nodeBraceGroup.redirects) {
                     redirectParts.add(ParableFunctions._formatRedirect(r, false, false));

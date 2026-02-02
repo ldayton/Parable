@@ -178,6 +178,7 @@ class CBackend:
         self._constant_names: set[str] = set()  # Module-level constants (need uppercase)
         self._constant_set_values: dict[str, SetLit] = {}  # Set constant values for membership
         self._temp_counter: int = 0  # Counter for generating unique temp names
+        self._function_sigs: dict[str, list[Type]] = {}  # Function name -> parameter types
 
     def emit(self, module: Module) -> str:
         """Emit C code from IR Module."""
@@ -195,6 +196,7 @@ class CBackend:
             if isinstance(c.value, SetLit):
                 self._constant_set_values[c.name] = c.value
         self._collect_struct_fields(module)
+        self._collect_function_sigs(module)
         self._collect_tuple_types(module)
         self._collect_slice_types(module)
         self._emit_header()
@@ -225,6 +227,17 @@ class CBackend:
         """Collect field information for all structs."""
         for struct in module.structs:
             self._struct_fields[struct.name] = [(f.name, f.typ) for f in struct.fields]
+
+    def _collect_function_sigs(self, module: Module) -> None:
+        """Collect function signatures for interface parameter casting."""
+        self._function_sigs = {}
+        for func in module.functions:
+            self._function_sigs[func.name] = [p.typ for p in func.params]
+        for struct in module.structs:
+            for method in struct.methods:
+                # Methods are emitted as StructName_methodName
+                method_name = f"{struct.name}_{method.name}"
+                self._function_sigs[method_name] = [p.typ for p in method.params]
 
     def _collect_tuple_types(self, module: Module) -> None:
         """Scan module for tuple types to generate struct definitions."""
@@ -1490,11 +1503,25 @@ static bool _map_contains(void *map, const char *key) {
         if stmt.name in self._hoisted_vars and self._hoisted_vars[stmt.name] == c_type:
             if stmt.value:
                 val = self._emit_expr(stmt.value)
+                # Cast if assigning struct pointer to interface type (but not primitives or "any")
+                if isinstance(stmt.typ, InterfaceRef) and stmt.typ.name != "any" and stmt.value.typ:
+                    value_typ = stmt.value.typ
+                    if isinstance(value_typ, (StructRef, Pointer)) and not isinstance(value_typ, Primitive):
+                        val = f"({c_type}){val}"
+                    elif isinstance(value_typ, InterfaceRef) and value_typ.name != "any":
+                        val = f"({c_type}){val}"
                 self._line(f"{name} = {val};")
             # else: no-op, already initialized
             return
         if stmt.value:
             val = self._emit_expr(stmt.value)
+            # Cast if assigning struct pointer to interface type (but not primitives or "any")
+            if isinstance(stmt.typ, InterfaceRef) and stmt.typ.name != "any" and stmt.value.typ:
+                value_typ = stmt.value.typ
+                if isinstance(value_typ, (StructRef, Pointer)) and not isinstance(value_typ, Primitive):
+                    val = f"({c_type}){val}"
+                elif isinstance(value_typ, InterfaceRef) and value_typ.name != "any":
+                    val = f"({c_type}){val}"
             self._line(f"{c_type} {name} = {val};")
         else:
             # Initialize to zero/NULL
@@ -1519,9 +1546,18 @@ static bool _map_contains(void *map, const char *key) {
         # Track interface-typed variables for TypeAssert emission
         if var_name is not None and isinstance(typ, InterfaceRef):
             self._interface_vars.add(var_name)
-        # Check if we're assigning interface type to concrete struct type - need cast
+        # Check if we're assigning struct/pointer to interface type - need cast
+        # Skip "any" interface since it can hold any type and doesn't need casts
         value_typ = stmt.value.typ
-        if (isinstance(value_typ, InterfaceRef) and
+        if isinstance(typ, InterfaceRef) and typ.name != "any" and value_typ and not isinstance(value_typ, Primitive):
+            # Assigning struct pointer to interface - add cast (but not primitives)
+            if isinstance(value_typ, (StructRef, Pointer)):
+                value = f"({c_type}){value}"
+            elif isinstance(value_typ, InterfaceRef) and value_typ.name != "any":
+                # Also cast interface to interface for consistency
+                value = f"({c_type}){value}"
+        # Check if we're assigning interface type to concrete struct type - need cast
+        elif (value_typ and isinstance(value_typ, InterfaceRef) and
             isinstance(typ, (Pointer, StructRef)) and not isinstance(typ, InterfaceRef)):
             # Assigning interface to concrete struct - need ->data cast
             target_type = typ.target if isinstance(typ, Pointer) else typ
@@ -1633,6 +1669,13 @@ static bool _map_contains(void *map, const char *key) {
                 self._line("return;")
             else:
                 val = self._emit_expr(stmt.value)
+                # Cast to interface type when returning struct from interface-returning function
+                ret_type = self._current_return_type
+                val_type = stmt.value.typ
+                if isinstance(ret_type, InterfaceRef):
+                    if isinstance(val_type, StructRef) or isinstance(val_type, InterfaceRef):
+                        ret_c_type = self._type_to_c(ret_type)
+                        val = f"({ret_c_type}){val}"
                 self._line(f"return {val};")
         else:
             self._line("return;")
@@ -2311,8 +2354,24 @@ static bool _map_contains(void *map, const char *key) {
         # If calling through a callback parameter with receiver, prepend self
         if func in self._callback_params and self._receiver_name:
             arg_list.append(_safe_name(self._receiver_name))
-        for a in expr.args:
-            arg_list.append(self._emit_expr(a))
+        # Look up parameter types for interface casting
+        param_types = self._function_sigs.get(func, [])
+        for i, a in enumerate(expr.args):
+            arg_str = self._emit_expr(a)
+            # Cast to interface type when needed (C requires explicit casts between struct pointer types)
+            if i < len(param_types):
+                param_type = param_types[i]
+                arg_type = a.typ
+                if isinstance(param_type, InterfaceRef):
+                    # Cast if arg is a struct OR if arg is the same interface but C might use concrete type
+                    # (e.g., loop variables from slices use concrete struct types)
+                    param_c_type = self._type_to_c(param_type)
+                    if isinstance(arg_type, StructRef):
+                        arg_str = f"({param_c_type}){arg_str}"
+                    elif isinstance(arg_type, InterfaceRef) and arg_type.name == param_type.name:
+                        # Same interface, but C code might have concrete type - cast to be safe
+                        arg_str = f"({param_c_type}){arg_str}"
+            arg_list.append(arg_str)
         args = ", ".join(arg_list)
         return f"{func_name}({args})"
 
@@ -2711,7 +2770,37 @@ static bool _map_contains(void *map, const char *key) {
                 return self._emit_expr(expr.elements[0])
             return "0"
         sig = self._tuple_sig(expr.typ)
-        elements = ", ".join(self._emit_expr(e) for e in expr.elements)
+        # Cast elements when needed (e.g., struct pointer to interface pointer)
+        elem_strs = []
+        for i, e in enumerate(expr.elements):
+            elem_str = self._emit_expr(e)
+            if i < len(expr.typ.elements):
+                expected_type = expr.typ.elements[i]
+                actual_type = e.typ
+                # Get the interface type from expected if it's wrapped in Optional/Pointer
+                target_iface = None
+                if isinstance(expected_type, InterfaceRef):
+                    target_iface = expected_type.name
+                elif isinstance(expected_type, Optional) and isinstance(expected_type.inner, InterfaceRef):
+                    target_iface = expected_type.inner.name
+                elif isinstance(expected_type, Pointer) and isinstance(expected_type.target, InterfaceRef):
+                    target_iface = expected_type.target.name
+                # Get the struct type from actual if it's wrapped in Pointer
+                source_is_struct = False
+                if isinstance(actual_type, StructRef):
+                    source_is_struct = True
+                elif isinstance(actual_type, Pointer) and isinstance(actual_type.target, StructRef):
+                    source_is_struct = True
+                elif isinstance(actual_type, InterfaceRef):
+                    source_is_struct = True  # Also cast interface to interface (for consistency)
+                elif isinstance(actual_type, Optional) and isinstance(actual_type.inner, InterfaceRef):
+                    source_is_struct = True
+                # Cast if needed
+                if target_iface and source_is_struct:
+                    iface_c_type = self._type_to_c(InterfaceRef(target_iface))
+                    elem_str = f"({iface_c_type}){elem_str}"
+            elem_strs.append(elem_str)
+        elements = ", ".join(elem_strs)
         return f"({sig}){{{elements}}}"
 
     def _emit_expr_StringConcat(self, expr: StringConcat) -> str:

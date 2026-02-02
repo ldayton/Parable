@@ -683,7 +683,6 @@ typedef struct Tuple_bool_bool Tuple_bool_bool;
 typedef struct Tuple_constcharPtr_bool Tuple_constcharPtr_bool;
 
 // === Slice (Vec) typedefs ===
-typedef struct Vec_Any { void * *data; size_t len; size_t cap; } Vec_Any;
 typedef struct Vec_CasePattern { CasePattern * *data; size_t len; size_t cap; } Vec_CasePattern;
 typedef struct Vec_HereDoc { HereDoc * *data; size_t len; size_t cap; } Vec_HereDoc;
 typedef struct Vec_Int { int64_t *data; size_t len; size_t cap; } Vec_Int;
@@ -7802,7 +7801,7 @@ static const char * If_get_kind(If *self) {
 
 static const char * While_to_sexp(While *self) {
     const char * base = _str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, "(while ", Node_to_sexp(self->condition)), " "), Node_to_sexp(self->body)), ")");
-    return append_redirects(base, self->redirects);
+    return append_redirects(base, &self->redirects);
 }
 
 static const char * While_get_kind(While *self) {
@@ -7811,7 +7810,7 @@ static const char * While_get_kind(While *self) {
 
 static const char * Until_to_sexp(Until *self) {
     const char * base = _str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, "(until ", Node_to_sexp(self->condition)), " "), Node_to_sexp(self->body)), ")");
-    return append_redirects(base, self->redirects);
+    return append_redirects(base, &self->redirects);
 }
 
 static const char * Until_get_kind(Until *self) {
@@ -7920,7 +7919,7 @@ static const char * Case_to_sexp(Case *self) {
         VEC_PUSH(g_arena, &parts, (CasePattern_to_sexp(p)));
     }
     const char * base = _str_concat(g_arena, _str_join(g_arena, " ", parts), ")");
-    return append_redirects(base, self->redirects);
+    return append_redirects(base, &self->redirects);
 }
 
 static const char * Case_get_kind(Case *self) {
@@ -9526,7 +9525,7 @@ static Node * Parser_arith_parse_assign(Parser *self) {
     Parser_arith_skip_ws(self);
     Vec_Str assign_ops = (Vec_Str){(const char *[]){ "<<=", ">>=", "+=", "-=", "*=", "/=", "%=", "&=", "^=", "|=", "=" }, 11, 11};
     for (size_t _idx = 0; _idx < assign_ops.len; _idx++) {
-        Any * op = assign_ops.data[_idx];
+        const char * op = assign_ops.data[_idx];
         if (Parser_arith_match(self, op)) {
             if (((strcmp(op, "=") == 0) && (strcmp(Parser_arith_peek(self, 1), "=") == 0))) {
                 break;
@@ -9569,7 +9568,7 @@ static Node * Parser_arith_parse_ternary(Parser *self) {
 }
 
 static Node * Parser_arith_parse_left_assoc(Parser *self, Vec_Str ops, Node * (*parsefn)(Parser *)) {
-    Any * left = parsefn(self);
+    Node * left = parsefn(self);
     while (true) {
         Parser_arith_skip_ws(self);
         bool matched = false;
@@ -9578,7 +9577,7 @@ static Node * Parser_arith_parse_left_assoc(Parser *self, Vec_Str ops, Node * (*
             if (Parser_arith_match(self, op)) {
                 Parser_arith_consume(self, op);
                 Parser_arith_skip_ws(self);
-                left = ArithBinaryOp_new(op, left, parsefn(self), "binary-op");
+                left = (Node *)ArithBinaryOp_new(op, left, parsefn(self), "binary-op");
                 matched = true;
                 break;
             }
@@ -9587,7 +9586,7 @@ static Node * Parser_arith_parse_left_assoc(Parser *self, Vec_Str ops, Node * (*
             break;
         }
     }
-    return left;
+    return (Node *)left;
 }
 
 static Node * Parser_arith_parse_logical_or(Parser *self) {
@@ -10802,7 +10801,8 @@ static Subshell * Parser_parse_subshell(Parser *self) {
     }
     Parser_advance(self);
     Parser_clear_state(self, PARSERSTATEFLAGS_PST_SUBSHELL);
-    return Subshell_new(body, &Parser_collect_redirects(self), "subshell");
+    Vec_Node _tmp_slice70 = Parser_collect_redirects(self);
+    return Subshell_new(body, &_tmp_slice70, "subshell");
 }
 
 static ArithmeticCommand * Parser_parse_arithmetic_command(Parser *self) {
@@ -11077,7 +11077,8 @@ static BraceGroup * Parser_parse_brace_group(Parser *self) {
         snprintf(g_error_msg, sizeof(g_error_msg), "%s", "Expected } to close brace group");
         return NULL;
     }
-    return BraceGroup_new(body, &Parser_collect_redirects(self), "brace-group");
+    Vec_Node _tmp_slice71 = Parser_collect_redirects(self);
+    return BraceGroup_new(body, &_tmp_slice71, "brace-group");
 }
 
 static If * Parser_parse_if(Parser *self) {
@@ -12095,9 +12096,9 @@ static Node * Parser_parse_simple_pipeline(Parser *self) {
     Vec_Node commands = (Vec_Node){(Node *[]){ cmd }, 1, 1};
     while (true) {
         Parser_skip_whitespace(self);
-        Tuple_int64_t_constcharPtr _tup70 = Parser_lex_peek_operator(self);
-        int64_t token_type = _tup70.F0;
-        const char * value = _tup70.F1;
+        Tuple_int64_t_constcharPtr _tup72 = Parser_lex_peek_operator(self);
+        int64_t token_type = _tup72.F0;
+        const char * value = _tup72.F1;
         if ((token_type == 0)) {
             break;
         }
@@ -12126,8 +12127,8 @@ static Node * Parser_parse_simple_pipeline(Parser *self) {
 
 static const char * Parser_parse_list_operator(Parser *self) {
     Parser_skip_whitespace(self);
-    Tuple_int64_t_constcharPtr _tup71 = Parser_lex_peek_operator(self);
-    int64_t token_type = _tup71.F0;
+    Tuple_int64_t_constcharPtr _tup73 = Parser_lex_peek_operator(self);
+    int64_t token_type = _tup73.F0;
     if ((token_type == 0)) {
         return "";
     }
@@ -12336,20 +12337,20 @@ static void Parser_strip_trailing_backslash_from_last_word(Parser *self, Vec_Nod
 }
 
 static Word * Parser_find_last_word(Parser *self, Node * node) {
-    void *_data72 = node->data;
+    void *_data74 = node->data;
     switch (node->kind) {
     case KIND_WORD: {
-        Word *node = (Word *)_data72;
+        Word *node = (Word *)_data74;
         return node;
         break;
     }
     }
     Word * last_word;
     Node * last_redirect;
-    void *_data73 = node->data;
+    void *_data75 = node->data;
     switch (node->kind) {
     case KIND_COMMAND: {
-        Command *node = (Command *)_data73;
+        Command *node = (Command *)_data75;
         if ((node->words.len > 0)) {
             last_word = node->words.data[(node->words.len - 1)];
             if (_str_endswith(last_word->value, "\\")) {
@@ -12358,10 +12359,10 @@ static Word * Parser_find_last_word(Parser *self, Node * node) {
         }
         if ((node->redirects.len > 0)) {
             last_redirect = (Node *)node->redirects.data[(node->redirects.len - 1)];
-            void *_data74 = last_redirect->data;
+            void *_data76 = last_redirect->data;
             switch (last_redirect->kind) {
             case KIND_REDIRECT: {
-                Redirect *last_redirect = (Redirect *)_data74;
+                Redirect *last_redirect = (Redirect *)_data76;
                 return last_redirect->target;
                 break;
             }
@@ -12373,20 +12374,20 @@ static Word * Parser_find_last_word(Parser *self, Node * node) {
         break;
     }
     }
-    void *_data75 = node->data;
+    void *_data77 = node->data;
     switch (node->kind) {
     case KIND_PIPELINE: {
-        Pipeline *node = (Pipeline *)_data75;
+        Pipeline *node = (Pipeline *)_data77;
         if ((node->commands.len > 0)) {
             return Parser_find_last_word(self, node->commands.data[(node->commands.len - 1)]);
         }
         break;
     }
     }
-    void *_data76 = node->data;
+    void *_data78 = node->data;
     switch (node->kind) {
     case KIND_LIST: {
-        List *node = (List *)_data76;
+        List *node = (List *)_data78;
         if ((node->parts.len > 0)) {
             return Parser_find_last_word(self, node->parts.data[(node->parts.len - 1)]);
         }

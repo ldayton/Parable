@@ -179,6 +179,7 @@ class CBackend:
         self._constant_set_values: dict[str, SetLit] = {}  # Set constant values for membership
         self._temp_counter: int = 0  # Counter for generating unique temp names
         self._function_sigs: dict[str, list[Type]] = {}  # Function name -> parameter types
+        self._rvalue_temps: dict[int, str] = {}  # Map expression id -> temp var name for rvalue slice fields
 
     def emit(self, module: Module) -> str:
         """Emit C code from IR Module."""
@@ -1668,6 +1669,8 @@ static bool _map_contains(void *map, const char *key) {
             if isinstance(stmt.value, NilLit) and self._current_return_type == VOID:
                 self._line("return;")
             else:
+                # Emit temp vars for rvalue slice fields in StructLits before the return
+                self._emit_rvalue_temps(stmt.value)
                 val = self._emit_expr(stmt.value)
                 # Cast to interface type when returning struct from interface-returning function
                 ret_type = self._current_return_type
@@ -2371,6 +2374,11 @@ static bool _map_contains(void *map, const char *key) {
                     elif isinstance(arg_type, InterfaceRef) and arg_type.name == param_type.name:
                         # Same interface, but C code might have concrete type - cast to be safe
                         arg_str = f"({param_c_type}){arg_str}"
+                # Add & when passing Slice value to Optional(Slice) parameter
+                # (matches logic in _emit_expr_StructLit)
+                elif (isinstance(param_type, Optional) and isinstance(param_type.inner, Slice) and
+                      isinstance(arg_type, Slice) and not isinstance(arg_type, (Optional, Pointer))):
+                    arg_str = f"&{arg_str}"
             arg_list.append(arg_str)
         args = ", ".join(arg_list)
         return f"{func_name}({args})"
@@ -2716,18 +2724,24 @@ static bool _map_contains(void *map, const char *key) {
                     if isinstance(field_val, NilLit) and isinstance(ftyp, Slice):
                         args.append(self._default_value(ftyp))
                     else:
-                        val_str = self._emit_expr(field_val)
                         val_type = field_val.typ
                         # Add & when passing Slice value to Optional(Slice) parameter
                         if (isinstance(ftyp, Optional) and isinstance(ftyp.inner, Slice) and
                             isinstance(val_type, Slice) and not isinstance(val_type, (Optional, Pointer))):
-                            val_str = f"&{val_str}"
+                            # Check if this field has a temp var (for rvalues)
+                            if id(field_val) in self._rvalue_temps:
+                                val_str = f"&{self._rvalue_temps[id(field_val)]}"
+                            else:
+                                val_str = f"&{self._emit_expr(field_val)}"
                         # Cast when passing Slice(StructA) to Slice(StructB/Interface)
                         # This handles cases like list[HereDoc] -> list[Node] where HereDoc implements Node
                         elif (isinstance(ftyp, Slice) and isinstance(val_type, Slice) and
                               self._needs_slice_cast(val_type, ftyp)):
+                            val_str = self._emit_expr(field_val)
                             target_vec = self._type_to_c(ftyp)
                             val_str = f"*({target_vec} *)&{val_str}"
+                        else:
+                            val_str = self._emit_expr(field_val)
                         args.append(val_str)
                 else:
                     # Default value based on type
@@ -2762,6 +2776,61 @@ static bool _map_contains(void *map, const char *key) {
         if isinstance(from_elem, InterfaceRef) and isinstance(to_elem, InterfaceRef):
             return from_elem.name != to_elem.name
         return False
+
+    def _is_lvalue(self, expr: Expr) -> bool:
+        """Check if expression is an lvalue (can take address of)."""
+        return isinstance(expr, (Var, FieldAccess, Index, DerefLV))
+
+    def _emit_rvalue_temps(self, expr: Expr) -> None:
+        """Emit temp var declarations for rvalue slice fields in StructLits.
+
+        Scans expression tree for StructLits that pass rvalue Slice to Optional(Slice) fields.
+        These need temp vars since we can't take address of rvalues.
+        """
+        if isinstance(expr, StructLit):
+            name = expr.struct_name
+            if name in self._struct_fields:
+                for fname, ftyp in self._struct_fields[name]:
+                    if fname in expr.fields:
+                        field_val = expr.fields[fname]
+                        val_type = field_val.typ
+                        # Check if this field needs &: Optional(Slice) param with Slice value
+                        if (isinstance(ftyp, Optional) and isinstance(ftyp.inner, Slice) and
+                            isinstance(val_type, Slice) and not isinstance(val_type, (Optional, Pointer))):
+                            # If it's an rvalue, emit temp var
+                            if not self._is_lvalue(field_val):
+                                tmp_name = self._temp_name("_tmp_slice")
+                                vec_type = self._type_to_c(val_type)
+                                val_str = self._emit_expr(field_val)
+                                self._line(f"{vec_type} {tmp_name} = {val_str};")
+                                self._rvalue_temps[id(field_val)] = tmp_name
+                        # Recurse into nested StructLits
+                        self._emit_rvalue_temps(field_val)
+            else:
+                # Unknown struct, still check field values
+                for field_val in expr.fields.values():
+                    self._emit_rvalue_temps(field_val)
+        elif isinstance(expr, Call):
+            for arg in expr.args:
+                self._emit_rvalue_temps(arg)
+        elif isinstance(expr, MethodCall):
+            self._emit_rvalue_temps(expr.obj)
+            for arg in expr.args:
+                self._emit_rvalue_temps(arg)
+        elif isinstance(expr, BinaryOp):
+            self._emit_rvalue_temps(expr.left)
+            self._emit_rvalue_temps(expr.right)
+        elif isinstance(expr, UnaryOp):
+            self._emit_rvalue_temps(expr.operand)
+        elif isinstance(expr, Ternary):
+            self._emit_rvalue_temps(expr.cond)
+            self._emit_rvalue_temps(expr.then_expr)
+            self._emit_rvalue_temps(expr.else_expr)
+        elif isinstance(expr, FieldAccess):
+            self._emit_rvalue_temps(expr.obj)
+        elif isinstance(expr, Index):
+            self._emit_rvalue_temps(expr.obj)
+            self._emit_rvalue_temps(expr.index)
 
     def _emit_expr_TupleLit(self, expr: TupleLit) -> str:
         if expr.typ is None or not isinstance(expr.typ, Tuple):

@@ -6187,7 +6187,7 @@ class Parser {
     var left: any = this.ArithParseTernary();
     this.ArithSkipWs();
     var assignOps: any = ["<<=", ">>=", "+=", "-=", "*=", "/=", "%=", "&=", "^=", "|=", "="];
-    for (const op of assignOps) {
+    for (const op of assignOps as string[]) {
       if (this.ArithMatch(op)) {
         if (op === "=" && this.ArithPeek(1) === "=") {
           break;

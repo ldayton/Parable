@@ -5958,7 +5958,7 @@ func (self *Parser) arithParseTernary() Node {
 }
 
 func (self *Parser) arithParseLeftAssoc(ops []string, parsefn func() Node) Node {
-	left := parsefn()
+	var left Node = parsefn()
 	for true {
 		self.arithSkipWs()
 		matched := false

@@ -6215,8 +6215,8 @@ var Parser = /** @class */ (function () {
         var left = this.ArithParseTernary();
         this.ArithSkipWs();
         var assignOps = ["<<=", ">>=", "+=", "-=", "*=", "/=", "%=", "&=", "^=", "|=", "="];
-        for (var _i = 0, assignOps_1 = assignOps; _i < assignOps_1.length; _i++) {
-            var op = assignOps_1[_i];
+        for (var _i = 0, _a = assignOps; _i < _a.length; _i++) {
+            var op = _a[_i];
             if (this.ArithMatch(op)) {
                 if (op === "=" && this.ArithPeek(1) === "=") {
                     break;

@@ -1754,13 +1754,8 @@ static bool _map_contains(void *map, const char *key) {
             value = f"({c_type}){value}"
         already_declared = var_name in self._hoisted_vars if var_name else False
         is_hoisted = already_declared and self._hoisted_vars.get(var_name) == c_type
-        # Emit declaration if middleend says is_declaration and not already hoisted with same type,
-        # OR if var isn't tracked at all.
-        # But if var IS tracked with different type AND the value is a primitive that's compatible
-        # with the existing type, skip redeclaration (workaround for middleend type inference bugs)
-        needs_decl = (stmt.is_declaration and not is_hoisted) or (
-            var_name is not None and not already_declared
-        )
+        # Emit declaration only if middleend says is_declaration and not already hoisted with same type
+        needs_decl = stmt.is_declaration and not is_hoisted
         # Workaround: if already declared with integer type and new value is compatible, don't redeclare
         if (
             already_declared

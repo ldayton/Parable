@@ -4928,7 +4928,7 @@ static const char * Lexer__parse_matched_pair(Lexer *self, const char * open_cha
         }
         if ((((strcmp(ch, "(") == 0) && was_gtlt) && ((flags & (MATCHEDPAIRFLAGS_DOLBRACE | MATCHEDPAIRFLAGS_ARRAYSUB)) != 0))) {
             const char * direction = chars.data[(chars.len - 1)];
-            Vec_Str chars = /* slice[0:(chars.len - 1)] */ chars;
+            chars = /* slice[0:(chars.len - 1)] */ chars;
             self->pos -= 1;
             Lexer__sync_to_parser(self);
             Tuple_NodePtr_constcharPtr _tup35 = Parser__parse_process_substitution(self->_parser);
@@ -4987,7 +4987,7 @@ static Word * Lexer__read_word_internal(Lexer *self, int64_t ctx, bool at_comman
             if (((((chars.len > 0) && at_command_start) && !(seen_equals)) && _is_array_assignment_prefix(chars))) {
                 const char * prev_char = chars.data[(chars.len - 1)];
                 if ((_str_is_alnum(prev_char) || (strcmp(prev_char, "_") == 0))) {
-                    int64_t bracket_start_pos = self->pos;
+                    bracket_start_pos = self->pos;
                     bracket_depth += 1;
                     VEC_PUSH(g_arena, &chars, (Lexer_advance(self)));
                     continue;
@@ -6700,7 +6700,7 @@ static const char * Word__strip_arith_line_continuations(Word *self, const char 
                     depth += 1;
                     i += 1;
                     if ((depth > 1)) {
-                        int64_t first_close_idx = -(1);
+                        first_close_idx = -(1);
                     }
                 } else if ((strcmp((const char *)(_char_at_str(g_arena, value, i)), ")") == 0)) {
                     if ((depth == 2)) {
@@ -9311,7 +9311,7 @@ static Tuple_NodePtr_constcharPtr Parser__parse_arithmetic_expansion(Parser *sel
             Parser_advance(self);
         } else if ((strcmp(c, ")") == 0)) {
             if ((depth == 2)) {
-                int64_t first_close_pos = self->pos;
+                first_close_pos = self->pos;
             }
             depth -= 1;
             if ((depth == 0)) {
@@ -10191,7 +10191,7 @@ static Node * Parser_parse_redirect(Parser *self) {
         while ((!(Parser_at_end(self)) && _str_is_digit(Parser_peek(self)))) {
             VEC_PUSH(g_arena, &fd_chars, (Parser_advance(self)));
         }
-        int64_t fd = _parse_int(_str_join(g_arena, "", fd_chars), 10);
+        fd = _parse_int(_str_join(g_arena, "", fd_chars), 10);
     }
     ch = Parser_peek(self);
     const char * op;

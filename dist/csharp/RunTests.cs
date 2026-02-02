@@ -300,7 +300,7 @@ class RunTests
             }
         }
 
-        Console.WriteLine($"{totalPassed} passed, {totalFailed} failed in {elapsed:F2}s");
+        Console.WriteLine($"csharp: {totalPassed} passed, {totalFailed} failed in {elapsed:F2}s");
         if (totalFailed > 0)
         {
             Environment.Exit(1);

@@ -210,7 +210,7 @@ func main() {
             print("\n... and \(totalFailed - maxFailures) more failures")
         }
     }
-    print("\(totalPassed) passed, \(totalFailed) failed in \(String(format: "%.2f", elapsed))s")
+    print("swift: \(totalPassed) passed, \(totalFailed) failed in \(String(format: "%.2f", elapsed))s")
     if totalFailed > 0 { exit(1) }
 }
 

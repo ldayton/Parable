@@ -13,7 +13,7 @@ case "$cmd" in
             echo "Usage: docker run <image> check <tests_dir>" >&2
             exit 1
         fi
-        node bin/run-tests.js "$tests_dir"
+        PARABLE_LANG=javascript node bin/run-tests.js "$tests_dir"
         ;;
     *)
         echo "Unknown command: $cmd" >&2

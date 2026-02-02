@@ -252,7 +252,7 @@ public class RunTests {
             }
         }
 
-        System.out.printf("%d passed, %d failed in %.2fs%n", totalPassed, totalFailed, elapsed);
+        System.out.printf("java: %d passed, %d failed in %.2fs%n", totalPassed, totalFailed, elapsed);
         executor.shutdownNow();
         if (totalFailed > 0) {
             System.exit(1);

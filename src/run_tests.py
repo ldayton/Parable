@@ -207,7 +207,7 @@ def main():
         if max_failures > 0 and total_failed > max_failures:
             print(f"\n... and {total_failed - max_failures} more failures")
 
-    print(f"{total_passed} passed, {total_failed} failed in {elapsed:.2f}s")
+    print(f"python: {total_passed} passed, {total_failed} failed in {elapsed:.2f}s")
 
     if total_failed > 0:
         sys.exit(1)

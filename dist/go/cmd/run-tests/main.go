@@ -287,7 +287,7 @@ func main() {
 			fmt.Printf("\n... and %d more failures\n", totalFailed-*maxFailures)
 		}
 	}
-	fmt.Printf("%d passed, %d failed in %.2fs\n", totalPassed, totalFailed, elapsed)
+	fmt.Printf("go: %d passed, %d failed in %.2fs\n", totalPassed, totalFailed, elapsed)
 	if totalFailed > 0 {
 		os.Exit(1)
 	}

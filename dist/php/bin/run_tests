@@ -222,7 +222,7 @@ function main(): int {
         }
         echo "\n";
     }
-    printf("%d passed, %d failed in %.2fs\n", $totalPassed, $totalFailed, $elapsed);
+    printf("php: %d passed, %d failed in %.2fs\n", $totalPassed, $totalFailed, $elapsed);
     return $totalFailed > 0 ? 1 : 0;
 }
 

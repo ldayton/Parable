@@ -16,7 +16,7 @@ case "$cmd" in
         fi
         npm install --silent 2>/dev/null || npm install
         npx tsc
-        PARABLE_PATH="$(pwd)/dist" node /js-runner/run-tests.js "$tests_dir"
+        PARABLE_LANG=typescript PARABLE_PATH="$(pwd)/dist" node /js-runner/run-tests.js "$tests_dir"
         ;;
     *)
         echo "Unknown command: $cmd" >&2

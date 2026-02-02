@@ -210,7 +210,7 @@ sub main {
         }
     }
 
-    printf "%d passed, %d failed in %.2fs\n", $total_passed, $total_failed, $elapsed;
+    printf "perl: %d passed, %d failed in %.2fs\n", $total_passed, $total_failed, $elapsed;
     exit($total_failed > 0 ? 1 : 0);
 }
 

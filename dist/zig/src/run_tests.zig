@@ -260,6 +260,6 @@ pub fn main() !void {
             try stdout.print("\n... and {d} more failures\n", .{total_failed - max_failures});
         }
     }
-    try stdout.print("{d} passed, {d} failed in {d:.2}s\n", .{ total_passed, total_failed, elapsed });
+    try stdout.print("zig: {d} passed, {d} failed in {d:.2}s\n", .{ total_passed, total_failed, elapsed });
     if (total_failed > 0) std.process.exit(1);
 }

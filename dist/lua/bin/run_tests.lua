@@ -315,7 +315,7 @@ local function main()
     print("")
   end
 
-  print(string.format("%d passed, %d failed in %.2fs", total_passed, total_failed, elapsed))
+  print(string.format("lua: %d passed, %d failed in %.2fs", total_passed, total_failed, elapsed))
 
   if total_failed > 0 then
     os.exit(1)

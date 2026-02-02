@@ -284,7 +284,8 @@ async function main() {
     }
   }
 
-  console.log(`${totalPassed} passed, ${totalFailed} failed in ${elapsed}s`);
+  const lang = process.env.PARABLE_LANG || 'javascript';
+  console.log(`${lang}: ${totalPassed} passed, ${totalFailed} failed in ${elapsed}s`);
 
   process.exit(totalFailed > 0 ? 1 : 0);
 }

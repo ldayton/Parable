@@ -458,7 +458,7 @@ int main(int argc, char **argv) {
             printf("\n... and %d more failures\n", total_failed - max_failures);
         }
     }
-    printf("%d passed, %d failed in %.2fs\n", total_passed, total_failed, elapsed);
+    printf("c: %d passed, %d failed in %.2fs\n", total_passed, total_failed, elapsed);
     fprintf(stderr, "DEBUG: %d tests, parse=%.3fs, other=%.3fs\n", test_count, total_parse_time, total_other_time);
     return total_failed > 0 ? 1 : 0;
 }

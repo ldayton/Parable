@@ -267,7 +267,7 @@ fn main() {
             println!("\n... and {} more failures", total_failed - max_failures);
         }
     }
-    println!("{} passed, {} failed in {:.2}s", total_passed, total_failed, elapsed);
+    println!("rust: {} passed, {} failed in {:.2}s", total_passed, total_failed, elapsed);
     if total_failed > 0 {
         process::exit(1);
     }

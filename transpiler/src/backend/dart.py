@@ -430,13 +430,16 @@ class DartBackend:
             else:
                 self._line(f"{class_name}();")
             return
-        # Make non-primitive constructor parameters nullable to allow null initialization
+        # Make non-primitive constructor parameters dynamic or nullable to allow null initialization
         param_parts: list[str] = []
         for f in struct.fields:
             typ = self._type(f.typ)
-            # Only make struct/pointer types nullable, keep primitives as-is
+            # Make struct/pointer types nullable, interface types dynamic (to allow null)
             if isinstance(f.typ, (Pointer, StructRef)) and not isinstance(f.typ, Optional):
                 param_parts.append(f"{typ}? {_safe_name(f.name)}")
+            elif isinstance(f.typ, InterfaceRef):
+                # Use dynamic for interface types since Python allows None even without Optional
+                param_parts.append(f"dynamic {_safe_name(f.name)}")
             else:
                 param_parts.append(f"{typ} {_safe_name(f.name)}")
         params = ", ".join(param_parts)
@@ -451,26 +454,55 @@ class DartBackend:
             # Assign with null check bypass for nullable params to late fields
             if isinstance(f.typ, (Pointer, StructRef)) and not isinstance(f.typ, Optional):
                 self._line(f"if ({param_name} != null) this.{param_name} = {param_name};")
+            elif isinstance(f.typ, InterfaceRef):
+                # For interface types (dynamic param), only assign if non-null
+                self._line(f"if ({param_name} != null) this.{param_name} = {param_name};")
             else:
                 self._line(f"this.{param_name} = {param_name};")
         self.indent -= 1
         self._line("}")
 
     def _has_null_return(self, stmts: list[Stmt]) -> bool:
-        """Check if any statement returns null."""
+        """Check if any statement returns null, directly or indirectly via variable."""
+        null_vars: set[str] = set()
+        return self._check_null_return(stmts, null_vars)
+
+    def _check_null_return(self, stmts: list[Stmt], null_vars: set[str]) -> bool:
+        """Check if statements return null, tracking variables that may be null."""
         for stmt in stmts:
+            # Direct return null
             if isinstance(stmt, Return) and isinstance(stmt.value, NilLit):
                 return True
+            # Return of a variable that was assigned null
+            if isinstance(stmt, Return) and isinstance(stmt.value, Var):
+                if stmt.value.name in null_vars:
+                    return True
+            # Track null assignments: result = None or result = null as dynamic
+            # Note: targets use VarLV (variable lvalue), not Var
+            if isinstance(stmt, Assign):
+                if isinstance(stmt.value, NilLit):
+                    if isinstance(stmt.target, VarLV):
+                        null_vars.add(stmt.target.name)
+                elif isinstance(stmt.value, Cast) and isinstance(stmt.value.expr, NilLit):
+                    # Handles: result = null as dynamic
+                    if isinstance(stmt.target, VarLV):
+                        null_vars.add(stmt.target.name)
             if isinstance(stmt, If):
-                if self._has_null_return(stmt.then_body):
+                # Use copies of null_vars for branches, then merge
+                then_vars = null_vars.copy()
+                else_vars = null_vars.copy()
+                if self._check_null_return(stmt.then_body, then_vars):
                     return True
-                if stmt.else_body and self._has_null_return(stmt.else_body):
+                if stmt.else_body and self._check_null_return(stmt.else_body, else_vars):
                     return True
+                # Variables assigned null in either branch could be null
+                null_vars.update(then_vars)
+                null_vars.update(else_vars)
             if isinstance(stmt, While):
-                if self._has_null_return(stmt.body):
+                if self._check_null_return(stmt.body, null_vars.copy()):
                     return True
             if isinstance(stmt, (ForRange, ForClassic)):
-                if self._has_null_return(stmt.body):
+                if self._check_null_return(stmt.body, null_vars.copy()):
                     return True
         return False
 
@@ -542,6 +574,11 @@ class DartBackend:
             return True
         if isinstance(typ, Optional):
             return self._is_nullable_reference_type(typ.inner)
+        if isinstance(typ, Tuple):
+            # Check if any element of the tuple is a reference type
+            for elem in typ.elements:
+                if self._is_nullable_reference_type(elem):
+                    return True
         return False
 
     def _emit_hoisted_vars(

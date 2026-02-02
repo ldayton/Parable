@@ -3612,7 +3612,7 @@ class Pipeline implements Node {
       cmds.add((cmd, needsRedirect));
       i += 1;
     }
-    (Node, bool) pair = (null as dynamic, false);
+    dynamic pair;
     bool needs = false;
     if (cmds.length == 1) {
       pair = cmds[0];
@@ -3986,8 +3986,8 @@ class Subshell implements Node {
   List<Node>? redirects;
   late String kind;
 
-  Subshell(Node body, List<Node>? redirects, String kind) {
-    this.body = body;
+  Subshell(dynamic body, List<Node>? redirects, String kind) {
+    if (body != null) this.body = body;
     this.redirects = redirects;
     this.kind = kind;
   }
@@ -4007,8 +4007,8 @@ class BraceGroup implements Node {
   List<Node>? redirects;
   late String kind;
 
-  BraceGroup(Node body, List<Node>? redirects, String kind) {
-    this.body = body;
+  BraceGroup(dynamic body, List<Node>? redirects, String kind) {
+    if (body != null) this.body = body;
     this.redirects = redirects;
     this.kind = kind;
   }
@@ -4030,9 +4030,9 @@ class If implements Node {
   late List<Node> redirects;
   late String kind;
 
-  If(Node condition, Node thenBody, Node? elseBody, List<Node> redirects, String kind) {
-    this.condition = condition;
-    this.thenBody = thenBody;
+  If(dynamic condition, dynamic thenBody, Node? elseBody, List<Node> redirects, String kind) {
+    if (condition != null) this.condition = condition;
+    if (thenBody != null) this.thenBody = thenBody;
     this.elseBody = elseBody;
     this.redirects = redirects;
     this.kind = kind;
@@ -4061,9 +4061,9 @@ class While implements Node {
   late List<Node> redirects;
   late String kind;
 
-  While(Node condition, Node body, List<Node> redirects, String kind) {
-    this.condition = condition;
-    this.body = body;
+  While(dynamic condition, dynamic body, List<Node> redirects, String kind) {
+    if (condition != null) this.condition = condition;
+    if (body != null) this.body = body;
     this.redirects = redirects;
     this.kind = kind;
   }
@@ -4084,9 +4084,9 @@ class Until implements Node {
   late List<Node> redirects;
   late String kind;
 
-  Until(Node condition, Node body, List<Node> redirects, String kind) {
-    this.condition = condition;
-    this.body = body;
+  Until(dynamic condition, dynamic body, List<Node> redirects, String kind) {
+    if (condition != null) this.condition = condition;
+    if (body != null) this.body = body;
     this.redirects = redirects;
     this.kind = kind;
   }
@@ -4108,10 +4108,10 @@ class For implements Node {
   late List<Node> redirects;
   late String kind;
 
-  For(String var_, List<Word>? words, Node body, List<Node> redirects, String kind) {
+  For(String var_, List<Word>? words, dynamic body, List<Node> redirects, String kind) {
     this.var_ = var_;
     this.words = words;
-    this.body = body;
+    if (body != null) this.body = body;
     this.redirects = redirects;
     this.kind = kind;
   }
@@ -4157,11 +4157,11 @@ class ForArith implements Node {
   late List<Node> redirects;
   late String kind;
 
-  ForArith(String init, String cond, String incr, Node body, List<Node> redirects, String kind) {
+  ForArith(String init, String cond, String incr, dynamic body, List<Node> redirects, String kind) {
     this.init = init;
     this.cond = cond;
     this.incr = incr;
-    this.body = body;
+    if (body != null) this.body = body;
     this.redirects = redirects;
     this.kind = kind;
   }
@@ -4197,10 +4197,10 @@ class Select implements Node {
   late List<Node> redirects;
   late String kind;
 
-  Select(String var_, List<Word>? words, Node body, List<Node> redirects, String kind) {
+  Select(String var_, List<Word>? words, dynamic body, List<Node> redirects, String kind) {
     this.var_ = var_;
     this.words = words;
-    this.body = body;
+    if (body != null) this.body = body;
     this.redirects = redirects;
     this.kind = kind;
   }
@@ -4379,9 +4379,9 @@ class Function_ implements Node {
   late Node body;
   late String kind;
 
-  Function_(String name, Node body, String kind) {
+  Function_(String name, dynamic body, String kind) {
     this.name = name;
-    this.body = body;
+    if (body != null) this.body = body;
     this.kind = kind;
   }
 
@@ -4486,8 +4486,8 @@ class CommandSubstitution implements Node {
   late bool brace;
   late String kind;
 
-  CommandSubstitution(Node command, bool brace, String kind) {
-    this.command = command;
+  CommandSubstitution(dynamic command, bool brace, String kind) {
+    if (command != null) this.command = command;
     this.brace = brace;
     this.kind = kind;
   }
@@ -4616,10 +4616,10 @@ class ArithBinaryOp implements Node {
   late Node right;
   late String kind;
 
-  ArithBinaryOp(String op, Node left, Node right, String kind) {
+  ArithBinaryOp(String op, dynamic left, dynamic right, String kind) {
     this.op = op;
-    this.left = left;
-    this.right = right;
+    if (left != null) this.left = left;
+    if (right != null) this.right = right;
     this.kind = kind;
   }
 
@@ -4637,9 +4637,9 @@ class ArithUnaryOp implements Node {
   late Node operand;
   late String kind;
 
-  ArithUnaryOp(String op, Node operand, String kind) {
+  ArithUnaryOp(String op, dynamic operand, String kind) {
     this.op = op;
-    this.operand = operand;
+    if (operand != null) this.operand = operand;
     this.kind = kind;
   }
 
@@ -4656,8 +4656,8 @@ class ArithPreIncr implements Node {
   late Node operand;
   late String kind;
 
-  ArithPreIncr(Node operand, String kind) {
-    this.operand = operand;
+  ArithPreIncr(dynamic operand, String kind) {
+    if (operand != null) this.operand = operand;
     this.kind = kind;
   }
 
@@ -4674,8 +4674,8 @@ class ArithPostIncr implements Node {
   late Node operand;
   late String kind;
 
-  ArithPostIncr(Node operand, String kind) {
-    this.operand = operand;
+  ArithPostIncr(dynamic operand, String kind) {
+    if (operand != null) this.operand = operand;
     this.kind = kind;
   }
 
@@ -4692,8 +4692,8 @@ class ArithPreDecr implements Node {
   late Node operand;
   late String kind;
 
-  ArithPreDecr(Node operand, String kind) {
-    this.operand = operand;
+  ArithPreDecr(dynamic operand, String kind) {
+    if (operand != null) this.operand = operand;
     this.kind = kind;
   }
 
@@ -4710,8 +4710,8 @@ class ArithPostDecr implements Node {
   late Node operand;
   late String kind;
 
-  ArithPostDecr(Node operand, String kind) {
-    this.operand = operand;
+  ArithPostDecr(dynamic operand, String kind) {
+    if (operand != null) this.operand = operand;
     this.kind = kind;
   }
 
@@ -4730,10 +4730,10 @@ class ArithAssign implements Node {
   late Node value;
   late String kind;
 
-  ArithAssign(String op, Node target, Node value, String kind) {
+  ArithAssign(String op, dynamic target, dynamic value, String kind) {
     this.op = op;
-    this.target = target;
-    this.value = value;
+    if (target != null) this.target = target;
+    if (value != null) this.value = value;
     this.kind = kind;
   }
 
@@ -4752,10 +4752,10 @@ class ArithTernary implements Node {
   late Node ifFalse;
   late String kind;
 
-  ArithTernary(Node condition, Node ifTrue, Node ifFalse, String kind) {
-    this.condition = condition;
-    this.ifTrue = ifTrue;
-    this.ifFalse = ifFalse;
+  ArithTernary(dynamic condition, dynamic ifTrue, dynamic ifFalse, String kind) {
+    if (condition != null) this.condition = condition;
+    if (ifTrue != null) this.ifTrue = ifTrue;
+    if (ifFalse != null) this.ifFalse = ifFalse;
     this.kind = kind;
   }
 
@@ -4773,9 +4773,9 @@ class ArithComma implements Node {
   late Node right;
   late String kind;
 
-  ArithComma(Node left, Node right, String kind) {
-    this.left = left;
-    this.right = right;
+  ArithComma(dynamic left, dynamic right, String kind) {
+    if (left != null) this.left = left;
+    if (right != null) this.right = right;
     this.kind = kind;
   }
 
@@ -4793,9 +4793,9 @@ class ArithSubscript implements Node {
   late Node index;
   late String kind;
 
-  ArithSubscript(String array, Node index, String kind) {
+  ArithSubscript(String array, dynamic index, String kind) {
     this.array = array;
-    this.index = index;
+    if (index != null) this.index = index;
     this.kind = kind;
   }
 
@@ -4910,9 +4910,9 @@ class ProcessSubstitution implements Node {
   late Node command;
   late String kind;
 
-  ProcessSubstitution(String direction, Node command, String kind) {
+  ProcessSubstitution(String direction, dynamic command, String kind) {
     this.direction = direction;
-    this.command = command;
+    if (command != null) this.command = command;
     this.kind = kind;
   }
 
@@ -4929,8 +4929,8 @@ class Negation implements Node {
   late Node pipeline;
   late String kind;
 
-  Negation(Node pipeline, String kind) {
-    this.pipeline = pipeline;
+  Negation(dynamic pipeline, String kind) {
+    if (pipeline != null) this.pipeline = pipeline;
     this.kind = kind;
   }
 
@@ -4951,8 +4951,8 @@ class Time implements Node {
   late bool posix;
   late String kind;
 
-  Time(Node pipeline, bool posix, String kind) {
-    this.pipeline = pipeline;
+  Time(dynamic pipeline, bool posix, String kind) {
+    if (pipeline != null) this.pipeline = pipeline;
     this.posix = posix;
     this.kind = kind;
   }
@@ -4982,7 +4982,7 @@ class ConditionalExpr implements Node {
   late String kind;
 
   ConditionalExpr(dynamic body, List<Node> redirects, String kind) {
-    this.body = body;
+    if (body != null) this.body = body;
     this.redirects = redirects;
     this.kind = kind;
   }
@@ -5065,9 +5065,9 @@ class CondAnd implements Node {
   late Node right;
   late String kind;
 
-  CondAnd(Node left, Node right, String kind) {
-    this.left = left;
-    this.right = right;
+  CondAnd(dynamic left, dynamic right, String kind) {
+    if (left != null) this.left = left;
+    if (right != null) this.right = right;
     this.kind = kind;
   }
 
@@ -5085,9 +5085,9 @@ class CondOr implements Node {
   late Node right;
   late String kind;
 
-  CondOr(Node left, Node right, String kind) {
-    this.left = left;
-    this.right = right;
+  CondOr(dynamic left, dynamic right, String kind) {
+    if (left != null) this.left = left;
+    if (right != null) this.right = right;
     this.kind = kind;
   }
 
@@ -5104,8 +5104,8 @@ class CondNot implements Node {
   late Node operand;
   late String kind;
 
-  CondNot(Node operand, String kind) {
-    this.operand = operand;
+  CondNot(dynamic operand, String kind) {
+    if (operand != null) this.operand = operand;
     this.kind = kind;
   }
 
@@ -5122,8 +5122,8 @@ class CondParen implements Node {
   late Node inner;
   late String kind;
 
-  CondParen(Node inner, String kind) {
-    this.inner = inner;
+  CondParen(dynamic inner, String kind) {
+    if (inner != null) this.inner = inner;
     this.kind = kind;
   }
 
@@ -5167,8 +5167,8 @@ class Coproc implements Node {
   late String name;
   late String kind;
 
-  Coproc(Node command, String name, String kind) {
-    this.command = command;
+  Coproc(dynamic command, String name, String kind) {
+    if (command != null) this.command = command;
     this.name = name;
     this.kind = kind;
   }
@@ -6293,7 +6293,7 @@ class Parser {
     return (ArithmeticExpansion(expr, "arith"), text);
   }
 
-  Node _parseArithExpr(String content) {
+  dynamic _parseArithExpr(String content) {
     String savedArithSrc = this._arithSrc; 
     int savedArithPos = this._arithPos; 
     int savedArithLen = this._arithLen; 

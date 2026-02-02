@@ -71,8 +71,7 @@ backend-transpile backend:
             gofmt /tmp/parable-ir.go > "$out"
             ;;
         java)
-            mkdir -p dist/java
-            uv run --directory transpiler python -m src.tongues --target java < "$(pwd)/src/parable.py" > dist/java/Parable.java
+            dist/java/gradlew -p dist/java transpile --quiet -PsourceFile="$(pwd)/src/parable.py" -PtranspilerDir="$(pwd)/transpiler"
             ;;
         javascript)
             mkdir -p dist/js
@@ -131,10 +130,7 @@ backend-test backend:
             go run -C dist/go ./cmd/run-tests "$tests_abs"
             ;;
         java)
-            just backend-transpile java
-            mkdir -p dist/java/classes
-            javac -d dist/java/classes dist/java/Parable.java dist/java/RunTests.java
-            java -cp dist/java/classes RunTests "$tests_abs"
+            dist/java/gradlew -p dist/java run --quiet -PsourceFile="$(pwd)/src/parable.py" -PtranspilerDir="$(pwd)/transpiler" --args="$tests_abs"
             ;;
         javascript)
             just backend-transpile javascript
@@ -186,7 +182,7 @@ c-compile:
 # Internal: run all parallel checks
 [private]
 [parallel]
-_check-parallel: src-test src-lint src-fmt src-verify-lock src-subset transpiler-subset transpiler-test check-dump-ast c-compile (backend-test "csharp") (backend-test "go") (backend-test "java") (backend-test "javascript") (backend-test "lua") (backend-test "perl") (backend-test "php") (backend-test "python") (backend-test "ruby") (backend-test "typescript")
+_check-parallel: src-test src-lint src-fmt src-verify-lock src-subset transpiler-subset transpiler-test check-dump-ast (backend-test "c") (backend-test "csharp") (backend-test "go") (backend-test "java") (backend-test "javascript") (backend-test "lua") (backend-test "perl") (backend-test "php") (backend-test "python") (backend-test "ruby") (backend-test "typescript")
 
 # Ensure biome is installed (prevents race condition in parallel JS checks)
 [private]

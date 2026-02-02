@@ -1,8 +1,9 @@
-// Test runner for the Java parser.
-// Mirrors the Go test runner in dist/go/cmd/run-tests/main.go
+package parable;
+
 import java.io.*;
 import java.nio.file.*;
 import java.util.*;
+import java.util.concurrent.*;
 import java.util.regex.*;
 
 public class RunTests {
@@ -78,7 +79,6 @@ public class RunTests {
                 if (i < n && lines.get(i).equals("---")) {
                     i++;
                 }
-                // Trim trailing empty lines from expected
                 while (!expectedLines.isEmpty() && expectedLines.get(expectedLines.size() - 1).trim().isEmpty()) {
                     expectedLines.remove(expectedLines.size() - 1);
                 }
@@ -98,51 +98,79 @@ public class RunTests {
         return WHITESPACE_RE.matcher(s).replaceAll(" ").trim();
     }
 
+    static ExecutorService executor = Executors.newSingleThreadExecutor();
+
     static String[] runTest(String testInput, String testExpected) {
-        // Returns [passed, actual, errMsg]
-        boolean extglob = false;
+        final boolean extglob;
+        final String finalInput;
         if (testInput.startsWith("# @extglob\n")) {
             extglob = true;
-            testInput = testInput.substring("# @extglob\n".length());
+            finalInput = testInput.substring("# @extglob\n".length());
+        } else {
+            extglob = false;
+            finalInput = testInput;
         }
+        Future<String[]> future = executor.submit(() -> {
+            try {
+                List<Node> nodes = ParableFunctions.parse(finalInput, extglob);
+                List<String> parts = new ArrayList<>();
+                for (Node n : nodes) {
+                    parts.add(n.toSexp());
+                }
+                String actual = String.join(" ", parts);
+                String expectedNorm = normalize(testExpected);
+                if (expectedNorm.equals("<error>")) {
+                    return new String[]{"false", actual, "Expected parse error but got successful parse"};
+                }
+                String actualNorm = normalize(actual);
+                if (expectedNorm.equals(actualNorm)) {
+                    return new String[]{"true", actual, ""};
+                }
+                return new String[]{"false", actual, ""};
+            } catch (RuntimeException e) {
+                if (normalize(testExpected).equals("<error>")) {
+                    return new String[]{"true", "<error>", ""};
+                }
+                StringWriter sw = new StringWriter();
+                e.printStackTrace(new PrintWriter(sw));
+                return new String[]{"false", "<exception>", e.getMessage() + "\n" + sw.toString()};
+            }
+        });
         try {
-            List<Node> nodes = ParableFunctions.parse(testInput, extglob);
-            List<String> parts = new ArrayList<>();
-            for (Node n : nodes) {
-                parts.add(n.toSexp());
-            }
-            String actual = String.join(" ", parts);
-            String expectedNorm = normalize(testExpected);
-            // If we expected an error but got a successful parse, that's a failure
-            if (expectedNorm.equals("<error>")) {
-                return new String[]{"false", actual, "Expected parse error but got successful parse"};
-            }
-            String actualNorm = normalize(actual);
-            if (expectedNorm.equals(actualNorm)) {
-                return new String[]{"true", actual, ""};
-            }
-            return new String[]{"false", actual, ""};
-        } catch (RuntimeException e) {
-            // Parse errors are signaled via RuntimeException
-            if (normalize(testExpected).equals("<error>")) {
-                return new String[]{"true", "<error>", ""};
-            }
-            StringWriter sw = new StringWriter();
-            e.printStackTrace(new PrintWriter(sw));
-            return new String[]{"false", "<exception>", e.getMessage() + "\n" + sw.toString()};
+            return future.get(10, TimeUnit.SECONDS);
+        } catch (TimeoutException e) {
+            future.cancel(true);
+            return new String[]{"false", "<timeout>", "Test timed out after 10 seconds"};
+        } catch (Exception e) {
+            return new String[]{"false", "<exception>", e.getMessage()};
         }
+    }
+
+    static void printUsage() {
+        System.out.println("Usage: RunTests [options] [test_dir]");
+        System.out.println("Options:");
+        System.out.println("  -v, --verbose       Show PASS/FAIL for each test");
+        System.out.println("  -f, --filter PAT    Only run tests matching PAT");
+        System.out.println("  --max-failures N    Show at most N failures (0=unlimited, default=20)");
+        System.out.println("  -h, --help          Show this help message");
     }
 
     public static void main(String[] args) throws IOException {
         boolean verbose = false;
         String filterPattern = null;
         String testDir = null;
+        int maxFailures = 20;
 
         for (int i = 0; i < args.length; i++) {
-            if (args[i].equals("-v") || args[i].equals("--verbose")) {
+            if (args[i].equals("-h") || args[i].equals("--help")) {
+                printUsage();
+                return;
+            } else if (args[i].equals("-v") || args[i].equals("--verbose")) {
                 verbose = true;
-            } else if (args[i].equals("-f") && i + 1 < args.length) {
+            } else if ((args[i].equals("-f") || args[i].equals("--filter")) && i + 1 < args.length) {
                 filterPattern = args[++i];
+            } else if (args[i].equals("--max-failures") && i + 1 < args.length) {
+                maxFailures = Integer.parseInt(args[++i]);
             } else if (!args[i].startsWith("-")) {
                 testDir = args[i];
             }
@@ -178,7 +206,6 @@ public class RunTests {
                 if (filterPattern != null && !tc.name.contains(filterPattern) && !relPath.contains(filterPattern)) {
                     continue;
                 }
-                // Treat <infinite> as <error> (bash-oracle hangs, but it's still a syntax error)
                 String effectiveExpected = tc.expected;
                 if (normalize(tc.expected).equals("<infinite>")) {
                     effectiveExpected = "<error>";
@@ -209,7 +236,7 @@ public class RunTests {
             System.out.println("============================================================");
             System.out.println("FAILURES");
             System.out.println("============================================================");
-            int showCount = Math.min(failedTests.size(), 20);
+            int showCount = maxFailures == 0 ? failedTests.size() : Math.min(failedTests.size(), maxFailures);
             for (int i = 0; i < showCount; i++) {
                 TestResult f = failedTests.get(i);
                 System.out.printf("%n%s:%d %s%n", f.relPath, f.lineNum, f.name);
@@ -220,12 +247,13 @@ public class RunTests {
                     System.out.printf("  Error:    %s%n", f.err);
                 }
             }
-            if (totalFailed > 20) {
-                System.out.printf("%n... and %d more failures%n", totalFailed - 20);
+            if (maxFailures > 0 && totalFailed > maxFailures) {
+                System.out.printf("%n... and %d more failures%n", totalFailed - maxFailures);
             }
         }
 
         System.out.printf("%d passed, %d failed in %.2fs%n", totalPassed, totalFailed, elapsed);
+        executor.shutdownNow();
         if (totalFailed > 0) {
             System.exit(1);
         }

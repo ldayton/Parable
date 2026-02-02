@@ -1,1 +1,8 @@
-classes/
+# Gradle
+.gradle/
+build/
+
+# Generated source (transpiled)
+src/main/java/parable/Parable.java
+
+# Gradle wrapper JAR is checked in (don't ignore gradle/)

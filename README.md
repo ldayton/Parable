@@ -22,25 +22,25 @@ Parse bash exactly as bash does. One file, zero dependencies, in your language. 
 
 ## Transpiler
 
-The transpiler supports these target languages (all on Ubuntu 24.04):
+The transpiler supports these target languages:
 
-| Language   | Min Version  | Source              | Status |
-| ---------- | ------------ | ------------------- | ------ |
-| C#         | .NET 8       | Microsoft apt repo  | Done   |
-| Go         | Go 1.21      | Official tarball    | Done   |
-| Java       | Temurin 21   | Adoptium apt repo   | Done   |
-| Javascript | Node.js 21   | Official tarball    | Done   |
-| Lua        | Lua 5.4      | Ubuntu apt          | Done   |
-| Perl       | Perl 5.38    | Ubuntu apt          | Done   |
-| PHP        | PHP 8.3      | ondrej/php PPA      | Done   |
-| Python     | CPython 3.12 | Ubuntu apt          | Done   |
-| Ruby       | Ruby 3.2     | Ubuntu apt          | Done   |
-| Typescript | tsc 5.3      | npm (on Node.js 21) | Done   |
-| C          | GCC 13       | Ubuntu apt          | WIP    |
-| Dart       | Dart 3.2     | Official SDK zip    | Future |
-| Rust       | Rust 1.75    | rustup              | Future |
-| Swift      | Swift 5.9    | Official tarball    | Future |
-| Zig        | Zig 0.11     | Official tarball    | Future |
+| Language   | Min Version  | Status |
+| ---------- | ------------ | ------ |
+| C#         | .NET 8       | Done   |
+| Go         | Go 1.21      | Done   |
+| Java       | Temurin 21   | Done   |
+| Javascript | Node.js 21   | Done   |
+| Lua        | Lua 5.4      | Done   |
+| Perl       | Perl 5.38    | Done   |
+| PHP        | PHP 8.3      | Done   |
+| Python     | CPython 3.12 | Done   |
+| Ruby       | Ruby 3.2     | Done   |
+| Typescript | tsc 5.3      | Done   |
+| C          | GCC 13       | WIP    |
+| Dart       | Dart 3.2     | Future |
+| Rust       | Rust 1.75    | Future |
+| Swift      | Swift 5.9    | Future |
+| Zig        | Zig 0.11     | Future |
 
 Output code quality is a work in progress. Currently the transpiler prioritizes correctness over readability; generated code may not yet match hand-written idioms.
 

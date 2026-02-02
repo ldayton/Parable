@@ -1,6 +1,7 @@
 # Gradle
 .gradle/
 build/
+classes/
 
 # Generated source (transpiled)
 src/main/java/parable/Parable.java

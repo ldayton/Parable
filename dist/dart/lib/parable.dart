@@ -2932,7 +2932,7 @@ class Word implements Node {
         break;
       case ArithmeticExpansion nodeArithmeticExpansion:
         if (nodeArithmeticExpansion.expression != null) {
-          result.addAll(this._collectCmdsubs(nodeArithmeticExpansion.expression));
+          result.addAll(this._collectCmdsubs(nodeArithmeticExpansion.expression!));
         }
         break;
       case ArithBinaryOp nodeArithBinaryOp:
@@ -3995,7 +3995,7 @@ class Subshell implements Node {
 
   String toSexp() {
     String base = "(subshell " + this.body.toSexp() + ")"; 
-    return _appendRedirects(base, this.redirects);
+    return _appendRedirects(base, this.redirects!);
   }
 
   String getKind() {
@@ -4016,7 +4016,7 @@ class BraceGroup implements Node {
 
   String toSexp() {
     String base = "(brace-group " + this.body.toSexp() + ")"; 
-    return _appendRedirects(base, this.redirects);
+    return _appendRedirects(base, this.redirects!);
   }
 
   String getKind() {
@@ -9874,7 +9874,7 @@ String _formatCmdsubNode(Node node, int indent, bool inProcsub, bool compactRedi
       String thenBody = _formatCmdsubNode(nodeIf.thenBody, indent + 4, false, false, false); 
       String result = "if " + cond + "; then\n" + innerSp + thenBody + ";"; 
       if (nodeIf.elseBody != null) {
-        String elseBody = _formatCmdsubNode(nodeIf.elseBody, indent + 4, false, false, false); 
+        String elseBody = _formatCmdsubNode(nodeIf.elseBody!, indent + 4, false, false, false); 
         result = result + "\n" + sp + "else\n" + innerSp + elseBody + ";";
       }
       result = result + "\n" + sp + "fi";
@@ -9951,7 +9951,7 @@ String _formatCmdsubNode(Node node, int indent, bool inProcsub, bool compactRedi
         String pat = p.pattern.replaceAll("|", " | "); 
         String body = "";
         if (p.body != null) {
-          body = _formatCmdsubNode(p.body, indent + 8, false, false, false);
+          body = _formatCmdsubNode(p.body!, indent + 8, false, false, false);
         } else {
           body = "";
         }

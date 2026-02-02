@@ -1421,11 +1421,14 @@ class DartBackend:
                 return "null /* TODO: unknown expression */"
 
     def _call(self, func: str, args: list[Expr]) -> str:
-        # Don't add ! for Optional args - Dart's flow analysis handles promotion
-        # for locals/params after null checks, and we use null-safe patterns elsewhere
+        # Add ! only for Optional field accesses (Dart can't promote public fields)
+        # Local variables are promoted by Dart's flow analysis after null checks
         arg_parts: list[str] = []
         for a in args:
-            arg_parts.append(self._expr(a))
+            s = self._expr(a)
+            if isinstance(a.typ, Optional) and isinstance(a, FieldAccess):
+                s = f"{s}!"
+            arg_parts.append(s)
         args_str = ", ".join(arg_parts)
         if func == "int" and len(args) == 2:
             return f"int.parse({self._expr(args[0])}, radix: {self._expr(args[1])})"
@@ -1471,11 +1474,14 @@ class DartBackend:
         return f"{_safe_name(func)}({args_str})"
 
     def _method_call(self, obj: Expr, method: str, args: list[Expr], receiver_type: Type) -> str:
-        # Don't add ! for Optional args - Dart's flow analysis handles promotion
-        # for locals/params after null checks, and we use null-safe patterns elsewhere
+        # Add ! only for Optional field accesses (Dart can't promote public fields)
+        # Local variables are promoted by Dart's flow analysis after null checks
         arg_parts: list[str] = []
         for a in args:
-            arg_parts.append(self._expr(a))
+            s = self._expr(a)
+            if isinstance(a.typ, Optional) and isinstance(a, FieldAccess):
+                s = f"{s}!"
+            arg_parts.append(s)
         args_str = ", ".join(arg_parts)
         obj_str = self._expr(obj)
         # Use null assertion for Optional receiver types

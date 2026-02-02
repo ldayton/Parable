@@ -286,8 +286,9 @@ class DartBackend:
         self._line("// ignore_for_file: invalid_assignment")
         self._line("// ignore_for_file: unchecked_use_of_nullable_value")
         self._line("")
-        # Emit import for dart:io (needed for stdin, stdout, stderr, Platform)
+        # Emit imports for dart:io and dart:convert
         self._line("import 'dart:io';")
+        self._line("import 'dart:convert';")
         self._line("")
         # Emit module doc comment if present
         if module.doc:
@@ -1494,7 +1495,9 @@ class DartBackend:
             if method == "decode":
                 elem = receiver_type.element
                 if isinstance(elem, Primitive) and elem.kind == "byte":
-                    return f"String.fromCharCodes({obj_str})"
+                    # Use utf8.decode with allowMalformed to replace invalid UTF-8 with U+FFFD
+                    # This matches Python's bytes.decode("utf-8", errors="replace")
+                    return f"utf8.decode({obj_str}, allowMalformed: true)"
         if isinstance(receiver_type, Primitive) and receiver_type.kind == "string":
             if method == "startswith":
                 if len(args) == 2:
@@ -1616,7 +1619,9 @@ class DartBackend:
                 if isinstance(inner_type, Slice):
                     elem = inner_type.element
                     if isinstance(elem, Primitive) and elem.kind == "byte":
-                        return f"String.fromCharCodes({inner_str})"
+                        # Use utf8.decode with allowMalformed to replace invalid UTF-8 with U+FFFD
+                        # This matches Python's bytes.decode("utf-8", errors="replace")
+                        return f"utf8.decode({inner_str}, allowMalformed: true)"
                 if isinstance(inner_type, Primitive) and inner_type.kind == "rune":
                     return f"String.fromCharCode({inner_str})"
                 return f"({inner_str}).toString()"
@@ -1626,10 +1631,11 @@ class DartBackend:
                     return f"({inner_str}).codeUnitAt(0)"
                 # If already an int/rune, just use it directly
                 return inner_str
-        # String to bytes conversion
+        # String to bytes conversion (UTF-8 encoding)
         if isinstance(to_type, Slice) and isinstance(to_type.element, Primitive) and to_type.element.kind == "byte":
             if isinstance(inner_type, Primitive) and inner_type.kind == "string":
-                return f"{inner_str}.codeUnits"
+                # Use utf8.encode for proper UTF-8 encoding, matching Python's str.encode("utf-8")
+                return f"utf8.encode({inner_str})"
         return f"({inner_str} as {dart_type})"
 
     def _format_string(self, template: str, args: list[Expr]) -> str:

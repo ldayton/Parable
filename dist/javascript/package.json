@@ -1,8 +1,19 @@
 {
-  "name": "parable",
+  "name": "@ldayton/parable",
   "version": "0.1.0",
-  "description": "Bash parser",
+  "description": "A bash parser that exactly matches bash's behavior",
+  "license": "MIT",
+  "author": "Lily Dayton",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/ldayton/Parable.git",
+    "directory": "dist/javascript"
+  },
+  "homepage": "https://github.com/ldayton/Parable",
+  "bugs": "https://github.com/ldayton/Parable/issues",
+  "keywords": ["bash", "parser", "shell", "ast"],
   "main": "lib/parable.js",
+  "files": ["lib/"],
   "bin": {
     "parable-test": "bin/run-tests.js"
   },
@@ -10,5 +21,8 @@
     "transpile": "uv run --directory \"$TRANSPILER_DIR\" python -m src.tongues --target javascript < \"$SOURCE_FILE\" > lib/parable.js",
     "check-syntax": "node --check lib/parable.js",
     "check": "node bin/run-tests.js \"$TESTS_DIR\""
+  },
+  "engines": {
+    "node": ">=18"
   }
 }

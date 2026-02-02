@@ -1,8 +1,26 @@
 [project]
-name = "parable"
+name = "parable-parser"
 version = "0.1.0"
-description = "Bash parser"
+description = "A bash parser that exactly matches bash's behavior"
+readme = "README.md"
+license = "MIT"
+authors = [{ name = "Lily Dayton" }]
+keywords = ["bash", "parser", "shell", "ast"]
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Software Development :: Interpreters",
+]
 requires-python = ">=3.11"
+
+[project.urls]
+Homepage = "https://github.com/ldayton/Parable"
+Repository = "https://github.com/ldayton/Parable"
+Issues = "https://github.com/ldayton/Parable/issues"
 
 [project.scripts]
 parable-test = "parable.run_tests:main"

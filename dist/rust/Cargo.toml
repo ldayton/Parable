@@ -1,7 +1,14 @@
 [package]
-name = "parable"
+name = "parable-parser"
 version = "0.1.0"
 edition = "2021"
+description = "A bash parser that exactly matches bash's behavior"
+license = "MIT"
+authors = ["Lily Dayton"]
+repository = "https://github.com/ldayton/Parable"
+homepage = "https://github.com/ldayton/Parable"
+keywords = ["bash", "parser", "shell", "ast"]
+categories = ["parsing", "command-line-utilities"]
 
 [dependencies]
 regex = "1"

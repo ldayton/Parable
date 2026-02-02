@@ -6,15 +6,15 @@ tests_dir="$2"
 
 case "$cmd" in
     build)
-        dotnet build csharp.csproj -o bin --verbosity quiet
+        dotnet build Parable.csproj -o bin --verbosity quiet
         ;;
     check)
         if [[ -z "$tests_dir" ]]; then
             echo "Usage: docker run <image> check <tests_dir>" >&2
             exit 1
         fi
-        dotnet build csharp.csproj -o bin --verbosity quiet
-        dotnet bin/csharp.dll "$tests_dir"
+        dotnet build Parable.csproj -o bin --verbosity quiet
+        dotnet bin/Parable.dll "$tests_dir"
         ;;
     *)
         echo "Unknown command: $cmd" >&2

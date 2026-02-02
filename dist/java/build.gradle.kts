@@ -1,11 +1,17 @@
 plugins {
     java
     application
+    `maven-publish`
 }
+
+group = "com.ldayton"
+version = "0.1.0"
 
 java {
     sourceCompatibility = JavaVersion.VERSION_21
     targetCompatibility = JavaVersion.VERSION_21
+    withSourcesJar()
+    withJavadocJar()
 }
 
 application {
@@ -15,6 +21,35 @@ application {
 tasks.jar {
     manifest {
         attributes["Main-Class"] = "parable.RunTests"
+    }
+}
+
+publishing {
+    publications {
+        create<MavenPublication>("maven") {
+            artifactId = "parable"
+            from(components["java"])
+            pom {
+                name = "Parable"
+                description = "A bash parser that exactly matches bash's behavior"
+                url = "https://github.com/ldayton/Parable"
+                licenses {
+                    license {
+                        name = "MIT License"
+                        url = "https://opensource.org/licenses/MIT"
+                    }
+                }
+                developers {
+                    developer {
+                        name = "Lily Dayton"
+                    }
+                }
+                scm {
+                    url = "https://github.com/ldayton/Parable"
+                    connection = "scm:git:git://github.com/ldayton/Parable.git"
+                }
+            }
+        }
     }
 }
 

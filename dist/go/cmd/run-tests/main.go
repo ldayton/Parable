@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"parable"
+	"github.com/ldayton/parable"
 )
 
 type testCase struct {

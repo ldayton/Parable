@@ -72,12 +72,10 @@ backend-transpile backend:
             dist/java/gradlew -p dist/java transpile --quiet -PsourceFile="$(pwd)/src/parable.py" -PtranspilerDir="$(pwd)/transpiler"
             ;;
         javascript)
-            mkdir -p dist/js
-            uv run --directory transpiler python -m src.tongues --target javascript < "$(pwd)/src/parable.py" > dist/js/parable.js
+            just -f dist/javascript/justfile transpile "$(pwd)/src/parable.py" "$(pwd)/transpiler"
             ;;
         lua)
-            mkdir -p dist/lua
-            uv run --directory transpiler python -m src.tongues --target lua < "$(pwd)/src/parable.py" > dist/lua/parable.lua
+            just -f dist/lua/justfile transpile "$(pwd)/src/parable.py" "$(pwd)/transpiler"
             ;;
         perl)
             just -f dist/perl/justfile transpile "$(pwd)/src/parable.py" "$(pwd)/transpiler"
@@ -94,8 +92,7 @@ backend-transpile backend:
             just -f dist/ruby/justfile transpile "$(pwd)/src/parable.py" "$(pwd)/transpiler"
             ;;
         typescript)
-            mkdir -p dist/typescript
-            uv run --directory transpiler python -m src.tongues --target typescript < "$(pwd)/src/parable.py" > dist/typescript/parable.ts
+            just -f dist/typescript/justfile transpile "$(pwd)/src/parable.py" "$(pwd)/transpiler"
             ;;
         *)
             echo "Unknown backend: {{backend}}"
@@ -127,13 +124,10 @@ backend-test backend:
             dist/java/gradlew -p dist/java run --quiet -PsourceFile="$(pwd)/src/parable.py" -PtranspilerDir="$(pwd)/transpiler" --args="$tests_abs"
             ;;
         javascript)
-            just backend-transpile javascript
-            node tests/bin/run-js-tests.js dist/js
+            just -f dist/javascript/justfile check "$(pwd)/src/parable.py" "$(pwd)/transpiler" "$tests_abs"
             ;;
         lua)
-            just backend-transpile lua
-            luac -p dist/lua/parable.lua
-            lua -l ./dist/lua/parable tests/bin/run-tests.lua "$(pwd)/tests"
+            just -f dist/lua/justfile check "$(pwd)/src/parable.py" "$(pwd)/transpiler" "$tests_abs"
             ;;
         perl)
             just -f dist/perl/justfile check "$(pwd)/src/parable.py" "$(pwd)/transpiler" "$tests_abs"
@@ -151,9 +145,7 @@ backend-test backend:
             just -f dist/ruby/justfile check "$(pwd)/src/parable.py" "$(pwd)/transpiler" "$tests_abs"
             ;;
         typescript)
-            just backend-transpile typescript
-            tsc --outDir dist/js --lib es2019 --module commonjs --esModuleInterop dist/typescript/parable.ts
-            node tests/bin/run-js-tests.js dist/js
+            just -f dist/typescript/justfile check "$(pwd)/src/parable.py" "$(pwd)/transpiler" "$tests_abs"
             ;;
         *)
             echo "No test runner for backend: {{backend}}"

@@ -1,0 +1,12 @@
+{
+  "name": "parable",
+  "version": "0.1.0",
+  "description": "Bash parser",
+  "main": "lib/parable.js",
+  "bin": {
+    "parable-test": "bin/run-tests.js"
+  },
+  "scripts": {
+    "test": "node bin/run-tests.js"
+  }
+}

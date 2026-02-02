@@ -1,0 +1,12 @@
+# Transpile source to lib/parable.js
+transpile source_file transpiler_dir:
+    uv run --directory "{{transpiler_dir}}" python -m src.tongues --target javascript < "{{source_file}}" > lib/parable.js
+
+# Syntax check
+check-syntax:
+    node --check lib/parable.js
+
+# Run tests
+check source_file transpiler_dir tests_dir:
+    just transpile "{{source_file}}" "{{transpiler_dir}}"
+    node bin/run-tests.js "{{tests_dir}}"

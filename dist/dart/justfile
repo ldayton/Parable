@@ -1,0 +1,13 @@
+# Transpile source to lib/parable.dart
+transpile source_file transpiler_dir:
+    mkdir -p lib
+    uv run --directory "{{transpiler_dir}}" python -m src.tongues --target dart < "{{source_file}}" > lib/parable.dart
+
+# Build the project
+build:
+    dart compile exe bin/run_tests.dart -o bin/run_tests
+
+# Run tests
+check source_file transpiler_dir tests_dir:
+    just transpile "{{source_file}}" "{{transpiler_dir}}"
+    dart run bin/run_tests.dart "{{tests_dir}}"

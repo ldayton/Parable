@@ -1,0 +1,9 @@
+{
+    "name": "parable/parable",
+    "description": "Bash parser",
+    "scripts": {
+        "transpile": "mkdir -p lib && uv run --directory \"$TRANSPILER_DIR\" python -m src.tongues --target php < \"$SOURCE_FILE\" > lib/parable.php",
+        "check-syntax": "php -l lib/parable.php",
+        "check": "php bin/run_tests \"$TESTS_DIR\""
+    }
+}

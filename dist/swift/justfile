@@ -1,0 +1,12 @@
+# Transpile source to Sources/Parable/Parable.swift
+transpile source_file transpiler_dir:
+    uv run --directory "{{transpiler_dir}}" python -m src.tongues --target swift < "{{source_file}}" > Sources/Parable/Parable.swift
+
+# Build the project
+build:
+    swift build -c release
+
+# Run tests
+check source_file transpiler_dir tests_dir:
+    just transpile "{{source_file}}" "{{transpiler_dir}}"
+    swift run -c release RunTests "{{tests_dir}}"

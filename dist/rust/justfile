@@ -1,0 +1,12 @@
+# Transpile source to src/parable.rs
+transpile source_file transpiler_dir:
+    uv run --directory "{{transpiler_dir}}" python -m src.tongues --target rust < "{{source_file}}" | rustfmt > src/parable.rs
+
+# Build the project
+build:
+    cargo build --release
+
+# Run tests
+check source_file transpiler_dir tests_dir:
+    just transpile "{{source_file}}" "{{transpiler_dir}}"
+    cargo run --release --bin run_tests -- "{{tests_dir}}"

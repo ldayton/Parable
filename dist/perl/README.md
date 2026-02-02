@@ -1,4 +1,4 @@
-# Parable Python
+# Parable Perl
 
 ```bash
 just transpile /path/to/parable.py /path/to/transpiler

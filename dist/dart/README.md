@@ -1,4 +1,4 @@
-# Parable Python
+# Parable Dart
 
 ```bash
 just transpile /path/to/parable.py /path/to/transpiler

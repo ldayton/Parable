@@ -71,26 +71,25 @@ backend-transpile backend:
             dist/java/gradlew -p dist/java transpile --quiet -PsourceFile="$(pwd)/src/parable.py" -PtranspilerDir="$(pwd)/transpiler"
             ;;
         javascript)
-            just -f dist/javascript/justfile transpile "$(pwd)/src/parable.py" "$(pwd)/transpiler"
+            SOURCE_FILE="$(pwd)/src/parable.py" TRANSPILER_DIR="$(pwd)/transpiler" npm --prefix dist/javascript run transpile
             ;;
         lua)
-            just -f dist/lua/justfile transpile "$(pwd)/src/parable.py" "$(pwd)/transpiler"
+            SOURCE_FILE="$(pwd)/src/parable.py" TRANSPILER_DIR="$(pwd)/transpiler" make -C dist/lua transpile
             ;;
         perl)
-            just -f dist/perl/justfile transpile "$(pwd)/src/parable.py" "$(pwd)/transpiler"
+            SOURCE_FILE="$(pwd)/src/parable.py" TRANSPILER_DIR="$(pwd)/transpiler" make -C dist/perl transpile
             ;;
         php)
-            just -f dist/php/justfile transpile "$(pwd)/src/parable.py" "$(pwd)/transpiler"
+            SOURCE_FILE="$(pwd)/src/parable.py" TRANSPILER_DIR="$(pwd)/transpiler" composer --working-dir=dist/php run transpile
             ;;
         python)
-            mkdir -p dist/python/src/parable
-            uv run --directory transpiler python -m src.tongues --target python < "$(pwd)/src/parable.py" > dist/python/src/parable/parable.py
+            SOURCE_FILE="$(pwd)/src/parable.py" TRANSPILER_DIR="$(pwd)/transpiler" make -C dist/python transpile
             ;;
         ruby)
-            just -f dist/ruby/justfile transpile "$(pwd)/src/parable.py" "$(pwd)/transpiler"
+            SOURCE_FILE="$(pwd)/src/parable.py" TRANSPILER_DIR="$(pwd)/transpiler" rake -C dist/ruby transpile
             ;;
         typescript)
-            just -f dist/typescript/justfile transpile "$(pwd)/src/parable.py" "$(pwd)/transpiler"
+            SOURCE_FILE="$(pwd)/src/parable.py" TRANSPILER_DIR="$(pwd)/transpiler" npm --prefix dist/typescript run transpile
             ;;
         *)
             echo "Unknown backend: {{backend}}"
@@ -120,26 +119,33 @@ backend-test backend:
             dist/java/gradlew -p dist/java run --quiet -PsourceFile="$(pwd)/src/parable.py" -PtranspilerDir="$(pwd)/transpiler" --args="$tests_abs"
             ;;
         javascript)
-            just -f dist/javascript/justfile check "$(pwd)/src/parable.py" "$(pwd)/transpiler" "$tests_abs"
+            SOURCE_FILE="$(pwd)/src/parable.py" TRANSPILER_DIR="$(pwd)/transpiler" npm --prefix dist/javascript run transpile
+            TESTS_DIR="$tests_abs" npm --prefix dist/javascript run check
             ;;
         lua)
-            just -f dist/lua/justfile check "$(pwd)/src/parable.py" "$(pwd)/transpiler" "$tests_abs"
+            SOURCE_FILE="$(pwd)/src/parable.py" TRANSPILER_DIR="$(pwd)/transpiler" make -C dist/lua transpile
+            TESTS_DIR="$tests_abs" make -C dist/lua check
             ;;
         perl)
-            just -f dist/perl/justfile check "$(pwd)/src/parable.py" "$(pwd)/transpiler" "$tests_abs"
+            SOURCE_FILE="$(pwd)/src/parable.py" TRANSPILER_DIR="$(pwd)/transpiler" make -C dist/perl transpile
+            TESTS_DIR="$tests_abs" make -C dist/perl check
             ;;
         php)
-            just -f dist/php/justfile check "$(pwd)/src/parable.py" "$(pwd)/transpiler" "$tests_abs"
+            SOURCE_FILE="$(pwd)/src/parable.py" TRANSPILER_DIR="$(pwd)/transpiler" composer --working-dir=dist/php run transpile
+            TESTS_DIR="$tests_abs" composer --working-dir=dist/php run check
             ;;
         python)
-            just backend-transpile python
-            uv run --directory dist/python parable-test "$tests_abs"
+            SOURCE_FILE="$(pwd)/src/parable.py" TRANSPILER_DIR="$(pwd)/transpiler" make -C dist/python transpile
+            TESTS_DIR="$tests_abs" make -C dist/python check
             ;;
         ruby)
-            just -f dist/ruby/justfile check "$(pwd)/src/parable.py" "$(pwd)/transpiler" "$tests_abs"
+            SOURCE_FILE="$(pwd)/src/parable.py" TRANSPILER_DIR="$(pwd)/transpiler" rake -C dist/ruby transpile
+            TESTS_DIR="$tests_abs" rake -C dist/ruby check
             ;;
         typescript)
-            just -f dist/typescript/justfile check "$(pwd)/src/parable.py" "$(pwd)/transpiler" "$tests_abs"
+            SOURCE_FILE="$(pwd)/src/parable.py" TRANSPILER_DIR="$(pwd)/transpiler" npm --prefix dist/typescript run transpile
+            npm --prefix dist/typescript run build
+            TESTS_DIR="$tests_abs" npm --prefix dist/typescript run check
             ;;
         *)
             echo "No test runner for backend: {{backend}}"

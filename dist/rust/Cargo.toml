@@ -1,0 +1,14 @@
+[package]
+name = "parable"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+regex = "1"
+
+[lib]
+path = "src/lib.rs"
+
+[[bin]]
+name = "run_tests"
+path = "src/bin/run_tests.rs"

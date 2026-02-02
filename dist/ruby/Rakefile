@@ -1,0 +1,19 @@
+# frozen_string_literal: true
+
+desc 'Transpile parable.py to Ruby'
+task :transpile do
+  source_file = ENV.fetch('SOURCE_FILE')
+  transpiler_dir = ENV.fetch('TRANSPILER_DIR')
+  sh "uv run --directory '#{transpiler_dir}' python -m src.tongues --target ruby < '#{source_file}' > lib/parable.rb"
+end
+
+desc 'Syntax check'
+task :'check-syntax' do
+  sh 'ruby -c lib/parable.rb'
+end
+
+desc 'Run tests'
+task :check do
+  tests_dir = ENV.fetch('TESTS_DIR')
+  sh "ruby -Ilib bin/run_tests '#{tests_dir}'"
+end

@@ -7,6 +7,8 @@
     "parable-test": "bin/run-tests.js"
   },
   "scripts": {
-    "test": "node bin/run-tests.js"
+    "transpile": "uv run --directory \"$TRANSPILER_DIR\" python -m src.tongues --target javascript < \"$SOURCE_FILE\" > lib/parable.js",
+    "check-syntax": "node --check lib/parable.js",
+    "check": "node bin/run-tests.js \"$TESTS_DIR\""
   }
 }

@@ -5,8 +5,9 @@
   "type": "commonjs",
   "main": "dist/parable.js",
   "scripts": {
+    "transpile": "uv run --directory \"$TRANSPILER_DIR\" python -m src.tongues --target typescript < \"$SOURCE_FILE\" > src/parable.ts",
     "build": "tsc",
-    "test": "node dist/run_tests.js"
+    "check": "PARABLE_PATH=\"$(pwd)/dist\" node bin/run-tests.js \"$TESTS_DIR\""
   },
   "devDependencies": {
     "typescript": "^5.0.0",

@@ -1,0 +1,12 @@
+# Transpile source to src/parable.zig
+transpile source_file transpiler_dir:
+    uv run --directory "{{transpiler_dir}}" python -m src.tongues --target zig < "{{source_file}}" > src/parable.zig
+
+# Build the project
+build:
+    zig build -Doptimize=ReleaseFast
+
+# Run tests
+check source_file transpiler_dir tests_dir:
+    just transpile "{{source_file}}" "{{transpiler_dir}}"
+    zig build run -Doptimize=ReleaseFast -- "{{tests_dir}}"

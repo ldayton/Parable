@@ -1,4 +1,4 @@
-# Parable Python
+# Parable Zig
 
 ```bash
 just transpile /path/to/parable.py /path/to/transpiler

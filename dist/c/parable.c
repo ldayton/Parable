@@ -11248,7 +11248,9 @@ static Node * Parser_parse_for(Parser *self) {
             snprintf(g_error_msg, sizeof(g_error_msg), "%s", "Expected brace group in for loop");
             return NULL;
         }
-        return For_new(var_name, &words, brace_group->body, Parser__collect_redirects(self), "for");
+        Vec_Word *_tmp_slice72 = (Vec_Word *)arena_alloc(g_arena, sizeof(Vec_Word));
+        *_tmp_slice72 = words;
+        return For_new(var_name, _tmp_slice72, brace_group->body, Parser__collect_redirects(self), "for");
     }
     if (!(Parser__lex_consume_word(self, "do"))) {
         g_parse_error = 1;
@@ -11267,7 +11269,9 @@ static Node * Parser_parse_for(Parser *self) {
         snprintf(g_error_msg, sizeof(g_error_msg), "%s", "Expected 'done' to close for loop");
         return NULL;
     }
-    return For_new(var_name, &words, body, Parser__collect_redirects(self), "for");
+    Vec_Word *_tmp_slice73 = (Vec_Word *)arena_alloc(g_arena, sizeof(Vec_Word));
+    *_tmp_slice73 = words;
+    return For_new(var_name, _tmp_slice73, body, Parser__collect_redirects(self), "for");
 }
 
 static ForArith * Parser__parse_for_arith(Parser *self) {
@@ -11364,7 +11368,9 @@ static Select * Parser_parse_select(Parser *self) {
     }
     Parser_skip_whitespace_and_newlines(self);
     Node * body = (Node *)Parser__parse_loop_body(self, "select");
-    return Select_new(var_name, &words, body, Parser__collect_redirects(self), "select");
+    Vec_Word *_tmp_slice74 = (Vec_Word *)arena_alloc(g_arena, sizeof(Vec_Word));
+    *_tmp_slice74 = words;
+    return Select_new(var_name, _tmp_slice74, body, Parser__collect_redirects(self), "select");
 }
 
 static const char * Parser__consume_case_terminator(Parser *self) {
@@ -12083,9 +12089,9 @@ static Node * Parser__parse_simple_pipeline(Parser *self) {
     Vec_Node commands = ({ Node * *_slc = (Node * *)arena_alloc(g_arena, 1 * sizeof(Node *)); _slc[0] = cmd; (Vec_Node){_slc, 1, 1}; });
     while (true) {
         Parser_skip_whitespace(self);
-        Tuple_int64_t_constcharPtr _tup72 = Parser__lex_peek_operator(self);
-        int64_t token_type = _tup72.F0;
-        const char * value = _tup72.F1;
+        Tuple_int64_t_constcharPtr _tup75 = Parser__lex_peek_operator(self);
+        int64_t token_type = _tup75.F0;
+        const char * value = _tup75.F1;
         if ((token_type == 0)) {
             break;
         }
@@ -12114,8 +12120,8 @@ static Node * Parser__parse_simple_pipeline(Parser *self) {
 
 static const char * Parser_parse_list_operator(Parser *self) {
     Parser_skip_whitespace(self);
-    Tuple_int64_t_constcharPtr _tup73 = Parser__lex_peek_operator(self);
-    int64_t token_type = _tup73.F0;
+    Tuple_int64_t_constcharPtr _tup76 = Parser__lex_peek_operator(self);
+    int64_t token_type = _tup76.F0;
     if ((token_type == 0)) {
         return "";
     }
@@ -12324,16 +12330,16 @@ static void Parser__strip_trailing_backslash_from_last_word(Parser *self, Vec_No
 }
 
 static Word * Parser__find_last_word(Parser *self, Node * node) {
-    void *_tsexpr74 = node;
-    if (strcmp(((Word *)_tsexpr74)->kind, "word") == 0) {
-        Word *node = (Word *)_tsexpr74;
+    void *_tsexpr77 = node;
+    if (strcmp(((Word *)_tsexpr77)->kind, "word") == 0) {
+        Word *node = (Word *)_tsexpr77;
         return node;
     }
     Word * last_word;
     Node * last_redirect;
-    void *_tsexpr75 = node;
-    if (strcmp(((Command *)_tsexpr75)->kind, "command") == 0) {
-        Command *node = (Command *)_tsexpr75;
+    void *_tsexpr78 = node;
+    if (strcmp(((Command *)_tsexpr78)->kind, "command") == 0) {
+        Command *node = (Command *)_tsexpr78;
         if ((node->words.len > 0)) {
             last_word = node->words.data[(node->words.len - 1)];
             if (_str_endswith(last_word->value, "\\")) {
@@ -12342,9 +12348,9 @@ static Word * Parser__find_last_word(Parser *self, Node * node) {
         }
         if ((node->redirects.len > 0)) {
             last_redirect = (Node *)node->redirects.data[(node->redirects.len - 1)];
-            void *_tsexpr76 = last_redirect;
-            if (strcmp(((Redirect *)_tsexpr76)->kind, "redirect") == 0) {
-                Redirect *last_redirect = (Redirect *)_tsexpr76;
+            void *_tsexpr79 = last_redirect;
+            if (strcmp(((Redirect *)_tsexpr79)->kind, "redirect") == 0) {
+                Redirect *last_redirect = (Redirect *)_tsexpr79;
                 return last_redirect->target;
             }
         }
@@ -12352,16 +12358,16 @@ static Word * Parser__find_last_word(Parser *self, Node * node) {
             return node->words.data[(node->words.len - 1)];
         }
     }
-    void *_tsexpr77 = node;
-    if (strcmp(((Pipeline *)_tsexpr77)->kind, "pipeline") == 0) {
-        Pipeline *node = (Pipeline *)_tsexpr77;
+    void *_tsexpr80 = node;
+    if (strcmp(((Pipeline *)_tsexpr80)->kind, "pipeline") == 0) {
+        Pipeline *node = (Pipeline *)_tsexpr80;
         if ((node->commands.len > 0)) {
             return Parser__find_last_word(self, node->commands.data[(node->commands.len - 1)]);
         }
     }
-    void *_tsexpr78 = node;
-    if (strcmp(((List *)_tsexpr78)->kind, "list") == 0) {
-        List *node = (List *)_tsexpr78;
+    void *_tsexpr81 = node;
+    if (strcmp(((List *)_tsexpr81)->kind, "list") == 0) {
+        List *node = (List *)_tsexpr81;
         if ((node->parts.len > 0)) {
             return Parser__find_last_word(self, node->parts.data[(node->parts.len - 1)]);
         }

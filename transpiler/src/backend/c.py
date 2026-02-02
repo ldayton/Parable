@@ -3101,20 +3101,20 @@ static bool _map_contains(void *map, const char *key) {
                             and isinstance(val_type, Slice)
                             and not isinstance(val_type, (Optional, Pointer))
                         ):
-                            # If it's an rvalue, emit heap-allocated temp to avoid stack-use-after-return
-                            if not self._is_lvalue(field_val):
-                                tmp_name = self._temp_name("_tmp_slice")
-                                vec_type = self._type_to_c(val_type)
-                                val_str = self._emit_expr(field_val)
-                                # Allocate Vec on heap (arena) to outlive current stack frame
-                                self._line(
-                                    f"{vec_type} *{tmp_name} = ({vec_type} *)arena_alloc(g_arena, sizeof({vec_type}));"
-                                )
-                                self._line(f"*{tmp_name} = {val_str};")
-                                # Store tmp_name directly (it's already a pointer)
-                                self._rvalue_temps.append(
-                                    (name, fname, tmp_name, True)
-                                )  # True = already a pointer
+                            # Always emit heap-allocated temp to avoid stack-use-after-return.
+                            # Local variables (lvalues) can also dangle if passed to returned structs.
+                            tmp_name = self._temp_name("_tmp_slice")
+                            vec_type = self._type_to_c(val_type)
+                            val_str = self._emit_expr(field_val)
+                            # Allocate Vec on heap (arena) to outlive current stack frame
+                            self._line(
+                                f"{vec_type} *{tmp_name} = ({vec_type} *)arena_alloc(g_arena, sizeof({vec_type}));"
+                            )
+                            self._line(f"*{tmp_name} = {val_str};")
+                            # Store tmp_name directly (it's already a pointer)
+                            self._rvalue_temps.append(
+                                (name, fname, tmp_name, True)
+                            )  # True = already a pointer
                         # Recurse into nested StructLits
                         self._emit_rvalue_temps(field_val)
             else:

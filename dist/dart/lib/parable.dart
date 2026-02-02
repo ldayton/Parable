@@ -3337,11 +3337,11 @@ class Word implements Node {
                   result.add("\${ }");
                 } else {
                   try {
-                    parser = newParser(inner.trimLeft(), false, false);
+                    parser = newParser(_trimLeft(inner, " \t\n|"), false, false);
                     parsed = parser.parseList(true);
                     if (parsed != null) {
                       formatted = _formatCmdsubNode(parsed, 0, false, false, false);
-                      formatted = formatted.trimRight();
+                      formatted = _trimRight(formatted, ";");
                       String terminator = "";
                       if (inner.trimRight().endsWith("\n")) {
                         terminator = "\n }";
@@ -3874,7 +3874,7 @@ class Redirect implements Node {
   }
 
   String toSexp() {
-    String op = this.op.trimLeft(); 
+    String op = _trimLeft(this.op, "0123456789"); 
     if (op.startsWith("{")) {
       int j = 1; 
       if (j < op.length && (((op[j]).toString().isNotEmpty && RegExp(r'^[a-zA-Z]+$').hasMatch((op[j]).toString())) || (op[j]).toString() == "_")) {
@@ -9980,7 +9980,7 @@ String _formatCmdsubNode(Node node, int indent, bool inProcsub, bool compactRedi
     case Function_ nodeFunction_:
       String name = nodeFunction_.name; 
       Node innerBody = (nodeFunction_.body.kind == "brace-group" ? (nodeFunction_.body as BraceGroup).body : nodeFunction_.body); 
-      String body = _formatCmdsubNode(innerBody, indent + 4, false, false, false).trimRight(); 
+      String body = _trimRight(_formatCmdsubNode(innerBody, indent + 4, false, false, false), ";"); 
       return "function \${name} () \n{ \n\${innerSp}\${body}\n}";
   }
   switch (node) {
@@ -10008,7 +10008,7 @@ String _formatCmdsubNode(Node node, int indent, bool inProcsub, bool compactRedi
   switch (node) {
     case BraceGroup nodeBraceGroup:
       String body = _formatCmdsubNode(nodeBraceGroup.body, indent, false, false, false); 
-      body = body.trimRight();
+      body = _trimRight(body, ";");
       String terminator = (body.endsWith(" &") ? " }" : "; }"); 
       String redirects = ""; 
       if ((nodeBraceGroup.redirects != null && nodeBraceGroup.redirects!.isNotEmpty)) {

@@ -1,0 +1,13 @@
+# Transpile source to src/parable.ts
+transpile source_file transpiler_dir:
+    uv run --directory "{{transpiler_dir}}" python -m src.tongues --target typescript < "{{source_file}}" > src/parable.ts
+
+# Build the module
+build:
+    npm run build
+
+# Run tests
+check source_file transpiler_dir tests_dir:
+    just transpile "{{source_file}}" "{{transpiler_dir}}"
+    npm run build
+    node dist/run_tests.js "{{tests_dir}}"

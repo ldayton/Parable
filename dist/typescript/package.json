@@ -1,0 +1,15 @@
+{
+  "name": "parable",
+  "version": "0.1.0",
+  "description": "Bash parser",
+  "type": "commonjs",
+  "main": "dist/parable.js",
+  "scripts": {
+    "build": "tsc",
+    "test": "node dist/run_tests.js"
+  },
+  "devDependencies": {
+    "typescript": "^5.0.0",
+    "@types/node": "^20.0.0"
+  }
+}

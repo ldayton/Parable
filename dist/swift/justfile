@@ -1,12 +1,35 @@
-# Transpile source to Sources/Parable/Parable.swift
-transpile source_file transpiler_dir:
-    uv run --directory "{{transpiler_dir}}" python -m src.tongues --target swift < "{{source_file}}" > Sources/Parable/Parable.swift
+image := "parable-swift"
+transpiler_image := "parable-transpiler"
 
-# Build the project
-build:
-    swift build -c release
+# Build the transpiler Docker image
+[private]
+docker-build-transpiler transpiler_dir:
+    docker build -t {{transpiler_image}} "{{transpiler_dir}}"
 
-# Run tests
-check source_file transpiler_dir tests_dir:
-    just transpile "{{source_file}}" "{{transpiler_dir}}"
-    swift run -c release RunTests "{{tests_dir}}"
+# Build the Swift Docker image
+[private]
+docker-build:
+    docker build -t {{image}} .
+
+# Transpile source to Sources/Parable/Parable.swift (in Docker)
+transpile source_file transpiler_dir: (docker-build-transpiler transpiler_dir)
+    mkdir -p Sources/Parable
+    docker run --rm \
+        -v "{{source_file}}:/source.py:ro" \
+        -v "{{justfile_directory()}}/Sources/Parable:/output" \
+        {{transpiler_image}} swift /source.py /output/Parable.swift
+
+# Build the project (in Docker)
+build source_file transpiler_dir: (transpile source_file transpiler_dir) docker-build
+    docker run --rm \
+        -v "{{justfile_directory()}}:/workspace" \
+        -w /workspace \
+        {{image}} build
+
+# Run tests (in Docker)
+check source_file transpiler_dir tests_dir: (transpile source_file transpiler_dir) docker-build
+    docker run --rm \
+        -v "{{justfile_directory()}}:/workspace" \
+        -v "{{tests_dir}}:/tests:ro" \
+        -w /workspace \
+        {{image}} check /tests

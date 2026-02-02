@@ -6,3 +6,6 @@ RUN apt-get update && apt-get install -y software-properties-common \
     && rm -rf /var/lib/apt/lists/* \
     && php --version | head -1 | grep -q "8\.3"
 WORKDIR /workspace
+COPY docker-entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]

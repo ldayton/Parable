@@ -1,4 +1,4 @@
-image := "parable-rust"
+image := "parable-lua"
 transpiler_image := "parable-transpiler"
 
 # Build the transpiler Docker image
@@ -6,18 +6,17 @@ transpiler_image := "parable-transpiler"
 docker-build-transpiler transpiler_dir:
     docker build -t {{transpiler_image}} "{{transpiler_dir}}"
 
-# Build the Rust Docker image
+# Build the Lua Docker image
 [private]
 docker-build:
     docker build -t {{image}} .
 
-# Transpile source to src/parable.rs (in Docker)
+# Transpile source to parable.lua (in Docker)
 transpile source_file transpiler_dir: (docker-build-transpiler transpiler_dir)
-    mkdir -p src
     docker run --rm \
         -v "{{source_file}}:/source.py:ro" \
-        -v "{{justfile_directory()}}/src:/output" \
-        {{transpiler_image}} rust /source.py /output/parable.rs
+        -v "{{justfile_directory()}}:/output" \
+        {{transpiler_image}} lua /source.py /output/parable.lua
 
 # Build the project (in Docker)
 build source_file transpiler_dir: (transpile source_file transpiler_dir) docker-build

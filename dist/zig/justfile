@@ -1,12 +1,35 @@
-# Transpile source to src/parable.zig
-transpile source_file transpiler_dir:
-    uv run --directory "{{transpiler_dir}}" python -m src.tongues --target zig < "{{source_file}}" > src/parable.zig
+image := "parable-zig"
+transpiler_image := "parable-transpiler"
 
-# Build the project
-build:
-    zig build -Doptimize=ReleaseFast
+# Build the transpiler Docker image
+[private]
+docker-build-transpiler transpiler_dir:
+    docker build -t {{transpiler_image}} "{{transpiler_dir}}"
 
-# Run tests
-check source_file transpiler_dir tests_dir:
-    just transpile "{{source_file}}" "{{transpiler_dir}}"
-    zig build run -Doptimize=ReleaseFast -- "{{tests_dir}}"
+# Build the Zig Docker image
+[private]
+docker-build:
+    docker build -t {{image}} .
+
+# Transpile source to src/parable.zig (in Docker)
+transpile source_file transpiler_dir: (docker-build-transpiler transpiler_dir)
+    mkdir -p src
+    docker run --rm \
+        -v "{{source_file}}:/source.py:ro" \
+        -v "{{justfile_directory()}}/src:/output" \
+        {{transpiler_image}} zig /source.py /output/parable.zig
+
+# Build the project (in Docker)
+build source_file transpiler_dir: (transpile source_file transpiler_dir) docker-build
+    docker run --rm \
+        -v "{{justfile_directory()}}:/workspace" \
+        -w /workspace \
+        {{image}} build
+
+# Run tests (in Docker)
+check source_file transpiler_dir tests_dir: (transpile source_file transpiler_dir) docker-build
+    docker run --rm \
+        -v "{{justfile_directory()}}:/workspace" \
+        -v "{{tests_dir}}:/tests:ro" \
+        -w /workspace \
+        {{image}} check /tests

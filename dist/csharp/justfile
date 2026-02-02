@@ -1,13 +1,34 @@
-# Transpile source to Parable.cs
-transpile source_file transpiler_dir:
-    uv run --directory "{{transpiler_dir}}" python -m src.tongues --target csharp < "{{source_file}}" > Parable.cs
+image := "parable-csharp"
+transpiler_image := "parable-transpiler"
 
-# Build the project
-build:
-    dotnet build csharp.csproj -o bin --verbosity quiet
+# Build the transpiler Docker image
+[private]
+docker-build-transpiler transpiler_dir:
+    docker build -t {{transpiler_image}} "{{transpiler_dir}}"
 
-# Run tests
-check source_file transpiler_dir tests_dir:
-    just transpile "{{source_file}}" "{{transpiler_dir}}"
-    just build
-    dotnet bin/csharp.dll "{{tests_dir}}"
+# Build the C# Docker image
+[private]
+docker-build:
+    docker build -t {{image}} .
+
+# Transpile source to Parable.cs (in Docker)
+transpile source_file transpiler_dir: (docker-build-transpiler transpiler_dir)
+    docker run --rm \
+        -v "{{source_file}}:/source.py:ro" \
+        -v "{{justfile_directory()}}:/output" \
+        {{transpiler_image}} csharp /source.py /output/Parable.cs
+
+# Build the project (in Docker)
+build source_file transpiler_dir: (transpile source_file transpiler_dir) docker-build
+    docker run --rm \
+        -v "{{justfile_directory()}}:/workspace" \
+        -w /workspace \
+        {{image}} build
+
+# Run tests (in Docker)
+check source_file transpiler_dir tests_dir: (transpile source_file transpiler_dir) docker-build
+    docker run --rm \
+        -v "{{justfile_directory()}}:/workspace" \
+        -v "{{tests_dir}}:/tests:ro" \
+        -w /workspace \
+        {{image}} check /tests

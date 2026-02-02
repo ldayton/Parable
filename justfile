@@ -3,7 +3,7 @@ set shell := ["bash", "-o", "pipefail", "-cu"]
 # --- Configuration ---
 project := "parable"
 run_id := `head -c 16 /dev/urandom | xxd -p`
-backends := "c csharp go java javascript lua perl php python ruby typescript"  # All backends
+backends := "csharp go java javascript lua perl php python ruby typescript"
 
 # --- Helpers ---
 
@@ -68,7 +68,7 @@ backend-transpile backend:
             just -f dist/go/justfile transpile "$(pwd)/src/parable.py" "$(pwd)/transpiler"
             ;;
         java)
-            dist/java/gradlew -p dist/java transpile --quiet -PsourceFile="$(pwd)/src/parable.py" -PtranspilerDir="$(pwd)/transpiler"
+            just -f dist/java/justfile transpile "$(pwd)/src/parable.py" "$(pwd)/transpiler"
             ;;
         javascript)
             SOURCE_FILE="$(pwd)/src/parable.py" TRANSPILER_DIR="$(pwd)/transpiler" npm --prefix dist/javascript run transpile
@@ -106,8 +106,7 @@ backend-test backend:
     tests_abs="$(pwd)/tests"
     case "{{backend}}" in
         c)
-            just backend-transpile c
-            just -f dist/c/justfile check "$tests_abs"
+            just -f dist/c/justfile check "$(pwd)/src/parable.py" "$(pwd)/transpiler" "$tests_abs"
             ;;
         csharp)
             just -f dist/csharp/justfile check "$(pwd)/src/parable.py" "$(pwd)/transpiler" "$tests_abs"
@@ -116,7 +115,7 @@ backend-test backend:
             just -f dist/go/justfile check "$(pwd)/src/parable.py" "$(pwd)/transpiler" "$tests_abs"
             ;;
         java)
-            dist/java/gradlew -p dist/java run --quiet -PsourceFile="$(pwd)/src/parable.py" -PtranspilerDir="$(pwd)/transpiler" --args="$tests_abs"
+            just -f dist/java/justfile check "$(pwd)/src/parable.py" "$(pwd)/transpiler" "$tests_abs"
             ;;
         javascript)
             SOURCE_FILE="$(pwd)/src/parable.py" TRANSPILER_DIR="$(pwd)/transpiler" npm --prefix dist/javascript run transpile

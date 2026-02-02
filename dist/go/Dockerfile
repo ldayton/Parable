@@ -6,3 +6,6 @@ RUN apt-get update && apt-get install -y curl \
     && /usr/local/go/bin/go version | grep -q "go1\.21\.5"
 ENV PATH="/usr/local/go/bin:${PATH}"
 WORKDIR /workspace
+COPY docker-entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]

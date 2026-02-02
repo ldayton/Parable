@@ -7,3 +7,6 @@ RUN apt-get update && apt-get install -y curl gnupg \
     && rm -rf /var/lib/apt/lists/* \
     && java --version | head -1 | grep -q "21\."
 WORKDIR /workspace
+COPY docker-entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
+ENTRYPOINT ["/entrypoint.sh"]

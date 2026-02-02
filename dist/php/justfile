@@ -1,0 +1,13 @@
+# Transpile source to lib/parable.php
+transpile source_file transpiler_dir:
+    mkdir -p lib
+    uv run --directory "{{transpiler_dir}}" python -m src.tongues --target php < "{{source_file}}" > lib/parable.php
+
+# Syntax check
+check-syntax:
+    php -l lib/parable.php
+
+# Run tests
+check source_file transpiler_dir tests_dir:
+    just transpile "{{source_file}}" "{{transpiler_dir}}"
+    php bin/run_tests "{{tests_dir}}"

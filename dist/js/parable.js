@@ -3909,7 +3909,7 @@ var Redirect = /** @class */ (function () {
     function Redirect(op, target, fd, kind) {
         if (op === void 0) { op = ""; }
         if (target === void 0) { target = null; }
-        if (fd === void 0) { fd = null; }
+        if (fd === void 0) { fd = 0; }
         if (kind === void 0) { kind = ""; }
         this.op = op;
         this.target = target;
@@ -3995,7 +3995,7 @@ var HereDoc = /** @class */ (function () {
         if (content === void 0) { content = ""; }
         if (stripTabs === void 0) { stripTabs = false; }
         if (quoted === void 0) { quoted = false; }
-        if (fd === void 0) { fd = null; }
+        if (fd === void 0) { fd = 0; }
         if (complete === void 0) { complete = false; }
         if (StartPos === void 0) { StartPos = 0; }
         if (kind === void 0) { kind = ""; }
@@ -4024,10 +4024,10 @@ var HereDoc = /** @class */ (function () {
 var Subshell = /** @class */ (function () {
     function Subshell(body, redirects, kind) {
         if (body === void 0) { body = null; }
-        if (redirects === void 0) { redirects = []; }
+        if (redirects === void 0) { redirects = null; }
         if (kind === void 0) { kind = ""; }
         this.body = body;
-        this.redirects = redirects !== null && redirects !== void 0 ? redirects : [];
+        this.redirects = redirects;
         this.kind = kind;
     }
     Subshell.prototype.toSexp = function () {
@@ -4042,10 +4042,10 @@ var Subshell = /** @class */ (function () {
 var BraceGroup = /** @class */ (function () {
     function BraceGroup(body, redirects, kind) {
         if (body === void 0) { body = null; }
-        if (redirects === void 0) { redirects = []; }
+        if (redirects === void 0) { redirects = null; }
         if (kind === void 0) { kind = ""; }
         this.body = body;
-        this.redirects = redirects !== null && redirects !== void 0 ? redirects : [];
+        this.redirects = redirects;
         this.kind = kind;
     }
     BraceGroup.prototype.toSexp = function () {
@@ -6998,7 +6998,7 @@ var Parser = /** @class */ (function () {
             if (target === null) {
                 throw new ParseError("".concat("Expected target for redirect " + op, " at position ").concat(this.pos), this.pos);
             }
-            return new Redirect(op, target, null, "redirect");
+            return new Redirect(op, target, 0, "redirect");
         }
         if (ch === "" || !IsRedirectChar(ch)) {
             this.pos = start;
@@ -7151,7 +7151,7 @@ var Parser = /** @class */ (function () {
         if (target === null) {
             throw new ParseError("".concat("Expected target for redirect " + op, " at position ").concat(this.pos), this.pos);
         }
-        return new Redirect(op, target, null, "redirect");
+        return new Redirect(op, target, 0, "redirect");
     };
     Parser.prototype.ParseHeredocDelimiter = function () {
         this.skipWhitespace();
@@ -7738,11 +7738,11 @@ var Parser = /** @class */ (function () {
         }
         this.CondSkipWhitespace();
         if (COND_UNARY_OPS.has(word1.value)) {
-            var operand = this.ParseCondWord();
-            if (operand === null) {
+            var unaryOperand = this.ParseCondWord();
+            if (unaryOperand === null) {
                 throw new ParseError("".concat("Expected operand after " + word1.value, " at position ").concat(this.pos), this.pos);
             }
-            return new UnaryTest(word1.value, operand, "unary-test");
+            return new UnaryTest(word1.value, unaryOperand, "unary-test");
         }
         if (!this.CondAtEnd() && (this.peek() !== "&" && this.peek() !== "|" && this.peek() !== ")")) {
             if (IsRedirectChar(this.peek()) && !(this.pos + 1 < this.length && this.source[this.pos + 1] === "(")) {
@@ -9868,7 +9868,7 @@ function FormatRedirect(r, compact, heredocOpOnly) {
         else {
             var op = "<<";
         }
-        if (r.fd !== null && r.fd > 0) {
+        if (r.fd > 0) {
             var op = String(r.fd) + op;
         }
         if (r.quoted) {

@@ -148,9 +148,9 @@ class Token {
   value: string;
   pos: number;
   parts: Node[];
-  word: Word;
+  word: Word | null;
 
-  constructor(typeName: number = 0, value: string = "", pos: number = 0, parts: Node[] = [], word: Word = null) {
+  constructor(typeName: number = 0, value: string = "", pos: number = 0, parts: Node[] = [], word: Word | null = null) {
     this.typeName = typeName;
     this.value = value;
     this.pos = pos;
@@ -831,7 +831,7 @@ class Lexer {
           this.pos -= 1;
           this.SyncToParser();
           var inDquote: any = (flags & MatchedPairFlags_DQUOTE) !== 0;
-          var [paramNode, paramText]: [Node, string] = this.Parser.ParseParamExpansion(inDquote);
+          var [paramNode, paramText]: [Node | null, string] = this.Parser.ParseParamExpansion(inDquote);
           this.SyncFromParser();
           if (paramNode !== null) {
             chars.push(paramText);
@@ -848,7 +848,7 @@ class Lexer {
             this.pos -= 1;
             this.SyncToParser();
             if (this.pos + 2 < this.length && this.source[this.pos + 2] === "(") {
-              var [arithNode, arithText]: [Node, string] = this.Parser.ParseArithmeticExpansion();
+              var [arithNode, arithText]: [Node | null, string] = this.Parser.ParseArithmeticExpansion();
               this.SyncFromParser();
               if (arithNode !== null) {
                 chars.push(arithText);
@@ -856,7 +856,7 @@ class Lexer {
                 wasGtlt = false;
               } else {
                 this.SyncToParser();
-                var [cmdNode, cmdText]: [Node, string] = this.Parser.ParseCommandSubstitution();
+                var [cmdNode, cmdText]: [Node | null, string] = this.Parser.ParseCommandSubstitution();
                 this.SyncFromParser();
                 if (cmdNode !== null) {
                   chars.push(cmdText);
@@ -870,7 +870,7 @@ class Lexer {
                 }
               }
             } else {
-              var [cmdNode, cmdText]: [Node, string] = this.Parser.ParseCommandSubstitution();
+              var [cmdNode, cmdText]: [Node | null, string] = this.Parser.ParseCommandSubstitution();
               this.SyncFromParser();
               if (cmdNode !== null) {
                 chars.push(cmdText);
@@ -888,7 +888,7 @@ class Lexer {
             if (nextCh === "[") {
               this.pos -= 1;
               this.SyncToParser();
-              var [arithNode, arithText]: [Node, string] = this.Parser.ParseDeprecatedArithmetic();
+              var [arithNode, arithText]: [Node | null, string] = this.Parser.ParseDeprecatedArithmetic();
               this.SyncFromParser();
               if (arithNode !== null) {
                 chars.push(arithText);
@@ -911,7 +911,7 @@ class Lexer {
         }
         this.pos -= 1;
         this.SyncToParser();
-        var [procsubNode, procsubText]: [Node, string] = this.Parser.ParseProcessSubstitution();
+        var [procsubNode, procsubText]: [Node | null, string] = this.Parser.ParseProcessSubstitution();
         this.SyncFromParser();
         if (procsubNode !== null) {
           chars.push(procsubText);
@@ -1068,7 +1068,7 @@ class Lexer {
               } else {
                 if (c === "`") {
                   this.SyncToParser();
-                  var [cmdsubResult0, cmdsubResult1]: [Node, string] = this.Parser.ParseBacktickSubstitution();
+                  var [cmdsubResult0, cmdsubResult1]: [Node | null, string] = this.Parser.ParseBacktickSubstitution();
                   this.SyncFromParser();
                   if (cmdsubResult0 !== null) {
                     parts.push(cmdsubResult0);
@@ -1106,7 +1106,7 @@ class Lexer {
         continue;
       }
       if (ctx !== WORD_CTX_REGEX && ch === "$" && this.pos + 1 < this.length && this.source[this.pos + 1] === "'") {
-        var [ansiResult0, ansiResult1]: [Node, string] = this.ReadAnsiCQuote();
+        var [ansiResult0, ansiResult1]: [Node | null, string] = this.ReadAnsiCQuote();
         if (ansiResult0 !== null) {
           parts.push(ansiResult0);
           chars.push(ansiResult1);
@@ -1116,7 +1116,7 @@ class Lexer {
         continue;
       }
       if (ctx !== WORD_CTX_REGEX && ch === "$" && this.pos + 1 < this.length && this.source[this.pos + 1] === "\"") {
-        var [localeResult0, localeResult1, localeResult2]: [Node, string, Node[]] = this.ReadLocaleString();
+        var [localeResult0, localeResult1, localeResult2]: [Node | null, string, Node[]] = this.ReadLocaleString();
         if (localeResult0 !== null) {
           parts.push(localeResult0);
           parts.push(...localeResult2);
@@ -1144,7 +1144,7 @@ class Lexer {
       }
       if (ctx !== WORD_CTX_REGEX && ch === "`") {
         this.SyncToParser();
-        var [cmdsubResult0, cmdsubResult1]: [Node, string] = this.Parser.ParseBacktickSubstitution();
+        var [cmdsubResult0, cmdsubResult1]: [Node | null, string] = this.Parser.ParseBacktickSubstitution();
         this.SyncFromParser();
         if (cmdsubResult0 !== null) {
           parts.push(cmdsubResult0);
@@ -1156,7 +1156,7 @@ class Lexer {
       }
       if (ctx !== WORD_CTX_REGEX && IsRedirectChar(ch) && this.pos + 1 < this.length && this.source[this.pos + 1] === "(") {
         this.SyncToParser();
-        var [procsubResult0, procsubResult1]: [Node, string] = this.Parser.ParseProcessSubstitution();
+        var [procsubResult0, procsubResult1]: [Node | null, string] = this.Parser.ParseProcessSubstitution();
         this.SyncFromParser();
         if (procsubResult0 !== null) {
           parts.push(procsubResult0);
@@ -1184,7 +1184,7 @@ class Lexer {
         }
         if (isArrayAssign && (atCommandStart || inAssignBuiltin)) {
           this.SyncToParser();
-          var [arrayResult0, arrayResult1]: [Node, string] = this.Parser.ParseArrayLiteral();
+          var [arrayResult0, arrayResult1]: [Node | null, string] = this.Parser.ParseArrayLiteral();
           this.SyncFromParser();
           if (arrayResult0 !== null) {
             parts.push(arrayResult0);
@@ -1302,7 +1302,7 @@ class Lexer {
     return this.TokenCache;
   }
 
-  ReadAnsiCQuote(): [Node, string] {
+  ReadAnsiCQuote(): [Node | null, string] {
     if (this.atEnd() || this.peek() !== "$") {
       return [null, ""];
     }
@@ -1352,7 +1352,7 @@ class Lexer {
     }
   }
 
-  ReadLocaleString(): [Node, string, Node[]] {
+  ReadLocaleString(): [Node | null, string, Node[]] {
     if (this.atEnd() || this.peek() !== "$") {
       return [null, "", []];
     }
@@ -1384,14 +1384,14 @@ class Lexer {
         } else {
           if (ch === "$" && this.pos + 2 < this.length && this.source[this.pos + 1] === "(" && this.source[this.pos + 2] === "(") {
             this.SyncToParser();
-            var [arithNode, arithText]: [Node, string] = this.Parser.ParseArithmeticExpansion();
+            var [arithNode, arithText]: [Node | null, string] = this.Parser.ParseArithmeticExpansion();
             this.SyncFromParser();
             if (arithNode !== null) {
               innerParts.push(arithNode);
               contentChars.push(arithText);
             } else {
               this.SyncToParser();
-              var [cmdsubNode, cmdsubText]: [Node, string] = this.Parser.ParseCommandSubstitution();
+              var [cmdsubNode, cmdsubText]: [Node | null, string] = this.Parser.ParseCommandSubstitution();
               this.SyncFromParser();
               if (cmdsubNode !== null) {
                 innerParts.push(cmdsubNode);
@@ -1403,7 +1403,7 @@ class Lexer {
           } else {
             if (IsExpansionStart(this.source, this.pos, "$(")) {
               this.SyncToParser();
-              var [cmdsubNode, cmdsubText]: [Node, string] = this.Parser.ParseCommandSubstitution();
+              var [cmdsubNode, cmdsubText]: [Node | null, string] = this.Parser.ParseCommandSubstitution();
               this.SyncFromParser();
               if (cmdsubNode !== null) {
                 innerParts.push(cmdsubNode);
@@ -1414,7 +1414,7 @@ class Lexer {
             } else {
               if (ch === "$") {
                 this.SyncToParser();
-                var [paramNode, paramText]: [Node, string] = this.Parser.ParseParamExpansion(false);
+                var [paramNode, paramText]: [Node | null, string] = this.Parser.ParseParamExpansion(false);
                 this.SyncFromParser();
                 if (paramNode !== null) {
                   innerParts.push(paramNode);
@@ -1425,7 +1425,7 @@ class Lexer {
               } else {
                 if (ch === "`") {
                   this.SyncToParser();
-                  var [cmdsubNode, cmdsubText]: [Node, string] = this.Parser.ParseBacktickSubstitution();
+                  var [cmdsubNode, cmdsubText]: [Node | null, string] = this.Parser.ParseBacktickSubstitution();
                   this.SyncFromParser();
                   if (cmdsubNode !== null) {
                     innerParts.push(cmdsubNode);
@@ -1662,7 +1662,7 @@ class Lexer {
     return "";
   }
 
-  ReadParamExpansion(inDquote: boolean): [Node, string] {
+  ReadParamExpansion(inDquote: boolean): [Node | null, string] {
     if (this.atEnd() || this.peek() !== "$") {
       return [null, ""];
     }
@@ -1700,7 +1700,7 @@ class Lexer {
     return [null, ""];
   }
 
-  ReadBracedParam(start: number, inDquote: boolean): [Node, string] {
+  ReadBracedParam(start: number, inDquote: boolean): [Node | null, string] {
     if (this.atEnd()) {
       throw new MatchedPairError()
     }
@@ -1860,7 +1860,7 @@ class Lexer {
     return [new ParamExpansion(param as any, op as any, arg as any, "param" as any), text];
   }
 
-  ReadFunsub(start: number): [Node, string] {
+  ReadFunsub(start: number): [Node | null, string] {
     return this.Parser.ParseFunsub(start);
   }
 }
@@ -3739,10 +3739,10 @@ class Comment implements Node {
 class Redirect implements Node {
   op: string;
   target: Word;
-  fd: number | null;
+  fd: number;
   kind: string;
 
-  constructor(op: string = "", target: Word = null, fd: number | null = null, kind: string = "") {
+  constructor(op: string = "", target: Word = null, fd: number = 0, kind: string = "") {
     this.op = op;
     this.target = target;
     this.fd = fd;
@@ -3827,12 +3827,12 @@ class HereDoc implements Node {
   content: string;
   stripTabs: boolean;
   quoted: boolean;
-  fd: number | null;
+  fd: number;
   complete: boolean;
   StartPos: number;
   kind: string;
 
-  constructor(delimiter: string = "", content: string = "", stripTabs: boolean = false, quoted: boolean = false, fd: number | null = null, complete: boolean = false, StartPos: number = 0, kind: string = "") {
+  constructor(delimiter: string = "", content: string = "", stripTabs: boolean = false, quoted: boolean = false, fd: number = 0, complete: boolean = false, StartPos: number = 0, kind: string = "") {
     this.delimiter = delimiter;
     this.content = content;
     this.stripTabs = stripTabs;
@@ -3859,12 +3859,12 @@ class HereDoc implements Node {
 
 class Subshell implements Node {
   body: Node;
-  redirects: Node[];
+  redirects: Node[] | null;
   kind: string;
 
-  constructor(body: Node = null, redirects: Node[] = [], kind: string = "") {
+  constructor(body: Node = null, redirects: Node[] | null = null, kind: string = "") {
     this.body = body;
-    this.redirects = redirects ?? [];
+    this.redirects = redirects;
     this.kind = kind;
   }
 
@@ -3880,12 +3880,12 @@ class Subshell implements Node {
 
 class BraceGroup implements Node {
   body: Node;
-  redirects: Node[];
+  redirects: Node[] | null;
   kind: string;
 
-  constructor(body: Node = null, redirects: Node[] = [], kind: string = "") {
+  constructor(body: Node = null, redirects: Node[] | null = null, kind: string = "") {
     this.body = body;
-    this.redirects = redirects ?? [];
+    this.redirects = redirects;
     this.kind = kind;
   }
 
@@ -3902,11 +3902,11 @@ class BraceGroup implements Node {
 class If implements Node {
   condition: Node;
   thenBody: Node;
-  elseBody: Node;
+  elseBody: Node | null;
   redirects: Node[];
   kind: string;
 
-  constructor(condition: Node = null, thenBody: Node = null, elseBody: Node = null, redirects: Node[] = [], kind: string = "") {
+  constructor(condition: Node = null, thenBody: Node = null, elseBody: Node | null = null, redirects: Node[] = [], kind: string = "") {
     this.condition = condition;
     this.thenBody = thenBody;
     this.elseBody = elseBody;
@@ -4104,12 +4104,12 @@ class Select implements Node {
 }
 
 class Case implements Node {
-  word: Node;
-  patterns: Node[];
+  word: Word;
+  patterns: CasePattern[];
   redirects: Node[];
   kind: string;
 
-  constructor(word: Node = null, patterns: Node[] = [], redirects: Node[] = [], kind: string = "") {
+  constructor(word: Word = null, patterns: CasePattern[] = [], redirects: Node[] = [], kind: string = "") {
     this.word = word;
     this.patterns = patterns ?? [];
     this.redirects = redirects ?? [];
@@ -4131,11 +4131,11 @@ class Case implements Node {
 
 class CasePattern implements Node {
   pattern: string;
-  body: Node;
+  body: Node | null;
   terminator: string;
   kind: string;
 
-  constructor(pattern: string = "", body: Node = null, terminator: string = "", kind: string = "") {
+  constructor(pattern: string = "", body: Node | null = null, terminator: string = "", kind: string = "") {
     this.pattern = pattern;
     this.body = body;
     this.terminator = terminator;
@@ -4857,17 +4857,17 @@ class ConditionalExpr implements Node {
 
 class UnaryTest implements Node {
   op: string;
-  operand: Node;
+  operand: Word;
   kind: string;
 
-  constructor(op: string = "", operand: Node = null, kind: string = "") {
+  constructor(op: string = "", operand: Word = null, kind: string = "") {
     this.op = op;
     this.operand = operand;
     this.kind = kind;
   }
 
   toSexp(): string {
-    var operandVal: any = (this.operand as unknown as Word).getCondFormattedValue();
+    var operandVal: any = this.operand.getCondFormattedValue();
     return "(cond-unary \"" + this.op + "\" (cond-term \"" + operandVal + "\"))";
   }
 
@@ -4878,11 +4878,11 @@ class UnaryTest implements Node {
 
 class BinaryTest implements Node {
   op: string;
-  left: Node;
-  right: Node;
+  left: Word;
+  right: Word;
   kind: string;
 
-  constructor(op: string = "", left: Node = null, right: Node = null, kind: string = "") {
+  constructor(op: string = "", left: Word = null, right: Word = null, kind: string = "") {
     this.op = op;
     this.left = left;
     this.right = right;
@@ -4890,8 +4890,8 @@ class BinaryTest implements Node {
   }
 
   toSexp(): string {
-    var leftVal: any = (this.left as unknown as Word).getCondFormattedValue();
-    var rightVal: any = (this.right as unknown as Word).getCondFormattedValue();
+    var leftVal: any = this.left.getCondFormattedValue();
+    var rightVal: any = this.right.getCondFormattedValue();
     return "(cond-binary \"" + this.op + "\" (cond-term \"" + leftVal + "\") (cond-term \"" + rightVal + "\"))";
   }
 
@@ -5036,7 +5036,7 @@ class Parser {
   Extglob: boolean;
   Ctx: ContextStack;
   Lexer: Lexer;
-  TokenHistory: Token[];
+  TokenHistory: Token | null[];
   ParserState: number;
   DolbraceState: number;
   EofToken: string;
@@ -5048,7 +5048,7 @@ class Parser {
   ArithPos: number;
   ArithLen: number;
 
-  constructor(source: string = "", pos: number = 0, length: number = 0, PendingHeredocs: HereDoc[] = [], CmdsubHeredocEnd: number = 0, SawNewlineInSingleQuote: boolean = false, InProcessSub: boolean = false, Extglob: boolean = false, Ctx: ContextStack = null, Lexer: Lexer = null, TokenHistory: Token[] = [], ParserState: number = 0, DolbraceState: number = 0, EofToken: string = "", WordContext: number = 0, AtCommandStart: boolean = false, InArrayLiteral: boolean = false, InAssignBuiltin: boolean = false, ArithSrc: string = "", ArithPos: number = 0, ArithLen: number = 0) {
+  constructor(source: string = "", pos: number = 0, length: number = 0, PendingHeredocs: HereDoc[] = [], CmdsubHeredocEnd: number = 0, SawNewlineInSingleQuote: boolean = false, InProcessSub: boolean = false, Extglob: boolean = false, Ctx: ContextStack = null, Lexer: Lexer = null, TokenHistory: Token | null[] = [], ParserState: number = 0, DolbraceState: number = 0, EofToken: string = "", WordContext: number = 0, AtCommandStart: boolean = false, InArrayLiteral: boolean = false, InAssignBuiltin: boolean = false, ArithSrc: string = "", ArithPos: number = 0, ArithLen: number = 0) {
     this.source = source;
     this.pos = pos;
     this.length = length;
@@ -5517,7 +5517,7 @@ class Parser {
 
   ParseDollarExpansion(chars: string[], parts: Node[], inDquote: boolean): boolean {
     if (this.pos + 2 < this.length && this.source[this.pos + 1] === "(" && this.source[this.pos + 2] === "(") {
-      var [result0, result1]: [Node, string] = this.ParseArithmeticExpansion();
+      var [result0, result1]: [Node | null, string] = this.ParseArithmeticExpansion();
       if (result0 !== null) {
         parts.push(result0);
         chars.push(result1);
@@ -5532,7 +5532,7 @@ class Parser {
       return false;
     }
     if (this.pos + 1 < this.length && this.source[this.pos + 1] === "[") {
-      var [result0, result1]: [Node, string] = this.ParseDeprecatedArithmetic();
+      var [result0, result1]: [Node | null, string] = this.ParseDeprecatedArithmetic();
       if (result0 !== null) {
         parts.push(result0);
         chars.push(result1);
@@ -5541,7 +5541,7 @@ class Parser {
       return false;
     }
     if (this.pos + 1 < this.length && this.source[this.pos + 1] === "(") {
-      var [result0, result1]: [Node, string] = this.ParseCommandSubstitution();
+      var [result0, result1]: [Node | null, string] = this.ParseCommandSubstitution();
       if (result0 !== null) {
         parts.push(result0);
         chars.push(result1);
@@ -5549,7 +5549,7 @@ class Parser {
       }
       return false;
     }
-    var [result0, result1]: [Node, string] = this.ParseParamExpansion(inDquote);
+    var [result0, result1]: [Node | null, string] = this.ParseParamExpansion(inDquote);
     if (result0 !== null) {
       parts.push(result0);
       chars.push(result1);
@@ -5585,7 +5585,7 @@ class Parser {
     return tok.word;
   }
 
-  ParseCommandSubstitution(): [Node, string] {
+  ParseCommandSubstitution(): [Node | null, string] {
     if (this.atEnd() || this.peek() !== "$") {
       return [null, ""];
     }
@@ -5616,7 +5616,7 @@ class Parser {
     return [new CommandSubstitution(cmd as any, false, "cmdsub" as any), text];
   }
 
-  ParseFunsub(start: number): [Node, string] {
+  ParseFunsub(start: number): [Node | null, string] {
     this.SyncParser();
     if (!this.atEnd() && this.peek() === "|") {
       this.advance();
@@ -5644,7 +5644,7 @@ class Parser {
     return Assignment((word as unknown as Word).value, 0) !== -1;
   }
 
-  ParseBacktickSubstitution(): [Node, string] {
+  ParseBacktickSubstitution(): [Node | null, string] {
     if (this.atEnd() || this.peek() !== "`") {
       return [null, ""];
     }
@@ -5918,7 +5918,7 @@ class Parser {
     return [new CommandSubstitution(cmd as any, false, "cmdsub" as any), text];
   }
 
-  ParseProcessSubstitution(): [Node, string] {
+  ParseProcessSubstitution(): [Node | null, string] {
     if (this.atEnd() || !IsRedirectChar(this.peek())) {
       return [null, ""];
     }
@@ -5967,7 +5967,7 @@ class Parser {
     }
   }
 
-  ParseArrayLiteral(): [Node, string] {
+  ParseArrayLiteral(): [Node | null, string] {
     if (this.atEnd() || this.peek() !== "(") {
       return [null, ""];
     }
@@ -6004,7 +6004,7 @@ class Parser {
     return [new ArrayName(elements as any, "array" as any), text];
   }
 
-  ParseArithmeticExpansion(): [Node, string] {
+  ParseArithmeticExpansion(): [Node | null, string] {
     if (this.atEnd() || this.peek() !== "$") {
       return [null, ""];
     }
@@ -6825,7 +6825,7 @@ class Parser {
     throw new ParseError(`${"Unexpected character '" + c + "' in arithmetic expression"} at position ${this.ArithPos}`, this.ArithPos)
   }
 
-  ParseDeprecatedArithmetic(): [Node, string] {
+  ParseDeprecatedArithmetic(): [Node | null, string] {
     if (this.atEnd() || this.peek() !== "$") {
       return [null, ""];
     }
@@ -6842,9 +6842,9 @@ class Parser {
     return [new ArithDeprecated(content as any, "arith-deprecated" as any), text];
   }
 
-  ParseParamExpansion(inDquote: boolean): [Node, string] {
+  ParseParamExpansion(inDquote: boolean): [Node | null, string] {
     this.SyncLexer();
-    var [result0, result1]: [Node, string] = this.Lexer.ReadParamExpansion(inDquote);
+    var [result0, result1]: [Node | null, string] = this.Lexer.ReadParamExpansion(inDquote);
     this.SyncParser();
     return [result0, result1];
   }
@@ -6951,7 +6951,7 @@ class Parser {
       if (target === null) {
         throw new ParseError(`${"Expected target for redirect " + op} at position ${this.pos}`, this.pos)
       }
-      return new Redirect(op as any, target as any, null, "redirect" as any);
+      return new Redirect(op as any, target as any, 0, "redirect" as any);
     }
     if (ch === "" || !IsRedirectChar(ch)) {
       this.pos = start;
@@ -7086,7 +7086,7 @@ class Parser {
     if (target === null) {
       throw new ParseError(`${"Expected target for redirect " + op} at position ${this.pos}`, this.pos)
     }
-    return new Redirect(op as any, target as any, null, "redirect" as any);
+    return new Redirect(op as any, target as any, 0, "redirect" as any);
   }
 
   ParseHeredocDelimiter(): [string, boolean] {
@@ -7388,7 +7388,7 @@ class Parser {
     this.PendingHeredocs = [];
   }
 
-  ParseHeredoc(fd: number | null, stripTabs: boolean): HereDoc {
+  ParseHeredoc(fd: number, stripTabs: boolean): HereDoc {
     var startPos: any = this.pos;
     this.SetState(ParserStateFlags_PST_HEREDOC);
     var [delimiter, quoted]: [string, boolean] = this.ParseHeredocDelimiter();
@@ -7651,11 +7651,11 @@ class Parser {
     }
     this.CondSkipWhitespace();
     if (COND_UNARY_OPS.has(word1.value)) {
-      var operand: any = this.ParseCondWord();
-      if (operand === null) {
+      var unaryOperand: any = this.ParseCondWord();
+      if (unaryOperand === null) {
         throw new ParseError(`${"Expected operand after " + word1.value} at position ${this.pos}`, this.pos)
       }
-      return new UnaryTest(word1.value as any, operand as any, "unary-test" as any);
+      return new UnaryTest(word1.value as any, unaryOperand as any, "unary-test" as any);
     }
     if (!this.CondAtEnd() && (this.peek() !== "&" && this.peek() !== "|" && this.peek() !== ")")) {
       if (IsRedirectChar(this.peek()) && !(this.pos + 1 < this.length && this.source[this.pos + 1] === "(")) {
@@ -9301,12 +9301,12 @@ function ConsumeBracketClass(s: string, start: number, depth: number): [number, 
 function FormatCondBody(node: Node): string {
   var kind: any = node.kind;
   if (kind === "unary-test") {
-    var operandVal: any = ((node as unknown as UnaryTest).operand as unknown as Word).getCondFormattedValue();
+    var operandVal: any = (node as unknown as UnaryTest).operand.getCondFormattedValue();
     return (node as unknown as UnaryTest).op + " " + operandVal;
   }
   if (kind === "binary-test") {
-    var leftVal: any = ((node as unknown as BinaryTest).left as unknown as Word).getCondFormattedValue();
-    var rightVal: any = ((node as unknown as BinaryTest).right as unknown as Word).getCondFormattedValue();
+    var leftVal: any = (node as unknown as BinaryTest).left.getCondFormattedValue();
+    var rightVal: any = (node as unknown as BinaryTest).right.getCondFormattedValue();
     return leftVal + " " + (node as unknown as BinaryTest).op + " " + rightVal;
   }
   if (kind === "cond-and") {
@@ -9639,18 +9639,18 @@ function FormatCmdsubNode(node: Node, indent: number, inProcsub: boolean, compac
     return result;
   }
   if (node instanceof Case) {
-    var word: any = (node.word as unknown as Word).value;
+    var word: any = node.word.value;
     var patterns: any = [];
     var i: any = 0;
     while (i < node.patterns.length) {
       var p: any = node.patterns[i];
-      var pat: any = (p as unknown as CasePattern).pattern.replace(/\|/g, " | ");
-      if ((p as unknown as CasePattern).body !== null) {
-        var body: any = FormatCmdsubNode((p as unknown as CasePattern).body, indent + 8, false, false, false);
+      var pat: any = p.pattern.replace(/\|/g, " | ");
+      if (p.body !== null) {
+        var body: any = FormatCmdsubNode(p.body, indent + 8, false, false, false);
       } else {
         var body: any = "";
       }
-      var term: any = (p as unknown as CasePattern).terminator;
+      var term: any = p.terminator;
       var patIndent: any = RepeatStr(" ", indent + 8);
       var termIndent: any = RepeatStr(" ", indent + 4);
       var bodyPart: any = ((body.length > 0) ? patIndent + body + "\n" : "\n");
@@ -9743,7 +9743,7 @@ function FormatRedirect(r: Node, compact: boolean, heredocOpOnly: boolean): stri
     } else {
       var op: any = "<<";
     }
-    if (r.fd !== null && r.fd > 0) {
+    if (r.fd > 0) {
       var op: any = String(r.fd) + op;
     }
     if (r.quoted) {

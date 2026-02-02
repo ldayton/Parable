@@ -2170,12 +2170,18 @@ def lower_stmt_Assign(
                 # Update type if:
                 # - Variable not yet tracked, or
                 # - Variable was RUNE from for-loop but now assigned STRING (from method call), or
-                # - Variable was Node (from for-loop over union list) but now has specific type
+                # - Variable was Node (from for-loop) but now has specific type AND not unified
+                # Note: Do NOT update if variable was UNIFIED to Node (multiple subtypes → Node)
                 hierarchy_root_type = InterfaceRef(ctx.hierarchy_root) if ctx.hierarchy_root else None
                 should_update = (
                     current_type is None
                     or (current_type == RUNE and value_type == STRING)
-                    or (hierarchy_root_type and current_type == hierarchy_root_type and value_type != hierarchy_root_type)
+                    or (
+                        hierarchy_root_type
+                        and current_type == hierarchy_root_type
+                        and value_type != hierarchy_root_type
+                        and target_id not in type_ctx.unified_to_node
+                    )
                 )
                 if should_update:
                     type_ctx.var_types[target_id] = value_type

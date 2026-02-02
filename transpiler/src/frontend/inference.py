@@ -639,22 +639,31 @@ def collect_var_types(
         if len(unique_types) == 1:
             vars_concrete_type[var_name] = unique_types[0]
         else:
-            # Multiple types - check if all are Node-related
+            # Multiple types - check if all are Node-related (handles Optional wrappers)
             hierarchy_root_iface = InterfaceRef(hierarchy_root) if hierarchy_root else None
             hierarchy_root_struct = StructRef(hierarchy_root) if hierarchy_root else None
             all_node = hierarchy_root and all(
-                t == hierarchy_root_iface
-                or t == hierarchy_root_struct
-                or (
-                    isinstance(t, Pointer)
-                    and isinstance(t.target, StructRef)
-                    and t.target.name in node_types
+                (inner := (t.inner if isinstance(t, Optional) else t))
+                and (
+                    inner == hierarchy_root_iface
+                    or inner == hierarchy_root_struct
+                    or (
+                        isinstance(inner, Pointer)
+                        and isinstance(inner.target, StructRef)
+                        and inner.target.name in node_types
+                    )
                 )
                 for t in unique_types
             )
             if all_node and hierarchy_root:
                 vars_concrete_type[var_name] = InterfaceRef(hierarchy_root)
             # Otherwise, no unified type (will fall back to default inference)
+    # Track which variables were unified to Node (multiple subtypes → Node)
+    unified_to_node: set[str] = set()
+    for var_name, concrete_type in vars_concrete_type.items():
+        hierarchy_root_iface = InterfaceRef(hierarchy_root) if hierarchy_root else None
+        if hierarchy_root_iface and concrete_type == hierarchy_root_iface:
+            unified_to_node.add(var_name)
     # First pass: collect For loop variable types (needed for append inference)
     for stmt in dict_walk({"_type": "Module", "body": stmts}):
         if is_type(stmt, ["For"]):
@@ -1051,7 +1060,7 @@ def collect_var_types(
     for var_name, concrete_type in vars_concrete_type.items():
         if var_name not in vars_assigned_none and hierarchy_root_iface and concrete_type == hierarchy_root_iface:
             var_types[var_name] = hierarchy_root_iface
-    return var_types, tuple_vars, sentinel_ints, list_element_unions
+    return var_types, tuple_vars, sentinel_ints, list_element_unions, unified_to_node
 
 
 @dataclass

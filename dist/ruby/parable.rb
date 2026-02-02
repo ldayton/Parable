@@ -3515,7 +3515,7 @@ end
 class Redirect
   attr_accessor :op, :target, :fd, :kind
 
-  def initialize(op: "", target: nil, fd: nil, kind: "")
+  def initialize(op: "", target: nil, fd: 0, kind: "")
     @op = op
     @target = target
     @fd = fd
@@ -3596,7 +3596,7 @@ end
 class HereDoc
   attr_accessor :delimiter, :content, :strip_tabs, :quoted, :fd, :complete, :start_pos, :kind
 
-  def initialize(delimiter: "", content: "", strip_tabs: false, quoted: false, fd: nil, complete: false, start_pos: 0, kind: "")
+  def initialize(delimiter: "", content: "", strip_tabs: false, quoted: false, fd: 0, complete: false, start_pos: 0, kind: "")
     @delimiter = delimiter
     @content = content
     @strip_tabs = strip_tabs
@@ -3624,7 +3624,7 @@ end
 class Subshell
   attr_accessor :body, :redirects, :kind
 
-  def initialize(body: nil, redirects: [], kind: "")
+  def initialize(body: nil, redirects: nil, kind: "")
     @body = body
     @redirects = redirects
     @kind = kind
@@ -3643,7 +3643,7 @@ end
 class BraceGroup
   attr_accessor :body, :redirects, :kind
 
-  def initialize(body: nil, redirects: [], kind: "")
+  def initialize(body: nil, redirects: nil, kind: "")
     @body = body
     @redirects = redirects
     @kind = kind
@@ -6599,7 +6599,7 @@ class Parser
       end
     end
     if op == "<<"
-      return self.parse_heredoc((fd == -1 ? nil : fd), strip_tabs)
+      return self.parse_heredoc(fd, strip_tabs)
     end
     if varfd != ""
       op = "{" + varfd + "}" + op
@@ -7197,11 +7197,11 @@ class Parser
     end
     self.cond_skip_whitespace
     if COND_UNARY_OPS.include?(word1.value)
-      operand = self.parse_cond_word
-      if operand.nil?
+      unary_operand = self.parse_cond_word
+      if unary_operand.nil?
         raise ParseError.new(message: "Expected operand after " + word1.value, pos: self.pos)
       end
-      return UnaryTest.new(op: word1.value, operand: operand, kind: "unary-test")
+      return UnaryTest.new(op: word1.value, operand: unary_operand, kind: "unary-test")
     end
     if !self.cond_at_end && self.peek != "&" && self.peek != "|" && self.peek != ")"
       if is_redirect_char(self.peek) && !(self.pos + 1 < self.length && self.source[self.pos + 1] == "(")
@@ -9294,7 +9294,7 @@ def format_redirect(r, compact = false, heredoc_op_only = false)
     else
       op = "<<"
     end
-    if !r.fd.nil? && r.fd > 0
+    if r.fd > 0
       op = r.fd.to_s + op
     end
     if r.quoted
@@ -10320,7 +10320,7 @@ def parse(source, extglob = false)
   return parser.parse
 end
 
-def new_parse_error(message, pos = nil, line = nil)
+def new_parse_error(message, pos = 0, line = 0)
   self_ = ParseError.new()
   self_.message = message
   self_.pos = pos

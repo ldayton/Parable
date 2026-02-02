@@ -137,7 +137,7 @@ class Token:
     value: str = ""
     pos: int = 0
     parts: list[Node] = field(default_factory=list)
-    word: Word = None
+    word: Word | None = None
 
     def __repr__(self) -> str:
         if self.word is not None:
@@ -994,7 +994,7 @@ class Lexer:
             self._last_read_token = saved_last
         return self._token_cache
 
-    def _read_ansi_c_quote(self) -> tuple[Node, str]:
+    def _read_ansi_c_quote(self) -> tuple[Node | None, str]:
         if self.at_end() or self.peek() != "$":
             return (None, "")
         if self.pos + 1 >= self.length or self.source[self.pos + 1] != "'":
@@ -1031,7 +1031,7 @@ class Lexer:
         if self._parser is not None:
             self.pos = self._parser.pos
 
-    def _read_locale_string(self) -> tuple[Node, str, list[Node]]:
+    def _read_locale_string(self) -> tuple[Node | None, str, list[Node]]:
         if self.at_end() or self.peek() != "$":
             return (None, "", [])
         if self.pos + 1 >= self.length or self.source[self.pos + 1] != "\"":
@@ -1261,7 +1261,7 @@ class Lexer:
                 return ""
         return ""
 
-    def _read_param_expansion(self, in_dquote: bool) -> tuple[Node, str]:
+    def _read_param_expansion(self, in_dquote: bool) -> tuple[Node | None, str]:
         if self.at_end() or self.peek() != "$":
             return (None, "")
         start = self.pos
@@ -1291,7 +1291,7 @@ class Lexer:
         self.pos = start
         return (None, "")
 
-    def _read_braced_param(self, start: int, in_dquote: bool) -> tuple[Node, str]:
+    def _read_braced_param(self, start: int, in_dquote: bool) -> tuple[Node | None, str]:
         if self.at_end():
             raise MatchedPairError("unexpected EOF looking for `}'", start)
         saved_dolbrace = self._dolbrace_state
@@ -1414,7 +1414,7 @@ class Lexer:
         self._dolbrace_state = saved_dolbrace
         return (ParamExpansion(param=param, op=op, arg=arg, kind="param"), text)
 
-    def _read_funsub(self, start: int) -> tuple[Node, str]:
+    def _read_funsub(self, start: int) -> tuple[Node | None, str]:
         return self._parser._parse_funsub(start)
 
 
@@ -2845,7 +2845,7 @@ class Comment(Node):
 class Redirect(Node):
     op: str = ""
     target: Word = None
-    fd: int | None = None
+    fd: int = 0
     kind: str = ""
 
     def to_sexp(self) -> str:
@@ -2906,7 +2906,7 @@ class HereDoc(Node):
     content: str = ""
     strip_tabs: bool = False
     quoted: bool = False
-    fd: int | None = None
+    fd: int = 0
     complete: bool = False
     _start_pos: int = 0
     kind: str = ""
@@ -2925,7 +2925,7 @@ class HereDoc(Node):
 @dataclass
 class Subshell(Node):
     body: Node = None
-    redirects: list[Node] = field(default_factory=list)
+    redirects: list[Node] | None = None
     kind: str = ""
 
     def to_sexp(self) -> str:
@@ -2939,7 +2939,7 @@ class Subshell(Node):
 @dataclass
 class BraceGroup(Node):
     body: Node = None
-    redirects: list[Node] = field(default_factory=list)
+    redirects: list[Node] | None = None
     kind: str = ""
 
     def to_sexp(self) -> str:
@@ -2954,7 +2954,7 @@ class BraceGroup(Node):
 class If(Node):
     condition: Node = None
     then_body: Node = None
-    else_body: Node = None
+    else_body: Node | None = None
     redirects: list[Node] = field(default_factory=list)
     kind: str = ""
 
@@ -3098,8 +3098,8 @@ class Select(Node):
 
 @dataclass
 class Case(Node):
-    word: Node = None
-    patterns: list[Node] = field(default_factory=list)
+    word: Word = None
+    patterns: list[CasePattern] = field(default_factory=list)
     redirects: list[Node] = field(default_factory=list)
     kind: str = ""
 
@@ -3118,7 +3118,7 @@ class Case(Node):
 @dataclass
 class CasePattern(Node):
     pattern: str = ""
-    body: Node = None
+    body: Node | None = None
     terminator: str = ""
     kind: str = ""
 
@@ -3616,7 +3616,7 @@ class ConditionalExpr(Node):
 @dataclass
 class UnaryTest(Node):
     op: str = ""
-    operand: Node = None
+    operand: Word = None
     kind: str = ""
 
     def to_sexp(self) -> str:
@@ -3630,8 +3630,8 @@ class UnaryTest(Node):
 @dataclass
 class BinaryTest(Node):
     op: str = ""
-    left: Node = None
-    right: Node = None
+    left: Word = None
+    right: Word = None
     kind: str = ""
 
     def to_sexp(self) -> str:
@@ -3740,7 +3740,7 @@ class Parser:
     _extglob: bool = False
     _ctx: ContextStack = None
     _lexer: Lexer = None
-    _token_history: list[Token] = field(default_factory=list)
+    _token_history: list[Token | None] = field(default_factory=list)
     _parser_state: int = 0
     _dolbrace_state: int = 0
     _eof_token: str = ""
@@ -4143,7 +4143,7 @@ class Parser:
         self._in_assign_builtin = False
         return tok.word
 
-    def _parse_command_substitution(self) -> tuple[Node, str]:
+    def _parse_command_substitution(self) -> tuple[Node | None, str]:
         if self.at_end() or self.peek() != "$":
             return (None, "")
         start = self.pos
@@ -4169,7 +4169,7 @@ class Parser:
         self._restore_parser_state(saved)
         return (CommandSubstitution(command=cmd, kind="cmdsub"), text)
 
-    def _parse_funsub(self, start: int) -> tuple[Node, str]:
+    def _parse_funsub(self, start: int) -> tuple[Node | None, str]:
         self._sync_parser()
         if not self.at_end() and self.peek() == "|":
             self.advance()
@@ -4192,7 +4192,7 @@ class Parser:
     def _is_assignment_word(self, word: Node) -> bool:
         return _assignment(word.value, 0) != -1
 
-    def _parse_backtick_substitution(self) -> tuple[Node, str]:
+    def _parse_backtick_substitution(self) -> tuple[Node | None, str]:
         if self.at_end() or self.peek() != "`":
             return (None, "")
         start = self.pos
@@ -4414,7 +4414,7 @@ class Parser:
             cmd = Empty(kind="empty")
         return (CommandSubstitution(command=cmd, kind="cmdsub"), text)
 
-    def _parse_process_substitution(self) -> tuple[Node, str]:
+    def _parse_process_substitution(self) -> tuple[Node | None, str]:
         if self.at_end() or not _is_redirect_char(self.peek()):
             return (None, "")
         start = self.pos
@@ -4456,7 +4456,7 @@ class Parser:
             text = _strip_line_continuations_comment_aware(text)
             return (None, text)
 
-    def _parse_array_literal(self) -> tuple[Node, str]:
+    def _parse_array_literal(self) -> tuple[Node | None, str]:
         if self.at_end() or self.peek() != "(":
             return (None, "")
         start = self.pos
@@ -4485,7 +4485,7 @@ class Parser:
         self._clear_state(ParserStateFlags_PST_COMPASSIGN)
         return (Array(elements=elements, kind="array"), text)
 
-    def _parse_arithmetic_expansion(self) -> tuple[Node, str]:
+    def _parse_arithmetic_expansion(self) -> tuple[Node | None, str]:
         if self.at_end() or self.peek() != "$":
             return (None, "")
         start = self.pos
@@ -5115,7 +5115,7 @@ class Parser:
             return ArithVar(name="".join(chars), kind="var")
         raise ParseError("Unexpected character '" + c + "' in arithmetic expression", self._arith_pos)
 
-    def _parse_deprecated_arithmetic(self) -> tuple[Node, str]:
+    def _parse_deprecated_arithmetic(self) -> tuple[Node | None, str]:
         if self.at_end() or self.peek() != "$":
             return (None, "")
         start = self.pos
@@ -5129,7 +5129,7 @@ class Parser:
         text = _substring(self.source, start, self.pos)
         return (ArithDeprecated(expression=content, kind="arith-deprecated"), text)
 
-    def _parse_param_expansion(self, in_dquote: bool) -> tuple[Node, str]:
+    def _parse_param_expansion(self, in_dquote: bool) -> tuple[Node | None, str]:
         self._sync_lexer()
         result0, result1 = self._lexer._read_param_expansion(in_dquote)
         self._sync_parser()
@@ -5140,7 +5140,7 @@ class Parser:
         if self.at_end():
             return None
         start = self.pos
-        fd = -1
+        fd: int = -1
         varfd = ""
         if self.peek() == "{":
             saved = self.pos
@@ -5250,7 +5250,7 @@ class Parser:
                     self.advance()
                     op = "<&"
         if op == "<<":
-            return self._parse_heredoc(_intPtr(fd), strip_tabs)
+            return self._parse_heredoc(fd, strip_tabs)
         if varfd != "":
             op = "{" + varfd + "}" + op
         elif fd != -1:
@@ -5524,7 +5524,7 @@ class Parser:
             heredoc.content = "".join(content_lines)
         self._pending_heredocs = []
 
-    def _parse_heredoc(self, fd: int | None, strip_tabs: bool) -> HereDoc:
+    def _parse_heredoc(self, fd: int, strip_tabs: bool) -> HereDoc:
         start_pos = self.pos
         self._set_state(ParserStateFlags_PST_HEREDOC)
         delimiter, quoted = self._parse_heredoc_delimiter()
@@ -5726,10 +5726,10 @@ class Parser:
             raise ParseError("Expected word in conditional expression", self.pos)
         self._cond_skip_whitespace()
         if word1.value in COND_UNARY_OPS:
-            operand = self._parse_cond_word()
-            if operand is None:
+            unary_operand = self._parse_cond_word()
+            if unary_operand is None:
                 raise ParseError("Expected operand after " + word1.value, self.pos)
-            return UnaryTest(op=word1.value, operand=operand, kind="unary-test")
+            return UnaryTest(op=word1.value, operand=unary_operand, kind="unary-test")
         if not self._cond_at_end() and self.peek() != "&" and self.peek() != "|" and self.peek() != ")":
             if _is_redirect_char(self.peek()) and not (self.pos + 1 < self.length and self.source[self.pos + 1] == "("):
                 op = self.advance()
@@ -6051,7 +6051,7 @@ class Parser:
         if not self._lex_consume_word("in"):
             raise ParseError("Expected 'in' after case word", self._lex_peek_token().pos)
         self.skip_whitespace_and_newlines()
-        patterns = []
+        patterns: list[CasePattern] = []
         self._set_state(ParserStateFlags_PST_CASEPAT)
         while True:
             self.skip_whitespace_and_newlines()
@@ -7016,7 +7016,7 @@ def _format_cmdsub_node(node: Node, indent: int, in_procsub: bool, compact_redir
             val = w._normalize_array_whitespace(val)
             val = w._format_command_substitutions(val, False)
             parts.append(val)
-        heredocs = []
+        heredocs: list[HereDoc] = []
         for r in (node.redirects or []):
             if isinstance(r, HereDoc):
                 r = r
@@ -7034,7 +7034,7 @@ def _format_cmdsub_node(node: Node, indent: int, in_procsub: bool, compact_redir
         return result
     if isinstance(node, Pipeline):
         node = node
-        cmds = []
+        cmds: list[tuple[Node, bool]] = []
         i = 0
         while i < len(node.commands):
             cmd = node.commands[i]
@@ -7211,7 +7211,7 @@ def _format_cmdsub_node(node: Node, indent: int, in_procsub: bool, compact_redir
         var = node.var
         body = _format_cmdsub_node(node.body, indent + 4, False, False, False)
         if node.words is not None:
-            word_vals = []
+            word_vals: list[str] = []
             for w in (node.words or []):
                 word_vals.append(w.value)
             words = " ".join(word_vals)
@@ -7236,7 +7236,7 @@ def _format_cmdsub_node(node: Node, indent: int, in_procsub: bool, compact_redir
     if isinstance(node, Case):
         node = node
         word = node.word.value
-        patterns = []
+        patterns: list[str] = []
         i = 0
         while i < len(node.patterns):
             p = node.patterns[i]
@@ -7257,7 +7257,7 @@ def _format_cmdsub_node(node: Node, indent: int, in_procsub: bool, compact_redir
         pattern_str = ("\n" + _repeat_str(" ", indent + 4)).join(patterns)
         redirects = ""
         if node.redirects:
-            redirect_parts = []
+            redirect_parts: list[str] = []
             for r in (node.redirects or []):
                 redirect_parts.append(_format_redirect(r, False, False))
             redirects = " " + " ".join(redirect_parts)
@@ -7276,7 +7276,7 @@ def _format_cmdsub_node(node: Node, indent: int, in_procsub: bool, compact_redir
         body = _format_cmdsub_node(node.body, indent, in_procsub, compact_redirects, False)
         redirects = ""
         if node.redirects:
-            redirect_parts = []
+            redirect_parts: list[str] = []
             for r in (node.redirects or []):
                 redirect_parts.append(_format_redirect(r, False, False))
             redirects = " ".join(redirect_parts)
@@ -7294,7 +7294,7 @@ def _format_cmdsub_node(node: Node, indent: int, in_procsub: bool, compact_redir
         terminator = " }" if body.endswith(" &") else "; }"
         redirects = ""
         if node.redirects:
-            redirect_parts = []
+            redirect_parts: list[str] = []
             for r in (node.redirects or []):
                 redirect_parts.append(_format_redirect(r, False, False))
             redirects = " ".join(redirect_parts)
@@ -7329,7 +7329,7 @@ def _format_redirect(r: Node, compact: bool, heredoc_op_only: bool) -> str:
             op = "<<-"
         else:
             op = "<<"
-        if r.fd is not None and r.fd > 0:
+        if r.fd > 0:
             op = str(r.fd) + op
         if r.quoted:
             delim = "'" + r.delimiter + "'"

@@ -9297,15 +9297,15 @@ func formatCmdsubNode(node Node, indent int, inProcsub bool, compactRedirects bo
 		patterns := []string{}
 		i := 0
 		for i < len(node.Patterns) {
-			var p Node = node.Patterns[i]
-			pat := strings.ReplaceAll(p.(*CasePattern).Pattern, "|", " | ")
+			p := node.Patterns[i]
+			pat := strings.ReplaceAll(p.Pattern, "|", " | ")
 			var body string
-			if !_isNilInterfaceRef(p.(*Subshell).Body) {
-				body = formatCmdsubNode(p.(*Subshell).Body, indent+8, false, false, false)
+			if p.Body != nil {
+				body = formatCmdsubNode(p.Body, indent+8, false, false, false)
 			} else {
 				body = ""
 			}
-			term := p.(*CasePattern).Terminator
+			term := p.Terminator
 			patIndent := strings.Repeat(" ", indent+8)
 			termIndent := strings.Repeat(" ", indent+4)
 			bodyPart := func() string {

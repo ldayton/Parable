@@ -7033,7 +7033,7 @@ sub parse_redirect ($self) {
         if (!defined($target)) {
             die "Expected target for redirect " . $op;
         }
-        return Redirect->new($op, $target, undef, "redirect");
+        return Redirect->new($op, $target, 0, "redirect");
     }
     if ($ch eq "" || !main::is_redirect_char($ch)) {
         $self->{pos_} = $start;
@@ -7156,7 +7156,7 @@ sub parse_redirect ($self) {
     if (!defined($target)) {
         die "Expected target for redirect " . $op;
     }
-    return Redirect->new($op, $target, undef, "redirect");
+    return Redirect->new($op, $target, 0, "redirect");
 }
 
 sub parse_heredoc_delimiter ($self) {
@@ -7686,12 +7686,12 @@ sub parse_cond_term ($self) {
     my $op_word;
     my $operand;
     my $saved_pos;
+    my $unary_operand;
     my $word2;
     $self->cond_skip_whitespace();
     if ($self->cond_at_end()) {
         die "Unexpected end of conditional expression";
     }
-    my $operand = undef;
     if ($self->peek() eq "!") {
         if ($self->{pos_} + 1 < $self->{length_} && !main::is_whitespace_no_newline(substr($self->{source}, $self->{pos_} + 1, 1))) {
         } else {
@@ -7716,11 +7716,11 @@ sub parse_cond_term ($self) {
     }
     $self->cond_skip_whitespace();
     if (exists(main::COND_UNARY_OPS()->{$word1->{value}})) {
-        $operand = $self->parse_cond_word();
-        if (!defined($operand)) {
+        $unary_operand = $self->parse_cond_word();
+        if (!defined($unary_operand)) {
             die "Expected operand after " . $word1->{value};
         }
-        return UnaryTest->new($word1->{value}, $operand, "unary-test");
+        return UnaryTest->new($word1->{value}, $unary_operand, "unary-test");
     }
     if (!$self->cond_at_end() && $self->peek() ne "&" && $self->peek() ne "|" && $self->peek() ne ")") {
         my $word2 = undef;
@@ -9429,7 +9429,6 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
     my $body_part;
     my $cmd;
     my $cmd_count;
-    my $cmds;
     my $compact_pipe;
     my $cond;
     my $else_body;
@@ -9437,7 +9436,6 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
     my $formatted;
     my $formatted_cmd;
     my $has_heredoc;
-    my $heredocs;
     my $i;
     my $idx;
     my $inner_body;
@@ -9451,7 +9449,6 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
     my $pat;
     my $pat_indent;
     my $pattern_str;
-    my $patterns;
     my $prefix;
     my $redirect_parts;
     my $redirects;
@@ -9467,7 +9464,6 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
     my $var;
     my $word;
     my $word_parts;
-    my $word_vals;
     my $words;
     if (!defined($node)) {
         return "";
@@ -9488,7 +9484,7 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
             $val = $w->format_command_substitutions($val, 0);
             push(@{$parts}, $val);
         }
-        $heredocs = [];
+        my $heredocs = [];
         for my $r (@{($node->{redirects} // [])}) {
             if (ref($r) eq 'HereDoc') {
                 my $r = $r;
@@ -9513,7 +9509,7 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
     }
     if (ref($node) eq 'Pipeline') {
         my $node = $node;
-        $cmds = [];
+        my $cmds = [];
         $i = 0;
         my $cmd = undef;
         my $needs_redirect = 0;
@@ -9745,7 +9741,7 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
         $body = format_cmdsub_node($node->{body}, $indent + 4, 0, 0, 0);
         my $result = "";
         if (defined($node->{words})) {
-            $word_vals = [];
+            my $word_vals = [];
             for my $w (@{($node->{words} // [])}) {
                 push(@{$word_vals}, $w->{value});
             }
@@ -9779,7 +9775,7 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
     if (ref($node) eq 'Case') {
         my $node = $node;
         $word = $node->{word}->{value};
-        $patterns = [];
+        my $patterns = [];
         $i = 0;
         while ($i < scalar(@{($node->{patterns} // [])})) {
             $p = $node->{patterns}->[$i];
@@ -9804,7 +9800,7 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
         $pattern_str = join(("\n" . repeat_str(" ", $indent + 4)), @{$patterns});
         $redirects = "";
         if ((scalar(@{($node->{redirects} // [])}) > 0)) {
-            $redirect_parts = [];
+            my $redirect_parts = [];
             for my $r (@{($node->{redirects} // [])}) {
                 push(@{$redirect_parts}, format_redirect($r, 0, 0));
             }
@@ -9827,7 +9823,7 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
         $body = format_cmdsub_node($node->{body}, $indent, $in_procsub, $compact_redirects, 0);
         $redirects = "";
         if ((scalar(@{($node->{redirects} // [])}) > 0)) {
-            $redirect_parts = [];
+            my $redirect_parts = [];
             for my $r (@{($node->{redirects} // [])}) {
                 push(@{$redirect_parts}, format_redirect($r, 0, 0));
             }
@@ -9851,7 +9847,7 @@ sub format_cmdsub_node ($node, $indent, $in_procsub, $compact_redirects, $procsu
         $terminator = ((substr($body, -length(" &")) eq " &") ? " }" : "; }");
         $redirects = "";
         if ((scalar(@{($node->{redirects} // [])}) > 0)) {
-            $redirect_parts = [];
+            my $redirect_parts = [];
             for my $r (@{($node->{redirects} // [])}) {
                 push(@{$redirect_parts}, format_redirect($r, 0, 0));
             }
@@ -9903,7 +9899,7 @@ sub format_redirect ($r, $compact, $heredoc_op_only) {
         } else {
             $op = "<<";
         }
-        if (defined($r->{fd}) && $r->{fd} > 0) {
+        if ($r->{fd} > 0) {
             $op = ("" . $r->{fd}) . $op;
         }
         my $delim = "";

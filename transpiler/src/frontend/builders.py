@@ -143,7 +143,7 @@ def build_constructor(
     callbacks.setup_context(class_name, None)
     # Collect variable types and build type context
     init_body = init_ast.get("body", [])
-    var_types, tuple_vars, sentinel_ints, list_element_unions = callbacks.collect_var_types(
+    var_types, tuple_vars, sentinel_ints, list_element_unions, unified_to_node = callbacks.collect_var_types(
         init_body
     )
     var_types.update(param_types)
@@ -154,6 +154,7 @@ def build_constructor(
         tuple_vars=tuple_vars,
         sentinel_ints=sentinel_ints,
         list_element_unions=list_element_unions,
+        unified_to_node=unified_to_node,
     )
     # Build constructor body:
     # 1. self := &ClassName{}
@@ -215,7 +216,7 @@ def build_method_shell(
         callbacks.setup_context(class_name, func_info)
         # Collect variable types from body and add parameters + self
         node_body = node.get("body", [])
-        var_types, tuple_vars, sentinel_ints, list_element_unions = callbacks.collect_var_types(
+        var_types, tuple_vars, sentinel_ints, list_element_unions, unified_to_node = callbacks.collect_var_types(
             node_body
         )
         if func_info:
@@ -241,6 +242,7 @@ def build_method_shell(
             sentinel_ints=sentinel_ints,
             union_types=union_types,
             list_element_unions=list_element_unions,
+            unified_to_node=unified_to_node,
         )
         body = callbacks.setup_and_lower_stmts(class_name, func_info, type_ctx, node_body)
     return Function(
@@ -277,7 +279,7 @@ def build_function_shell(
         # Set up context first (needed by collect_var_types) - empty class name for functions
         callbacks.setup_context("", func_info)
         # Collect variable types from body and add parameters
-        var_types, tuple_vars, sentinel_ints, list_element_unions = callbacks.collect_var_types(
+        var_types, tuple_vars, sentinel_ints, list_element_unions, unified_to_node = callbacks.collect_var_types(
             node.get("body", [])
         )
         if func_info:
@@ -302,6 +304,7 @@ def build_function_shell(
             sentinel_ints=sentinel_ints,
             union_types=union_types,
             list_element_unions=list_element_unions,
+            unified_to_node=unified_to_node,
         )
         body = callbacks.setup_and_lower_stmts("", func_info, type_ctx, node.get("body", []))
     return Function(

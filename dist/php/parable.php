@@ -155,7 +155,7 @@ class Token
     public ?array $parts;
     public ?Word $word;
 
-    public function __construct(int $type, string $value, int $pos, ?array $parts, ?Word $word)
+    public function __construct(int $type, string $value, int $pos, ?array $parts, ?Word $word = null)
     {
         $this->type = $type;
         $this->value = $value;
@@ -4988,15 +4988,15 @@ class Redirect implements Node
 {
     public string $op;
     public ?Word $target;
-    public ?int $fd;
+    public int $fd;
     public string $kind;
 
-    public function __construct(string $op, ?Word $target, string $kind, ?int $fd = null)
+    public function __construct(string $op, ?Word $target, int $fd, string $kind)
     {
         $this->op = $op;
         $this->target = $target;
-        $this->kind = $kind;
         $this->fd = $fd;
+        $this->kind = $kind;
     }
 
     public function toSexp(): string
@@ -5100,21 +5100,21 @@ class Heredoc implements Node
     public string $content;
     public bool $stripTabs;
     public bool $quoted;
-    public ?int $fd;
+    public int $fd;
     public bool $complete;
     public int $_startPos;
     public string $kind;
 
-    public function __construct(string $delimiter, string $content, bool $stripTabs, bool $quoted, bool $complete, int $_startPos, string $kind, ?int $fd = null)
+    public function __construct(string $delimiter, string $content, bool $stripTabs, bool $quoted, int $fd, bool $complete, int $_startPos, string $kind)
     {
         $this->delimiter = $delimiter;
         $this->content = $content;
         $this->stripTabs = $stripTabs;
         $this->quoted = $quoted;
+        $this->fd = $fd;
         $this->complete = $complete;
         $this->_startPos = $_startPos;
         $this->kind = $kind;
-        $this->fd = $fd;
     }
 
     public function toSexp(): string
@@ -5140,11 +5140,11 @@ class Subshell implements Node
     public ?array $redirects;
     public string $kind;
 
-    public function __construct(?Node $body, ?array $redirects, string $kind)
+    public function __construct(?Node $body, string $kind, ?array $redirects = null)
     {
         $this->body = $body;
-        $this->redirects = $redirects ?? [];
         $this->kind = $kind;
+        $this->redirects = $redirects;
     }
 
     public function toSexp(): string
@@ -5165,11 +5165,11 @@ class Bracegroup implements Node
     public ?array $redirects;
     public string $kind;
 
-    public function __construct(?Node $body, ?array $redirects, string $kind)
+    public function __construct(?Node $body, string $kind, ?array $redirects = null)
     {
         $this->body = $body;
-        $this->redirects = $redirects ?? [];
         $this->kind = $kind;
+        $this->redirects = $redirects;
     }
 
     public function toSexp(): string
@@ -5192,13 +5192,13 @@ class If_ implements Node
     public ?array $redirects;
     public string $kind;
 
-    public function __construct(?Node $condition, ?Node $thenBody, ?Node $elseBody, ?array $redirects, string $kind)
+    public function __construct(?Node $condition, ?Node $thenBody, ?array $redirects, string $kind, ?Node $elseBody = null)
     {
         $this->condition = $condition;
         $this->thenBody = $thenBody;
-        $this->elseBody = $elseBody;
         $this->redirects = $redirects ?? [];
         $this->kind = $kind;
+        $this->elseBody = $elseBody;
     }
 
     public function toSexp(): string
@@ -5447,12 +5447,12 @@ class Select implements Node
 
 class Case_ implements Node
 {
-    public ?Node $word;
+    public ?Word $word;
     public ?array $patterns;
     public ?array $redirects;
     public string $kind;
 
-    public function __construct(?Node $word, ?array $patterns, ?array $redirects, string $kind)
+    public function __construct(?Word $word, ?array $patterns, ?array $redirects, string $kind)
     {
         $this->word = $word;
         $this->patterns = $patterns ?? [];
@@ -5485,12 +5485,12 @@ class Casepattern implements Node
     public string $terminator;
     public string $kind;
 
-    public function __construct(string $pattern, ?Node $body, string $terminator, string $kind)
+    public function __construct(string $pattern, string $terminator, string $kind, ?Node $body = null)
     {
         $this->pattern = $pattern;
-        $this->body = $body;
         $this->terminator = $terminator;
         $this->kind = $kind;
+        $this->body = $body;
     }
 
     public function toSexp(): string
@@ -6396,10 +6396,10 @@ class Conditionalexpr implements Node
 class Unarytest implements Node
 {
     public string $op;
-    public ?Node $operand;
+    public ?Word $operand;
     public string $kind;
 
-    public function __construct(string $op, ?Node $operand, string $kind)
+    public function __construct(string $op, ?Word $operand, string $kind)
     {
         $this->op = $op;
         $this->operand = $operand;
@@ -6421,11 +6421,11 @@ class Unarytest implements Node
 class Binarytest implements Node
 {
     public string $op;
-    public ?Node $left;
-    public ?Node $right;
+    public ?Word $left;
+    public ?Word $right;
     public string $kind;
 
-    public function __construct(string $op, ?Node $left, ?Node $right, string $kind)
+    public function __construct(string $op, ?Word $left, ?Word $right, string $kind)
     {
         $this->op = $op;
         $this->left = $left;
@@ -9105,7 +9105,7 @@ class Parser
             {
                 throw new Parseerror_("Expected target for redirect " . $op);
             }
-            return new Redirect($op, $target, "redirect", null);
+            return new Redirect($op, $target, 0, "redirect");
         }
         if ($ch === "" || !_isRedirectChar($ch))
         {
@@ -9308,7 +9308,7 @@ class Parser
         {
             throw new Parseerror_("Expected target for redirect " . $op);
         }
-        return new Redirect($op, $target, "redirect", null);
+        return new Redirect($op, $target, 0, "redirect");
     }
 
     public function _parseHeredocDelimiter(): array
@@ -9729,7 +9729,7 @@ class Parser
         $this->_pendingHeredocs = [];
     }
 
-    public function _parseHeredoc(?int $fd, bool $stripTabs): ?Heredoc
+    public function _parseHeredoc(int $fd, bool $stripTabs): ?Heredoc
     {
         $startPos = $this->pos;
         $this->_setState(PARSERSTATEFLAGS_PST_HEREDOC);
@@ -9742,7 +9742,7 @@ class Parser
                 return $existing;
             }
         }
-        $heredoc = new Heredoc($delimiter, "", $stripTabs, $quoted, false, 0, "heredoc", $fd);
+        $heredoc = new Heredoc($delimiter, "", $stripTabs, $quoted, $fd, false, 0, "heredoc");
         $heredoc->_startPos = $startPos;
         array_push($this->_pendingHeredocs, $heredoc);
         $this->_clearState(PARSERSTATEFLAGS_PST_HEREDOC);
@@ -9821,7 +9821,7 @@ class Parser
         }
         $this->advance();
         $this->_clearState(PARSERSTATEFLAGS_PST_SUBSHELL);
-        return new Subshell($body, $this->_collectRedirects(), "subshell");
+        return new Subshell($body, "subshell", $this->_collectRedirects());
     }
 
     public function parseArithmeticCommand(): ?Arithmeticcommand
@@ -10039,7 +10039,6 @@ class Parser
         {
             throw new Parseerror_("Unexpected end of conditional expression");
         }
-        $operand = null;
         if ($this->peek() === "!")
         {
             if ($this->pos + 1 < $this->length && !_isWhitespaceNoNewline((string)(mb_substr($this->source, $this->pos + 1, 1))))
@@ -10072,12 +10071,12 @@ class Parser
         $this->_condSkipWhitespace();
         if (isset(COND_UNARY_OPS[$word1->value]))
         {
-            $operand = $this->_parseCondWord();
-            if ($operand === null)
+            $unaryOperand = $this->_parseCondWord();
+            if ($unaryOperand === null)
             {
                 throw new Parseerror_("Expected operand after " . $word1->value);
             }
-            return new Unarytest($word1->value, $operand, "unary-test");
+            return new Unarytest($word1->value, $unaryOperand, "unary-test");
         }
         if (!$this->_condAtEnd() && $this->peek() !== "&" && $this->peek() !== "|" && $this->peek() !== ")")
         {
@@ -10175,7 +10174,7 @@ class Parser
         {
             throw new Parseerror_("Expected } to close brace group");
         }
-        return new Bracegroup($body, $this->_collectRedirects(), "brace-group");
+        return new Bracegroup($body, "brace-group", $this->_collectRedirects());
     }
 
     public function parseIf(): ?If_
@@ -10238,7 +10237,7 @@ class Parser
                     }
                 }
             }
-            $elseBody = new If_($elifCondition, $elifThenBody, $innerElse, [], "if");
+            $elseBody = new If_($elifCondition, $elifThenBody, [], "if", $innerElse);
         }
         else
         {
@@ -10257,7 +10256,7 @@ class Parser
         {
             throw new Parseerror_("Expected 'fi' to close if statement");
         }
-        return new If_($condition, $thenBody, $elseBody, $this->_collectRedirects(), "if");
+        return new If_($condition, $thenBody, $this->_collectRedirects(), "if", $elseBody);
     }
 
     public function _parseElifChain(): ?If_
@@ -10296,7 +10295,7 @@ class Parser
                 }
             }
         }
-        return new If_($condition, $thenBody, $elseBody, [], "if");
+        return new If_($condition, $thenBody, [], "if", $elseBody);
     }
 
     public function parseWhile(): ?While_
@@ -10920,7 +10919,7 @@ class Parser
             }
             $terminator = $this->_consumeCaseTerminator();
             $this->skipWhitespaceAndNewlines();
-            array_push($patterns, new Casepattern($pattern, $body, $terminator, "pattern"));
+            array_push($patterns, new Casepattern($pattern, $terminator, "pattern", $body));
         }
         $this->_clearState(PARSERSTATEFLAGS_PST_CASEPAT);
         $this->skipWhitespaceAndNewlines();
@@ -12859,7 +12858,7 @@ function _formatRedirect(?Node $r, bool $compact, bool $heredocOpOnly): string
         {
             $op = "<<";
         }
-        if ($r->fd !== null && $r->fd > 0)
+        if ($r->fd > 0)
         {
             $op = strval($r->fd) . $op;
         }

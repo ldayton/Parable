@@ -3856,10 +3856,10 @@ class Comment implements Node {
 class Redirect implements Node {
     String op;
     Word target;
-    Integer fd;
+    int fd;
     String kind;
 
-    Redirect(String op, Word target, Integer fd, String kind) {
+    Redirect(String op, Word target, int fd, String kind) {
         this.op = op;
         this.target = target;
         this.fd = fd;
@@ -3944,12 +3944,12 @@ class HereDoc implements Node {
     String content;
     boolean stripTabs;
     boolean quoted;
-    Integer fd;
+    int fd;
     boolean complete;
     int _startPos;
     String kind;
 
-    HereDoc(String delimiter, String content, boolean stripTabs, boolean quoted, Integer fd, boolean complete, int _startPos, String kind) {
+    HereDoc(String delimiter, String content, boolean stripTabs, boolean quoted, int fd, boolean complete, int _startPos, String kind) {
         this.delimiter = delimiter;
         this.content = content;
         this.stripTabs = stripTabs;
@@ -4232,12 +4232,12 @@ class Select implements Node {
 }
 
 class Case implements Node {
-    Node word;
-    List<Node> patterns;
+    Word word;
+    List<CasePattern> patterns;
     List<Node> redirects;
     String kind;
 
-    Case(Node word, List<Node> patterns, List<Node> redirects, String kind) {
+    Case(Word word, List<CasePattern> patterns, List<Node> redirects, String kind) {
         this.word = word;
         this.patterns = patterns;
         this.redirects = redirects;
@@ -4247,7 +4247,7 @@ class Case implements Node {
     public String toSexp() {
         List<String> parts = new ArrayList<>();
         parts.add("(case " + this.word.toSexp());
-        for (Node p : this.patterns) {
+        for (CasePattern p : this.patterns) {
             parts.add(p.toSexp());
         }
         String base = String.join(" ", parts) + ")";
@@ -5007,17 +5007,17 @@ class ConditionalExpr implements Node {
 
 class UnaryTest implements Node {
     String op;
-    Node operand;
+    Word operand;
     String kind;
 
-    UnaryTest(String op, Node operand, String kind) {
+    UnaryTest(String op, Word operand, String kind) {
         this.op = op;
         this.operand = operand;
         this.kind = kind;
     }
 
     public String toSexp() {
-        String operandVal = ((Word) this.operand).getCondFormattedValue();
+        String operandVal = this.operand.getCondFormattedValue();
         return "(cond-unary \"" + this.op + "\" (cond-term \"" + operandVal + "\"))";
     }
 
@@ -5028,11 +5028,11 @@ class UnaryTest implements Node {
 
 class BinaryTest implements Node {
     String op;
-    Node left;
-    Node right;
+    Word left;
+    Word right;
     String kind;
 
-    BinaryTest(String op, Node left, Node right, String kind) {
+    BinaryTest(String op, Word left, Word right, String kind) {
         this.op = op;
         this.left = left;
         this.right = right;
@@ -5040,8 +5040,8 @@ class BinaryTest implements Node {
     }
 
     public String toSexp() {
-        String leftVal = ((Word) this.left).getCondFormattedValue();
-        String rightVal = ((Word) this.right).getCondFormattedValue();
+        String leftVal = this.left.getCondFormattedValue();
+        String rightVal = this.right.getCondFormattedValue();
         return "(cond-binary \"" + this.op + "\" (cond-term \"" + leftVal + "\") (cond-term \"" + rightVal + "\"))";
     }
 
@@ -6372,7 +6372,7 @@ class Parser {
         Node left = this._arithParseTernary();
         this._arithSkipWs();
         List<String> assignOps = new ArrayList<>(Arrays.asList("<<=", ">>=", "+=", "-=", "*=", "/=", "%=", "&=", "^=", "|=", "="));
-        for (String op : assignOps) {
+        for (Object op : assignOps) {
             if (this._arithMatch(op)) {
                 if (op == "=" && this._arithPeek(1).equals("=")) {
                     break;
@@ -6415,7 +6415,7 @@ class Parser {
     }
 
     public Node _arithParseLeftAssoc(List<String> ops, Supplier<Node> parsefn) {
-        Node left = parsefn.get();
+        Object left = parsefn.get();
         while (true) {
             this._arithSkipWs();
             boolean matched = false;
@@ -7158,7 +7158,7 @@ class Parser {
             if (target == null) {
                 throw new ParseError("Expected target for redirect " + op, this.pos, 0);
             }
-            return new Redirect(op, target, null, "redirect");
+            return new Redirect(op, target, 0, "redirect");
         }
         if (ch.equals("") || !ParableFunctions._isRedirectChar(ch)) {
             this.pos = start;
@@ -7218,7 +7218,7 @@ class Parser {
             }
         }
         if (op.equals("<<")) {
-            return this._parseHeredoc((fd), stripTabs);
+            return this._parseHeredoc(fd, stripTabs);
         }
         if (!varfd.equals("")) {
             op = "{" + varfd + "}" + op;
@@ -7295,7 +7295,7 @@ class Parser {
         if (target == null) {
             throw new ParseError("Expected target for redirect " + op, this.pos, 0);
         }
-        return new Redirect(op, target, null, "redirect");
+        return new Redirect(op, target, 0, "redirect");
     }
 
     public Tuple2 _parseHeredocDelimiter() {
@@ -7606,7 +7606,7 @@ class Parser {
         this._pendingHeredocs = new ArrayList<>();
     }
 
-    public HereDoc _parseHeredoc(Integer fd, boolean stripTabs) {
+    public HereDoc _parseHeredoc(int fd, boolean stripTabs) {
         int startPos = this.pos;
         this._setState(Constants.PARSERSTATEFLAGS_PST_HEREDOC);
         Tuple2 _tuple35 = this._parseHeredocDelimiter();
@@ -7847,12 +7847,11 @@ class Parser {
         if (this._condAtEnd()) {
             throw new ParseError("Unexpected end of conditional expression", this.pos, 0);
         }
-        Node operand = null;
         if (this.peek().equals("!")) {
             if (this.pos + 1 < this.length && !ParableFunctions._isWhitespaceNoNewline(String.valueOf(this.source.charAt(this.pos + 1)))) {
             } else {
                 this.advance();
-                operand = this._parseCondTerm();
+                Node operand = this._parseCondTerm();
                 return new CondNot(operand, "cond-not");
             }
         }
@@ -7872,11 +7871,11 @@ class Parser {
         }
         this._condSkipWhitespace();
         if (Constants.COND_UNARY_OPS.contains(word1.value)) {
-            operand = this._parseCondWord();
-            if (operand == null) {
+            Word unaryOperand = this._parseCondWord();
+            if (unaryOperand == null) {
                 throw new ParseError("Expected operand after " + word1.value, this.pos, 0);
             }
-            return new UnaryTest(word1.value, operand, "unary-test");
+            return new UnaryTest(word1.value, unaryOperand, "unary-test");
         }
         if (!this._condAtEnd() && !this.peek().equals("&") && !this.peek().equals("|") && !this.peek().equals(")")) {
             Word word2 = null;
@@ -8305,7 +8304,7 @@ class Parser {
             throw new ParseError("Expected 'in' after case word", this._lexPeekToken().pos, 0);
         }
         this.skipWhitespaceAndNewlines();
-        List<Node> patterns = new ArrayList<>();
+        List<CasePattern> patterns = new ArrayList<>();
         this._setState(Constants.PARSERSTATEFLAGS_PST_CASEPAT);
         while (true) {
             this.skipWhitespaceAndNewlines();
@@ -8700,7 +8699,7 @@ class Parser {
     }
 
     public Node _parseCompoundCommand() {
-        Node result = this.parseBraceGroup();
+        BraceGroup result = this.parseBraceGroup();
         if (result != null) {
             return result;
         }
@@ -9544,12 +9543,12 @@ final class ParableFunctions {
     static String _formatCondBody(Node node) {
         String kind = node.getKind();
         if (kind == "unary-test") {
-            String operandVal = ((Word) ((UnaryTest) node).operand).getCondFormattedValue();
+            String operandVal = ((UnaryTest) node).operand.getCondFormattedValue();
             return ((UnaryTest) node).op + " " + operandVal;
         }
         if (kind == "binary-test") {
-            String leftVal = ((Word) ((BinaryTest) node).left).getCondFormattedValue();
-            String rightVal = ((Word) ((BinaryTest) node).right).getCondFormattedValue();
+            String leftVal = ((BinaryTest) node).left.getCondFormattedValue();
+            String rightVal = ((BinaryTest) node).right.getCondFormattedValue();
             return leftVal + " " + ((BinaryTest) node).op + " " + rightVal;
         }
         if (kind == "cond-and") {
@@ -9893,19 +9892,19 @@ final class ParableFunctions {
             return result;
         }
         if (node instanceof Case nodeCase) {
-            String word = ((Word) nodeCase.word).value;
+            String word = nodeCase.word.value;
             List<String> patterns = new ArrayList<>();
             int i = 0;
             while (i < nodeCase.patterns.size()) {
-                Node p = nodeCase.patterns.get(i);
-                Object pat = ((CasePattern) p).pattern.replace("|", " | ");
+                CasePattern p = nodeCase.patterns.get(i);
+                String pat = p.pattern.replace("|", " | ");
                 String body = "";
-                if (((CasePattern) p).body != null) {
-                    body = ParableFunctions._formatCmdsubNode(((CasePattern) p).body, indent + 8, false, false, false);
+                if (p.body != null) {
+                    body = ParableFunctions._formatCmdsubNode(p.body, indent + 8, false, false, false);
                 } else {
                     body = "";
                 }
-                String term = ((CasePattern) p).terminator;
+                String term = p.terminator;
                 String patIndent = ParableFunctions._repeatStr(" ", indent + 8);
                 String termIndent = ParableFunctions._repeatStr(" ", indent + 4);
                 String bodyPart = ((!body.isEmpty()) ? patIndent + body + "\n" : "\n");
@@ -10002,7 +10001,7 @@ final class ParableFunctions {
             } else {
                 op = "<<";
             }
-            if (rHereDoc.fd != null && rHereDoc.fd > 0) {
+            if (rHereDoc.fd > 0) {
                 op = String.valueOf(rHereDoc.fd) + op;
             }
             String delim = "";

@@ -26,6 +26,7 @@ class TypeContext:
     union_types: dict[str, list[str]] = field(default_factory=dict)
     list_element_unions: dict[str, list[str]] = field(default_factory=dict)
     narrowed_attr_paths: dict[tuple[str, ...], str] = field(default_factory=dict)
+    unified_to_node: set[str] = field(default_factory=set)
 
 
 @dataclass

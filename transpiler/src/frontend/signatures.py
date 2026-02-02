@@ -14,8 +14,6 @@ from ..ir import (
     Slice,
     VOID,
 )
-from ..type_overrides import RETURN_TYPE_OVERRIDES
-
 if TYPE_CHECKING:
     from ..ir import SymbolTable
 
@@ -81,9 +79,6 @@ def extract_func_info(
     if returns:
         py_return = callbacks.annotation_to_str(returns)
         return_type = callbacks.py_return_type_to_ir(py_return)
-    # Apply return type overrides
-    if node.get("name") in RETURN_TYPE_OVERRIDES:
-        return_type = RETURN_TYPE_OVERRIDES[node.get("name")]
     return FuncInfo(
         name=node.get("name"),
         params=params,

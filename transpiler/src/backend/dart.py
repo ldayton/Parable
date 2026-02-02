@@ -972,10 +972,15 @@ class DartBackend:
         self._emit_hoisted_vars(stmt)
         iter_expr = self._expr(stmt.iterable)
         iter_type = stmt.iterable.typ
-        # Add ! if iterating over Optional type (Dart can't promote instance fields)
+        # Use fallback empty collection for Optional types (works whether promoted or not)
         if isinstance(iter_type, Optional):
-            iter_expr = f"{iter_expr}!"
-            iter_type = iter_type.inner
+            inner = iter_type.inner
+            if isinstance(inner, Slice):
+                elem_type = self._type(inner.element)
+                iter_expr = f"({iter_expr} ?? <{elem_type}>[])"
+            else:
+                iter_expr = f"({iter_expr} ?? [])"
+            iter_type = inner
         is_string = isinstance(iter_type, Primitive) and iter_type.kind == "string"
         index = stmt.index
         value = stmt.value
@@ -1209,10 +1214,10 @@ class DartBackend:
                 if isinstance(inner_type, (Slice, Map, Set)):
                     return f"({inner_str}.isNotEmpty)"
                 if isinstance(inner_type, Optional) and isinstance(inner_type.inner, (Slice, Map, Set)):
-                    # Need ! after null check because Dart can't promote non-final instance fields
-                    return f"({inner_str} != null && {inner_str}!.isNotEmpty)"
+                    # Use null-safe access - works whether Dart promoted the variable or not
+                    return f"({inner_str}?.isNotEmpty ?? false)"
                 if isinstance(inner_type, Optional) and isinstance(inner_type.inner, Primitive) and inner_type.inner.kind == "string":
-                    return f"({inner_str} != null && {inner_str}!.isNotEmpty)"
+                    return f"({inner_str}?.isNotEmpty ?? false)"
                 if isinstance(inner_type, Primitive) and inner_type.kind == "int":
                     return f"({inner_str} != 0)"
                 return f"({inner_str} != null)"
@@ -1416,13 +1421,11 @@ class DartBackend:
                 return "null /* TODO: unknown expression */"
 
     def _call(self, func: str, args: list[Expr]) -> str:
-        # Add ! for Optional-typed arguments since Dart can't promote non-final fields
+        # Don't add ! for Optional args - Dart's flow analysis handles promotion
+        # for locals/params after null checks, and we use null-safe patterns elsewhere
         arg_parts: list[str] = []
         for a in args:
-            s = self._expr(a)
-            if isinstance(a.typ, Optional):
-                s = f"{s}!"
-            arg_parts.append(s)
+            arg_parts.append(self._expr(a))
         args_str = ", ".join(arg_parts)
         if func == "int" and len(args) == 2:
             return f"int.parse({self._expr(args[0])}, radix: {self._expr(args[1])})"
@@ -1468,13 +1471,11 @@ class DartBackend:
         return f"{_safe_name(func)}({args_str})"
 
     def _method_call(self, obj: Expr, method: str, args: list[Expr], receiver_type: Type) -> str:
-        # Add ! for Optional-typed arguments since Dart can't promote non-final fields
+        # Don't add ! for Optional args - Dart's flow analysis handles promotion
+        # for locals/params after null checks, and we use null-safe patterns elsewhere
         arg_parts: list[str] = []
         for a in args:
-            s = self._expr(a)
-            if isinstance(a.typ, Optional):
-                s = f"{s}!"
-            arg_parts.append(s)
+            arg_parts.append(self._expr(a))
         args_str = ", ".join(arg_parts)
         obj_str = self._expr(obj)
         # Use null assertion for Optional receiver types

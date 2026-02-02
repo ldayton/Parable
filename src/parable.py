@@ -74,7 +74,7 @@ def _is_whitespace(c: str) -> bool:
     return c == " " or c == "\t" or c == "\n"
 
 
-def _string_to_bytes(s: str) -> list[int]:
+def _string_to_bytes(s: str) -> bytearray:
     """Convert a string to a list of UTF-8 bytes."""
     return list(s.encode("utf-8"))
 

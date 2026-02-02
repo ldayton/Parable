@@ -1101,7 +1101,7 @@ class Lexer {
                   cmdsubResult1 = _tuple9.$2;
                   this._syncFromParser();
                   if (cmdsubResult0 != null) {
-                    parts.add(cmdsubResult0!);
+                    parts.add(cmdsubResult0);
                     chars.add(cmdsubResult1);
                   } else {
                     chars.add(this.advance());
@@ -1140,7 +1140,7 @@ class Lexer {
         Node? ansiResult0 = _tuple10.$1;
         String ansiResult1 = _tuple10.$2;
         if (ansiResult0 != null) {
-          parts.add(ansiResult0!);
+          parts.add(ansiResult0);
           chars.add(ansiResult1);
         } else {
           chars.add(this.advance());
@@ -1153,7 +1153,7 @@ class Lexer {
         String localeResult1 = _tuple11.$2;
         List<Node> localeResult2 = _tuple11.$3;
         if (localeResult0 != null) {
-          parts.add(localeResult0!);
+          parts.add(localeResult0);
           parts.addAll(localeResult2);
           chars.add(localeResult1);
         } else {
@@ -1184,7 +1184,7 @@ class Lexer {
         cmdsubResult1 = _tuple12.$2;
         this._syncFromParser();
         if (cmdsubResult0 != null) {
-          parts.add(cmdsubResult0!);
+          parts.add(cmdsubResult0);
           chars.add(cmdsubResult1);
         } else {
           chars.add(this.advance());
@@ -1198,7 +1198,7 @@ class Lexer {
         String procsubResult1 = _tuple13.$2;
         this._syncFromParser();
         if (procsubResult0 != null) {
-          parts.add(procsubResult0!);
+          parts.add(procsubResult0);
           chars.add(procsubResult1);
         } else {
           if ((procsubResult1.isNotEmpty)) {
@@ -1228,7 +1228,7 @@ class Lexer {
           String arrayResult1 = _tuple14.$2;
           this._syncFromParser();
           if (arrayResult0 != null) {
-            parts.add(arrayResult0!);
+            parts.add(arrayResult0);
             chars.add(arrayResult1);
           } else {
             break;
@@ -1433,7 +1433,7 @@ class Lexer {
             String arithText = _tuple15.$2;
             this._syncFromParser();
             if (arithNode != null) {
-              innerParts.add(arithNode!);
+              innerParts.add(arithNode);
               contentChars.add(arithText);
             } else {
               this._syncToParser();
@@ -1442,7 +1442,7 @@ class Lexer {
               cmdsubText = _tuple16.$2;
               this._syncFromParser();
               if (cmdsubNode != null) {
-                innerParts.add(cmdsubNode!);
+                innerParts.add(cmdsubNode);
                 contentChars.add(cmdsubText);
               } else {
                 contentChars.add(this.advance());
@@ -1456,7 +1456,7 @@ class Lexer {
               cmdsubText = _tuple17.$2;
               this._syncFromParser();
               if (cmdsubNode != null) {
-                innerParts.add(cmdsubNode!);
+                innerParts.add(cmdsubNode);
                 contentChars.add(cmdsubText);
               } else {
                 contentChars.add(this.advance());
@@ -1469,7 +1469,7 @@ class Lexer {
                 String paramText = _tuple18.$2;
                 this._syncFromParser();
                 if (paramNode != null) {
-                  innerParts.add(paramNode!);
+                  innerParts.add(paramNode);
                   contentChars.add(paramText);
                 } else {
                   contentChars.add(this.advance());
@@ -1482,7 +1482,7 @@ class Lexer {
                   cmdsubText = _tuple19.$2;
                   this._syncFromParser();
                   if (cmdsubNode != null) {
-                    innerParts.add(cmdsubNode!);
+                    innerParts.add(cmdsubNode);
                     contentChars.add(cmdsubText);
                   } else {
                     contentChars.add(this.advance());
@@ -2932,7 +2932,7 @@ class Word implements Node {
         break;
       case ArithmeticExpansion nodeArithmeticExpansion:
         if (nodeArithmeticExpansion.expression != null) {
-          result.addAll(this._collectCmdsubs(nodeArithmeticExpansion.expression!));
+          result.addAll(this._collectCmdsubs(nodeArithmeticExpansion.expression));
         }
         break;
       case ArithBinaryOp nodeArithBinaryOp:
@@ -3995,7 +3995,7 @@ class Subshell implements Node {
 
   String toSexp() {
     String base = "(subshell " + this.body.toSexp() + ")"; 
-    return _appendRedirects(base, this.redirects!);
+    return _appendRedirects(base, this.redirects);
   }
 
   String getKind() {
@@ -4016,7 +4016,7 @@ class BraceGroup implements Node {
 
   String toSexp() {
     String base = "(brace-group " + this.body.toSexp() + ")"; 
-    return _appendRedirects(base, this.redirects!);
+    return _appendRedirects(base, this.redirects);
   }
 
   String getKind() {
@@ -4136,7 +4136,7 @@ class For implements Node {
         return "(for (word \"" + varEscaped + "\") (in) " + this.body.toSexp() + ")" + suffix;
       } else {
         List<String> wordParts = <String>[]; 
-        for (final w in this.words!) {
+        for (final w in (this.words ?? <Word>[])) {
           wordParts.add(w.toSexp());
         }
         String wordStrs = wordParts.join(" "); 
@@ -4219,11 +4219,11 @@ class Select implements Node {
     String inClause = "";
     if (this.words != null) {
       List<String> wordParts = <String>[]; 
-      for (final w in this.words!) {
+      for (final w in (this.words ?? <Word>[])) {
         wordParts.add(w.toSexp());
       }
       String wordStrs = wordParts.join(" "); 
-      if ((this.words != null && this.words!.isNotEmpty)) {
+      if ((this.words?.isNotEmpty ?? false)) {
         inClause = "(in " + wordStrs + ")";
       } else {
         inClause = "(in)";
@@ -5689,7 +5689,7 @@ class Parser {
       result0 = _tuple23.$1;
       result1 = _tuple23.$2;
       if (result0 != null) {
-        parts.add(result0!);
+        parts.add(result0);
         chars.add(result1);
         return true;
       }
@@ -5697,7 +5697,7 @@ class Parser {
       result0 = _tuple24.$1;
       result1 = _tuple24.$2;
       if (result0 != null) {
-        parts.add(result0!);
+        parts.add(result0);
         chars.add(result1);
         return true;
       }
@@ -5708,7 +5708,7 @@ class Parser {
       result0 = _tuple25.$1;
       result1 = _tuple25.$2;
       if (result0 != null) {
-        parts.add(result0!);
+        parts.add(result0);
         chars.add(result1);
         return true;
       }
@@ -5719,7 +5719,7 @@ class Parser {
       result0 = _tuple26.$1;
       result1 = _tuple26.$2;
       if (result0 != null) {
-        parts.add(result0!);
+        parts.add(result0);
         chars.add(result1);
         return true;
       }
@@ -5729,7 +5729,7 @@ class Parser {
     result0 = _tuple27.$1;
     result1 = _tuple27.$2;
     if (result0 != null) {
-      parts.add(result0!);
+      parts.add(result0);
       chars.add(result1);
       return true;
     }
@@ -9442,9 +9442,9 @@ String _stripLineContinuationsCommentAware(String text) {
 }
 
 String _appendRedirects(String base, List<Node>? redirects) {
-  if ((redirects != null && redirects!.isNotEmpty)) {
+  if ((redirects?.isNotEmpty ?? false)) {
     List<String> parts = <String>[]; 
-    for (final r in redirects!) {
+    for (final r in (redirects ?? <Node>[])) {
       parts.add(r.toSexp());
     }
     return base + " " + parts.join(" ");
@@ -9874,7 +9874,7 @@ String _formatCmdsubNode(Node node, int indent, bool inProcsub, bool compactRedi
       String thenBody = _formatCmdsubNode(nodeIf.thenBody, indent + 4, false, false, false); 
       String result = "if " + cond + "; then\n" + innerSp + thenBody + ";"; 
       if (nodeIf.elseBody != null) {
-        String elseBody = _formatCmdsubNode(nodeIf.elseBody!, indent + 4, false, false, false); 
+        String elseBody = _formatCmdsubNode(nodeIf.elseBody, indent + 4, false, false, false); 
         result = result + "\n" + sp + "else\n" + innerSp + elseBody + ";";
       }
       result = result + "\n" + sp + "fi";
@@ -9911,7 +9911,7 @@ String _formatCmdsubNode(Node node, int indent, bool inProcsub, bool compactRedi
       String result = "";
       if (nodeFor.words != null) {
         List<String> wordVals = <String>[]; 
-        for (final w in nodeFor.words!) {
+        for (final w in (nodeFor.words ?? <Word>[])) {
           wordVals.add(w.value);
         }
         String words = wordVals.join(" "); 
@@ -9951,7 +9951,7 @@ String _formatCmdsubNode(Node node, int indent, bool inProcsub, bool compactRedi
         String pat = p.pattern.replaceAll("|", " | "); 
         String body = "";
         if (p.body != null) {
-          body = _formatCmdsubNode(p.body!, indent + 8, false, false, false);
+          body = _formatCmdsubNode(p.body, indent + 8, false, false, false);
         } else {
           body = "";
         }
@@ -9988,9 +9988,9 @@ String _formatCmdsubNode(Node node, int indent, bool inProcsub, bool compactRedi
     case Subshell nodeSubshell:
       String body = _formatCmdsubNode(nodeSubshell.body, indent, inProcsub, compactRedirects, false); 
       String redirects = ""; 
-      if ((nodeSubshell.redirects != null && nodeSubshell.redirects!.isNotEmpty)) {
+      if ((nodeSubshell.redirects?.isNotEmpty ?? false)) {
         List<String> redirectParts = <String>[]; 
-        for (final r in nodeSubshell.redirects!) {
+        for (final r in (nodeSubshell.redirects ?? <Node>[])) {
           redirectParts.add(_formatRedirect(r, false, false));
         }
         redirects = redirectParts.join(" ");
@@ -10012,9 +10012,9 @@ String _formatCmdsubNode(Node node, int indent, bool inProcsub, bool compactRedi
       body = _trimRight(body, ";");
       String terminator = (body.endsWith(" &") ? " }" : "; }"); 
       String redirects = ""; 
-      if ((nodeBraceGroup.redirects != null && nodeBraceGroup.redirects!.isNotEmpty)) {
+      if ((nodeBraceGroup.redirects?.isNotEmpty ?? false)) {
         List<String> redirectParts = <String>[]; 
-        for (final r in nodeBraceGroup.redirects!) {
+        for (final r in (nodeBraceGroup.redirects ?? <Node>[])) {
           redirectParts.add(_formatRedirect(r, false, false));
         }
         redirects = redirectParts.join(" ");

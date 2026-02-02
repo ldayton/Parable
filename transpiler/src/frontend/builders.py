@@ -26,7 +26,6 @@ from ..ir import (
     VOID,
     loc_unknown,
 )
-from ..type_overrides import MODULE_CONSTANTS
 
 if TYPE_CHECKING:
     from .. import ir
@@ -414,21 +413,10 @@ def build_module(
 
     module = Module(name="parable")
     module.hierarchy_root = hierarchy_root
-    # Build constants from MODULE_CONSTANTS overrides
-    for const_name, (const_type, go_value) in MODULE_CONSTANTS.items():
-        # Strip quotes from go_value to get the actual string content
-        str_value = go_value.strip('"')
-        value = ir.StringLit(value=str_value, typ=STRING, loc=loc_unknown())
-        module.constants.append(
-            Constant(name=const_name, typ=const_type, value=value, loc=loc_unknown())
-        )
     # Build constants (module-level and class-level)
     for node in tree.get("body", []):
         if is_type(node, ["Assign"]) and len(node.get("targets", [])) == 1:
             target = node.get("targets", [])[0]
-            # Skip constants already handled by MODULE_CONSTANTS
-            if is_type(target, ["Name"]) and target.get("id") in MODULE_CONSTANTS:
-                continue
             if is_type(target, ["Name"]) and target.get("id") in symbols.constants:
                 value = callbacks.lower_expr(node.get("value"))
                 const_type = symbols.constants[target.get("id")]

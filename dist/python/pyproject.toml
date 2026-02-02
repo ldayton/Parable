@@ -31,3 +31,4 @@ build-backend = "uv_build"
 
 [tool.uv.build-backend]
 module-root = "src"
+module-name = "parable"

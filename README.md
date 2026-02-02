@@ -22,25 +22,25 @@ Parse bash exactly as bash does. One file, zero dependencies, in your language. 
 
 ## Transpiler
 
-The transpiler supports these target languages:
+The transpiler supports these target languages (all on Ubuntu 24.04):
 
-| Language   | Reference    | Released | Homebrew      | GitHub Actions    | Status |
-| ---------- | ------------ | -------- | ------------- | ----------------- | ------ |
-| Go         | Go 1.21      | Aug 2023 | `go@1.21`     | `setup-go@v5`     | Done   |
-| Java       | Temurin 21   | Sep 2023 | `temurin@21`  | `setup-java@v4`   | Done   |
-| Javascript | Node.js 21   | Oct 2023 | `node@21`     | `setup-node@v4`   | Done   |
-| Lua        | Lua 5.4      | May 2023 | `lua`         | `gh-actions-lua`  | Done   |
-| Python     | CPython 3.12 | Oct 2023 | `python@3.12` | `setup-uv@v4`     | Done   |
-| Ruby       | Ruby 3.3     | Dec 2023 | `ruby@3.3`    | `setup-ruby@v1`   | Done   |
-| Typescript | tsc 5.3      | Nov 2023 | `node@21`     | `setup-node@v4`   | Done   |
-| C#         | .NET 8       | Nov 2023 | `dotnet@8`    | `setup-dotnet@v4` | WIP    |
-| Perl       | Perl 5.38    | Jul 2023 | `perl`        | `setup-perl@v1`   | WIP    |
-| PHP        | PHP 8.3      | Nov 2023 | `php@8.3`     | `setup-php@v2`    | WIP    |
-| C          | GCC 13       | Jul 2023 | `gcc@13`      | `setup-gcc@v1`    | Future |
-| Dart       | Dart 3.2     | Nov 2023 | `dart`        | `setup-dart@v1`   | Future |
-| Rust       | Rust 1.75    | Dec 2023 | `rust`        | `setup-rust@v1`   | Future |
-| Swift      | Swift 5.9    | Sep 2023 | `swift`       | `setup-swift@v2`  | Future |
-| Zig        | Zig 0.11     | Aug 2023 | `zig`         | `setup-zig@v2`    | Future |
+| Language   | Min Version  | Source              | Status |
+| ---------- | ------------ | ------------------- | ------ |
+| C#         | .NET 8       | Microsoft apt repo  | Done   |
+| Go         | Go 1.21      | Official tarball    | Done   |
+| Java       | Temurin 21   | Adoptium apt repo   | Done   |
+| Javascript | Node.js 21   | Official tarball    | Done   |
+| Lua        | Lua 5.4      | Ubuntu apt          | Done   |
+| Perl       | Perl 5.38    | Ubuntu apt          | Done   |
+| PHP        | PHP 8.3      | ondrej/php PPA      | Done   |
+| Python     | CPython 3.12 | Ubuntu apt          | Done   |
+| Ruby       | Ruby 3.2     | Ubuntu apt          | Done   |
+| Typescript | tsc 5.3      | npm (on Node.js 21) | Done   |
+| C          | GCC 13       | Ubuntu apt          | WIP    |
+| Dart       | Dart 3.2     | Official SDK zip    | Future |
+| Rust       | Rust 1.75    | rustup              | Future |
+| Swift      | Swift 5.9    | Official tarball    | Future |
+| Zig        | Zig 0.11     | Official tarball    | Future |
 
 Output code quality is a work in progress. Currently the transpiler prioritizes correctness over readability; generated code may not yet match hand-written idioms.
 

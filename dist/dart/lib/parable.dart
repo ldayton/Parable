@@ -226,10 +226,10 @@ class QuoteState {
   }
 
   QuoteState copy() {
-    QuoteState qs = newQuoteState();
+    dynamic qs = newQuoteState();
     qs.single = this.single;
     qs.double = this.double;
-    qs._stack = List.from(this._stack);
+    qs._stack = List<(bool, bool)>.from(this._stack);
     return qs;
   }
 
@@ -263,7 +263,7 @@ class ParseContext {
   }
 
   ParseContext copy() {
-    ParseContext ctx = newParseContext(this.kind);
+    dynamic ctx = newParseContext(this.kind);
     ctx.parenDepth = this.parenDepth;
     ctx.braceDepth = this.braceDepth;
     ctx.bracketDepth = this.bracketDepth;
@@ -298,7 +298,7 @@ class ContextStack {
   }
 
   List<ParseContext> copyStack() {
-    List<ParseContext> result = <ParseContext>[];
+    List<ParseContext> result = <ParseContext>[]; 
     for (final ctx in this._stack) {
       result.add(ctx.copy());
     }
@@ -306,7 +306,7 @@ class ContextStack {
   }
 
   void restoreFrom(List<ParseContext> savedStack) {
-    List<ParseContext> result = <ParseContext>[];
+    List<ParseContext> result = <ParseContext>[]; 
     for (final ctx in savedStack) {
       result.add(ctx.copy());
     }
@@ -374,7 +374,7 @@ class Lexer {
     if (this.pos >= this.length) {
       return "";
     }
-    String c = (this.source[this.pos]).toString();
+    String c = (this.source[this.pos]).toString(); 
     this.pos += 1;
     return c;
   }
@@ -391,14 +391,14 @@ class Lexer {
     return "|&;()<> \t\n".contains(c);
   }
 
-  Token _readOperator() {
-    int start = this.pos;
-    String c = this.peek();
+  dynamic _readOperator() {
+    int start = this.pos; 
+    String c = this.peek(); 
     if (c == "") {
       return null as dynamic;
     }
-    String two = this.lookahead(2);
-    String three = this.lookahead(3);
+    String two = this.lookahead(2); 
+    String three = this.lookahead(3); 
     if (three == ";;&") {
       this.pos += 3;
       return Token(tokentypeSemiSemiAmp, three, start, <Node>[], null);
@@ -512,7 +512,7 @@ class Lexer {
 
   void skipBlanks() {
     while (this.pos < this.length) {
-      String c = (this.source[this.pos]).toString();
+      String c = (this.source[this.pos]).toString(); 
       if (c != " " && c != "\t") {
         break;
       }
@@ -531,7 +531,7 @@ class Lexer {
       return false;
     }
     if (this.pos > 0) {
-      String prev = (this.source[this.pos - 1]).toString();
+      String prev = (this.source[this.pos - 1]).toString(); 
       if (!" \t\n;|&(){}".contains(prev)) {
         return false;
       }
@@ -543,10 +543,10 @@ class Lexer {
   }
 
   (String, bool) _readSingleQuote(int start) {
-    List<String> chars = <String>["'"];
-    bool sawNewline = false;
+    List<String> chars = <String>["'"]; 
+    bool sawNewline = false; 
     while (this.pos < this.length) {
-      String c = (this.source[this.pos]).toString();
+      String c = (this.source[this.pos]).toString(); 
       if (c == "\n") {
         sawNewline = true;
       }
@@ -604,16 +604,16 @@ class Lexer {
 
   bool _readBracketExpression(List<String> chars, List<Node> parts, bool forRegex, int parenDepth) {
     if (forRegex) {
-      int scan = this.pos + 1;
+      int scan = this.pos + 1; 
       if (scan < this.length && (this.source[scan]).toString() == "^") {
         scan += 1;
       }
       if (scan < this.length && (this.source[scan]).toString() == "]") {
         scan += 1;
       }
-      bool bracketWillClose = false;
+      bool bracketWillClose = false; 
       while (scan < this.length) {
-        String sc = (this.source[scan]).toString();
+        String sc = (this.source[scan]).toString(); 
         if (sc == "]" && scan + 1 < this.length && (this.source[scan + 1]).toString() == "]") {
           break;
         }
@@ -646,7 +646,7 @@ class Lexer {
       if (this.pos + 1 >= this.length) {
         return false;
       }
-      String nextCh = (this.source[this.pos + 1]).toString();
+      String nextCh = (this.source[this.pos + 1]).toString(); 
       if (_isWhitespaceNoNewline(nextCh) || nextCh == "&" || nextCh == "|") {
         return false;
       }
@@ -659,7 +659,7 @@ class Lexer {
       chars.add(this.advance());
     }
     while (!(this.atEnd())) {
-      String c = this.peek();
+      String c = this.peek(); 
       if (c == "]") {
         chars.add(this.advance());
         break;
@@ -716,17 +716,17 @@ class Lexer {
   }
 
   String _parseMatchedPair(String openChar, String closeChar, int flags, bool initialWasDollar) {
-    int start = this.pos;
-    int count = 1;
-    List<String> chars = <String>[];
-    bool passNext = false;
-    bool wasDollar = initialWasDollar;
-    bool wasGtlt = false;
+    int start = this.pos; 
+    int count = 1; 
+    List<String> chars = <String>[]; 
+    bool passNext = false; 
+    bool wasDollar = initialWasDollar; 
+    bool wasGtlt = false; 
     while (count > 0) {
       if (this.atEnd()) {
         throw MatchedPairError("unexpected EOF while looking for matching `\${closeChar}'", start, 0);
       }
-      String ch = this.advance();
+      String ch = this.advance(); 
       if ((flags & matchedpairflagsDolbrace != 0) && this._dolbraceState == dolbracestateOp) {
         if (!"#%^,~:-=?+/".contains(ch)) {
           this._dolbraceState = dolbracestateWord;
@@ -787,10 +787,10 @@ class Lexer {
         continue;
       }
       if ("'\"`".contains(ch) && openChar != closeChar) {
-        late String nested;
+        String nested = "";
         if (ch == "'") {
           chars.add(ch);
-          int quoteFlags = (wasDollar ? flags | matchedpairflagsAllowesc : flags);
+          int quoteFlags = (wasDollar ? flags | matchedpairflagsAllowesc : flags); 
           nested = this._parseMatchedPair("'", "'", quoteFlags, false);
           chars.add(nested);
           chars.add("'");
@@ -820,7 +820,7 @@ class Lexer {
         }
       }
       if (ch == "\$" && !(this.atEnd()) && !((flags & matchedpairflagsExtglob != 0))) {
-        String nextCh = this.peek();
+        String nextCh = this.peek(); 
         if (wasDollar) {
           chars.add(ch);
           wasDollar = false;
@@ -829,7 +829,7 @@ class Lexer {
         }
         if (nextCh == "{") {
           if ((flags & matchedpairflagsArith != 0)) {
-            int afterBracePos = this.pos + 1;
+            int afterBracePos = this.pos + 1; 
             if (afterBracePos >= this.length || !(_isFunsubChar((this.source[afterBracePos]).toString()))) {
               chars.add(ch);
               wasDollar = true;
@@ -839,7 +839,7 @@ class Lexer {
           }
           this.pos -= 1;
           this._syncToParser();
-          bool inDquote = flags & matchedpairflagsDquote != 0;
+          bool inDquote = flags & matchedpairflagsDquote != 0; 
           final _tuple2 = this._parser!._parseParamExpansion(inDquote);
           Node? paramNode = _tuple2.$1;
           String paramText = _tuple2.$2;
@@ -855,16 +855,16 @@ class Lexer {
           }
           continue;
         } else {
-          late Node arithNode;
-          late String arithText;
+          dynamic arithNode;
+          String arithText = "";
           if (nextCh == "(") {
             this.pos -= 1;
             this._syncToParser();
-            late Node cmdNode;
-            late String cmdText;
+            dynamic cmdNode;
+            String cmdText = "";
             if (this.pos + 2 < this.length && (this.source[this.pos + 2]).toString() == "(") {
               final _tuple3 = this._parser!._parseArithmeticExpansion();
-              arithNode = _tuple3.$1!;
+              arithNode = _tuple3.$1;
               arithText = _tuple3.$2;
               this._syncFromParser();
               if (arithNode != null) {
@@ -874,7 +874,7 @@ class Lexer {
               } else {
                 this._syncToParser();
                 final _tuple4 = this._parser!._parseCommandSubstitution();
-                cmdNode = _tuple4.$1!;
+                cmdNode = _tuple4.$1;
                 cmdText = _tuple4.$2;
                 this._syncFromParser();
                 if (cmdNode != null) {
@@ -890,7 +890,7 @@ class Lexer {
               }
             } else {
               final _tuple5 = this._parser!._parseCommandSubstitution();
-              cmdNode = _tuple5.$1!;
+              cmdNode = _tuple5.$1;
               cmdText = _tuple5.$2;
               this._syncFromParser();
               if (cmdNode != null) {
@@ -910,7 +910,7 @@ class Lexer {
               this.pos -= 1;
               this._syncToParser();
               final _tuple6 = this._parser!._parseDeprecatedArithmetic();
-              arithNode = _tuple6.$1!;
+              arithNode = _tuple6.$1;
               arithText = _tuple6.$2;
               this._syncFromParser();
               if (arithNode != null) {
@@ -928,7 +928,7 @@ class Lexer {
         }
       }
       if (ch == "(" && wasGtlt && (flags & matchedpairflagsDolbrace | matchedpairflagsArraysub != 0)) {
-        String direction = chars[chars.length - 1];
+        String direction = chars[chars.length - 1]; 
         chars = chars.sublist(0, chars.length - 1);
         this.pos -= 1;
         this._syncToParser();
@@ -959,16 +959,16 @@ class Lexer {
     return this._parseMatchedPair("{", "}", flags | matchedpairflagsDolbrace, wasDollar);
   }
 
-  Word _readWordInternal(int ctx, bool atCommandStart, bool inArrayLiteral, bool inAssignBuiltin) {
-    int start = this.pos;
-    List<String> chars = <String>[];
-    List<Node> parts = <Node>[];
-    int bracketDepth = 0;
-    int bracketStartPos = -1;
-    bool seenEquals = false;
-    int parenDepth = 0;
+  dynamic _readWordInternal(int ctx, bool atCommandStart, bool inArrayLiteral, bool inAssignBuiltin) {
+    int start = this.pos; 
+    List<String> chars = <String>[]; 
+    List<Node> parts = <Node>[]; 
+    int bracketDepth = 0; 
+    int bracketStartPos = -1; 
+    bool seenEquals = false; 
+    int parenDepth = 0; 
     while (!(this.atEnd())) {
-      String ch = this.peek();
+      String ch = this.peek(); 
       if (ctx == wordCtxRegex) {
         if (ch == "\\" && this.pos + 1 < this.length && (this.source[this.pos + 1]).toString() == "\n") {
           this.advance();
@@ -986,7 +986,7 @@ class Lexer {
           continue;
         }
         if ((chars.isNotEmpty) && atCommandStart && !(seenEquals) && _isArrayAssignmentPrefix(chars)) {
-          String prevChar = chars[chars.length - 1];
+          String prevChar = chars[chars.length - 1]; 
           if ((prevChar.isNotEmpty && RegExp(r'^[a-zA-Z0-9]+$').hasMatch(prevChar)) || prevChar == "_") {
             bracketStartPos = this.pos;
             bracketDepth += 1;
@@ -1023,14 +1023,14 @@ class Lexer {
         break;
       }
       if ((ctx == wordCtxCond || ctx == wordCtxRegex) && ch == "[") {
-        bool forRegex = ctx == wordCtxRegex;
+        bool forRegex = ctx == wordCtxRegex; 
         if (this._readBracketExpression(chars, parts, forRegex, parenDepth)) {
           continue;
         }
         chars.add(this.advance());
         continue;
       }
-      late String content;
+      String content = "";
       if (ctx == wordCtxCond && ch == "(") {
         if (this._extglob && (chars.isNotEmpty) && _isExtglobPrefix(chars[chars.length - 1])) {
           chars.add(this.advance());
@@ -1048,7 +1048,7 @@ class Lexer {
       }
       if (ch == "'") {
         this.advance();
-        bool trackNewline = ctx == wordCtxNormal;
+        bool trackNewline = ctx == wordCtxNormal; 
         final _tuple8 = this._readSingleQuote(start);
         content = _tuple8.$1;
         bool sawNewline = _tuple8.$2;
@@ -1058,15 +1058,15 @@ class Lexer {
         }
         continue;
       }
-      late Node cmdsubResult0;
-      late String cmdsubResult1;
+      dynamic cmdsubResult0;
+      String cmdsubResult1 = "";
       if (ch == "\"") {
         this.advance();
         if (ctx == wordCtxNormal) {
           chars.add("\"");
-          bool inSingleInDquote = false;
+          bool inSingleInDquote = false; 
           while (!(this.atEnd()) && (inSingleInDquote || this.peek() != "\"")) {
-            String c = this.peek();
+            String c = this.peek(); 
             if (inSingleInDquote) {
               chars.add(this.advance());
               if (c == "'") {
@@ -1075,7 +1075,7 @@ class Lexer {
               continue;
             }
             if (c == "\\" && this.pos + 1 < this.length) {
-              String nextC = (this.source[this.pos + 1]).toString();
+              String nextC = (this.source[this.pos + 1]).toString(); 
               if (nextC == "\n") {
                 this.advance();
                 this.advance();
@@ -1096,7 +1096,7 @@ class Lexer {
                 if (c == "`") {
                   this._syncToParser();
                   final _tuple9 = this._parser!._parseBacktickSubstitution();
-                  cmdsubResult0 = _tuple9.$1!;
+                  cmdsubResult0 = _tuple9.$1;
                   cmdsubResult1 = _tuple9.$2;
                   this._syncFromParser();
                   if (cmdsubResult0 != null) {
@@ -1116,7 +1116,7 @@ class Lexer {
           }
           chars.add(this.advance());
         } else {
-          bool handleLineContinuation = ctx == wordCtxCond;
+          bool handleLineContinuation = ctx == wordCtxCond; 
           this._syncToParser();
           this._parser!._scanDoubleQuote(chars, parts, start, handleLineContinuation);
           this._syncFromParser();
@@ -1124,7 +1124,7 @@ class Lexer {
         continue;
       }
       if (ch == "\\" && this.pos + 1 < this.length) {
-        String nextCh = (this.source[this.pos + 1]).toString();
+        String nextCh = (this.source[this.pos + 1]).toString(); 
         if (ctx != wordCtxRegex && nextCh == "\n") {
           this.advance();
           this.advance();
@@ -1179,7 +1179,7 @@ class Lexer {
       if (ctx != wordCtxRegex && ch == "`") {
         this._syncToParser();
         final _tuple12 = this._parser!._parseBacktickSubstitution();
-        cmdsubResult0 = _tuple12.$1!;
+        cmdsubResult0 = _tuple12.$1;
         cmdsubResult1 = _tuple12.$2;
         this._syncFromParser();
         if (cmdsubResult0 != null) {
@@ -1212,7 +1212,7 @@ class Lexer {
         continue;
       }
       if (ctx == wordCtxNormal && ch == "(" && (chars.isNotEmpty) && bracketDepth == 0) {
-        bool isArrayAssign = false;
+        bool isArrayAssign = false; 
         if (chars.length >= 3 && chars[chars.length - 2] == "+" && chars[chars.length - 1] == "=") {
           isArrayAssign = _isArrayAssignmentPrefix(chars.sublist(0, chars.length - 2));
         } else {
@@ -1266,21 +1266,21 @@ class Lexer {
     return Word(chars.join(""), <Node>[], "word");
   }
 
-  Token _readWord() {
-    int start = this.pos;
+  dynamic _readWord() {
+    int start = this.pos; 
     if (this.pos >= this.length) {
       return null as dynamic;
     }
-    String c = this.peek();
+    String c = this.peek(); 
     if (c == "") {
       return null as dynamic;
     }
-    bool isProcsub = (c == "<" || c == ">") && this.pos + 1 < this.length && (this.source[this.pos + 1]).toString() == "(";
-    bool isRegexParen = this._wordContext == wordCtxRegex && (c == "(" || c == ")");
+    bool isProcsub = (c == "<" || c == ">") && this.pos + 1 < this.length && (this.source[this.pos + 1]).toString() == "("; 
+    bool isRegexParen = this._wordContext == wordCtxRegex && (c == "(" || c == ")"); 
     if (this.isMetachar(c) && !(isProcsub) && !(isRegexParen)) {
       return null as dynamic;
     }
-    Word word = this._readWordInternal(this._wordContext, this._atCommandStart, this._inArrayLiteral, this._inAssignBuiltin);
+    dynamic word = this._readWordInternal(this._wordContext, this._atCommandStart, this._inArrayLiteral, this._inAssignBuiltin);
     if (word == null) {
       return null as dynamic;
     }
@@ -1288,7 +1288,7 @@ class Lexer {
   }
 
   Token nextToken() {
-    late Token tok;
+    dynamic tok;
     if (this._tokenCache != null) {
       tok = this._tokenCache!;
       this._tokenCache = null as dynamic;
@@ -1336,7 +1336,7 @@ class Lexer {
 
   Token peekToken() {
     if (this._tokenCache == null) {
-      Token? savedLast = this._lastReadToken;
+      Token? savedLast = this._lastReadToken; 
       this._tokenCache = this.nextToken();
       this._lastReadToken = savedLast;
     }
@@ -1350,13 +1350,13 @@ class Lexer {
     if (this.pos + 1 >= this.length || (this.source[this.pos + 1]).toString() != "'") {
       return (null, "");
     }
-    int start = this.pos;
+    int start = this.pos; 
     this.advance();
     this.advance();
-    List<String> contentChars = <String>[];
-    bool foundClose = false;
+    List<String> contentChars = <String>[]; 
+    bool foundClose = false; 
     while (!(this.atEnd())) {
-      String ch = this.peek();
+      String ch = this.peek(); 
       if (ch == "'") {
         this.advance();
         foundClose = true;
@@ -1375,9 +1375,9 @@ class Lexer {
     if (!(foundClose)) {
       throw MatchedPairError("unexpected EOF while looking for matching `''", start, 0);
     }
-    String text = _substring(this.source, start, this.pos);
-    String content = contentChars.join("");
-    AnsiCQuote node = AnsiCQuote(content, "ansi-c");
+    String text = _substring(this.source, start, this.pos); 
+    String content = contentChars.join(""); 
+    AnsiCQuote node = AnsiCQuote(content, "ansi-c"); 
     return (node, text);
   }
 
@@ -1400,21 +1400,21 @@ class Lexer {
     if (this.pos + 1 >= this.length || (this.source[this.pos + 1]).toString() != "\"") {
       return (null, "", <Node>[]);
     }
-    int start = this.pos;
+    int start = this.pos; 
     this.advance();
     this.advance();
-    List<String> contentChars = <String>[];
-    List<Node> innerParts = <Node>[];
-    bool foundClose = false;
+    List<String> contentChars = <String>[]; 
+    List<Node> innerParts = <Node>[]; 
+    bool foundClose = false; 
     while (!(this.atEnd())) {
-      String ch = this.peek();
+      String ch = this.peek(); 
       if (ch == "\"") {
         this.advance();
         foundClose = true;
         break;
       } else {
         if (ch == "\\" && this.pos + 1 < this.length) {
-          String nextCh = (this.source[this.pos + 1]).toString();
+          String nextCh = (this.source[this.pos + 1]).toString(); 
           if (nextCh == "\n") {
             this.advance();
             this.advance();
@@ -1423,8 +1423,8 @@ class Lexer {
             contentChars.add(this.advance());
           }
         } else {
-          late Node cmdsubNode;
-          late String cmdsubText;
+          dynamic cmdsubNode;
+          String cmdsubText = "";
           if (ch == "\$" && this.pos + 2 < this.length && (this.source[this.pos + 1]).toString() == "(" && (this.source[this.pos + 2]).toString() == "(") {
             this._syncToParser();
             final _tuple15 = this._parser!._parseArithmeticExpansion();
@@ -1437,7 +1437,7 @@ class Lexer {
             } else {
               this._syncToParser();
               final _tuple16 = this._parser!._parseCommandSubstitution();
-              cmdsubNode = _tuple16.$1!;
+              cmdsubNode = _tuple16.$1;
               cmdsubText = _tuple16.$2;
               this._syncFromParser();
               if (cmdsubNode != null) {
@@ -1451,7 +1451,7 @@ class Lexer {
             if (_isExpansionStart(this.source, this.pos, "\$(")) {
               this._syncToParser();
               final _tuple17 = this._parser!._parseCommandSubstitution();
-              cmdsubNode = _tuple17.$1!;
+              cmdsubNode = _tuple17.$1;
               cmdsubText = _tuple17.$2;
               this._syncFromParser();
               if (cmdsubNode != null) {
@@ -1477,7 +1477,7 @@ class Lexer {
                 if (ch == "`") {
                   this._syncToParser();
                   final _tuple19 = this._parser!._parseBacktickSubstitution();
-                  cmdsubNode = _tuple19.$1!;
+                  cmdsubNode = _tuple19.$1;
                   cmdsubText = _tuple19.$2;
                   this._syncFromParser();
                   if (cmdsubNode != null) {
@@ -1499,8 +1499,8 @@ class Lexer {
       this.pos = start;
       return (null, "", <Node>[]);
     }
-    String content = contentChars.join("");
-    String text = "\$\"" + content + "\"";
+    String content = contentChars.join(""); 
+    String text = "\$\"" + content + "\""; 
     return (LocaleString(content, "locale"), text, innerParts);
   }
 
@@ -1511,7 +1511,7 @@ class Lexer {
     if (op == "" || op.length == 0) {
       return;
     }
-    String firstChar = (op[0]).toString();
+    String firstChar = (op[0]).toString(); 
     if (this._dolbraceState == dolbracestateParam && hasParam) {
       if ("%#^,".contains(firstChar)) {
         this._dolbraceState = dolbracestateQuote;
@@ -1533,8 +1533,8 @@ class Lexer {
     if (this.atEnd()) {
       return "";
     }
-    String ch = this.peek();
-    late String nextCh;
+    String ch = this.peek(); 
+    String nextCh = "";
     if (ch == ":") {
       this.advance();
       if (this.atEnd()) {
@@ -1612,11 +1612,11 @@ class Lexer {
   }
 
   bool _paramSubscriptHasClose(int startPos) {
-    int depth = 1;
-    int i = startPos + 1;
-    QuoteState quote = newQuoteState();
+    int depth = 1; 
+    int i = startPos + 1; 
+    dynamic quote = newQuoteState();
     while (i < this.length) {
-      String c = (this.source[i]).toString();
+      String c = (this.source[i]).toString(); 
       if (quote.single) {
         if (c == "'") {
           quote.single = false;
@@ -1671,7 +1671,7 @@ class Lexer {
     if (this.atEnd()) {
       return "";
     }
-    String ch = this.peek();
+    String ch = this.peek(); 
     if (_isSpecialParam(ch)) {
       if (ch == "\$" && this.pos + 1 < this.length && "{'\"".contains((this.source[this.pos + 1]).toString())) {
         return "";
@@ -1680,16 +1680,16 @@ class Lexer {
       return ch;
     }
     if ((ch.isNotEmpty && RegExp(r'^\d+$').hasMatch(ch))) {
-      List<String> nameChars = <String>[];
+      List<String> nameChars = <String>[]; 
       while (!(this.atEnd()) && (this.peek().isNotEmpty && RegExp(r'^\d+$').hasMatch(this.peek()))) {
         nameChars.add(this.advance());
       }
       return nameChars.join("");
     }
     if ((ch.isNotEmpty && RegExp(r'^[a-zA-Z]+$').hasMatch(ch)) || ch == "_") {
-      List<String> nameChars = <String>[];
+      List<String> nameChars = <String>[]; 
       while (!(this.atEnd())) {
-        String c = this.peek();
+        String c = this.peek(); 
         if ((c.isNotEmpty && RegExp(r'^[a-zA-Z0-9]+$').hasMatch(c)) || c == "_") {
           nameChars.add(this.advance());
         } else {
@@ -1698,7 +1698,7 @@ class Lexer {
               break;
             }
             nameChars.add(this.advance());
-            String content = this._parseMatchedPair("[", "]", matchedpairflagsArraysub, false);
+            String content = this._parseMatchedPair("[", "]", matchedpairflagsArraysub, false); 
             nameChars.add(content);
             nameChars.add("]");
             break;
@@ -1720,34 +1720,34 @@ class Lexer {
     if (this.atEnd() || this.peek() != "\$") {
       return (null, "");
     }
-    int start = this.pos;
+    int start = this.pos; 
     this.advance();
     if (this.atEnd()) {
       this.pos = start;
       return (null, "");
     }
-    String ch = this.peek();
+    String ch = this.peek(); 
     if (ch == "{") {
       this.advance();
       return this._readBracedParam(start, inDquote);
     }
-    late String text;
+    String text = "";
     if (_isSpecialParamUnbraced(ch) || _isDigit(ch) || ch == "#") {
       this.advance();
       text = _substring(this.source, start, this.pos);
       return (ParamExpansion(ch, "", "", "param"), text);
     }
     if ((ch.isNotEmpty && RegExp(r'^[a-zA-Z]+$').hasMatch(ch)) || ch == "_") {
-      int nameStart = this.pos;
+      int nameStart = this.pos; 
       while (!(this.atEnd())) {
-        String c = this.peek();
+        String c = this.peek(); 
         if ((c.isNotEmpty && RegExp(r'^[a-zA-Z0-9]+$').hasMatch(c)) || c == "_") {
           this.advance();
         } else {
           break;
         }
       }
-      String name = _substring(this.source, nameStart, this.pos);
+      String name = _substring(this.source, nameStart, this.pos); 
       text = _substring(this.source, start, this.pos);
       return (ParamExpansion(name, "", "", "param"), text);
     }
@@ -1759,15 +1759,15 @@ class Lexer {
     if (this.atEnd()) {
       throw MatchedPairError("unexpected EOF looking for `}'", start, 0);
     }
-    int savedDolbrace = this._dolbraceState;
+    int savedDolbrace = this._dolbraceState; 
     this._dolbraceState = dolbracestateParam;
-    String ch = this.peek();
+    String ch = this.peek(); 
     if (_isFunsubChar(ch)) {
       this._dolbraceState = savedDolbrace;
       return this._readFunsub(start);
     }
-    late String param;
-    late String text;
+    String param = "";
+    String text = "";
     if (ch == "#") {
       this.advance();
       param = this._consumeParamName();
@@ -1779,8 +1779,8 @@ class Lexer {
       }
       this.pos = start + 2;
     }
-    late String op;
-    late String arg;
+    String op = "";
+    String arg = "";
     if (ch == "!") {
       this.advance();
       while (!(this.atEnd()) && _isWhitespaceNoNewline(this.peek())) {
@@ -1798,8 +1798,8 @@ class Lexer {
           return (ParamIndirect(param, "", "", "param-indirect"), text);
         }
         if (!(this.atEnd()) && _isAtOrStar(this.peek())) {
-          String suffix = this.advance();
-          String trailing = this._parseMatchedPair("{", "}", matchedpairflagsDolbrace, false);
+          String suffix = this.advance(); 
+          String trailing = this._parseMatchedPair("{", "}", matchedpairflagsDolbrace, false); 
           text = _substring(this.source, start, this.pos);
           this._dolbraceState = savedDolbrace;
           return (ParamIndirect(param + suffix + trailing, "", "", "param-indirect"), text);
@@ -1828,7 +1828,7 @@ class Lexer {
       if (!(this.atEnd()) && ("-=+?".contains(this.peek()) || this.peek() == ":" && this.pos + 1 < this.length && _isSimpleParamOp((this.source[this.pos + 1]).toString()))) {
         param = "";
       } else {
-        String content = this._parseMatchedPair("{", "}", matchedpairflagsDolbrace, false);
+        String content = this._parseMatchedPair("{", "}", matchedpairflagsDolbrace, false); 
         text = "\${" + content + "}";
         this._dolbraceState = savedDolbrace;
         return (ParamExpansion(content, "", "", "param"), text);
@@ -1847,7 +1847,7 @@ class Lexer {
     op = this._consumeParamOperator();
     if (op == "") {
       if (!(this.atEnd()) && this.peek() == "\$" && this.pos + 1 < this.length && ((this.source[this.pos + 1]).toString() == "\"" || (this.source[this.pos + 1]).toString() == "'")) {
-        int dollarCount = 1 + _countConsecutiveDollarsBefore(this.source, this.pos);
+        int dollarCount = 1 + _countConsecutiveDollarsBefore(this.source, this.pos); 
         if (dollarCount % 2 == 1) {
           op = "";
         } else {
@@ -1855,12 +1855,12 @@ class Lexer {
         }
       } else {
         if (!(this.atEnd()) && this.peek() == "`") {
-          int backtickPos = this.pos;
+          int backtickPos = this.pos; 
           this.advance();
           while (!(this.atEnd()) && this.peek() != "`") {
-            String bc = this.peek();
+            String bc = this.peek(); 
             if (bc == "\\" && this.pos + 1 < this.length) {
-              String nextC = (this.source[this.pos + 1]).toString();
+              String nextC = (this.source[this.pos + 1]).toString(); 
               if (_isEscapeCharInBacktick(nextC)) {
                 this.advance();
               }
@@ -1895,20 +1895,20 @@ class Lexer {
     }
     this._updateDolbraceForOp(op, param.length > 0);
     try {
-      int flags = (inDquote ? matchedpairflagsDquote : matchedpairflagsNone);
-      bool paramEndsWithDollar = param != "" && param.endsWith("\$");
+      int flags = (inDquote ? matchedpairflagsDquote : matchedpairflagsNone); 
+      bool paramEndsWithDollar = param != "" && param.endsWith("\$"); 
       arg = this._collectParamArgument(flags, paramEndsWithDollar);
     } on MatchedPairError {
       this._dolbraceState = savedDolbrace;
       rethrow;
     }
     if ((op == "<" || op == ">") && arg.startsWith("(") && arg.endsWith(")")) {
-      String inner = arg.substring(1, arg.length - 1);
+      String inner = _safeSubstring(arg, 1, arg.length - 1); 
       try {
-        Parser subParser = newParser(inner, true, this._parser!._extglob);
-        Node parsed = subParser.parseList(true);
+        dynamic subParser = newParser(inner, true, this._parser!._extglob);
+        dynamic parsed = subParser.parseList(true);
         if (parsed != null && subParser.atEnd()) {
-          String formatted = _formatCmdsubNode(parsed, 0, true, false, true);
+          String formatted = _formatCmdsubNode(parsed, 0, true, false, true); 
           arg = "(" + formatted + ")";
         }
       } on Exception {
@@ -1936,7 +1936,7 @@ class Word implements Node {
   }
 
   String toSexp() {
-    String value = this.value;
+    String value = this.value; 
     value = this._expandAllAnsiCQuotes(value);
     value = this._stripLocaleStringDollars(value);
     value = this._normalizeArrayWhitespace(value);
@@ -1949,7 +1949,7 @@ class Word implements Node {
     if (value.endsWith("\\\\") && !(value.endsWith("\\\\\\\\"))) {
       value = value + "\\\\";
     }
-    String escaped = value.replaceAll("\"", "\\\"").replaceAll("\n", "\\n").replaceAll("\t", "\\t");
+    String escaped = value.replaceAll("\"", "\\\"").replaceAll("\n", "\\n").replaceAll("\t", "\\t"); 
     return "(word \"" + escaped + "\")";
   }
 
@@ -1958,8 +1958,8 @@ class Word implements Node {
   }
 
   String _doubleCtlescSmart(String value) {
-    List<String> result = <String>[];
-    QuoteState quote = newQuoteState();
+    List<String> result = <String>[]; 
+    dynamic quote = newQuoteState();
     for (final _c1 in value.split('')) {
       var c = _c1;
       if (c == "'" && !(quote.double)) {
@@ -1972,7 +1972,7 @@ class Word implements Node {
       result.add(c);
       if (c == "\u0001") {
         if (quote.double) {
-          int bsCount = 0;
+          int bsCount = 0; 
           for (int j = result.length - 2; j > -1; j += -1) {
             if (result[j] == "\\") {
               bsCount += 1;
@@ -1992,11 +1992,11 @@ class Word implements Node {
   }
 
   String _normalizeParamExpansionNewlines(String value) {
-    List<String> result = <String>[];
-    int i = 0;
-    QuoteState quote = newQuoteState();
+    List<String> result = <String>[]; 
+    int i = 0; 
+    dynamic quote = newQuoteState();
     while (i < value.length) {
-      String c = (value[i]).toString();
+      String c = (value[i]).toString(); 
       if (c == "'" && !(quote.double)) {
         quote.single = !(quote.single);
         result.add(c);
@@ -2011,14 +2011,14 @@ class Word implements Node {
             result.add("\$");
             result.add("{");
             i += 2;
-            bool hadLeadingNewline = i < value.length && (value[i]).toString() == "\n";
+            bool hadLeadingNewline = i < value.length && (value[i]).toString() == "\n"; 
             if (hadLeadingNewline) {
               result.add(" ");
               i += 1;
             }
-            int depth = 1;
+            int depth = 1; 
             while (i < value.length && depth > 0) {
-              String ch = (value[i]).toString();
+              String ch = (value[i]).toString(); 
               if (ch == "\\" && i + 1 < value.length && !(quote.single)) {
                 if ((value[i + 1]).toString() == "\n") {
                   i += 2;
@@ -2074,7 +2074,7 @@ class Word implements Node {
     if (s == "'") {
       return "\\'";
     }
-    List<String> result = <String>["'"];
+    List<String> result = <String>["'"]; 
     for (final _c2 in s.split('')) {
       var c = _c2;
       if (c == "'") {
@@ -2088,12 +2088,12 @@ class Word implements Node {
   }
 
   List<int> _ansiCToBytes(String inner) {
-    List<int> result = <int>[];
-    int i = 0;
+    List<int> result = <int>[]; 
+    int i = 0; 
     while (i < inner.length) {
       if ((inner[i]).toString() == "\\" && i + 1 < inner.length) {
-        String c = (inner[i + 1]).toString();
-        int simple = _getAnsiEscape(c);
+        String c = (inner[i + 1]).toString(); 
+        int simple = _getAnsiEscape(c); 
         if (simple >= 0) {
           result.add((simple as int));
           i += 2;
@@ -2102,15 +2102,15 @@ class Word implements Node {
             result.add((39 as int));
             i += 2;
           } else {
-            late int j;
-            late int byteVal;
+            int j = 0;
+            int byteVal = 0;
             if (c == "x") {
               if (i + 2 < inner.length && (inner[i + 2]).toString() == "{") {
                 j = i + 3;
                 while (j < inner.length && _isHexDigit((inner[j]).toString())) {
                   j += 1;
                 }
-                String hexStr = _substring(inner, i + 3, j);
+                String hexStr = _substring(inner, i + 3, j); 
                 if (j < inner.length && (inner[j]).toString() == "}") {
                   j += 1;
                 }
@@ -2141,7 +2141,7 @@ class Word implements Node {
                 }
               }
             } else {
-              late int codepoint;
+              int codepoint = 0;
               if (c == "u") {
                 j = i + 2;
                 while (j < inner.length && j < i + 6 && _isHexDigit((inner[j]).toString())) {
@@ -2178,12 +2178,12 @@ class Word implements Node {
                 } else {
                   if (c == "c") {
                     if (i + 3 <= inner.length) {
-                      String ctrlChar = (inner[i + 2]).toString();
-                      int skipExtra = 0;
+                      String ctrlChar = (inner[i + 2]).toString(); 
+                      int skipExtra = 0; 
                       if (ctrlChar == "\\" && i + 4 <= inner.length && (inner[i + 3]).toString() == "\\") {
                         skipExtra = 1;
                       }
-                      int ctrlVal = (ctrlChar[0] as int) & 31;
+                      int ctrlVal = (ctrlChar[0] as int) & 31; 
                       if (ctrlVal == 0) {
                         return result;
                       }
@@ -2245,20 +2245,20 @@ class Word implements Node {
     if (!(value.startsWith("'") && value.endsWith("'"))) {
       return value;
     }
-    String inner = _substring(value, 1, value.length - 1);
-    List<int> literalBytes = this._ansiCToBytes(inner);
-    String literalStr = String.fromCharCodes(literalBytes);
+    String inner = _substring(value, 1, value.length - 1); 
+    List<int> literalBytes = this._ansiCToBytes(inner); 
+    String literalStr = String.fromCharCodes(literalBytes); 
     return this._shSingleQuote(literalStr);
   }
 
   String _expandAllAnsiCQuotes(String value) {
-    List<String> result = <String>[];
-    int i = 0;
-    QuoteState quote = newQuoteState();
-    bool inBacktick = false;
-    int braceDepth = 0;
+    List<String> result = <String>[]; 
+    int i = 0; 
+    dynamic quote = newQuoteState();
+    bool inBacktick = false; 
+    int braceDepth = 0; 
     while (i < value.length) {
-      String ch = (value[i]).toString();
+      String ch = (value[i]).toString(); 
       if (ch == "`" && !(quote.single)) {
         inBacktick = !(inBacktick);
         result.add(ch);
@@ -2293,9 +2293,9 @@ class Word implements Node {
           }
         }
       }
-      bool effectiveInDquote = quote.double;
+      bool effectiveInDquote = quote.double; 
       if (ch == "'" && !(effectiveInDquote)) {
-        bool isAnsiC = !(quote.single) && i > 0 && (value[i - 1]).toString() == "\$" && _countConsecutiveDollarsBefore(value, i - 1) % 2 == 0;
+        bool isAnsiC = !(quote.single) && i > 0 && (value[i - 1]).toString() == "\$" && _countConsecutiveDollarsBefore(value, i - 1) % 2 == 0; 
         if (!(isAnsiC)) {
           quote.single = !(quote.single);
         }
@@ -2313,7 +2313,7 @@ class Word implements Node {
             i += 2;
           } else {
             if (_startsWithAt(value, i, "\$'") && !(quote.single) && !(effectiveInDquote) && _countConsecutiveDollarsBefore(value, i) % 2 == 0) {
-              int j = i + 2;
+              int j = i + 2; 
               while (j < value.length) {
                 if ((value[j]).toString() == "\\" && j + 1 < value.length) {
                   j += 2;
@@ -2326,25 +2326,25 @@ class Word implements Node {
                   }
                 }
               }
-              String ansiStr = _substring(value, i, j);
-              String expanded = this._expandAnsiCEscapes(_substring(ansiStr, 1, ansiStr.length));
-              bool outerInDquote = quote.outerDouble();
+              String ansiStr = _substring(value, i, j); 
+              String expanded = this._expandAnsiCEscapes(_substring(ansiStr, 1, ansiStr.length)); 
+              bool outerInDquote = quote.outerDouble(); 
               if (braceDepth > 0 && outerInDquote && expanded.startsWith("'") && expanded.endsWith("'")) {
-                String inner = _substring(expanded, 1, expanded.length - 1);
+                String inner = _substring(expanded, 1, expanded.length - 1); 
                 if (inner.indexOf("\u0001") == -1) {
-                  String resultStr = result.join("");
-                  bool inPattern = false;
-                  int lastBraceIdx = resultStr.lastIndexOf("\${");
+                  String resultStr = result.join(""); 
+                  bool inPattern = false; 
+                  int lastBraceIdx = resultStr.lastIndexOf("\${"); 
                   if (lastBraceIdx >= 0) {
-                    String afterBrace = resultStr.substring(lastBraceIdx + 2);
-                    int varNameLen = 0;
+                    String afterBrace = resultStr.substring(lastBraceIdx + 2); 
+                    int varNameLen = 0; 
                     if ((afterBrace.isNotEmpty)) {
                       if ("@*#?-\$!0123456789_".contains((afterBrace[0]).toString())) {
                         varNameLen = 1;
                       } else {
                         if (((afterBrace[0]).toString().isNotEmpty && RegExp(r'^[a-zA-Z]+$').hasMatch((afterBrace[0]).toString())) || (afterBrace[0]).toString() == "_") {
                           while (varNameLen < afterBrace.length) {
-                            String c = (afterBrace[varNameLen]).toString();
+                            String c = (afterBrace[varNameLen]).toString(); 
                             if (!((c.isNotEmpty && RegExp(r'^[a-zA-Z0-9]+$').hasMatch(c)) || c == "_")) {
                               break;
                             }
@@ -2354,7 +2354,7 @@ class Word implements Node {
                       }
                     }
                     if (varNameLen > 0 && varNameLen < afterBrace.length && !"#?-".contains((afterBrace[0]).toString())) {
-                      String opStart = afterBrace.substring(varNameLen);
+                      String opStart = afterBrace.substring(varNameLen); 
                       if (opStart.startsWith("@") && opStart.length > 1) {
                         opStart = opStart.substring(1);
                       }
@@ -2374,9 +2374,9 @@ class Word implements Node {
                       }
                     } else {
                       if (varNameLen == 0 && afterBrace.length > 1) {
-                        String firstChar = (afterBrace[0]).toString();
+                        String firstChar = (afterBrace[0]).toString(); 
                         if (!"%#/^,".contains(firstChar)) {
-                          String rest = afterBrace.substring(1);
+                          String rest = afterBrace.substring(1); 
                           for (final op in <String>["//", "%%", "##", "/", "%", "#", "^", "^^", ",", ",,"]) {
                             if (rest.contains(op)) {
                               inPattern = true;
@@ -2406,15 +2406,15 @@ class Word implements Node {
   }
 
   String _stripLocaleStringDollars(String value) {
-    List<String> result = <String>[];
-    int i = 0;
-    int braceDepth = 0;
-    int bracketDepth = 0;
-    QuoteState quote = newQuoteState();
-    QuoteState braceQuote = newQuoteState();
-    bool bracketInDoubleQuote = false;
+    List<String> result = <String>[]; 
+    int i = 0; 
+    int braceDepth = 0; 
+    int bracketDepth = 0; 
+    dynamic quote = newQuoteState();
+    dynamic braceQuote = newQuoteState();
+    bool bracketInDoubleQuote = false; 
     while (i < value.length) {
-      String ch = (value[i]).toString();
+      String ch = (value[i]).toString(); 
       if (ch == "\\" && i + 1 < value.length && !(quote.single) && !(braceQuote.single)) {
         result.add(ch);
         result.add((value[i + 1]).toString());
@@ -2470,7 +2470,7 @@ class Word implements Node {
                           i += 1;
                         } else {
                           if (_startsWithAt(value, i, "\$\"") && !(quote.single) && !(braceQuote.single) && (braceDepth > 0 || bracketDepth > 0 || !(quote.double)) && !(braceQuote.double) && !(bracketInDoubleQuote)) {
-                            int dollarCount = 1 + _countConsecutiveDollarsBefore(value, i);
+                            int dollarCount = 1 + _countConsecutiveDollarsBefore(value, i); 
                             if (dollarCount % 2 == 1) {
                               result.add("\"");
                               if (bracketDepth > 0) {
@@ -2506,7 +2506,7 @@ class Word implements Node {
   }
 
   String _normalizeArrayWhitespace(String value) {
-    int i = 0;
+    int i = 0; 
     if (!(i < value.length && (((value[i]).toString().isNotEmpty && RegExp(r'^[a-zA-Z]+$').hasMatch((value[i]).toString())) || (value[i]).toString() == "_"))) {
       return value;
     }
@@ -2515,7 +2515,7 @@ class Word implements Node {
       i += 1;
     }
     while (i < value.length && (value[i]).toString() == "[") {
-      int depth = 1;
+      int depth = 1; 
       i += 1;
       while (i < value.length && depth > 0) {
         if ((value[i]).toString() == "[") {
@@ -2537,9 +2537,9 @@ class Word implements Node {
     if (!(i + 1 < value.length && (value[i]).toString() == "=" && (value[i + 1]).toString() == "(")) {
       return value;
     }
-    String prefix = _substring(value, 0, i + 1);
-    int openParenPos = i + 1;
-    late int closeParenPos;
+    String prefix = _substring(value, 0, i + 1); 
+    int openParenPos = i + 1; 
+    int closeParenPos = 0;
     if (value.endsWith(")")) {
       closeParenPos = value.length - 1;
     } else {
@@ -2548,9 +2548,9 @@ class Word implements Node {
         return value;
       }
     }
-    String inner = _substring(value, openParenPos + 1, closeParenPos);
-    String suffix = _substring(value, closeParenPos + 1, value.length);
-    String result = this._normalizeArrayInner(inner);
+    String inner = _substring(value, openParenPos + 1, closeParenPos); 
+    String suffix = _substring(value, closeParenPos + 1, value.length); 
+    String result = this._normalizeArrayInner(inner); 
     return prefix + "(" + result + ")" + suffix;
   }
 
@@ -2558,11 +2558,11 @@ class Word implements Node {
     if (openPos >= value.length || (value[openPos]).toString() != "(") {
       return -1;
     }
-    int i = openPos + 1;
-    int depth = 1;
-    QuoteState quote = newQuoteState();
+    int i = openPos + 1; 
+    int depth = 1; 
+    dynamic quote = newQuoteState();
     while (i < value.length && depth > 0) {
-      String ch = (value[i]).toString();
+      String ch = (value[i]).toString(); 
       if (ch == "\\" && i + 1 < value.length && !(quote.single)) {
         i += 2;
         continue;
@@ -2603,13 +2603,13 @@ class Word implements Node {
   }
 
   String _normalizeArrayInner(String inner) {
-    List<String> normalized = <String>[];
-    int i = 0;
-    bool inWhitespace = true;
-    int braceDepth = 0;
-    int bracketDepth = 0;
+    List<String> normalized = <String>[]; 
+    int i = 0; 
+    bool inWhitespace = true; 
+    int braceDepth = 0; 
+    int bracketDepth = 0; 
     while (i < inner.length) {
-      String ch = (inner[i]).toString();
+      String ch = (inner[i]).toString(); 
       if (_isWhitespace(ch)) {
         if (!(inWhitespace) && (normalized.isNotEmpty) && braceDepth == 0 && bracketDepth == 0) {
           normalized.add(" ");
@@ -2620,7 +2620,7 @@ class Word implements Node {
         }
         i += 1;
       } else {
-        late int j;
+        int j = 0;
         if (ch == "'") {
           inWhitespace = false;
           j = i + 1;
@@ -2633,8 +2633,8 @@ class Word implements Node {
           if (ch == "\"") {
             inWhitespace = false;
             j = i + 1;
-            List<String> dqContent = <String>["\""];
-            int dqBraceDepth = 0;
+            List<String> dqContent = <String>["\""]; 
+            int dqBraceDepth = 0; 
             while (j < inner.length) {
               if ((inner[j]).toString() == "\\" && j + 1 < inner.length) {
                 if ((inner[j + 1]).toString() == "\n") {
@@ -2679,7 +2679,7 @@ class Word implements Node {
                 i += 2;
               }
             } else {
-              late int depth;
+              int depth = 0;
               if (_isExpansionStart(inner, i, "\$((")) {
                 inWhitespace = false;
                 j = i + 3;
@@ -2831,15 +2831,15 @@ class Word implements Node {
   }
 
   String _stripArithLineContinuations(String value) {
-    List<String> result = <String>[];
-    int i = 0;
+    List<String> result = <String>[]; 
+    int i = 0; 
     while (i < value.length) {
       if (_isExpansionStart(value, i, "\$((")) {
-        int start = i;
+        int start = i; 
         i += 3;
-        int depth = 2;
-        List<String> arithContent = <String>[];
-        int firstCloseIdx = -1;
+        int depth = 2; 
+        List<String> arithContent = <String>[]; 
+        int firstCloseIdx = -1; 
         while (i < value.length && depth > 0) {
           if ((value[i]).toString() == "(") {
             arithContent.add("(");
@@ -2860,8 +2860,8 @@ class Word implements Node {
               i += 1;
             } else {
               if ((value[i]).toString() == "\\" && i + 1 < value.length && (value[i + 1]).toString() == "\n") {
-                int numBackslashes = 0;
-                int j = arithContent.length - 1;
+                int numBackslashes = 0; 
+                int j = arithContent.length - 1; 
                 while (j >= 0 && arithContent[j] == "\n") {
                   j -= 1;
                 }
@@ -2890,10 +2890,10 @@ class Word implements Node {
           }
         }
         if (depth == 0 || depth == 1 && firstCloseIdx != -1) {
-          String content = arithContent.join("");
+          String content = arithContent.join(""); 
           if (firstCloseIdx != -1) {
-            content = content.substring(0, firstCloseIdx);
-            String closing = (depth == 0 ? "))" : ")");
+            content = _safeSubstring(content, 0, firstCloseIdx);
+            String closing = (depth == 0 ? "))" : ")"); 
             result.add("\$((" + content + closing);
           } else {
             result.add("\$((" + content + ")");
@@ -2910,7 +2910,7 @@ class Word implements Node {
   }
 
   List<Node> _collectCmdsubs(Node node) {
-    List<Node> result = <Node>[];
+    List<Node> result = <Node>[]; 
     switch (node) {
       case CommandSubstitution nodeCommandSubstitution:
         result.add(nodeCommandSubstitution);
@@ -2971,7 +2971,7 @@ class Word implements Node {
   }
 
   List<Node> _collectProcsubs(Node node) {
-    List<Node> result = <Node>[];
+    List<Node> result = <Node>[]; 
     switch (node) {
       case ProcessSubstitution nodeProcessSubstitution:
         result.add(nodeProcessSubstitution);
@@ -2995,9 +2995,9 @@ class Word implements Node {
   }
 
   String _formatCommandSubstitutions(String value, bool inArith) {
-    List<Node> cmdsubParts = <Node>[];
-    List<Node> procsubParts = <Node>[];
-    bool hasArith = false;
+    List<Node> cmdsubParts = <Node>[]; 
+    List<Node> procsubParts = <Node>[]; 
+    bool hasArith = false; 
     for (final p in this.parts) {
       switch (p) {
         case CommandSubstitution pCommandSubstitution:
@@ -3015,11 +3015,11 @@ class Word implements Node {
           break;
       }
     }
-    bool hasBraceCmdsub = value.indexOf("\${ ") != -1 || value.indexOf("\${\t") != -1 || value.indexOf("\${\n") != -1 || value.indexOf("\${|") != -1;
-    bool hasUntrackedCmdsub = false;
-    bool hasUntrackedProcsub = false;
-    int idx = 0;
-    QuoteState scanQuote = newQuoteState();
+    bool hasBraceCmdsub = value.indexOf("\${ ") != -1 || value.indexOf("\${\t") != -1 || value.indexOf("\${\n") != -1 || value.indexOf("\${|") != -1; 
+    bool hasUntrackedCmdsub = false; 
+    bool hasUntrackedProcsub = false; 
+    int idx = 0; 
+    dynamic scanQuote = newQuoteState();
     while (idx < value.length) {
       if ((value[idx]).toString() == "\"") {
         scanQuote.double = !(scanQuote.double);
@@ -3051,19 +3051,19 @@ class Word implements Node {
         }
       }
     }
-    bool hasParamWithProcsubPattern = value.contains("\${") && (value.contains("<(") || value.contains(">("));
+    bool hasParamWithProcsubPattern = value.contains("\${") && (value.contains("<(") || value.contains(">(")); 
     if (!((cmdsubParts.isNotEmpty)) && !((procsubParts.isNotEmpty)) && !(hasBraceCmdsub) && !(hasUntrackedCmdsub) && !(hasUntrackedProcsub) && !(hasParamWithProcsubPattern)) {
       return value;
     }
-    List<String> result = <String>[];
-    int i = 0;
-    int cmdsubIdx = 0;
-    int procsubIdx = 0;
-    QuoteState mainQuote = newQuoteState();
-    int extglobDepth = 0;
-    int deprecatedArithDepth = 0;
-    int arithDepth = 0;
-    int arithParenDepth = 0;
+    List<String> result = <String>[]; 
+    int i = 0; 
+    int cmdsubIdx = 0; 
+    int procsubIdx = 0; 
+    dynamic mainQuote = newQuoteState();
+    int extglobDepth = 0; 
+    int deprecatedArithDepth = 0; 
+    int arithDepth = 0; 
+    int arithParenDepth = 0; 
     while (i < value.length) {
       if (i > 0 && _isExtglobPrefix((value[i - 1]).toString()) && (value[i]).toString() == "(" && !(_isBackslashEscaped(value, i - 1))) {
         extglobDepth += 1;
@@ -3118,7 +3118,7 @@ class Word implements Node {
           }
         }
       }
-      late int j;
+      int j = 0;
       if (_isExpansionStart(value, i, "\$((") && !(hasArith)) {
         j = _findCmdsubEnd(value, i + 2);
         result.add(_substring(value, i, j));
@@ -3128,11 +3128,11 @@ class Word implements Node {
         i = j;
         continue;
       }
-      late String inner;
-      late Node node;
-      late String formatted;
-      late Parser parser;
-      late Node parsed;
+      String inner = "";
+      dynamic node;
+      String formatted = "";
+      dynamic parser;
+      dynamic parsed;
       if (_startsWithAt(value, i, "\$(") && !(_startsWithAt(value, i, "\$((")) && !(_isBackslashEscaped(value, i)) && !(_isDollarDollarParen(value, i))) {
         j = _findCmdsubEnd(value, i + 2);
         if (extglobDepth > 0) {
@@ -3181,18 +3181,18 @@ class Word implements Node {
           cmdsubIdx += 1;
           i = j;
         } else {
-          late String prefix;
+          String prefix = "";
           if (_isExpansionStart(value, i, "\${") && i + 2 < value.length && _isFunsubChar((value[i + 2]).toString()) && !(_isBackslashEscaped(value, i))) {
             j = _findFunsubEnd(value, i + 2);
             Node? cmdsubNode = (cmdsubIdx < cmdsubParts.length ? cmdsubParts[cmdsubIdx] : null);
             if ((cmdsubNode is CommandSubstitution) && (cmdsubNode as CommandSubstitution).brace) {
               node = cmdsubNode;
               formatted = _formatCmdsubNode((node as CommandSubstitution).command, 0, false, false, false);
-              bool hasPipe = (value[i + 2]).toString() == "|";
+              bool hasPipe = (value[i + 2]).toString() == "|"; 
               prefix = (hasPipe ? "\${|" : "\${ ");
-              String origInner = _substring(value, i + 2, j - 1);
-              bool endsWithNewline = origInner.endsWith("\n");
-              late String suffix;
+              String origInner = _substring(value, i + 2, j - 1); 
+              bool endsWithNewline = origInner.endsWith("\n"); 
+              String suffix = "";
               if (!((formatted.isNotEmpty)) || (formatted.isNotEmpty && RegExp(r'^\s+$').hasMatch(formatted))) {
                 suffix = "}";
               } else {
@@ -3214,7 +3214,7 @@ class Word implements Node {
             i = j;
           } else {
             if ((_startsWithAt(value, i, ">(") || _startsWithAt(value, i, "<(")) && !(mainQuote.double) && deprecatedArithDepth == 0 && arithDepth == 0) {
-              bool isProcsub = i == 0 || !(((value[i - 1]).toString().isNotEmpty && RegExp(r'^[a-zA-Z0-9]+$').hasMatch((value[i - 1]).toString()))) && !"\"'".contains((value[i - 1]).toString());
+              bool isProcsub = i == 0 || !(((value[i - 1]).toString().isNotEmpty && RegExp(r'^[a-zA-Z0-9]+$').hasMatch((value[i - 1]).toString()))) && !"\"'".contains((value[i - 1]).toString()); 
               if (extglobDepth > 0) {
                 j = _findCmdsubEnd(value, i + 2);
                 result.add(_substring(value, i, j));
@@ -3224,27 +3224,27 @@ class Word implements Node {
                 i = j;
                 continue;
               }
-              late String direction;
-              late bool compact;
-              late String stripped;
+              String direction = "";
+              bool compact = false;
+              String stripped = "";
               if (procsubIdx < procsubParts.length) {
                 direction = (value[i]).toString();
                 j = _findCmdsubEnd(value, i + 2);
                 node = procsubParts[procsubIdx];
                 compact = _startsWithSubshell((node as ProcessSubstitution).command);
                 formatted = _formatCmdsubNode((node as ProcessSubstitution).command, 0, true, compact, true);
-                String rawContent = _substring(value, i + 2, j - 1);
+                String rawContent = _substring(value, i + 2, j - 1); 
                 if ((node as ProcessSubstitution).command.kind == "subshell") {
-                  int leadingWsEnd = 0;
+                  int leadingWsEnd = 0; 
                   while (leadingWsEnd < rawContent.length && " \t\n".contains((rawContent[leadingWsEnd]).toString())) {
                     leadingWsEnd += 1;
                   }
-                  String leadingWs = rawContent.substring(0, leadingWsEnd);
+                  String leadingWs = _safeSubstring(rawContent, 0, leadingWsEnd); 
                   stripped = rawContent.substring(leadingWsEnd);
                   if (stripped.startsWith("(")) {
                     if ((leadingWs.isNotEmpty)) {
-                      String normalizedWs = leadingWs.replaceAll("\n", " ").replaceAll("\t", " ");
-                      String spaced = _formatCmdsubNode((node as ProcessSubstitution).command, 0, false, false, false);
+                      String normalizedWs = leadingWs.replaceAll("\n", " ").replaceAll("\t", " "); 
+                      String spaced = _formatCmdsubNode((node as ProcessSubstitution).command, 0, false, false, false); 
                       result.add(direction + "(" + normalizedWs + spaced + ")");
                     } else {
                       rawContent = rawContent.replaceAll("\\\n", "");
@@ -3256,11 +3256,11 @@ class Word implements Node {
                   }
                 }
                 rawContent = _substring(value, i + 2, j - 1);
-                String rawStripped = rawContent.replaceAll("\\\n", "");
+                String rawStripped = rawContent.replaceAll("\\\n", ""); 
                 if (_startsWithSubshell((node as ProcessSubstitution).command) && formatted != rawStripped) {
                   result.add(direction + "(" + rawStripped + ")");
                 } else {
-                  String finalOutput = direction + "(" + formatted + ")";
+                  String finalOutput = direction + "(" + formatted + ")"; 
                   result.add(finalOutput);
                 }
                 procsubIdx += 1;
@@ -3317,7 +3317,7 @@ class Word implements Node {
                 }
               }
             } else {
-              late int depth;
+              int depth = 0;
               if ((_isExpansionStart(value, i, "\${ ") || _isExpansionStart(value, i, "\${\t") || _isExpansionStart(value, i, "\${\n") || _isExpansionStart(value, i, "\${|")) && !(_isBackslashEscaped(value, i))) {
                 prefix = _substring(value, i, i + 3).replaceAll("\t", " ").replaceAll("\n", " ");
                 j = i + 3;
@@ -3342,7 +3342,7 @@ class Word implements Node {
                     if (parsed != null) {
                       formatted = _formatCmdsubNode(parsed, 0, false, false, false);
                       formatted = formatted.trimRight();
-                      late String terminator;
+                      String terminator = "";
                       if (inner.trimRight().endsWith("\n")) {
                         terminator = "\n }";
                       } else {
@@ -3365,9 +3365,9 @@ class Word implements Node {
                 if (_isExpansionStart(value, i, "\${") && !(_isBackslashEscaped(value, i))) {
                   j = i + 2;
                   depth = 1;
-                  QuoteState braceQuote = newQuoteState();
+                  dynamic braceQuote = newQuoteState();
                   while (j < value.length && depth > 0) {
-                    String c = (value[j]).toString();
+                    String c = (value[j]).toString(); 
                     if (c == "\\" && j + 1 < value.length && !(braceQuote.single)) {
                       j += 2;
                       continue;
@@ -3400,7 +3400,7 @@ class Word implements Node {
                   } else {
                     inner = _substring(value, i + 2, j - 1);
                   }
-                  String formattedInner = this._formatCommandSubstitutions(inner, false);
+                  String formattedInner = this._formatCommandSubstitutions(inner, false); 
                   formattedInner = this._normalizeExtglobWhitespace(formattedInner);
                   if (depth == 0) {
                     result.add("\${" + formattedInner + "}");
@@ -3440,10 +3440,10 @@ class Word implements Node {
   }
 
   String _normalizeExtglobWhitespace(String value) {
-    List<String> result = <String>[];
-    int i = 0;
-    QuoteState extglobQuote = newQuoteState();
-    int deprecatedArithDepth = 0;
+    List<String> result = <String>[]; 
+    int i = 0; 
+    dynamic extglobQuote = newQuoteState();
+    int deprecatedArithDepth = 0; 
     while (i < value.length) {
       if ((value[i]).toString() == "\"") {
         extglobQuote.double = !(extglobQuote.double);
@@ -3464,18 +3464,18 @@ class Word implements Node {
         continue;
       }
       if (i + 1 < value.length && (value[i + 1]).toString() == "(") {
-        String prefixChar = (value[i]).toString();
+        String prefixChar = (value[i]).toString(); 
         if ("><".contains(prefixChar) && !(extglobQuote.double) && deprecatedArithDepth == 0) {
           result.add(prefixChar);
           result.add("(");
           i += 2;
-          int depth = 1;
-          List<String> patternParts = <String>[];
-          List<String> currentPart = <String>[];
-          bool hasPipe = false;
+          int depth = 1; 
+          List<String> patternParts = <String>[]; 
+          List<String> currentPart = <String>[]; 
+          bool hasPipe = false; 
           while (i < value.length && depth > 0) {
             if ((value[i]).toString() == "\\" && i + 1 < value.length) {
-              currentPart.add(value.substring(i, i + 2));
+              currentPart.add(_safeSubstring(value, i, i + 2));
               i += 2;
               continue;
             } else {
@@ -3484,7 +3484,7 @@ class Word implements Node {
                 currentPart.add((value[i]).toString());
                 i += 1;
               } else {
-                late String partContent;
+                String partContent = "";
                 if ((value[i]).toString() == ")") {
                   depth -= 1;
                   if (depth == 0) {
@@ -3541,7 +3541,7 @@ class Word implements Node {
   }
 
   String getCondFormattedValue() {
-    String value = this._expandAllAnsiCQuotes(this.value);
+    String value = this._expandAllAnsiCQuotes(this.value); 
     value = this._stripLocaleStringDollars(value);
     value = this._formatCommandSubstitutions(value, false);
     value = this._normalizeExtglobWhitespace(value);
@@ -3566,14 +3566,14 @@ class Command implements Node {
   }
 
   String toSexp() {
-    List<String> parts = <String>[];
+    List<String> parts = <String>[]; 
     for (final w in this.words) {
       parts.add(w.toSexp());
     }
     for (final r in this.redirects) {
       parts.add(r.toSexp());
     }
-    String inner = parts.join(" ");
+    String inner = parts.join(" "); 
     if (!((inner.isNotEmpty))) {
       return "(command)";
     }
@@ -3598,9 +3598,9 @@ class Pipeline implements Node {
     if (this.commands.length == 1) {
       return this.commands[0].toSexp();
     }
-    List<(Node, bool)> cmds = <(Node, bool)>[];
-    int i = 0;
-    late Node cmd;
+    List<(Node, bool)> cmds = <(Node, bool)>[]; 
+    int i = 0; 
+    dynamic cmd;
     while (i < this.commands.length) {
       cmd = this.commands[i];
       switch (cmd) {
@@ -3608,23 +3608,23 @@ class Pipeline implements Node {
           i += 1;
           continue;
       }
-      bool needsRedirect = i + 1 < this.commands.length && this.commands[i + 1].kind == "pipe-both";
+      bool needsRedirect = i + 1 < this.commands.length && this.commands[i + 1].kind == "pipe-both"; 
       cmds.add((cmd, needsRedirect));
       i += 1;
     }
-    late (Node, bool) pair;
-    late bool needs;
+    (Node, bool) pair = (null as dynamic, false);
+    bool needs = false;
     if (cmds.length == 1) {
       pair = cmds[0];
       cmd = pair.$1;
       needs = pair.$2;
       return this._cmdSexp(cmd, needs);
     }
-    (Node, bool) lastPair = cmds[cmds.length - 1];
-    Node lastCmd = lastPair.$1;
-    bool lastNeeds = lastPair.$2;
-    String result = this._cmdSexp(lastCmd, lastNeeds);
-    int j = cmds.length - 2;
+    (Node, bool) lastPair = cmds[cmds.length - 1]; 
+    Node lastCmd = lastPair.$1; 
+    bool lastNeeds = lastPair.$2; 
+    String result = this._cmdSexp(lastCmd, lastNeeds); 
+    int j = cmds.length - 2; 
     while (j >= 0) {
       pair = cmds[j];
       cmd = pair.$1;
@@ -3645,7 +3645,7 @@ class Pipeline implements Node {
     }
     switch (cmd) {
       case Command cmdCommand:
-        List<String> parts = <String>[];
+        List<String> parts = <String>[]; 
         for (final w in cmdCommand.words) {
           parts.add(w.toSexp());
         }
@@ -3673,8 +3673,8 @@ class List_ implements Node {
   }
 
   String toSexp() {
-    List<Node> parts = List.from(this.parts);
-    Map<String, String> opNames = <String, String>{"&&": "and", "||": "or", ";": "semi", "\n": "semi", "&": "background"};
+    List<Node> parts = List<Node>.from(this.parts); 
+    Map<String, String> opNames = <String, String>{"&&": "and", "||": "or", ";": "semi", "\n": "semi", "&": "background"}; 
     while (parts.length > 1 && parts[parts.length - 1].kind == "operator" && ((parts[parts.length - 1] as Operator).op == ";" || (parts[parts.length - 1] as Operator).op == "\n")) {
       parts = _sublist(parts, 0, parts.length - 1);
     }
@@ -3684,15 +3684,15 @@ class List_ implements Node {
     if (parts[parts.length - 1].kind == "operator" && (parts[parts.length - 1] as Operator).op == "&") {
       for (int i = parts.length - 3; i > 0; i += -2) {
         if (parts[i].kind == "operator" && ((parts[i] as Operator).op == ";" || (parts[i] as Operator).op == "\n")) {
-          List<Node> left = _sublist(parts, 0, i);
-          List<Node> right = _sublist(parts, i + 1, parts.length - 1);
-          late String leftSexp;
+          List<Node> left = _sublist(parts, 0, i); 
+          List<Node> right = _sublist(parts, i + 1, parts.length - 1); 
+          String leftSexp = "";
           if (left.length > 1) {
             leftSexp = List_(left, "list").toSexp();
           } else {
             leftSexp = left[0].toSexp();
           }
-          late String rightSexp;
+          String rightSexp = "";
           if (right.length > 1) {
             rightSexp = List_(right, "list").toSexp();
           } else {
@@ -3701,27 +3701,27 @@ class List_ implements Node {
           return "(semi " + leftSexp + " (background " + rightSexp + "))";
         }
       }
-      List<Node> innerParts = _sublist(parts, 0, parts.length - 1);
+      List<Node> innerParts = _sublist(parts, 0, parts.length - 1); 
       if (innerParts.length == 1) {
         return "(background " + innerParts[0].toSexp() + ")";
       }
-      List_ innerList = List_(innerParts, "list");
+      List_ innerList = List_(innerParts, "list"); 
       return "(background " + innerList.toSexp() + ")";
     }
     return this._toSexpWithPrecedence(parts, opNames);
   }
 
   String _toSexpWithPrecedence(List<Node> parts, Map<String, String> opNames) {
-    List<int> semiPositions = <int>[];
+    List<int> semiPositions = <int>[]; 
     for (int i = 0; i < parts.length; i += 1) {
       if (parts[i].kind == "operator" && ((parts[i] as Operator).op == ";" || (parts[i] as Operator).op == "\n")) {
         semiPositions.add(i);
       }
     }
     if ((semiPositions.isNotEmpty)) {
-      List<List<Node>> segments = <List<Node>>[];
-      int start = 0;
-      late List<Node> seg;
+      List<List<Node>> segments = <List<Node>>[]; 
+      int start = 0; 
+      List<Node> seg = <Node>[];
       for (final pos in semiPositions) {
         seg = _sublist(parts, start, pos);
         if ((seg.isNotEmpty) && seg[0].kind != "operator") {
@@ -3736,7 +3736,7 @@ class List_ implements Node {
       if (!((segments.isNotEmpty))) {
         return "()";
       }
-      String result = this._toSexpAmpAndHigher(segments[0], opNames);
+      String result = this._toSexpAmpAndHigher(segments[0], opNames); 
       for (int i = 1; i < segments.length; i += 1) {
         result = "(semi " + result + " " + this._toSexpAmpAndHigher(segments[i], opNames) + ")";
       }
@@ -3749,21 +3749,21 @@ class List_ implements Node {
     if (parts.length == 1) {
       return parts[0].toSexp();
     }
-    List<int> ampPositions = <int>[];
+    List<int> ampPositions = <int>[]; 
     for (int i = 1; i < parts.length - 1; i += 2) {
       if (parts[i].kind == "operator" && (parts[i] as Operator).op == "&") {
         ampPositions.add(i);
       }
     }
     if ((ampPositions.isNotEmpty)) {
-      List<List<Node>> segments = <List<Node>>[];
-      int start = 0;
+      List<List<Node>> segments = <List<Node>>[]; 
+      int start = 0; 
       for (final pos in ampPositions) {
         segments.add(_sublist(parts, start, pos));
         start = pos + 1;
       }
       segments.add(_sublist(parts, start, parts.length));
-      String result = this._toSexpAndOr(segments[0], opNames);
+      String result = this._toSexpAndOr(segments[0], opNames); 
       for (int i = 1; i < segments.length; i += 1) {
         result = "(background " + result + " " + this._toSexpAndOr(segments[i], opNames) + ")";
       }
@@ -3776,11 +3776,11 @@ class List_ implements Node {
     if (parts.length == 1) {
       return parts[0].toSexp();
     }
-    String result = parts[0].toSexp();
+    String result = parts[0].toSexp(); 
     for (int i = 1; i < parts.length - 1; i += 2) {
-      Node op = parts[i];
-      Node cmd = parts[i + 1];
-      String opName = (opNames[(op as Operator).op] ?? (op as Operator).op);
+      Node op = parts[i]; 
+      Node cmd = parts[i + 1]; 
+      String opName = (opNames[(op as Operator).op] ?? (op as Operator).op); 
       result = "(" + opName + " " + result + " " + cmd.toSexp() + ")";
     }
     return result;
@@ -3801,7 +3801,7 @@ class Operator implements Node {
   }
 
   String toSexp() {
-    Map<String, String> names = <String, String>{"&&": "and", "||": "or", ";": "semi", "&": "bg", "|": "pipe"};
+    Map<String, String> names = <String, String>{"&&": "and", "||": "or", ";": "semi", "&": "bg", "|": "pipe"}; 
     return "(" + (names[this.op] ?? this.op) + ")";
   }
 
@@ -3874,9 +3874,9 @@ class Redirect implements Node {
   }
 
   String toSexp() {
-    String op = this.op.trimLeft();
+    String op = this.op.trimLeft(); 
     if (op.startsWith("{")) {
-      int j = 1;
+      int j = 1; 
       if (j < op.length && (((op[j]).toString().isNotEmpty && RegExp(r'^[a-zA-Z]+$').hasMatch((op[j]).toString())) || (op[j]).toString() == "_")) {
         j += 1;
         while (j < op.length && (((op[j]).toString().isNotEmpty && RegExp(r'^[a-zA-Z0-9]+$').hasMatch((op[j]).toString())) || (op[j]).toString() == "_")) {
@@ -3896,7 +3896,7 @@ class Redirect implements Node {
         }
       }
     }
-    String targetVal = this.target.value;
+    String targetVal = this.target.value; 
     targetVal = this.target._expandAllAnsiCQuotes(targetVal);
     targetVal = this.target._stripLocaleStringDollars(targetVal);
     targetVal = this.target._formatCommandSubstitutions(targetVal, false);
@@ -3912,17 +3912,17 @@ class Redirect implements Node {
           op = "<&";
         }
       }
-      String raw = _substring(targetVal, 1, targetVal.length);
+      String raw = _substring(targetVal, 1, targetVal.length); 
       if ((raw.isNotEmpty && RegExp(r'^\d+$').hasMatch(raw)) && int.parse(raw, radix: 10) <= 2147483647) {
         return "(redirect \"" + op + "\" " + int.parse(raw, radix: 10).toString() + ")";
       }
-      if (raw.endsWith("-") && (raw.substring(0, raw.length - 1).isNotEmpty && RegExp(r'^\d+$').hasMatch(raw.substring(0, raw.length - 1))) && int.parse(raw.substring(0, raw.length - 1), radix: 10) <= 2147483647) {
-        return "(redirect \"" + op + "\" " + int.parse(raw.substring(0, raw.length - 1), radix: 10).toString() + ")";
+      if (raw.endsWith("-") && (_safeSubstring(raw, 0, raw.length - 1).isNotEmpty && RegExp(r'^\d+$').hasMatch(_safeSubstring(raw, 0, raw.length - 1))) && int.parse(_safeSubstring(raw, 0, raw.length - 1), radix: 10) <= 2147483647) {
+        return "(redirect \"" + op + "\" " + int.parse(_safeSubstring(raw, 0, raw.length - 1), radix: 10).toString() + ")";
       }
       if (targetVal == "&-") {
         return "(redirect \">&-\" 0)";
       }
-      String fdTarget = (raw.endsWith("-") ? raw.substring(0, raw.length - 1) : raw);
+      String fdTarget = (raw.endsWith("-") ? _safeSubstring(raw, 0, raw.length - 1) : raw); 
       return "(redirect \"" + op + "\" \"" + fdTarget + "\")";
     }
     if (op == ">&" || op == "<&") {
@@ -3932,10 +3932,10 @@ class Redirect implements Node {
       if (targetVal == "-") {
         return "(redirect \">&-\" 0)";
       }
-      if (targetVal.endsWith("-") && (targetVal.substring(0, targetVal.length - 1).isNotEmpty && RegExp(r'^\d+$').hasMatch(targetVal.substring(0, targetVal.length - 1))) && int.parse(targetVal.substring(0, targetVal.length - 1), radix: 10) <= 2147483647) {
-        return "(redirect \"" + op + "\" " + int.parse(targetVal.substring(0, targetVal.length - 1), radix: 10).toString() + ")";
+      if (targetVal.endsWith("-") && (_safeSubstring(targetVal, 0, targetVal.length - 1).isNotEmpty && RegExp(r'^\d+$').hasMatch(_safeSubstring(targetVal, 0, targetVal.length - 1))) && int.parse(_safeSubstring(targetVal, 0, targetVal.length - 1), radix: 10) <= 2147483647) {
+        return "(redirect \"" + op + "\" " + int.parse(_safeSubstring(targetVal, 0, targetVal.length - 1), radix: 10).toString() + ")";
       }
-      String outVal = (targetVal.endsWith("-") ? targetVal.substring(0, targetVal.length - 1) : targetVal);
+      String outVal = (targetVal.endsWith("-") ? _safeSubstring(targetVal, 0, targetVal.length - 1) : targetVal); 
       return "(redirect \"" + op + "\" \"" + outVal + "\")";
     }
     return "(redirect \"" + op + "\" \"" + targetVal + "\")";
@@ -3968,8 +3968,8 @@ class HereDoc implements Node {
   }
 
   String toSexp() {
-    String op = (this.stripTabs ? "<<-" : "<<");
-    String content = this.content;
+    String op = (this.stripTabs ? "<<-" : "<<"); 
+    String content = this.content; 
     if (content.endsWith("\\") && !(content.endsWith("\\\\"))) {
       content = content + "\\";
     }
@@ -3993,7 +3993,7 @@ class Subshell implements Node {
   }
 
   String toSexp() {
-    String base = "(subshell " + this.body.toSexp() + ")";
+    String base = "(subshell " + this.body.toSexp() + ")"; 
     return _appendRedirects(base, this.redirects!);
   }
 
@@ -4014,7 +4014,7 @@ class BraceGroup implements Node {
   }
 
   String toSexp() {
-    String base = "(brace-group " + this.body.toSexp() + ")";
+    String base = "(brace-group " + this.body.toSexp() + ")"; 
     return _appendRedirects(base, this.redirects!);
   }
 
@@ -4039,7 +4039,7 @@ class If implements Node {
   }
 
   String toSexp() {
-    String result = "(if " + this.condition.toSexp() + " " + this.thenBody.toSexp();
+    String result = "(if " + this.condition.toSexp() + " " + this.thenBody.toSexp(); 
     if (this.elseBody != null) {
       result = result + " " + this.elseBody!.toSexp();
     }
@@ -4069,7 +4069,7 @@ class While implements Node {
   }
 
   String toSexp() {
-    String base = "(while " + this.condition.toSexp() + " " + this.body.toSexp() + ")";
+    String base = "(while " + this.condition.toSexp() + " " + this.body.toSexp() + ")"; 
     return _appendRedirects(base, this.redirects);
   }
 
@@ -4092,7 +4092,7 @@ class Until implements Node {
   }
 
   String toSexp() {
-    String base = "(until " + this.condition.toSexp() + " " + this.body.toSexp() + ")";
+    String base = "(until " + this.condition.toSexp() + " " + this.body.toSexp() + ")"; 
     return _appendRedirects(base, this.redirects);
   }
 
@@ -4117,28 +4117,28 @@ class For implements Node {
   }
 
   String toSexp() {
-    String suffix = "";
+    String suffix = ""; 
     if ((this.redirects.isNotEmpty)) {
-      List<String> redirectParts = <String>[];
+      List<String> redirectParts = <String>[]; 
       for (final r in this.redirects) {
         redirectParts.add(r.toSexp());
       }
       suffix = " " + redirectParts.join(" ");
     }
-    Word tempWord = Word(this.var_, <Node>[], "word");
-    String varFormatted = tempWord._formatCommandSubstitutions(this.var_, false);
-    String varEscaped = varFormatted.replaceAll("\\", "\\\\").replaceAll("\"", "\\\"");
+    Word tempWord = Word(this.var_, <Node>[], "word"); 
+    String varFormatted = tempWord._formatCommandSubstitutions(this.var_, false); 
+    String varEscaped = varFormatted.replaceAll("\\", "\\\\").replaceAll("\"", "\\\""); 
     if (this.words == null) {
       return "(for (word \"" + varEscaped + "\") (in (word \"\\\"\$@\\\"\")) " + this.body.toSexp() + ")" + suffix;
     } else {
       if (this.words!.length == 0) {
         return "(for (word \"" + varEscaped + "\") (in) " + this.body.toSexp() + ")" + suffix;
       } else {
-        List<String> wordParts = <String>[];
+        List<String> wordParts = <String>[]; 
         for (final w in this.words!) {
           wordParts.add(w.toSexp());
         }
-        String wordStrs = wordParts.join(" ");
+        String wordStrs = wordParts.join(" "); 
         return "(for (word \"" + varEscaped + "\") (in " + wordStrs + ") " + this.body.toSexp() + ")" + suffix;
       }
     }
@@ -4167,21 +4167,21 @@ class ForArith implements Node {
   }
 
   String toSexp() {
-    String suffix = "";
+    String suffix = ""; 
     if ((this.redirects.isNotEmpty)) {
-      List<String> redirectParts = <String>[];
+      List<String> redirectParts = <String>[]; 
       for (final r in this.redirects) {
         redirectParts.add(r.toSexp());
       }
       suffix = " " + redirectParts.join(" ");
     }
-    String initVal = ((this.init.isNotEmpty) ? this.init : "1");
-    String condVal = ((this.cond.isNotEmpty) ? this.cond : "1");
-    String incrVal = ((this.incr.isNotEmpty) ? this.incr : "1");
-    String initStr = _formatArithVal(initVal);
-    String condStr = _formatArithVal(condVal);
-    String incrStr = _formatArithVal(incrVal);
-    String bodyStr = this.body.toSexp();
+    String initVal = ((this.init.isNotEmpty) ? this.init : "1"); 
+    String condVal = ((this.cond.isNotEmpty) ? this.cond : "1"); 
+    String incrVal = ((this.incr.isNotEmpty) ? this.incr : "1"); 
+    String initStr = _formatArithVal(initVal); 
+    String condStr = _formatArithVal(condVal); 
+    String incrStr = _formatArithVal(incrVal); 
+    String bodyStr = this.body.toSexp(); 
     return "(arith-for (init (word \"\${initStr}\")) (test (word \"\${condStr}\")) (step (word \"\${incrStr}\")) \${bodyStr})\${suffix}";
   }
 
@@ -4206,22 +4206,22 @@ class Select implements Node {
   }
 
   String toSexp() {
-    String suffix = "";
+    String suffix = ""; 
     if ((this.redirects.isNotEmpty)) {
-      List<String> redirectParts = <String>[];
+      List<String> redirectParts = <String>[]; 
       for (final r in this.redirects) {
         redirectParts.add(r.toSexp());
       }
       suffix = " " + redirectParts.join(" ");
     }
-    String varEscaped = this.var_.replaceAll("\\", "\\\\").replaceAll("\"", "\\\"");
-    late String inClause;
+    String varEscaped = this.var_.replaceAll("\\", "\\\\").replaceAll("\"", "\\\""); 
+    String inClause = "";
     if (this.words != null) {
-      List<String> wordParts = <String>[];
+      List<String> wordParts = <String>[]; 
       for (final w in this.words!) {
         wordParts.add(w.toSexp());
       }
-      String wordStrs = wordParts.join(" ");
+      String wordStrs = wordParts.join(" "); 
       if ((this.words != null && this.words!.isNotEmpty)) {
         inClause = "(in " + wordStrs + ")";
       } else {
@@ -4252,12 +4252,12 @@ class Case implements Node {
   }
 
   String toSexp() {
-    List<String> parts = <String>[];
+    List<String> parts = <String>[]; 
     parts.add("(case " + this.word.toSexp());
     for (final p in this.patterns) {
       parts.add(p.toSexp());
     }
-    String base = parts.join(" ") + ")";
+    String base = parts.join(" ") + ")"; 
     return _appendRedirects(base, this.redirects);
   }
 
@@ -4280,12 +4280,12 @@ class CasePattern implements Node {
   }
 
   String toSexp() {
-    List<String> alternatives = <String>[];
-    List<String> current = <String>[];
-    int i = 0;
-    int depth = 0;
+    List<String> alternatives = <String>[]; 
+    List<String> current = <String>[]; 
+    int i = 0; 
+    int depth = 0; 
     while (i < this.pattern.length) {
-      String ch = (this.pattern[i]).toString();
+      String ch = (this.pattern[i]).toString(); 
       if (ch == "\\" && i + 1 < this.pattern.length) {
         current.add(_substring(this.pattern, i, i + 2));
         i += 2;
@@ -4312,8 +4312,8 @@ class CasePattern implements Node {
                 depth -= 1;
                 i += 1;
               } else {
-                late int result0;
-                late List<String> result1;
+                int result0 = 0;
+                List<String> result1 = <String>[];
                 if (ch == "[") {
                   final _tuple20 = _consumeBracketClass(this.pattern, i, depth);
                   result0 = _tuple20.$1;
@@ -4354,12 +4354,12 @@ class CasePattern implements Node {
       }
     }
     alternatives.add(current.join(""));
-    List<String> wordList = <String>[];
+    List<String> wordList = <String>[]; 
     for (final alt in alternatives) {
       wordList.add(Word(alt, <Node>[], "word").toSexp());
     }
-    String patternStr = wordList.join(" ");
-    List<String> parts = <String>["(pattern (" + patternStr + ")"];
+    String patternStr = wordList.join(" "); 
+    List<String> parts = <String>["(pattern (" + patternStr + ")"]; 
     if (this.body != null) {
       parts.add(" " + this.body!.toSexp());
     } else {
@@ -4408,16 +4408,16 @@ class ParamExpansion implements Node {
   }
 
   String toSexp() {
-    String escapedParam = this.param.replaceAll("\\", "\\\\").replaceAll("\"", "\\\"");
+    String escapedParam = this.param.replaceAll("\\", "\\\\").replaceAll("\"", "\\\""); 
     if (this.op != "") {
-      String escapedOp = this.op.replaceAll("\\", "\\\\").replaceAll("\"", "\\\"");
-      late String argVal;
+      String escapedOp = this.op.replaceAll("\\", "\\\\").replaceAll("\"", "\\\""); 
+      String argVal = "";
       if (this.arg != "") {
         argVal = this.arg;
       } else {
         argVal = "";
       }
-      String escapedArg = argVal.replaceAll("\\", "\\\\").replaceAll("\"", "\\\"");
+      String escapedArg = argVal.replaceAll("\\", "\\\\").replaceAll("\"", "\\\""); 
       return "(param \"" + escapedParam + "\" \"" + escapedOp + "\" \"" + escapedArg + "\")";
     }
     return "(param \"" + escapedParam + "\")";
@@ -4438,7 +4438,7 @@ class ParamLength implements Node {
   }
 
   String toSexp() {
-    String escaped = this.param.replaceAll("\\", "\\\\").replaceAll("\"", "\\\"");
+    String escaped = this.param.replaceAll("\\", "\\\\").replaceAll("\"", "\\\""); 
     return "(param-len \"" + escaped + "\")";
   }
 
@@ -4461,16 +4461,16 @@ class ParamIndirect implements Node {
   }
 
   String toSexp() {
-    String escaped = this.param.replaceAll("\\", "\\\\").replaceAll("\"", "\\\"");
+    String escaped = this.param.replaceAll("\\", "\\\\").replaceAll("\"", "\\\""); 
     if (this.op != "") {
-      String escapedOp = this.op.replaceAll("\\", "\\\\").replaceAll("\"", "\\\"");
-      late String argVal;
+      String escapedOp = this.op.replaceAll("\\", "\\\\").replaceAll("\"", "\\\""); 
+      String argVal = "";
       if (this.arg != "") {
         argVal = this.arg;
       } else {
         argVal = "";
       }
-      String escapedArg = argVal.replaceAll("\\", "\\\\").replaceAll("\"", "\\\"");
+      String escapedArg = argVal.replaceAll("\\", "\\\\").replaceAll("\"", "\\\""); 
       return "(param-indirect \"" + escaped + "\" \"" + escapedOp + "\" \"" + escapedArg + "\")";
     }
     return "(param-indirect \"" + escaped + "\")";
@@ -4539,15 +4539,15 @@ class ArithmeticCommand implements Node {
   }
 
   String toSexp() {
-    String formatted = Word(this.rawContent, <Node>[], "word")._formatCommandSubstitutions(this.rawContent, true);
-    String escaped = formatted.replaceAll("\\", "\\\\").replaceAll("\"", "\\\"").replaceAll("\n", "\\n").replaceAll("\t", "\\t");
-    String result = "(arith (word \"" + escaped + "\"))";
+    String formatted = Word(this.rawContent, <Node>[], "word")._formatCommandSubstitutions(this.rawContent, true); 
+    String escaped = formatted.replaceAll("\\", "\\\\").replaceAll("\"", "\\\"").replaceAll("\n", "\\n").replaceAll("\t", "\\t"); 
+    String result = "(arith (word \"" + escaped + "\"))"; 
     if ((this.redirects.isNotEmpty)) {
-      List<String> redirectParts = <String>[];
+      List<String> redirectParts = <String>[]; 
       for (final r in this.redirects) {
         redirectParts.add(r.toSexp());
       }
-      String redirectSexps = redirectParts.join(" ");
+      String redirectSexps = redirectParts.join(" "); 
       return result + " " + redirectSexps;
     }
     return result;
@@ -4836,7 +4836,7 @@ class ArithDeprecated implements Node {
   }
 
   String toSexp() {
-    String escaped = this.expression.replaceAll("\\", "\\\\").replaceAll("\"", "\\\"").replaceAll("\n", "\\n");
+    String escaped = this.expression.replaceAll("\\", "\\\\").replaceAll("\"", "\\\"").replaceAll("\n", "\\n"); 
     return "(arith-deprecated \"" + escaped + "\")";
   }
 
@@ -4855,7 +4855,7 @@ class ArithConcat implements Node {
   }
 
   String toSexp() {
-    List<String> sexps = <String>[];
+    List<String> sexps = <String>[]; 
     for (final p in this.parts) {
       sexps.add(p.toSexp());
     }
@@ -4877,7 +4877,7 @@ class AnsiCQuote implements Node {
   }
 
   String toSexp() {
-    String escaped = this.content.replaceAll("\\", "\\\\").replaceAll("\"", "\\\"").replaceAll("\n", "\\n");
+    String escaped = this.content.replaceAll("\\", "\\\\").replaceAll("\"", "\\\"").replaceAll("\n", "\\n"); 
     return "(ansi-c \"" + escaped + "\")";
   }
 
@@ -4896,7 +4896,7 @@ class LocaleString implements Node {
   }
 
   String toSexp() {
-    String escaped = this.content.replaceAll("\\", "\\\\").replaceAll("\"", "\\\"").replaceAll("\n", "\\n");
+    String escaped = this.content.replaceAll("\\", "\\\\").replaceAll("\"", "\\\"").replaceAll("\n", "\\n"); 
     return "(locale \"" + escaped + "\")";
   }
 
@@ -4988,11 +4988,11 @@ class ConditionalExpr implements Node {
   }
 
   String toSexp() {
-    dynamic body = this.body;
-    late String result;
+    dynamic body = this.body; 
+    String result = "";
     switch (body) {
       case String bodyString:
-        String escaped = bodyString.replaceAll("\\", "\\\\").replaceAll("\"", "\\\"").replaceAll("\n", "\\n");
+        String escaped = bodyString.replaceAll("\\", "\\\\").replaceAll("\"", "\\\"").replaceAll("\n", "\\n"); 
         result = "(cond \"" + escaped + "\")";
         break;
       default:
@@ -5000,11 +5000,11 @@ class ConditionalExpr implements Node {
         break;
     }
     if ((this.redirects.isNotEmpty)) {
-      List<String> redirectParts = <String>[];
+      List<String> redirectParts = <String>[]; 
       for (final r in this.redirects) {
         redirectParts.add(r.toSexp());
       }
-      String redirectSexps = redirectParts.join(" ");
+      String redirectSexps = redirectParts.join(" "); 
       return result + " " + redirectSexps;
     }
     return result;
@@ -5027,7 +5027,7 @@ class UnaryTest implements Node {
   }
 
   String toSexp() {
-    String operandVal = this.operand.getCondFormattedValue();
+    String operandVal = this.operand.getCondFormattedValue(); 
     return "(cond-unary \"" + this.op + "\" (cond-term \"" + operandVal + "\"))";
   }
 
@@ -5050,8 +5050,8 @@ class BinaryTest implements Node {
   }
 
   String toSexp() {
-    String leftVal = this.left.getCondFormattedValue();
-    String rightVal = this.right.getCondFormattedValue();
+    String leftVal = this.left.getCondFormattedValue(); 
+    String rightVal = this.right.getCondFormattedValue(); 
     return "(cond-binary \"" + this.op + "\" (cond-term \"" + leftVal + "\") (cond-term \"" + rightVal + "\"))";
   }
 
@@ -5149,11 +5149,11 @@ class Array implements Node {
     if (!((this.elements.isNotEmpty))) {
       return "(array)";
     }
-    List<String> parts = <String>[];
+    List<String> parts = <String>[]; 
     for (final e in this.elements) {
       parts.add(e.toSexp());
     }
-    String inner = parts.join(" ");
+    String inner = parts.join(" "); 
     return "(array " + inner + ")";
   }
 
@@ -5174,7 +5174,7 @@ class Coproc implements Node {
   }
 
   String toSexp() {
-    late String name;
+    String name = "";
     if ((this.name.isNotEmpty)) {
       name = this.name;
     } else {
@@ -5269,7 +5269,7 @@ class Parser {
     if (op == "" || op.length == 0) {
       return;
     }
-    String firstChar = (op[0]).toString();
+    String firstChar = (op[0]).toString(); 
     if (this._dolbraceState == dolbracestateParam && hasParam) {
       if ("%#^,".contains(firstChar)) {
         this._dolbraceState = dolbracestateQuote;
@@ -5313,9 +5313,9 @@ class Parser {
     if (this._lexer._tokenCache != null && this._lexer._tokenCache!.pos == this.pos && this._lexer._cachedWordContext == this._wordContext && this._lexer._cachedAtCommandStart == this._atCommandStart && this._lexer._cachedInArrayLiteral == this._inArrayLiteral && this._lexer._cachedInAssignBuiltin == this._inAssignBuiltin) {
       return this._lexer._tokenCache!;
     }
-    int savedPos = this.pos;
+    int savedPos = this.pos; 
     this._syncLexer();
-    Token result = this._lexer.peekToken();
+    dynamic result = this._lexer.peekToken();
     this._lexer._cachedWordContext = this._wordContext;
     this._lexer._cachedAtCommandStart = this._atCommandStart;
     this._lexer._cachedInArrayLiteral = this._inArrayLiteral;
@@ -5326,7 +5326,7 @@ class Parser {
   }
 
   Token _lexNextToken() {
-    late Token tok;
+    dynamic tok;
     if (this._lexer._tokenCache != null && this._lexer._tokenCache!.pos == this.pos && this._lexer._cachedWordContext == this._wordContext && this._lexer._cachedAtCommandStart == this._atCommandStart && this._lexer._cachedInArrayLiteral == this._inArrayLiteral && this._lexer._cachedInAssignBuiltin == this._inAssignBuiltin) {
       tok = this._lexer.nextToken();
       this.pos = this._lexer._postReadPos;
@@ -5352,20 +5352,20 @@ class Parser {
 
   bool _lexSkipComment() {
     this._syncLexer();
-    bool result = this._lexer._skipComment();
+    bool result = this._lexer._skipComment(); 
     this._syncParser();
     return result;
   }
 
   bool _lexIsCommandTerminator() {
-    Token tok = this._lexPeekToken();
-    int t = tok.type;
+    dynamic tok = this._lexPeekToken();
+    int t = tok.type; 
     return t == tokentypeEof || t == tokentypeNewline || t == tokentypePipe || t == tokentypeSemi || t == tokentypeLparen || t == tokentypeRparen || t == tokentypeAmp;
   }
 
   (int, String) _lexPeekOperator() {
-    Token tok = this._lexPeekToken();
-    int t = tok.type;
+    dynamic tok = this._lexPeekToken();
+    int t = tok.type; 
     if (t >= tokentypeSemi && t <= tokentypeGreater || t >= tokentypeAndAnd && t <= tokentypePipeAmp) {
       return (t, tok.value);
     }
@@ -5373,13 +5373,13 @@ class Parser {
   }
 
   String _lexPeekReservedWord() {
-    Token tok = this._lexPeekToken();
+    dynamic tok = this._lexPeekToken();
     if (tok.type != tokentypeWord) {
       return "";
     }
-    String word = tok.value;
+    String word = tok.value; 
     if (word.endsWith("\\\n")) {
-      word = word.substring(0, word.length - 2);
+      word = _safeSubstring(word, 0, word.length - 2);
     }
     if (reservedWords.contains(word) || word == "{" || word == "}" || word == "[[" || word == "]]" || word == "!" || word == "time") {
       return word;
@@ -5388,18 +5388,18 @@ class Parser {
   }
 
   bool _lexIsAtReservedWord(String word) {
-    String reserved = this._lexPeekReservedWord();
+    String reserved = this._lexPeekReservedWord(); 
     return reserved == word;
   }
 
   bool _lexConsumeWord(String expected) {
-    Token tok = this._lexPeekToken();
+    dynamic tok = this._lexPeekToken();
     if (tok.type != tokentypeWord) {
       return false;
     }
-    String word = tok.value;
+    String word = tok.value; 
     if (word.endsWith("\\\n")) {
-      word = word.substring(0, word.length - 2);
+      word = _safeSubstring(word, 0, word.length - 2);
     }
     if (word == expected) {
       this._lexNextToken();
@@ -5409,8 +5409,8 @@ class Parser {
   }
 
   String _lexPeekCaseTerminator() {
-    Token tok = this._lexPeekToken();
-    int t = tok.type;
+    dynamic tok = this._lexPeekToken();
+    int t = tok.type; 
     if (t == tokentypeSemiSemi) {
       return ";;";
     }
@@ -5438,13 +5438,13 @@ class Parser {
     if (this.atEnd()) {
       return "";
     }
-    String ch = (this.source[this.pos]).toString();
+    String ch = (this.source[this.pos]).toString(); 
     this.pos += 1;
     return ch;
   }
 
   String peekAt(int offset) {
-    int pos = this.pos + offset;
+    int pos = this.pos + offset; 
     if (pos < 0 || pos >= this.length) {
       return "";
     }
@@ -5459,7 +5459,7 @@ class Parser {
     if (this.pos + 2 >= this.length) {
       return false;
     }
-    String nextChar = (this.source[this.pos + 1]).toString();
+    String nextChar = (this.source[this.pos + 1]).toString(); 
     if (nextChar != ">" && nextChar != "<") {
       return false;
     }
@@ -5472,7 +5472,7 @@ class Parser {
       if (this.atEnd()) {
         break;
       }
-      String ch = this.peek();
+      String ch = this.peek(); 
       if (ch == "#") {
         this._lexSkipComment();
       } else {
@@ -5488,7 +5488,7 @@ class Parser {
 
   void skipWhitespaceAndNewlines() {
     while (!(this.atEnd())) {
-      String ch = this.peek();
+      String ch = this.peek(); 
       if (_isWhitespace(ch)) {
         this.advance();
         if (ch == "\n") {
@@ -5519,7 +5519,7 @@ class Parser {
     if (this.atEnd()) {
       return false;
     }
-    String ch = this.peek();
+    String ch = this.peek(); 
     if (this._eofToken != "" && ch == this._eofToken) {
       return true;
     }
@@ -5527,7 +5527,7 @@ class Parser {
       return true;
     }
     if (ch == "}") {
-      int nextPos = this.pos + 1;
+      int nextPos = this.pos + 1; 
       if (nextPos >= this.length) {
         return true;
       }
@@ -5540,7 +5540,7 @@ class Parser {
     if (this._eofToken == "") {
       return false;
     }
-    Token tok = this._lexPeekToken();
+    dynamic tok = this._lexPeekToken();
     if (this._eofToken == ")") {
       return tok.type == tokentypeRparen;
     }
@@ -5551,10 +5551,10 @@ class Parser {
   }
 
   List<Node> _collectRedirects() {
-    List<Node> redirects = <Node>[];
+    List<Node> redirects = <Node>[]; 
     while (true) {
       this.skipWhitespace();
-      Node redirect = this.parseRedirect();
+      dynamic redirect = this.parseRedirect();
       if (redirect == null) {
         break;
       }
@@ -5565,14 +5565,14 @@ class Parser {
 
   Node _parseLoopBody(String context) {
     if (this.peek() == "{") {
-      BraceGroup brace = this.parseBraceGroup();
+      dynamic brace = this.parseBraceGroup();
       if (brace == null) {
         throw ParseError("Expected brace group body in \${context}", this._lexPeekToken().pos, 0);
       }
       return brace.body;
     }
     if (this._lexConsumeWord("do")) {
-      Node body = this.parseListUntil(<String>{"done"});
+      dynamic body = this.parseListUntil(<String>{"done"});
       if (body == null) {
         throw ParseError("Expected commands after 'do'", this._lexPeekToken().pos, 0);
       }
@@ -5586,15 +5586,15 @@ class Parser {
   }
 
   String peekWord() {
-    int savedPos = this.pos;
+    int savedPos = this.pos; 
     this.skipWhitespace();
     if (this.atEnd() || _isMetachar(this.peek())) {
       this.pos = savedPos;
       return "";
     }
-    List<String> chars = <String>[];
+    List<String> chars = <String>[]; 
     while (!(this.atEnd()) && !(_isMetachar(this.peek()))) {
-      String ch = this.peek();
+      String ch = this.peek(); 
       if (_isQuote(ch)) {
         break;
       }
@@ -5608,7 +5608,7 @@ class Parser {
       }
       chars.add(this.advance());
     }
-    late String word;
+    String word = "";
     if ((chars.isNotEmpty)) {
       word = chars.join("");
     } else {
@@ -5619,11 +5619,11 @@ class Parser {
   }
 
   bool consumeWord(String expected) {
-    int savedPos = this.pos;
+    int savedPos = this.pos; 
     this.skipWhitespace();
-    String word = this.peekWord();
-    String keywordWord = word;
-    bool hasLeadingBrace = false;
+    String word = this.peekWord(); 
+    String keywordWord = word; 
+    bool hasLeadingBrace = false; 
     if (word != "" && this._inProcessSub && word.length > 1 && (word[0]).toString() == "}") {
       keywordWord = word.substring(1);
       hasLeadingBrace = true;
@@ -5654,9 +5654,9 @@ class Parser {
   void _scanDoubleQuote(List<String> chars, List<Node> parts, int start, bool handleLineContinuation) {
     chars.add("\"");
     while (!(this.atEnd()) && this.peek() != "\"") {
-      String c = this.peek();
+      String c = this.peek(); 
       if (c == "\\" && this.pos + 1 < this.length) {
-        String nextC = (this.source[this.pos + 1]).toString();
+        String nextC = (this.source[this.pos + 1]).toString(); 
         if (handleLineContinuation && nextC == "\n") {
           this.advance();
           this.advance();
@@ -5681,11 +5681,11 @@ class Parser {
   }
 
   bool _parseDollarExpansion(List<String> chars, List<Node> parts, bool inDquote) {
-    late Node result0;
-    late String result1;
+    dynamic result0;
+    String result1 = "";
     if (this.pos + 2 < this.length && (this.source[this.pos + 1]).toString() == "(" && (this.source[this.pos + 2]).toString() == "(") {
       final _tuple23 = this._parseArithmeticExpansion();
-      result0 = _tuple23.$1!;
+      result0 = _tuple23.$1;
       result1 = _tuple23.$2;
       if (result0 != null) {
         parts.add(result0!);
@@ -5693,7 +5693,7 @@ class Parser {
         return true;
       }
       final _tuple24 = this._parseCommandSubstitution();
-      result0 = _tuple24.$1!;
+      result0 = _tuple24.$1;
       result1 = _tuple24.$2;
       if (result0 != null) {
         parts.add(result0!);
@@ -5704,7 +5704,7 @@ class Parser {
     }
     if (this.pos + 1 < this.length && (this.source[this.pos + 1]).toString() == "[") {
       final _tuple25 = this._parseDeprecatedArithmetic();
-      result0 = _tuple25.$1!;
+      result0 = _tuple25.$1;
       result1 = _tuple25.$2;
       if (result0 != null) {
         parts.add(result0!);
@@ -5715,7 +5715,7 @@ class Parser {
     }
     if (this.pos + 1 < this.length && (this.source[this.pos + 1]).toString() == "(") {
       final _tuple26 = this._parseCommandSubstitution();
-      result0 = _tuple26.$1!;
+      result0 = _tuple26.$1;
       result1 = _tuple26.$2;
       if (result0 != null) {
         parts.add(result0!);
@@ -5725,7 +5725,7 @@ class Parser {
       return false;
     }
     final _tuple27 = this._parseParamExpansion(inDquote);
-    result0 = _tuple27.$1!;
+    result0 = _tuple27.$1;
     result1 = _tuple27.$2;
     if (result0 != null) {
       parts.add(result0!);
@@ -5740,7 +5740,7 @@ class Parser {
     return this.parseWord(atCommandStart, inArrayLiteral, false);
   }
 
-  Word parseWord(bool atCommandStart, bool inArrayLiteral, bool inAssignBuiltin) {
+  dynamic parseWord(bool atCommandStart, bool inArrayLiteral, bool inAssignBuiltin) {
     this.skipWhitespace();
     if (this.atEnd()) {
       return null as dynamic;
@@ -5748,7 +5748,7 @@ class Parser {
     this._atCommandStart = atCommandStart;
     this._inArrayLiteral = inArrayLiteral;
     this._inAssignBuiltin = inAssignBuiltin;
-    Token tok = this._lexPeekToken();
+    dynamic tok = this._lexPeekToken();
     if (tok.type != tokentypeWord) {
       this._atCommandStart = false;
       this._inArrayLiteral = false;
@@ -5766,17 +5766,17 @@ class Parser {
     if (this.atEnd() || this.peek() != "\$") {
       return (null, "");
     }
-    int start = this.pos;
+    int start = this.pos; 
     this.advance();
     if (this.atEnd() || this.peek() != "(") {
       this.pos = start;
       return (null, "");
     }
     this.advance();
-    SavedParserState saved = this._saveParserState();
+    dynamic saved = this._saveParserState();
     this._setState(parserstateflagsPstCmdsubst | parserstateflagsPstEoftoken);
     this._eofToken = ")";
-    Node cmd = this.parseList(true);
+    dynamic cmd = this.parseList(true);
     if (cmd == null) {
       cmd = Empty("empty");
     }
@@ -5787,8 +5787,8 @@ class Parser {
       return (null, "");
     }
     this.advance();
-    int textEnd = this.pos;
-    String text = _substring(this.source, start, textEnd);
+    int textEnd = this.pos; 
+    String text = _substring(this.source, start, textEnd); 
     this._restoreParserState(saved);
     return (CommandSubstitution(cmd, false, "cmdsub"), text);
   }
@@ -5798,10 +5798,10 @@ class Parser {
     if (!(this.atEnd()) && this.peek() == "|") {
       this.advance();
     }
-    SavedParserState saved = this._saveParserState();
+    dynamic saved = this._saveParserState();
     this._setState(parserstateflagsPstCmdsubst | parserstateflagsPstEoftoken);
     this._eofToken = "}";
-    Node cmd = this.parseList(true);
+    dynamic cmd = this.parseList(true);
     if (cmd == null) {
       cmd = Empty("empty");
     }
@@ -5811,7 +5811,7 @@ class Parser {
       throw MatchedPairError("unexpected EOF looking for `}'", start, 0);
     }
     this.advance();
-    String text = _substring(this.source, start, this.pos);
+    String text = _substring(this.source, start, this.pos); 
     this._restoreParserState(saved);
     this._syncLexer();
     return (CommandSubstitution(cmd, true, "cmdsub"), text);
@@ -5825,24 +5825,24 @@ class Parser {
     if (this.atEnd() || this.peek() != "`") {
       return (null, "");
     }
-    int start = this.pos;
+    int start = this.pos; 
     this.advance();
-    List<String> contentChars = <String>[];
-    List<String> textChars = <String>["`"];
-    List<(String, bool)> pendingHeredocs = <(String, bool)>[];
-    bool inHeredocBody = false;
-    String currentHeredocDelim = "";
-    bool currentHeredocStrip = false;
-    late String ch;
+    List<String> contentChars = <String>[]; 
+    List<String> textChars = <String>["`"]; 
+    List<(String, bool)> pendingHeredocs = <(String, bool)>[]; 
+    bool inHeredocBody = false; 
+    String currentHeredocDelim = ""; 
+    bool currentHeredocStrip = false; 
+    String ch = "";
     while (!(this.atEnd()) && (inHeredocBody || this.peek() != "`")) {
       if (inHeredocBody) {
-        int lineStart = this.pos;
-        int lineEnd = lineStart;
+        int lineStart = this.pos; 
+        int lineEnd = lineStart; 
         while (lineEnd < this.length && (this.source[lineEnd]).toString() != "\n") {
           lineEnd += 1;
         }
-        String line = _substring(this.source, lineStart, lineEnd);
-        String checkLine = (currentHeredocStrip ? line.trimLeft() : line);
+        String line = _substring(this.source, lineStart, lineEnd); 
+        String checkLine = (currentHeredocStrip ? line.trimLeft() : line); 
         if (checkLine == currentHeredocDelim) {
           for (final _c3 in line.split('')) {
             ch = _c3;
@@ -5865,8 +5865,8 @@ class Parser {
           }
         } else {
           if (checkLine.startsWith(currentHeredocDelim) && checkLine.length > currentHeredocDelim.length) {
-            int tabsStripped = line.length - checkLine.length;
-            int endPos = tabsStripped + currentHeredocDelim.length;
+            int tabsStripped = line.length - checkLine.length; 
+            int endPos = tabsStripped + currentHeredocDelim.length; 
             for (int i = 0; i < endPos; i += 1) {
               contentChars.add((line[i]).toString());
               textChars.add((line[i]).toString());
@@ -5896,16 +5896,16 @@ class Parser {
         }
         continue;
       }
-      String c = this.peek();
+      String c = this.peek(); 
       if (c == "\\" && this.pos + 1 < this.length) {
-        String nextC = (this.source[this.pos + 1]).toString();
+        String nextC = (this.source[this.pos + 1]).toString(); 
         if (nextC == "\n") {
           this.advance();
           this.advance();
         } else {
           if (_isEscapeCharInBacktick(nextC)) {
             this.advance();
-            String escaped = this.advance();
+            String escaped = this.advance(); 
             contentChars.add(escaped);
             textChars.add("\\");
             textChars.add(escaped);
@@ -5918,7 +5918,7 @@ class Parser {
         continue;
       }
       if (c == "<" && this.pos + 1 < this.length && (this.source[this.pos + 1]).toString() == "<") {
-        late String quote;
+        String quote = "";
         if (this.pos + 2 < this.length && (this.source[this.pos + 2]).toString() == "<") {
           contentChars.add(this.advance());
           textChars.add("<");
@@ -5973,7 +5973,7 @@ class Parser {
         textChars.add("<");
         contentChars.add(this.advance());
         textChars.add("<");
-        bool stripTabs = false;
+        bool stripTabs = false; 
         if (!(this.atEnd()) && this.peek() == "-") {
           stripTabs = true;
           contentChars.add(this.advance());
@@ -5984,11 +5984,11 @@ class Parser {
           contentChars.add(ch);
           textChars.add(ch);
         }
-        List<String> delimiterChars = <String>[];
+        List<String> delimiterChars = <String>[]; 
         if (!(this.atEnd())) {
           ch = this.peek();
-          late String dch;
-          late String closing;
+          String dch = "";
+          String closing = "";
           if (_isQuote(ch)) {
             quote = this.advance();
             contentChars.add(quote);
@@ -6005,7 +6005,7 @@ class Parser {
               textChars.add(closing);
             }
           } else {
-            late String esc;
+            String esc = "";
             if (ch == "\\") {
               esc = this.advance();
               contentChars.add(esc);
@@ -6062,7 +6062,7 @@ class Parser {
             }
           }
         }
-        String delimiter = delimiterChars.join("");
+        String delimiter = delimiterChars.join(""); 
         if ((delimiter.isNotEmpty)) {
           pendingHeredocs.add((delimiter, stripTabs));
         }
@@ -6090,8 +6090,8 @@ class Parser {
     }
     this.advance();
     textChars.add("`");
-    String text = textChars.join("");
-    String content = contentChars.join("");
+    String text = textChars.join(""); 
+    String content = contentChars.join(""); 
     if (pendingHeredocs.length > 0) {
       final _tuple31 = _findHeredocContentEnd(this.source, this.pos, pendingHeredocs);
       int heredocStart = _tuple31.$1;
@@ -6105,8 +6105,8 @@ class Parser {
         }
       }
     }
-    Parser subParser = newParser(content, false, this._extglob);
-    Node cmd = subParser.parseList(true);
+    dynamic subParser = newParser(content, false, this._extglob);
+    dynamic cmd = subParser.parseList(true);
     if (cmd == null) {
       cmd = Empty("empty");
     }
@@ -6117,20 +6117,20 @@ class Parser {
     if (this.atEnd() || !(_isRedirectChar(this.peek()))) {
       return (null, "");
     }
-    int start = this.pos;
-    String direction = this.advance();
+    int start = this.pos; 
+    String direction = this.advance(); 
     if (this.atEnd() || this.peek() != "(") {
       this.pos = start;
       return (null, "");
     }
     this.advance();
-    SavedParserState saved = this._saveParserState();
-    bool oldInProcessSub = this._inProcessSub;
+    dynamic saved = this._saveParserState();
+    bool oldInProcessSub = this._inProcessSub; 
     this._inProcessSub = true;
     this._setState(parserstateflagsPstEoftoken);
     this._eofToken = ")";
     try {
-      Node cmd = this.parseList(true);
+      dynamic cmd = this.parseList(true);
       if (cmd == null) {
         cmd = Empty("empty");
       }
@@ -6139,8 +6139,8 @@ class Parser {
         throw ParseError("Invalid process substitution", start, 0);
       }
       this.advance();
-      int textEnd = this.pos;
-      String text = _substring(this.source, start, textEnd);
+      int textEnd = this.pos; 
+      String text = _substring(this.source, start, textEnd); 
       text = _stripLineContinuationsCommentAware(text);
       this._restoreParserState(saved);
       this._inProcessSub = oldInProcessSub;
@@ -6148,7 +6148,7 @@ class Parser {
     } on ParseError {
       this._restoreParserState(saved);
       this._inProcessSub = oldInProcessSub;
-      String contentStartChar = (start + 2 < this.length ? (this.source[start + 2]).toString() : "");
+      String contentStartChar = (start + 2 < this.length ? (this.source[start + 2]).toString() : ""); 
       if (" \t\n".contains(contentStartChar)) {
         rethrow;
       }
@@ -6156,7 +6156,7 @@ class Parser {
       this._lexer.pos = this.pos;
       this._lexer._parseMatchedPair("(", ")", 0, false);
       this.pos = this._lexer.pos;
-      String text = _substring(this.source, start, this.pos);
+      String text = _substring(this.source, start, this.pos); 
       text = _stripLineContinuationsCommentAware(text);
       return (null, text);
     }
@@ -6166,10 +6166,10 @@ class Parser {
     if (this.atEnd() || this.peek() != "(") {
       return (null, "");
     }
-    int start = this.pos;
+    int start = this.pos; 
     this.advance();
     this._setState(parserstateflagsPstCompassign);
-    List<Word> elements = <Word>[];
+    List<Word> elements = <Word>[]; 
     while (true) {
       this.skipWhitespaceAndNewlines();
       if (this.atEnd()) {
@@ -6179,7 +6179,7 @@ class Parser {
       if (this.peek() == ")") {
         break;
       }
-      Word word = this.parseWord(false, true, false);
+      dynamic word = this.parseWord(false, true, false);
       if (word == null) {
         if (this.peek() == ")") {
           break;
@@ -6194,7 +6194,7 @@ class Parser {
       throw ParseError("Expected ) to close array literal", this.pos, 0);
     }
     this.advance();
-    String text = _substring(this.source, start, this.pos);
+    String text = _substring(this.source, start, this.pos); 
     this._clearState(parserstateflagsPstCompassign);
     return (Array(elements, "array"), text);
   }
@@ -6203,18 +6203,18 @@ class Parser {
     if (this.atEnd() || this.peek() != "\$") {
       return (null, "");
     }
-    int start = this.pos;
+    int start = this.pos; 
     if (this.pos + 2 >= this.length || (this.source[this.pos + 1]).toString() != "(" || (this.source[this.pos + 2]).toString() != "(") {
       return (null, "");
     }
     this.advance();
     this.advance();
     this.advance();
-    int contentStart = this.pos;
-    int depth = 2;
-    int firstClosePos = -1;
+    int contentStart = this.pos; 
+    int depth = 2; 
+    int firstClosePos = -1; 
     while (!(this.atEnd()) && depth > 0) {
-      String c = this.peek();
+      String c = this.peek(); 
       if (c == "'") {
         this.advance();
         while (!(this.atEnd()) && this.peek() != "'") {
@@ -6275,15 +6275,15 @@ class Parser {
       this.pos = start;
       return (null, "");
     }
-    late String content;
+    String content = "";
     if (firstClosePos != -1) {
       content = _substring(this.source, contentStart, firstClosePos);
     } else {
       content = _substring(this.source, contentStart, this.pos);
     }
     this.advance();
-    String text = _substring(this.source, start, this.pos);
-    late Node expr;
+    String text = _substring(this.source, start, this.pos); 
+    dynamic expr;
     try {
       expr = this._parseArithExpr(content);
     } on ParseError {
@@ -6294,16 +6294,16 @@ class Parser {
   }
 
   Node _parseArithExpr(String content) {
-    String savedArithSrc = this._arithSrc;
-    int savedArithPos = this._arithPos;
-    int savedArithLen = this._arithLen;
-    int savedParserState = this._parserState;
+    String savedArithSrc = this._arithSrc; 
+    int savedArithPos = this._arithPos; 
+    int savedArithLen = this._arithLen; 
+    int savedParserState = this._parserState; 
     this._setState(parserstateflagsPstArith);
     this._arithSrc = content;
     this._arithPos = 0;
     this._arithLen = content.length;
     this._arithSkipWs();
-    late Node result;
+    dynamic result;
     if (this._arithAtEnd()) {
       result = null as dynamic;
     } else {
@@ -6323,7 +6323,7 @@ class Parser {
   }
 
   String _arithPeek(int offset) {
-    int pos = this._arithPos + offset;
+    int pos = this._arithPos + offset; 
     if (pos >= this._arithLen) {
       return "";
     }
@@ -6334,14 +6334,14 @@ class Parser {
     if (this._arithAtEnd()) {
       return "";
     }
-    String c = (this._arithSrc[this._arithPos]).toString();
+    String c = (this._arithSrc[this._arithPos]).toString(); 
     this._arithPos += 1;
     return c;
   }
 
   void _arithSkipWs() {
     while (!(this._arithAtEnd())) {
-      String c = (this._arithSrc[this._arithPos]).toString();
+      String c = (this._arithSrc[this._arithPos]).toString(); 
       if (_isWhitespace(c)) {
         this._arithPos += 1;
       } else {
@@ -6367,12 +6367,12 @@ class Parser {
   }
 
   Node _arithParseComma() {
-    Node left = this._arithParseAssign();
+    dynamic left = this._arithParseAssign();
     while (true) {
       this._arithSkipWs();
       if (this._arithConsume(",")) {
         this._arithSkipWs();
-        Node right = this._arithParseAssign();
+        dynamic right = this._arithParseAssign();
         left = ArithComma(left, right, "comma");
       } else {
         break;
@@ -6382,9 +6382,9 @@ class Parser {
   }
 
   Node _arithParseAssign() {
-    Node left = this._arithParseTernary();
+    dynamic left = this._arithParseTernary();
     this._arithSkipWs();
-    List<String> assignOps = <String>["<<=", ">>=", "+=", "-=", "*=", "/=", "%=", "&=", "^=", "|=", "="];
+    List<String> assignOps = <String>["<<=", ">>=", "+=", "-=", "*=", "/=", "%=", "&=", "^=", "|=", "="]; 
     for (final op in assignOps) {
       if (this._arithMatch(op)) {
         if (op == "=" && this._arithPeek(1) == "=") {
@@ -6392,7 +6392,7 @@ class Parser {
         }
         this._arithConsume(op);
         this._arithSkipWs();
-        Node right = this._arithParseAssign();
+        dynamic right = this._arithParseAssign();
         return ArithAssign(op, left, right, "assign");
       }
     }
@@ -6400,18 +6400,18 @@ class Parser {
   }
 
   Node _arithParseTernary() {
-    Node cond = this._arithParseLogicalOr();
+    dynamic cond = this._arithParseLogicalOr();
     this._arithSkipWs();
     if (this._arithConsume("?")) {
       this._arithSkipWs();
-      late Node ifTrue;
+      dynamic ifTrue;
       if (this._arithMatch(":")) {
         ifTrue = null as dynamic;
       } else {
         ifTrue = this._arithParseAssign();
       }
       this._arithSkipWs();
-      late Node ifFalse;
+      dynamic ifFalse;
       if (this._arithConsume(":")) {
         this._arithSkipWs();
         if (this._arithAtEnd() || this._arithPeek(0) == ")") {
@@ -6428,10 +6428,10 @@ class Parser {
   }
 
   Node _arithParseLeftAssoc(List<String> ops, Node Function() parsefn) {
-    Node left = parsefn();
+    dynamic left = parsefn();
     while (true) {
       this._arithSkipWs();
-      bool matched = false;
+      bool matched = false; 
       for (final op in ops) {
         if (this._arithMatch(op)) {
           this._arithConsume(op);
@@ -6457,13 +6457,13 @@ class Parser {
   }
 
   Node _arithParseBitwiseOr() {
-    Node left = this._arithParseBitwiseXor();
+    dynamic left = this._arithParseBitwiseXor();
     while (true) {
       this._arithSkipWs();
       if (this._arithPeek(0) == "|" && this._arithPeek(1) != "|" && this._arithPeek(1) != "=") {
         this._arithAdvance();
         this._arithSkipWs();
-        Node right = this._arithParseBitwiseXor();
+        dynamic right = this._arithParseBitwiseXor();
         left = ArithBinaryOp("|", left, right, "binary-op");
       } else {
         break;
@@ -6473,13 +6473,13 @@ class Parser {
   }
 
   Node _arithParseBitwiseXor() {
-    Node left = this._arithParseBitwiseAnd();
+    dynamic left = this._arithParseBitwiseAnd();
     while (true) {
       this._arithSkipWs();
       if (this._arithPeek(0) == "^" && this._arithPeek(1) != "=") {
         this._arithAdvance();
         this._arithSkipWs();
-        Node right = this._arithParseBitwiseAnd();
+        dynamic right = this._arithParseBitwiseAnd();
         left = ArithBinaryOp("^", left, right, "binary-op");
       } else {
         break;
@@ -6489,13 +6489,13 @@ class Parser {
   }
 
   Node _arithParseBitwiseAnd() {
-    Node left = this._arithParseEquality();
+    dynamic left = this._arithParseEquality();
     while (true) {
       this._arithSkipWs();
       if (this._arithPeek(0) == "&" && this._arithPeek(1) != "&" && this._arithPeek(1) != "=") {
         this._arithAdvance();
         this._arithSkipWs();
-        Node right = this._arithParseEquality();
+        dynamic right = this._arithParseEquality();
         left = ArithBinaryOp("&", left, right, "binary-op");
       } else {
         break;
@@ -6509,10 +6509,10 @@ class Parser {
   }
 
   Node _arithParseComparison() {
-    Node left = this._arithParseShift();
+    dynamic left = this._arithParseShift();
     while (true) {
       this._arithSkipWs();
-      late Node right;
+      dynamic right;
       if (this._arithMatch("<=")) {
         this._arithConsume("<=");
         this._arithSkipWs();
@@ -6547,7 +6547,7 @@ class Parser {
   }
 
   Node _arithParseShift() {
-    Node left = this._arithParseAdditive();
+    dynamic left = this._arithParseAdditive();
     while (true) {
       this._arithSkipWs();
       if (this._arithMatch("<<=")) {
@@ -6556,7 +6556,7 @@ class Parser {
       if (this._arithMatch(">>=")) {
         break;
       }
-      late Node right;
+      dynamic right;
       if (this._arithMatch("<<")) {
         this._arithConsume("<<");
         this._arithSkipWs();
@@ -6577,12 +6577,12 @@ class Parser {
   }
 
   Node _arithParseAdditive() {
-    Node left = this._arithParseMultiplicative();
+    dynamic left = this._arithParseMultiplicative();
     while (true) {
       this._arithSkipWs();
-      String c = this._arithPeek(0);
-      String c2 = this._arithPeek(1);
-      late Node right;
+      String c = this._arithPeek(0); 
+      String c2 = this._arithPeek(1); 
+      dynamic right;
       if (c == "+" && c2 != "+" && c2 != "=") {
         this._arithAdvance();
         this._arithSkipWs();
@@ -6603,12 +6603,12 @@ class Parser {
   }
 
   Node _arithParseMultiplicative() {
-    Node left = this._arithParseExponentiation();
+    dynamic left = this._arithParseExponentiation();
     while (true) {
       this._arithSkipWs();
-      String c = this._arithPeek(0);
-      String c2 = this._arithPeek(1);
-      late Node right;
+      String c = this._arithPeek(0); 
+      String c2 = this._arithPeek(1); 
+      dynamic right;
       if (c == "*" && c2 != "*" && c2 != "=") {
         this._arithAdvance();
         this._arithSkipWs();
@@ -6636,12 +6636,12 @@ class Parser {
   }
 
   Node _arithParseExponentiation() {
-    Node left = this._arithParseUnary();
+    dynamic left = this._arithParseUnary();
     this._arithSkipWs();
     if (this._arithMatch("**")) {
       this._arithConsume("**");
       this._arithSkipWs();
-      Node right = this._arithParseExponentiation();
+      dynamic right = this._arithParseExponentiation();
       return ArithBinaryOp("**", left, right, "binary-op");
     }
     return left;
@@ -6649,7 +6649,7 @@ class Parser {
 
   Node _arithParseUnary() {
     this._arithSkipWs();
-    late Node operand;
+    dynamic operand;
     if (this._arithMatch("++")) {
       this._arithConsume("++");
       this._arithSkipWs();
@@ -6662,7 +6662,7 @@ class Parser {
       operand = this._arithParseUnary();
       return ArithPreDecr(operand, "pre-decr");
     }
-    String c = this._arithPeek(0);
+    String c = this._arithPeek(0); 
     if (c == "!") {
       this._arithAdvance();
       this._arithSkipWs();
@@ -6691,7 +6691,7 @@ class Parser {
   }
 
   Node _arithParsePostfix() {
-    Node left = this._arithParsePrimary();
+    dynamic left = this._arithParsePrimary();
     while (true) {
       this._arithSkipWs();
       if (this._arithMatch("++")) {
@@ -6708,7 +6708,7 @@ class Parser {
               case ArithVar leftArithVar:
                 this._arithAdvance();
                 this._arithSkipWs();
-                Node index = this._arithParseComma();
+                dynamic index = this._arithParseComma();
                 this._arithSkipWs();
                 if (!(this._arithConsume("]"))) {
                   throw ParseError("Expected ']' in array subscript", this._arithPos, 0);
@@ -6731,11 +6731,11 @@ class Parser {
 
   Node _arithParsePrimary() {
     this._arithSkipWs();
-    String c = this._arithPeek(0);
+    String c = this._arithPeek(0); 
     if (c == "(") {
       this._arithAdvance();
       this._arithSkipWs();
-      Node expr = this._arithParseComma();
+      dynamic expr = this._arithParseComma();
       this._arithSkipWs();
       if (!(this._arithConsume(")"))) {
         throw ParseError("Expected ')' in arithmetic expression", this._arithPos, 0);
@@ -6763,7 +6763,7 @@ class Parser {
       if (this._arithAtEnd()) {
         throw ParseError("Unexpected end after backslash in arithmetic", this._arithPos, 0);
       }
-      String escapedChar = this._arithAdvance();
+      String escapedChar = this._arithAdvance(); 
       return ArithEscape(escapedChar, "escape");
     }
     if (this._arithAtEnd() || ")]:,;?|&<>=!+-*/%^~#{}".contains(c)) {
@@ -6776,16 +6776,16 @@ class Parser {
     if (!(this._arithConsume("\$"))) {
       throw ParseError("Expected '\$'", this._arithPos, 0);
     }
-    String c = this._arithPeek(0);
+    String c = this._arithPeek(0); 
     if (c == "(") {
       return this._arithParseCmdsub();
     }
     if (c == "{") {
       return this._arithParseBracedParam();
     }
-    List<String> nameChars = <String>[];
+    List<String> nameChars = <String>[]; 
     while (!(this._arithAtEnd())) {
-      String ch = this._arithPeek(0);
+      String ch = this._arithPeek(0); 
       if ((ch.isNotEmpty && RegExp(r'^[a-zA-Z0-9]+$').hasMatch(ch)) || ch == "_") {
         nameChars.add(this._arithAdvance());
       } else {
@@ -6805,10 +6805,10 @@ class Parser {
 
   Node _arithParseCmdsub() {
     this._arithAdvance();
-    late int depth;
-    late int contentStart;
-    late String ch;
-    late String content;
+    int depth = 0;
+    int contentStart = 0;
+    String ch = "";
+    String content = "";
     if (this._arithPeek(0) == "(") {
       this._arithAdvance();
       depth = 1;
@@ -6833,7 +6833,7 @@ class Parser {
       content = _substring(this._arithSrc, contentStart, this._arithPos);
       this._arithAdvance();
       this._arithAdvance();
-      Node innerExpr = this._parseArithExpr(content);
+      dynamic innerExpr = this._parseArithExpr(content);
       return ArithmeticExpansion(innerExpr, "arith");
     }
     depth = 1;
@@ -6857,14 +6857,14 @@ class Parser {
     }
     content = _substring(this._arithSrc, contentStart, this._arithPos);
     this._arithAdvance();
-    Parser subParser = newParser(content, false, this._extglob);
-    Node cmd = subParser.parseList(true);
+    dynamic subParser = newParser(content, false, this._extglob);
+    dynamic cmd = subParser.parseList(true);
     return CommandSubstitution(cmd, false, "cmdsub");
   }
 
   Node _arithParseBracedParam() {
     this._arithAdvance();
-    late List<String> nameChars;
+    List<String> nameChars = <String>[];
     if (this._arithPeek(0) == "!") {
       this._arithAdvance();
       nameChars = <String>[];
@@ -6884,7 +6884,7 @@ class Parser {
       return ParamLength(nameChars.join(""), "param-len");
     }
     nameChars = <String>[];
-    late String ch;
+    String ch = "";
     while (!(this._arithAtEnd())) {
       ch = this._arithPeek(0);
       if (ch == "}") {
@@ -6896,9 +6896,9 @@ class Parser {
       }
       nameChars.add(this._arithAdvance());
     }
-    String name = nameChars.join("");
-    List<String> opChars = <String>[];
-    int depth = 1;
+    String name = nameChars.join(""); 
+    List<String> opChars = <String>[]; 
+    int depth = 1; 
     while (!(this._arithAtEnd()) && depth > 0) {
       ch = this._arithPeek(0);
       if (ch == "{") {
@@ -6917,7 +6917,7 @@ class Parser {
       }
     }
     this._arithConsume("}");
-    String opStr = opChars.join("");
+    String opStr = opChars.join(""); 
     if (opStr.startsWith(":-")) {
       return ParamExpansion(name, ":-", _substring(opStr, 2, opStr.length), "param");
     }
@@ -6956,11 +6956,11 @@ class Parser {
 
   Node _arithParseSingleQuote() {
     this._arithAdvance();
-    int contentStart = this._arithPos;
+    int contentStart = this._arithPos; 
     while (!(this._arithAtEnd()) && this._arithPeek(0) != "'") {
       this._arithAdvance();
     }
-    String content = _substring(this._arithSrc, contentStart, this._arithPos);
+    String content = _substring(this._arithSrc, contentStart, this._arithPos); 
     if (!(this._arithConsume("'"))) {
       throw ParseError("Unterminated single quote in arithmetic", this._arithPos, 0);
     }
@@ -6969,9 +6969,9 @@ class Parser {
 
   Node _arithParseDoubleQuote() {
     this._arithAdvance();
-    int contentStart = this._arithPos;
+    int contentStart = this._arithPos; 
     while (!(this._arithAtEnd()) && this._arithPeek(0) != "\"") {
-      String c = this._arithPeek(0);
+      String c = this._arithPeek(0); 
       if (c == "\\" && !(this._arithAtEnd())) {
         this._arithAdvance();
         this._arithAdvance();
@@ -6979,7 +6979,7 @@ class Parser {
         this._arithAdvance();
       }
     }
-    String content = _substring(this._arithSrc, contentStart, this._arithPos);
+    String content = _substring(this._arithSrc, contentStart, this._arithPos); 
     if (!(this._arithConsume("\""))) {
       throw ParseError("Unterminated double quote in arithmetic", this._arithPos, 0);
     }
@@ -6988,9 +6988,9 @@ class Parser {
 
   Node _arithParseBacktick() {
     this._arithAdvance();
-    int contentStart = this._arithPos;
+    int contentStart = this._arithPos; 
     while (!(this._arithAtEnd()) && this._arithPeek(0) != "`") {
-      String c = this._arithPeek(0);
+      String c = this._arithPeek(0); 
       if (c == "\\" && !(this._arithAtEnd())) {
         this._arithAdvance();
         this._arithAdvance();
@@ -6998,20 +6998,20 @@ class Parser {
         this._arithAdvance();
       }
     }
-    String content = _substring(this._arithSrc, contentStart, this._arithPos);
+    String content = _substring(this._arithSrc, contentStart, this._arithPos); 
     if (!(this._arithConsume("`"))) {
       throw ParseError("Unterminated backtick in arithmetic", this._arithPos, 0);
     }
-    Parser subParser = newParser(content, false, this._extglob);
-    Node cmd = subParser.parseList(true);
+    dynamic subParser = newParser(content, false, this._extglob);
+    dynamic cmd = subParser.parseList(true);
     return CommandSubstitution(cmd, false, "cmdsub");
   }
 
   Node _arithParseNumberOrVar() {
     this._arithSkipWs();
-    List<String> chars = <String>[];
-    String c = this._arithPeek(0);
-    late String ch;
+    List<String> chars = <String>[]; 
+    String c = this._arithPeek(0); 
+    String ch = "";
     if ((c.isNotEmpty && RegExp(r'^\d+$').hasMatch(c))) {
       while (!(this._arithAtEnd())) {
         ch = this._arithPeek(0);
@@ -7021,9 +7021,9 @@ class Parser {
           break;
         }
       }
-      String prefix = chars.join("");
+      String prefix = chars.join(""); 
       if (!(this._arithAtEnd()) && this._arithPeek(0) == "\$") {
-        Node expansion = this._arithParseExpansion();
+        dynamic expansion = this._arithParseExpansion();
         return ArithConcat(<Node>[ArithNumber(prefix, "number"), expansion], "arith-concat");
       }
       return ArithNumber(prefix, "number");
@@ -7046,16 +7046,16 @@ class Parser {
     if (this.atEnd() || this.peek() != "\$") {
       return (null, "");
     }
-    int start = this.pos;
+    int start = this.pos; 
     if (this.pos + 1 >= this.length || (this.source[this.pos + 1]).toString() != "[") {
       return (null, "");
     }
     this.advance();
     this.advance();
     this._lexer.pos = this.pos;
-    String content = this._lexer._parseMatchedPair("[", "]", matchedpairflagsArith, false);
+    String content = this._lexer._parseMatchedPair("[", "]", matchedpairflagsArith, false); 
     this.pos = this._lexer.pos;
-    String text = _substring(this.source, start, this.pos);
+    String text = _substring(this.source, start, this.pos); 
     return (ArithDeprecated(content, "arith-deprecated"), text);
   }
 
@@ -7068,20 +7068,20 @@ class Parser {
     return (result0, result1);
   }
 
-  Node parseRedirect() {
+  dynamic parseRedirect() {
     this.skipWhitespace();
     if (this.atEnd()) {
       return null as dynamic;
     }
-    int start = this.pos;
-    int fd = -1;
-    String varfd = "";
-    late String ch;
+    int start = this.pos; 
+    int fd = -1; 
+    String varfd = ""; 
+    String ch = "";
     if (this.peek() == "{") {
-      int saved = this.pos;
+      int saved = this.pos; 
       this.advance();
-      List<String> varnameChars = <String>[];
-      bool inBracket = false;
+      List<String> varnameChars = <String>[]; 
+      bool inBracket = false; 
       while (!(this.atEnd()) && !(_isRedirectChar(this.peek()))) {
         ch = this.peek();
         if (ch == "}" && !(inBracket)) {
@@ -7108,15 +7108,15 @@ class Parser {
           }
         }
       }
-      String varname = varnameChars.join("");
-      bool isValidVarfd = false;
+      String varname = varnameChars.join(""); 
+      bool isValidVarfd = false; 
       if ((varname.isNotEmpty)) {
         if (((varname[0]).toString().isNotEmpty && RegExp(r'^[a-zA-Z]+$').hasMatch((varname[0]).toString())) || (varname[0]).toString() == "_") {
           if (varname.contains("[") || varname.contains("]")) {
-            int left = varname.indexOf("[");
-            int right = varname.lastIndexOf("]");
+            int left = varname.indexOf("["); 
+            int right = varname.lastIndexOf("]"); 
             if (left != -1 && right == varname.length - 1 && right > left + 1) {
-              String base = varname.substring(0, left);
+              String base = _safeSubstring(varname, 0, left); 
               if ((base.isNotEmpty) && (((base[0]).toString().isNotEmpty && RegExp(r'^[a-zA-Z]+$').hasMatch((base[0]).toString())) || (base[0]).toString() == "_")) {
                 isValidVarfd = true;
                 for (final _c5 in base.substring(1).split('')) {
@@ -7147,7 +7147,7 @@ class Parser {
         this.pos = saved;
       }
     }
-    late List<String> fdChars;
+    List<String> fdChars = <String>[];
     if (varfd == "" && (this.peek().isNotEmpty) && (this.peek().isNotEmpty && RegExp(r'^\d+$').hasMatch(this.peek()))) {
       fdChars = <String>[];
       while (!(this.atEnd()) && (this.peek().isNotEmpty && RegExp(r'^\d+$').hasMatch(this.peek()))) {
@@ -7156,8 +7156,8 @@ class Parser {
       fd = int.parse(fdChars.join(""), radix: 10);
     }
     ch = this.peek();
-    late String op;
-    late Word target;
+    String op = "";
+    dynamic target;
     if (ch == "&" && this.pos + 1 < this.length && (this.source[this.pos + 1]).toString() == ">") {
       if (fd != -1 || varfd != "") {
         this.pos = start;
@@ -7187,9 +7187,9 @@ class Parser {
       return null as dynamic;
     }
     op = this.advance();
-    bool stripTabs = false;
+    bool stripTabs = false; 
     if (!(this.atEnd())) {
-      String nextCh = this.peek();
+      String nextCh = this.peek(); 
       if (op == ">" && nextCh == ">") {
         this.advance();
         op = ">>";
@@ -7259,14 +7259,14 @@ class Parser {
         target = null as dynamic;
       }
       if (target == null) {
-        late Word innerWord;
+        dynamic innerWord;
         if (!(this.atEnd()) && ((this.peek().isNotEmpty && RegExp(r'^\d+$').hasMatch(this.peek())) || this.peek() == "-")) {
-          int wordStart = this.pos;
+          int wordStart = this.pos; 
           fdChars = <String>[];
           while (!(this.atEnd()) && (this.peek().isNotEmpty && RegExp(r'^\d+$').hasMatch(this.peek()))) {
             fdChars.add(this.advance());
           }
-          late String fdTarget;
+          String fdTarget = "";
           if ((fdChars.isNotEmpty)) {
             fdTarget = fdChars.join("");
           } else {
@@ -7318,13 +7318,13 @@ class Parser {
 
   (String, bool) _parseHeredocDelimiter() {
     this.skipWhitespace();
-    bool quoted = false;
-    List<String> delimiterChars = <String>[];
+    bool quoted = false; 
+    List<String> delimiterChars = <String>[]; 
     while (true) {
-      late String c;
-      late int depth;
+      String c = "";
+      int depth = 0;
       while (!(this.atEnd()) && !(_isMetachar(this.peek()))) {
-        String ch = this.peek();
+        String ch = this.peek(); 
         if (ch == "\"") {
           quoted = true;
           this.advance();
@@ -7352,7 +7352,7 @@ class Parser {
             if (ch == "\\") {
               this.advance();
               if (!(this.atEnd())) {
-                String nextCh = this.peek();
+                String nextCh = this.peek(); 
                 if (nextCh == "\n") {
                   this.advance();
                 } else {
@@ -7369,8 +7369,8 @@ class Parser {
                   c = this.peek();
                   if (c == "\\" && this.pos + 1 < this.length) {
                     this.advance();
-                    String esc = this.peek();
-                    int escVal = _getAnsiEscape(esc);
+                    String esc = this.peek(); 
+                    int escVal = _getAnsiEscape(esc); 
                     if (escVal >= 0) {
                       delimiterChars.add(String.fromCharCode(escVal));
                       this.advance();
@@ -7405,8 +7405,8 @@ class Parser {
                     delimiterChars.add(this.advance());
                   }
                 } else {
-                  late int dollarCount;
-                  late int j;
+                  int dollarCount = 0;
+                  int j = 0;
                   if (ch == "\$" && this.pos + 1 < this.length && (this.source[this.pos + 1]).toString() == "{") {
                     dollarCount = 0;
                     j = this.pos - 1;
@@ -7544,21 +7544,21 @@ class Parser {
   }
 
   (String, int) _readHeredocLine(bool quoted) {
-    int lineStart = this.pos;
-    int lineEnd = this.pos;
+    int lineStart = this.pos; 
+    int lineEnd = this.pos; 
     while (lineEnd < this.length && (this.source[lineEnd]).toString() != "\n") {
       lineEnd += 1;
     }
-    String line = _substring(this.source, lineStart, lineEnd);
+    String line = _substring(this.source, lineStart, lineEnd); 
     if (!(quoted)) {
       while (lineEnd < this.length) {
-        int trailingBs = _countTrailingBackslashes(line);
+        int trailingBs = _countTrailingBackslashes(line); 
         if (trailingBs % 2 == 0) {
           break;
         }
         line = _substring(line, 0, line.length - 1);
         lineEnd += 1;
-        int nextLineStart = lineEnd;
+        int nextLineStart = lineEnd; 
         while (lineEnd < this.length && (this.source[lineEnd]).toString() != "\n") {
           lineEnd += 1;
         }
@@ -7569,16 +7569,16 @@ class Parser {
   }
 
   (bool, String) _lineMatchesDelimiter(String line, String delimiter, bool stripTabs) {
-    String checkLine = (stripTabs ? line.trimLeft() : line);
-    String normalizedCheck = _normalizeHeredocDelimiter(checkLine);
-    String normalizedDelim = _normalizeHeredocDelimiter(delimiter);
+    String checkLine = (stripTabs ? line.trimLeft() : line); 
+    String normalizedCheck = _normalizeHeredocDelimiter(checkLine); 
+    String normalizedDelim = _normalizeHeredocDelimiter(delimiter); 
     return (normalizedCheck == normalizedDelim, checkLine);
   }
 
   void _gatherHeredocBodies() {
     for (final heredoc in this._pendingHeredocs) {
-      List<String> contentLines = <String>[];
-      int lineStart = this.pos;
+      List<String> contentLines = <String>[]; 
+      int lineStart = this.pos; 
       while (this.pos < this.length) {
         lineStart = this.pos;
         final _tuple34 = this._readHeredocLine(heredoc.quoted);
@@ -7591,9 +7591,9 @@ class Parser {
           this.pos = (lineEnd < this.length ? lineEnd + 1 : lineEnd);
           break;
         }
-        String normalizedCheck = _normalizeHeredocDelimiter(checkLine);
-        String normalizedDelim = _normalizeHeredocDelimiter(heredoc.delimiter);
-        late int tabsStripped;
+        String normalizedCheck = _normalizeHeredocDelimiter(checkLine); 
+        String normalizedDelim = _normalizeHeredocDelimiter(heredoc.delimiter); 
+        int tabsStripped = 0;
         if (this._eofToken == ")" && normalizedCheck.startsWith(normalizedDelim)) {
           tabsStripped = line.length - checkLine.length;
           this.pos = lineStart + tabsStripped + heredoc.delimiter.length;
@@ -7611,7 +7611,7 @@ class Parser {
           contentLines.add(line + "\n");
           this.pos = lineEnd + 1;
         } else {
-          bool addNewline = true;
+          bool addNewline = true; 
           if (!(heredoc.quoted) && _countTrailingBackslashes(line) % 2 == 1) {
             addNewline = false;
           }
@@ -7625,7 +7625,7 @@ class Parser {
   }
 
   HereDoc _parseHeredoc(int fd, bool stripTabs) {
-    int startPos = this.pos;
+    int startPos = this.pos; 
     this._setState(parserstateflagsPstHeredoc);
     final _tuple36 = this._parseHeredocDelimiter();
     String delimiter = _tuple36.$1;
@@ -7636,41 +7636,41 @@ class Parser {
         return existing;
       }
     }
-    HereDoc heredoc = HereDoc(delimiter, "", stripTabs, quoted, fd, false, 0, "heredoc");
+    HereDoc heredoc = HereDoc(delimiter, "", stripTabs, quoted, fd, false, 0, "heredoc"); 
     heredoc._startPos = startPos;
     this._pendingHeredocs.add(heredoc);
     this._clearState(parserstateflagsPstHeredoc);
     return heredoc;
   }
 
-  Command parseCommand() {
-    List<Word> words = <Word>[];
-    List<Node> redirects = <Node>[];
+  dynamic parseCommand() {
+    List<Word> words = <Word>[]; 
+    List<Node> redirects = <Node>[]; 
     while (true) {
       this.skipWhitespace();
       if (this._lexIsCommandTerminator()) {
         break;
       }
       if (words.length == 0) {
-        String reserved = this._lexPeekReservedWord();
+        String reserved = this._lexPeekReservedWord(); 
         if (reserved == "}" || reserved == "]]") {
           break;
         }
       }
-      Node redirect = this.parseRedirect();
+      dynamic redirect = this.parseRedirect();
       if (redirect != null) {
         redirects.add(redirect);
         continue;
       }
-      bool allAssignments = true;
+      bool allAssignments = true; 
       for (final w in words) {
         if (!(this._isAssignmentWord(w))) {
           allAssignments = false;
           break;
         }
       }
-      bool inAssignBuiltin = words.length > 0 && assignmentBuiltins.contains(words[0].value);
-      Word word = this.parseWord(!((words.isNotEmpty)) || allAssignments && redirects.length == 0, false, inAssignBuiltin);
+      bool inAssignBuiltin = words.length > 0 && assignmentBuiltins.contains(words[0].value); 
+      dynamic word = this.parseWord(!((words.isNotEmpty)) || allAssignments && redirects.length == 0, false, inAssignBuiltin);
       if (word == null) {
         break;
       }
@@ -7682,14 +7682,14 @@ class Parser {
     return Command(words, redirects, "command");
   }
 
-  Subshell parseSubshell() {
+  dynamic parseSubshell() {
     this.skipWhitespace();
     if (this.atEnd() || this.peek() != "(") {
       return null as dynamic;
     }
     this.advance();
     this._setState(parserstateflagsPstSubshell);
-    Node body = this.parseList(true);
+    dynamic body = this.parseList(true);
     if (body == null) {
       this._clearState(parserstateflagsPstSubshell);
       throw ParseError("Expected command in subshell", this.pos, 0);
@@ -7704,18 +7704,18 @@ class Parser {
     return Subshell(body, this._collectRedirects(), "subshell");
   }
 
-  ArithmeticCommand parseArithmeticCommand() {
+  dynamic parseArithmeticCommand() {
     this.skipWhitespace();
     if (this.atEnd() || this.peek() != "(" || this.pos + 1 >= this.length || (this.source[this.pos + 1]).toString() != "(") {
       return null as dynamic;
     }
-    int savedPos = this.pos;
+    int savedPos = this.pos; 
     this.advance();
     this.advance();
-    int contentStart = this.pos;
-    int depth = 1;
+    int contentStart = this.pos; 
+    int depth = 1; 
     while (!(this.atEnd()) && depth > 0) {
-      String c = this.peek();
+      String c = this.peek(); 
       if (c == "'") {
         this.advance();
         while (!(this.atEnd()) && this.peek() != "'") {
@@ -7774,20 +7774,20 @@ class Parser {
       this.pos = savedPos;
       return null as dynamic;
     }
-    String content = _substring(this.source, contentStart, this.pos);
+    String content = _substring(this.source, contentStart, this.pos); 
     content = content.replaceAll("\\\n", "");
     this.advance();
     this.advance();
-    Node expr = this._parseArithExpr(content);
+    dynamic expr = this._parseArithExpr(content);
     return ArithmeticCommand(expr, this._collectRedirects(), content, "arith-cmd");
   }
 
-  ConditionalExpr parseConditionalExpr() {
+  dynamic parseConditionalExpr() {
     this.skipWhitespace();
     if (this.atEnd() || this.peek() != "[" || this.pos + 1 >= this.length || (this.source[this.pos + 1]).toString() != "[") {
       return null as dynamic;
     }
-    int nextPos = this.pos + 2;
+    int nextPos = this.pos + 2; 
     if (nextPos < this.length && !(_isWhitespace((this.source[nextPos]).toString()) || (this.source[nextPos]).toString() == "\\" && nextPos + 1 < this.length && (this.source[nextPos + 1]).toString() == "\n")) {
       return null as dynamic;
     }
@@ -7795,7 +7795,7 @@ class Parser {
     this.advance();
     this._setState(parserstateflagsPstCondexpr);
     this._wordContext = wordCtxCond;
-    Node body = this._parseCondOr();
+    dynamic body = this._parseCondOr();
     while (!(this.atEnd()) && _isWhitespaceNoNewline(this.peek())) {
       this.advance();
     }
@@ -7836,12 +7836,12 @@ class Parser {
 
   Node _parseCondOr() {
     this._condSkipWhitespace();
-    Node left = this._parseCondAnd();
+    dynamic left = this._parseCondAnd();
     this._condSkipWhitespace();
     if (!(this._condAtEnd()) && this.peek() == "|" && this.pos + 1 < this.length && (this.source[this.pos + 1]).toString() == "|") {
       this.advance();
       this.advance();
-      Node right = this._parseCondOr();
+      dynamic right = this._parseCondOr();
       return CondOr(left, right, "cond-or");
     }
     return left;
@@ -7849,12 +7849,12 @@ class Parser {
 
   Node _parseCondAnd() {
     this._condSkipWhitespace();
-    Node left = this._parseCondTerm();
+    dynamic left = this._parseCondTerm();
     this._condSkipWhitespace();
     if (!(this._condAtEnd()) && this.peek() == "&" && this.pos + 1 < this.length && (this.source[this.pos + 1]).toString() == "&") {
       this.advance();
       this.advance();
-      Node right = this._parseCondAnd();
+      dynamic right = this._parseCondAnd();
       return CondAnd(left, right, "cond-and");
     }
     return left;
@@ -7869,13 +7869,13 @@ class Parser {
       if (this.pos + 1 < this.length && !(_isWhitespaceNoNewline((this.source[this.pos + 1]).toString()))) {
       } else {
         this.advance();
-        Node operand = this._parseCondTerm();
+        dynamic operand = this._parseCondTerm();
         return CondNot(operand, "cond-not");
       }
     }
     if (this.peek() == "(") {
       this.advance();
-      Node inner = this._parseCondOr();
+      dynamic inner = this._parseCondOr();
       this._condSkipWhitespace();
       if (this.atEnd() || this.peek() != ")") {
         throw ParseError("Expected ) in conditional expression", this.pos, 0);
@@ -7883,22 +7883,22 @@ class Parser {
       this.advance();
       return CondParen(inner, "cond-paren");
     }
-    Word word1 = this._parseCondWord();
+    dynamic word1 = this._parseCondWord();
     if (word1 == null) {
       throw ParseError("Expected word in conditional expression", this.pos, 0);
     }
     this._condSkipWhitespace();
     if (condUnaryOps.contains(word1.value)) {
-      Word unaryOperand = this._parseCondWord();
+      dynamic unaryOperand = this._parseCondWord();
       if (unaryOperand == null) {
         throw ParseError("Expected operand after " + word1.value, this.pos, 0);
       }
       return UnaryTest(word1.value, unaryOperand, "unary-test");
     }
     if (!(this._condAtEnd()) && this.peek() != "&" && this.peek() != "|" && this.peek() != ")") {
-      late Word word2;
+      dynamic word2;
       if (_isRedirectChar(this.peek()) && !(this.pos + 1 < this.length && (this.source[this.pos + 1]).toString() == "(")) {
-        String op = this.advance();
+        String op = this.advance(); 
         this._condSkipWhitespace();
         word2 = this._parseCondWord();
         if (word2 == null) {
@@ -7906,8 +7906,8 @@ class Parser {
         }
         return BinaryTest(op, word1, word2, "binary-test");
       }
-      int savedPos = this.pos;
-      Word opWord = this._parseCondWord();
+      int savedPos = this.pos; 
+      dynamic opWord = this._parseCondWord();
       if (opWord != null && condBinaryOps.contains(opWord.value)) {
         this._condSkipWhitespace();
         if (opWord.value == "=~") {
@@ -7926,12 +7926,12 @@ class Parser {
     return UnaryTest("-n", word1, "unary-test");
   }
 
-  Word _parseCondWord() {
+  dynamic _parseCondWord() {
     this._condSkipWhitespace();
     if (this._condAtEnd()) {
       return null as dynamic;
     }
-    String c = this.peek();
+    String c = this.peek(); 
     if (_isParen(c)) {
       return null as dynamic;
     }
@@ -7944,25 +7944,25 @@ class Parser {
     return this._parseWordInternal(wordCtxCond, false, false);
   }
 
-  Word _parseCondRegexWord() {
+  dynamic _parseCondRegexWord() {
     this._condSkipWhitespace();
     if (this._condAtEnd()) {
       return null as dynamic;
     }
     this._setState(parserstateflagsPstRegexp);
-    Word result = this._parseWordInternal(wordCtxRegex, false, false);
+    dynamic result = this._parseWordInternal(wordCtxRegex, false, false);
     this._clearState(parserstateflagsPstRegexp);
     this._wordContext = wordCtxCond;
     return result;
   }
 
-  BraceGroup parseBraceGroup() {
+  dynamic parseBraceGroup() {
     this.skipWhitespace();
     if (!(this._lexConsumeWord("{"))) {
       return null as dynamic;
     }
     this.skipWhitespaceAndNewlines();
-    Node body = this.parseList(true);
+    dynamic body = this.parseList(true);
     if (body == null) {
       throw ParseError("Expected command in brace group", this._lexPeekToken().pos, 0);
     }
@@ -7973,12 +7973,12 @@ class Parser {
     return BraceGroup(body, this._collectRedirects(), "brace-group");
   }
 
-  If parseIf() {
+  dynamic parseIf() {
     this.skipWhitespace();
     if (!(this._lexConsumeWord("if"))) {
       return null as dynamic;
     }
-    Node condition = this.parseListUntil(<String>{"then"});
+    dynamic condition = this.parseListUntil(<String>{"then"});
     if (condition == null) {
       throw ParseError("Expected condition after 'if'", this._lexPeekToken().pos, 0);
     }
@@ -7986,7 +7986,7 @@ class Parser {
     if (!(this._lexConsumeWord("then"))) {
       throw ParseError("Expected 'then' after if condition", this._lexPeekToken().pos, 0);
     }
-    Node thenBody = this.parseListUntil(<String>{"elif", "else", "fi"});
+    dynamic thenBody = this.parseListUntil(<String>{"elif", "else", "fi"});
     if (thenBody == null) {
       throw ParseError("Expected commands after 'then'", this._lexPeekToken().pos, 0);
     }
@@ -7994,7 +7994,7 @@ class Parser {
     Node? elseBody = null;
     if (this._lexIsAtReservedWord("elif")) {
       this._lexConsumeWord("elif");
-      Node elifCondition = this.parseListUntil(<String>{"then"});
+      dynamic elifCondition = this.parseListUntil(<String>{"then"});
       if (elifCondition == null) {
         throw ParseError("Expected condition after 'elif'", this._lexPeekToken().pos, 0);
       }
@@ -8002,7 +8002,7 @@ class Parser {
       if (!(this._lexConsumeWord("then"))) {
         throw ParseError("Expected 'then' after elif condition", this._lexPeekToken().pos, 0);
       }
-      Node elifThenBody = this.parseListUntil(<String>{"elif", "else", "fi"});
+      dynamic elifThenBody = this.parseListUntil(<String>{"elif", "else", "fi"});
       if (elifThenBody == null) {
         throw ParseError("Expected commands after 'then'", this._lexPeekToken().pos, 0);
       }
@@ -8038,7 +8038,7 @@ class Parser {
 
   If _parseElifChain() {
     this._lexConsumeWord("elif");
-    Node condition = this.parseListUntil(<String>{"then"});
+    dynamic condition = this.parseListUntil(<String>{"then"});
     if (condition == null) {
       throw ParseError("Expected condition after 'elif'", this._lexPeekToken().pos, 0);
     }
@@ -8046,7 +8046,7 @@ class Parser {
     if (!(this._lexConsumeWord("then"))) {
       throw ParseError("Expected 'then' after elif condition", this._lexPeekToken().pos, 0);
     }
-    Node thenBody = this.parseListUntil(<String>{"elif", "else", "fi"});
+    dynamic thenBody = this.parseListUntil(<String>{"elif", "else", "fi"});
     if (thenBody == null) {
       throw ParseError("Expected commands after 'then'", this._lexPeekToken().pos, 0);
     }
@@ -8066,12 +8066,12 @@ class Parser {
     return If(condition, thenBody, elseBody, <Node>[], "if");
   }
 
-  While parseWhile() {
+  dynamic parseWhile() {
     this.skipWhitespace();
     if (!(this._lexConsumeWord("while"))) {
       return null as dynamic;
     }
-    Node condition = this.parseListUntil(<String>{"do"});
+    dynamic condition = this.parseListUntil(<String>{"do"});
     if (condition == null) {
       throw ParseError("Expected condition after 'while'", this._lexPeekToken().pos, 0);
     }
@@ -8079,7 +8079,7 @@ class Parser {
     if (!(this._lexConsumeWord("do"))) {
       throw ParseError("Expected 'do' after while condition", this._lexPeekToken().pos, 0);
     }
-    Node body = this.parseListUntil(<String>{"done"});
+    dynamic body = this.parseListUntil(<String>{"done"});
     if (body == null) {
       throw ParseError("Expected commands after 'do'", this._lexPeekToken().pos, 0);
     }
@@ -8090,12 +8090,12 @@ class Parser {
     return While(condition, body, this._collectRedirects(), "while");
   }
 
-  Until parseUntil() {
+  dynamic parseUntil() {
     this.skipWhitespace();
     if (!(this._lexConsumeWord("until"))) {
       return null as dynamic;
     }
-    Node condition = this.parseListUntil(<String>{"do"});
+    dynamic condition = this.parseListUntil(<String>{"do"});
     if (condition == null) {
       throw ParseError("Expected condition after 'until'", this._lexPeekToken().pos, 0);
     }
@@ -8103,7 +8103,7 @@ class Parser {
     if (!(this._lexConsumeWord("do"))) {
       throw ParseError("Expected 'do' after until condition", this._lexPeekToken().pos, 0);
     }
-    Node body = this.parseListUntil(<String>{"done"});
+    dynamic body = this.parseListUntil(<String>{"done"});
     if (body == null) {
       throw ParseError("Expected commands after 'do'", this._lexPeekToken().pos, 0);
     }
@@ -8114,7 +8114,7 @@ class Parser {
     return Until(condition, body, this._collectRedirects(), "until");
   }
 
-  Node parseFor() {
+  dynamic parseFor() {
     this.skipWhitespace();
     if (!(this._lexConsumeWord("for"))) {
       return null as dynamic;
@@ -8123,9 +8123,9 @@ class Parser {
     if (this.peek() == "(" && this.pos + 1 < this.length && (this.source[this.pos + 1]).toString() == "(") {
       return this._parseForArith();
     }
-    late String varName;
+    String varName = "";
     if (this.peek() == "\$") {
-      Word varWord = this.parseWord(false, false, false);
+      dynamic varWord = this.parseWord(false, false, false);
       if (varWord == null) {
         throw ParseError("Expected variable name after 'for'", this._lexPeekToken().pos, 0);
       }
@@ -8146,7 +8146,7 @@ class Parser {
     if (this._lexIsAtReservedWord("in")) {
       this._lexConsumeWord("in");
       this.skipWhitespace();
-      bool sawDelimiter = _isSemicolonOrNewline(this.peek());
+      bool sawDelimiter = _isSemicolonOrNewline(this.peek()); 
       if (this.peek() == ";") {
         this.advance();
       }
@@ -8170,7 +8170,7 @@ class Parser {
           }
           throw ParseError("Expected ';' or newline before 'do'", this._lexPeekToken().pos, 0);
         }
-        Word word = this.parseWord(false, false, false);
+        dynamic word = this.parseWord(false, false, false);
         if (word == null) {
           break;
         }
@@ -8179,7 +8179,7 @@ class Parser {
     }
     this.skipWhitespaceAndNewlines();
     if (this.peek() == "{") {
-      BraceGroup braceGroup = this.parseBraceGroup();
+      dynamic braceGroup = this.parseBraceGroup();
       if (braceGroup == null) {
         throw ParseError("Expected brace group in for loop", this._lexPeekToken().pos, 0);
       }
@@ -8188,7 +8188,7 @@ class Parser {
     if (!(this._lexConsumeWord("do"))) {
       throw ParseError("Expected 'do' in for loop", this._lexPeekToken().pos, 0);
     }
-    Node body = this.parseListUntil(<String>{"done"});
+    dynamic body = this.parseListUntil(<String>{"done"});
     if (body == null) {
       throw ParseError("Expected commands after 'do'", this._lexPeekToken().pos, 0);
     }
@@ -8202,11 +8202,11 @@ class Parser {
   ForArith _parseForArith() {
     this.advance();
     this.advance();
-    List<String> parts = <String>[];
-    List<String> current = <String>[];
-    int parenDepth = 0;
+    List<String> parts = <String>[]; 
+    List<String> current = <String>[]; 
+    int parenDepth = 0; 
     while (!(this.atEnd())) {
-      String ch = this.peek();
+      String ch = this.peek(); 
       if (ch == "(") {
         parenDepth += 1;
         current.add(this.advance());
@@ -8239,25 +8239,25 @@ class Parser {
     if (parts.length != 3) {
       throw ParseError("Expected three expressions in for ((;;))", this.pos, 0);
     }
-    String init = parts[0];
-    String cond = parts[1];
-    String incr = parts[2];
+    String init = parts[0]; 
+    String cond = parts[1]; 
+    String incr = parts[2]; 
     this.skipWhitespace();
     if (!(this.atEnd()) && this.peek() == ";") {
       this.advance();
     }
     this.skipWhitespaceAndNewlines();
-    Node body = this._parseLoopBody("for loop");
+    dynamic body = this._parseLoopBody("for loop");
     return ForArith(init, cond, incr, body, this._collectRedirects(), "for-arith");
   }
 
-  Select parseSelect() {
+  dynamic parseSelect() {
     this.skipWhitespace();
     if (!(this._lexConsumeWord("select"))) {
       return null as dynamic;
     }
     this.skipWhitespace();
-    String varName = this.peekWord();
+    String varName = this.peekWord(); 
     if (varName == "") {
       throw ParseError("Expected variable name after 'select'", this._lexPeekToken().pos, 0);
     }
@@ -8286,7 +8286,7 @@ class Parser {
         if (this._lexIsAtReservedWord("do")) {
           break;
         }
-        Word word = this.parseWord(false, false, false);
+        dynamic word = this.parseWord(false, false, false);
         if (word == null) {
           break;
         }
@@ -8294,12 +8294,12 @@ class Parser {
       }
     }
     this.skipWhitespaceAndNewlines();
-    Node body = this._parseLoopBody("select");
+    dynamic body = this._parseLoopBody("select");
     return Select(varName, words, body, this._collectRedirects(), "select");
   }
 
   String _consumeCaseTerminator() {
-    String term = this._lexPeekCaseTerminator();
+    String term = this._lexPeekCaseTerminator(); 
     if (term != "") {
       this._lexNextToken();
       return term;
@@ -8307,13 +8307,13 @@ class Parser {
     return ";;";
   }
 
-  Case parseCase() {
+  dynamic parseCase() {
     if (!(this.consumeWord("case"))) {
       return null as dynamic;
     }
     this._setState(parserstateflagsPstCasestmt);
     this.skipWhitespace();
-    Word word = this.parseWord(false, false, false);
+    dynamic word = this.parseWord(false, false, false);
     if (word == null) {
       throw ParseError("Expected word after 'case'", this._lexPeekToken().pos, 0);
     }
@@ -8322,18 +8322,18 @@ class Parser {
       throw ParseError("Expected 'in' after case word", this._lexPeekToken().pos, 0);
     }
     this.skipWhitespaceAndNewlines();
-    List<CasePattern> patterns = <CasePattern>[];
+    List<CasePattern> patterns = <CasePattern>[]; 
     this._setState(parserstateflagsPstCasepat);
     while (true) {
       this.skipWhitespaceAndNewlines();
       if (this._lexIsAtReservedWord("esac")) {
-        int saved = this.pos;
+        int saved = this.pos; 
         this.skipWhitespace();
         while (!(this.atEnd()) && !(_isMetachar(this.peek())) && !(_isQuote(this.peek()))) {
           this.advance();
         }
         this.skipWhitespace();
-        bool isPattern = false;
+        bool isPattern = false; 
         if (!(this.atEnd()) && this.peek() == ")") {
           if (this._eofToken == ")") {
             isPattern = false;
@@ -8341,7 +8341,7 @@ class Parser {
             this.advance();
             this.skipWhitespace();
             if (!(this.atEnd())) {
-              String nextCh = this.peek();
+              String nextCh = this.peek(); 
               if (nextCh == ";") {
                 isPattern = true;
               } else {
@@ -8362,10 +8362,10 @@ class Parser {
         this.advance();
         this.skipWhitespaceAndNewlines();
       }
-      List<String> patternChars = <String>[];
-      int extglobDepth = 0;
+      List<String> patternChars = <String>[]; 
+      int extglobDepth = 0; 
       while (!(this.atEnd())) {
-        String ch = this.peek();
+        String ch = this.peek(); 
         if (ch == ")") {
           if (extglobDepth > 0) {
             patternChars.add(this.advance());
@@ -8391,9 +8391,9 @@ class Parser {
               patternChars.add(this.advance());
               if (!(this.atEnd()) && this.peek() == "(") {
                 patternChars.add(this.advance());
-                int parenDepth = 2;
+                int parenDepth = 2; 
                 while (!(this.atEnd()) && parenDepth > 0) {
-                  String c = this.peek();
+                  String c = this.peek(); 
                   if (c == "(") {
                     parenDepth += 1;
                   } else {
@@ -8417,10 +8417,10 @@ class Parser {
                   extglobDepth += 1;
                 } else {
                   if (ch == "[") {
-                    bool isCharClass = false;
-                    int scanPos = this.pos + 1;
-                    int scanDepth = 0;
-                    bool hasFirstBracketLiteral = false;
+                    bool isCharClass = false; 
+                    int scanPos = this.pos + 1; 
+                    int scanDepth = 0; 
+                    bool hasFirstBracketLiteral = false; 
                     if (scanPos < this.length && _isCaretOrBang((this.source[scanPos]).toString())) {
                       scanPos += 1;
                     }
@@ -8431,7 +8431,7 @@ class Parser {
                       }
                     }
                     while (scanPos < this.length) {
-                      String sc = (this.source[scanPos]).toString();
+                      String sc = (this.source[scanPos]).toString(); 
                       if (sc == "]" && scanDepth == 0) {
                         isCharClass = true;
                         break;
@@ -8507,24 +8507,24 @@ class Parser {
           }
         }
       }
-      String pattern = patternChars.join("");
+      String pattern = patternChars.join(""); 
       if (!((pattern.isNotEmpty))) {
         throw ParseError("Expected pattern in case statement", this._lexPeekToken().pos, 0);
       }
       this.skipWhitespace();
       Node? body = null;
-      bool isEmptyBody = this._lexPeekCaseTerminator() != "";
+      bool isEmptyBody = this._lexPeekCaseTerminator() != ""; 
       if (!(isEmptyBody)) {
         this.skipWhitespaceAndNewlines();
         if (!(this.atEnd()) && !(this._lexIsAtReservedWord("esac"))) {
-          bool isAtTerminator = this._lexPeekCaseTerminator() != "";
+          bool isAtTerminator = this._lexPeekCaseTerminator() != ""; 
           if (!(isAtTerminator)) {
             body = this.parseListUntil(<String>{"esac"});
             this.skipWhitespace();
           }
         }
       }
-      String terminator = this._consumeCaseTerminator();
+      String terminator = this._consumeCaseTerminator(); 
       this.skipWhitespaceAndNewlines();
       patterns.add(CasePattern(pattern, body, terminator, "pattern"));
     }
@@ -8538,18 +8538,18 @@ class Parser {
     return Case(word, patterns, this._collectRedirects(), "case");
   }
 
-  Coproc parseCoproc() {
+  dynamic parseCoproc() {
     this.skipWhitespace();
     if (!(this._lexConsumeWord("coproc"))) {
       return null as dynamic;
     }
     this.skipWhitespace();
-    String name = "";
-    String ch = "";
+    String name = ""; 
+    String ch = ""; 
     if (!(this.atEnd())) {
       ch = this.peek();
     }
-    late Node body;
+    dynamic body;
     if (ch == "{") {
       body = this.parseBraceGroup();
       if (body != null) {
@@ -8568,15 +8568,15 @@ class Parser {
         return Coproc(body, name, "coproc");
       }
     }
-    String nextWord = this._lexPeekReservedWord();
+    String nextWord = this._lexPeekReservedWord(); 
     if (nextWord != "" && compoundKeywords.contains(nextWord)) {
       body = this.parseCompoundCommand();
       if (body != null) {
         return Coproc(body, name, "coproc");
       }
     }
-    int wordStart = this.pos;
-    String potentialName = this.peekWord();
+    int wordStart = this.pos; 
+    String potentialName = this.peekWord(); 
     if ((potentialName.isNotEmpty)) {
       while (!(this.atEnd()) && !(_isMetachar(this.peek())) && !(_isQuote(this.peek()))) {
         this.advance();
@@ -8625,14 +8625,14 @@ class Parser {
     throw ParseError("Expected command after coproc", this.pos, 0);
   }
 
-  Function_ parseFunction() {
+  dynamic parseFunction() {
     this.skipWhitespace();
     if (this.atEnd()) {
       return null as dynamic;
     }
-    int savedPos = this.pos;
-    late String name;
-    late Node body;
+    int savedPos = this.pos; 
+    String name = "";
+    dynamic body;
     if (this._lexIsAtReservedWord("function")) {
       this._lexConsumeWord("function");
       this.skipWhitespace();
@@ -8664,7 +8664,7 @@ class Parser {
       return null as dynamic;
     }
     this.skipWhitespace();
-    int nameStart = this.pos;
+    int nameStart = this.pos; 
     while (!(this.atEnd()) && !(_isMetachar(this.peek())) && !(_isQuote(this.peek())) && !(_isParen(this.peek()))) {
       this.advance();
     }
@@ -8673,8 +8673,8 @@ class Parser {
       this.pos = savedPos;
       return null as dynamic;
     }
-    int braceDepth = 0;
-    int i = 0;
+    int braceDepth = 0; 
+    int i = 0; 
     while (i < name.length) {
       if (_isExpansionStart(name, i, "\${")) {
         braceDepth += 1;
@@ -8690,9 +8690,9 @@ class Parser {
       this.pos = savedPos;
       return null as dynamic;
     }
-    int posAfterName = this.pos;
+    int posAfterName = this.pos; 
     this.skipWhitespace();
-    bool hasWhitespace = this.pos > posAfterName;
+    bool hasWhitespace = this.pos > posAfterName; 
     if (!(hasWhitespace) && (name.isNotEmpty) && "*?@+!\$".contains((name[name.length - 1]).toString())) {
       this.pos = savedPos;
       return null as dynamic;
@@ -8716,8 +8716,8 @@ class Parser {
     return Function_(name, body, "function");
   }
 
-  Node _parseCompoundCommand() {
-    Node result = this.parseBraceGroup();
+  dynamic _parseCompoundCommand() {
+    dynamic result = this.parseBraceGroup();
     if (result != null) {
       return result;
     }
@@ -8770,12 +8770,12 @@ class Parser {
       return true;
     }
     if (this.peek() == "}") {
-      int nextPos = this.pos + 1;
+      int nextPos = this.pos + 1; 
       if (nextPos >= this.length || _isWordEndContext((this.source[nextPos]).toString())) {
         return true;
       }
     }
-    String reserved = this._lexPeekReservedWord();
+    String reserved = this._lexPeekReservedWord(); 
     if (reserved != "" && stopWords.contains(reserved)) {
       return true;
     }
@@ -8785,20 +8785,20 @@ class Parser {
     return false;
   }
 
-  Node parseListUntil(Set<String> stopWords) {
+  dynamic parseListUntil(Set<String> stopWords) {
     this.skipWhitespaceAndNewlines();
-    String reserved = this._lexPeekReservedWord();
+    String reserved = this._lexPeekReservedWord(); 
     if (reserved != "" && stopWords.contains(reserved)) {
       return null as dynamic;
     }
-    Node pipeline = this.parsePipeline();
+    dynamic pipeline = this.parsePipeline();
     if (pipeline == null) {
       return null as dynamic;
     }
-    List<Node> parts = <Node>[pipeline];
+    List<Node> parts = <Node>[pipeline]; 
     while (true) {
       this.skipWhitespace();
-      String op = this.parseListOperator();
+      String op = this.parseListOperator(); 
       if (op == "") {
         if (!(this.atEnd()) && this.peek() == "\n") {
           this.advance();
@@ -8811,7 +8811,7 @@ class Parser {
           if (this._atListUntilTerminator(stopWords)) {
             break;
           }
-          String nextOp = this._peekListOperator();
+          String nextOp = this._peekListOperator(); 
           if (nextOp == "&" || nextOp == ";") {
             break;
           }
@@ -8860,13 +8860,13 @@ class Parser {
     return List_(parts, "list");
   }
 
-  Node parseCompoundCommand() {
+  dynamic parseCompoundCommand() {
     this.skipWhitespace();
     if (this.atEnd()) {
       return null as dynamic;
     }
-    String ch = this.peek();
-    late Node result;
+    String ch = this.peek(); 
+    dynamic result;
     if (ch == "(" && this.pos + 1 < this.length && (this.source[this.pos + 1]).toString() == "(") {
       result = this.parseArithmeticCommand();
       if (result != null) {
@@ -8888,11 +8888,11 @@ class Parser {
         return result;
       }
     }
-    String reserved = this._lexPeekReservedWord();
+    String reserved = this._lexPeekReservedWord(); 
     if (reserved == "" && this._inProcessSub) {
-      String word = this.peekWord();
+      String word = this.peekWord(); 
       if (word != "" && word.length > 1 && (word[0]).toString() == "}") {
-        String keywordWord = word.substring(1);
+        String keywordWord = word.substring(1); 
         if (reservedWords.contains(keywordWord) || keywordWord == "{" || keywordWord == "}" || keywordWord == "[[" || keywordWord == "]]" || keywordWord == "!" || keywordWord == "time") {
           reserved = keywordWord;
         }
@@ -8925,22 +8925,22 @@ class Parser {
     if (reserved == "coproc") {
       return this.parseCoproc();
     }
-    Function_ func = this.parseFunction();
+    dynamic func = this.parseFunction();
     if (func != null) {
       return func;
     }
     return this.parseCommand();
   }
 
-  Node parsePipeline() {
+  dynamic parsePipeline() {
     this.skipWhitespace();
-    String prefixOrder = "";
-    bool timePosix = false;
+    String prefixOrder = ""; 
+    bool timePosix = false; 
     if (this._lexIsAtReservedWord("time")) {
       this._lexConsumeWord("time");
       prefixOrder = "time";
       this.skipWhitespace();
-      late int saved;
+      int saved = 0;
       if (!(this.atEnd()) && this.peek() == "-") {
         saved = this.pos;
         this.advance();
@@ -8995,7 +8995,7 @@ class Parser {
         if ((this.pos + 1 >= this.length || _isNegationBoundary((this.source[this.pos + 1]).toString())) && !(this._isBangFollowedByProcsub())) {
           this.advance();
           this.skipWhitespace();
-          Node inner = this.parsePipeline();
+          dynamic inner = this.parsePipeline();
           if (inner != null && inner.kind == "negation") {
             if ((inner as Negation).pipeline != null) {
               return (inner as Negation).pipeline;
@@ -9007,7 +9007,7 @@ class Parser {
         }
       }
     }
-    Node result = this._parseSimplePipeline();
+    dynamic result = this._parseSimplePipeline();
     if (prefixOrder == "time") {
       result = Time(result, timePosix, "time");
     } else {
@@ -9032,12 +9032,12 @@ class Parser {
     return result;
   }
 
-  Node _parseSimplePipeline() {
-    Node cmd = this.parseCompoundCommand();
+  dynamic _parseSimplePipeline() {
+    dynamic cmd = this.parseCompoundCommand();
     if (cmd == null) {
       return null as dynamic;
     }
-    List<Node> commands = <Node>[cmd];
+    List<Node> commands = <Node>[cmd]; 
     while (true) {
       this.skipWhitespace();
       final _tuple37 = this._lexPeekOperator();
@@ -9050,7 +9050,7 @@ class Parser {
         break;
       }
       this._lexNextToken();
-      bool isPipeBoth = tokenType == tokentypePipeAmp;
+      bool isPipeBoth = tokenType == tokentypePipeAmp; 
       this.skipWhitespaceAndNewlines();
       if (isPipeBoth) {
         commands.add(PipeBoth("pipe-both"));
@@ -9095,29 +9095,29 @@ class Parser {
   }
 
   String _peekListOperator() {
-    int savedPos = this.pos;
-    String op = this.parseListOperator();
+    int savedPos = this.pos; 
+    String op = this.parseListOperator(); 
     this.pos = savedPos;
     return op;
   }
 
-  Node parseList(bool newlineAsSeparator) {
+  dynamic parseList(bool newlineAsSeparator) {
     if (newlineAsSeparator) {
       this.skipWhitespaceAndNewlines();
     } else {
       this.skipWhitespace();
     }
-    Node pipeline = this.parsePipeline();
+    dynamic pipeline = this.parsePipeline();
     if (pipeline == null) {
       return null as dynamic;
     }
-    List<Node> parts = <Node>[pipeline];
+    List<Node> parts = <Node>[pipeline]; 
     if (this._inState(parserstateflagsPstEoftoken) && this._atEofToken()) {
       return (parts.length == 1 ? parts[0] : List_(parts, "list"));
     }
     while (true) {
       this.skipWhitespace();
-      String op = this.parseListOperator();
+      String op = this.parseListOperator(); 
       if (op == "") {
         if (!(this.atEnd()) && this.peek() == "\n") {
           if (!(newlineAsSeparator)) {
@@ -9133,7 +9133,7 @@ class Parser {
           if (this.atEnd() || this._atListTerminatingBracket()) {
             break;
           }
-          String nextOp = this._peekListOperator();
+          String nextOp = this._peekListOperator(); 
           if (nextOp == "&" || nextOp == ";") {
             break;
           }
@@ -9198,24 +9198,24 @@ class Parser {
     return List_(parts, "list");
   }
 
-  Node parseComment() {
+  dynamic parseComment() {
     if (this.atEnd() || this.peek() != "#") {
       return null as dynamic;
     }
-    int start = this.pos;
+    int start = this.pos; 
     while (!(this.atEnd()) && this.peek() != "\n") {
       this.advance();
     }
-    String text = _substring(this.source, start, this.pos);
+    String text = _substring(this.source, start, this.pos); 
     return Comment(text, "comment");
   }
 
   List<Node> parse() {
-    String source = this.source.trim();
+    String source = this.source.trim(); 
     if (!((source.isNotEmpty))) {
       return <Node>[Empty("empty")];
     }
-    List<Node> results = <Node>[];
+    List<Node> results = <Node>[]; 
     while (true) {
       this.skipWhitespace();
       while (!(this.atEnd()) && this.peek() == "\n") {
@@ -9224,18 +9224,18 @@ class Parser {
       if (this.atEnd()) {
         break;
       }
-      Node comment = this.parseComment();
+      dynamic comment = this.parseComment();
       if (!(comment != null)) {
         break;
       }
     }
     while (!(this.atEnd())) {
-      Node result = this.parseList(false);
+      dynamic result = this.parseList(false);
       if (result != null) {
         results.add(result);
       }
       this.skipWhitespace();
-      bool foundNewline = false;
+      bool foundNewline = false; 
       while (!(this.atEnd()) && this.peek() == "\n") {
         foundNewline = true;
         this.advance();
@@ -9253,7 +9253,7 @@ class Parser {
     if (!((results.isNotEmpty))) {
       return <Node>[Empty("empty")];
     }
-    if (this._sawNewlineInSingleQuote && (this.source.isNotEmpty) && (this.source[this.source.length - 1]).toString() == "\\" && !(this.source.length >= 3 && this.source.substring(this.source.length - 3, this.source.length - 1) == "\\\n")) {
+    if (this._sawNewlineInSingleQuote && (this.source.isNotEmpty) && (this.source[this.source.length - 1]).toString() == "\\" && !(this.source.length >= 3 && _safeSubstring(this.source, this.source.length - 3, this.source.length - 1) == "\\\n")) {
       if (!(this._lastWordOnOwnLine(results))) {
         this._stripTrailingBackslashFromLastWord(results);
       }
@@ -9269,8 +9269,8 @@ class Parser {
     if (!((nodes.isNotEmpty))) {
       return;
     }
-    Node lastNode = nodes[nodes.length - 1];
-    Word lastWord = this._findLastWord(lastNode);
+    Node lastNode = nodes[nodes.length - 1]; 
+    dynamic lastWord = this._findLastWord(lastNode);
     if (lastWord != null && lastWord.value.endsWith("\\")) {
       lastWord.value = _substring(lastWord.value, 0, lastWord.value.length - 1);
       if (!((lastWord.value.isNotEmpty)) && (lastNode is Command) && ((lastNode as Command).words.isNotEmpty)) {
@@ -9279,7 +9279,7 @@ class Parser {
     }
   }
 
-  Word _findLastWord(Node node) {
+  dynamic _findLastWord(Node node) {
     switch (node) {
       case Word nodeWord:
         return nodeWord;
@@ -9287,13 +9287,13 @@ class Parser {
     switch (node) {
       case Command nodeCommand:
         if ((nodeCommand.words.isNotEmpty)) {
-          Word lastWord = nodeCommand.words[nodeCommand.words.length - 1];
+          Word lastWord = nodeCommand.words[nodeCommand.words.length - 1]; 
           if (lastWord.value.endsWith("\\")) {
             return lastWord;
           }
         }
         if ((nodeCommand.redirects.isNotEmpty)) {
-          Node lastRedirect = nodeCommand.redirects[nodeCommand.redirects.length - 1];
+          Node lastRedirect = nodeCommand.redirects[nodeCommand.redirects.length - 1]; 
           switch (lastRedirect) {
             case Redirect lastRedirectRedirect:
               return lastRedirectRedirect.target;
@@ -9339,7 +9339,7 @@ bool _isWhitespace(String c) {
 }
 
 List<int> _stringToBytes(String s) {
-  return List.from(s.codeUnits);
+  return List<int>.from(s.codeUnits);
 }
 
 bool _isWhitespaceNoNewline(String c) {
@@ -9347,7 +9347,7 @@ bool _isWhitespaceNoNewline(String c) {
 }
 
 String _substring(String s, int start, int end) {
-  return s.substring(start, end);
+  return _safeSubstring(s, start, end);
 }
 
 bool _startsWithAt(String s, int pos, String prefix) {
@@ -9355,11 +9355,11 @@ bool _startsWithAt(String s, int pos, String prefix) {
 }
 
 int _countConsecutiveDollarsBefore(String s, int pos) {
-  int count = 0;
-  int k = pos - 1;
+  int count = 0; 
+  int k = pos - 1; 
   while (k >= 0 && (s[k]).toString() == "\$") {
-    int bsCount = 0;
-    int j = k - 1;
+    int bsCount = 0; 
+    int j = k - 1; 
     while (j >= 0 && (s[j]).toString() == "\\") {
       bsCount += 1;
       j -= 1;
@@ -9385,8 +9385,8 @@ List<Node> _sublist(List<Node> lst, int start, int end) {
 }
 
 String _repeatStr(String s, int n) {
-  List<String> result = <String>[];
-  int i = 0;
+  List<String> result = <String>[]; 
+  int i = 0; 
   while (i < n) {
     result.add(s);
     i += 1;
@@ -9395,15 +9395,15 @@ String _repeatStr(String s, int n) {
 }
 
 String _stripLineContinuationsCommentAware(String text) {
-  List<String> result = <String>[];
-  int i = 0;
-  bool inComment = false;
-  QuoteState quote = newQuoteState();
+  List<String> result = <String>[]; 
+  int i = 0; 
+  bool inComment = false; 
+  dynamic quote = newQuoteState();
   while (i < text.length) {
-    String c = (text[i]).toString();
+    String c = (text[i]).toString(); 
     if (c == "\\" && i + 1 < text.length && (text[i + 1]).toString() == "\n") {
-      int numPrecedingBackslashes = 0;
-      int j = i - 1;
+      int numPrecedingBackslashes = 0; 
+      int j = i - 1; 
       while (j >= 0 && (text[j]).toString() == "\\") {
         numPrecedingBackslashes += 1;
         j -= 1;
@@ -9442,7 +9442,7 @@ String _stripLineContinuationsCommentAware(String text) {
 
 String _appendRedirects(String base, List<Node>? redirects) {
   if ((redirects != null && redirects!.isNotEmpty)) {
-    List<String> parts = <String>[];
+    List<String> parts = <String>[]; 
     for (final r in redirects!) {
       parts.add(r.toSexp());
     }
@@ -9452,8 +9452,8 @@ String _appendRedirects(String base, List<Node>? redirects) {
 }
 
 String _formatArithVal(String s) {
-  Word w = Word(s, <Node>[], "word");
-  String val = w._expandAllAnsiCQuotes(s);
+  Word w = Word(s, <Node>[], "word"); 
+  String val = w._expandAllAnsiCQuotes(s); 
   val = w._stripLocaleStringDollars(val);
   val = w._formatCommandSubstitutions(val, false);
   val = val.replaceAll("\\", "\\\\").replaceAll("\"", "\\\"");
@@ -9462,8 +9462,8 @@ String _formatArithVal(String s) {
 }
 
 (int, List<String>) _consumeSingleQuote(String s, int start) {
-  List<String> chars = <String>["'"];
-  int i = start + 1;
+  List<String> chars = <String>["'"]; 
+  int i = start + 1; 
   while (i < s.length && (s[i]).toString() != "'") {
     chars.add((s[i]).toString());
     i += 1;
@@ -9476,8 +9476,8 @@ String _formatArithVal(String s) {
 }
 
 (int, List<String>) _consumeDoubleQuote(String s, int start) {
-  List<String> chars = <String>["\""];
-  int i = start + 1;
+  List<String> chars = <String>["\""]; 
+  int i = start + 1; 
   while (i < s.length && (s[i]).toString() != "\"") {
     if ((s[i]).toString() == "\\" && i + 1 < s.length) {
       chars.add((s[i]).toString());
@@ -9494,7 +9494,7 @@ String _formatArithVal(String s) {
 }
 
 bool _hasBracketClose(String s, int start, int depth) {
-  int i = start;
+  int i = start; 
   while (i < s.length) {
     if ((s[i]).toString() == "]") {
       return true;
@@ -9508,7 +9508,7 @@ bool _hasBracketClose(String s, int start, int depth) {
 }
 
 (int, List<String>, bool) _consumeBracketClass(String s, int start, int depth) {
-  int scanPos = start + 1;
+  int scanPos = start + 1; 
   if (scanPos < s.length && ((s[scanPos]).toString() == "!" || (s[scanPos]).toString() == "^")) {
     scanPos += 1;
   }
@@ -9517,7 +9517,7 @@ bool _hasBracketClose(String s, int start, int depth) {
       scanPos += 1;
     }
   }
-  bool isBracket = false;
+  bool isBracket = false; 
   while (scanPos < s.length) {
     if ((s[scanPos]).toString() == "]") {
       isBracket = true;
@@ -9534,8 +9534,8 @@ bool _hasBracketClose(String s, int start, int depth) {
   if (!(isBracket)) {
     return (start + 1, <String>["["], false);
   }
-  List<String> chars = <String>["["];
-  int i = start + 1;
+  List<String> chars = <String>["["]; 
+  int i = start + 1; 
   if (i < s.length && ((s[i]).toString() == "!" || (s[i]).toString() == "^")) {
     chars.add((s[i]).toString());
     i += 1;
@@ -9558,14 +9558,14 @@ bool _hasBracketClose(String s, int start, int depth) {
 }
 
 String _formatCondBody(Node node) {
-  String kind = node.kind;
+  String kind = node.kind; 
   if (kind == "unary-test") {
-    String operandVal = (node as UnaryTest).operand.getCondFormattedValue();
+    String operandVal = (node as UnaryTest).operand.getCondFormattedValue(); 
     return (node as UnaryTest).op + " " + operandVal;
   }
   if (kind == "binary-test") {
-    String leftVal = (node as BinaryTest).left.getCondFormattedValue();
-    String rightVal = (node as BinaryTest).right.getCondFormattedValue();
+    String leftVal = (node as BinaryTest).left.getCondFormattedValue(); 
+    String rightVal = (node as BinaryTest).right.getCondFormattedValue(); 
     return leftVal + " " + (node as BinaryTest).op + " " + rightVal;
   }
   if (kind == "cond-and") {
@@ -9611,23 +9611,23 @@ String _formatCmdsubNode(Node node, int indent, bool inProcsub, bool compactRedi
   if (node == null) {
     return "";
   }
-  String sp = _repeatStr(" ", indent);
-  String innerSp = _repeatStr(" ", indent + 4);
+  String sp = _repeatStr(" ", indent); 
+  String innerSp = _repeatStr(" ", indent + 4); 
   switch (node) {
     case ArithEmpty nodeArithEmpty:
       return "";
   }
   switch (node) {
     case Command nodeCommand:
-      List<String> parts = <String>[];
+      List<String> parts = <String>[]; 
       for (final w in nodeCommand.words) {
-        String val = w._expandAllAnsiCQuotes(w.value);
+        String val = w._expandAllAnsiCQuotes(w.value); 
         val = w._stripLocaleStringDollars(val);
         val = w._normalizeArrayWhitespace(val);
         val = w._formatCommandSubstitutions(val, false);
         parts.add(val);
       }
-      List<HereDoc> heredocs = <HereDoc>[];
+      List<HereDoc> heredocs = <HereDoc>[]; 
       for (final r in nodeCommand.redirects) {
         switch (r) {
           case HereDoc rHereDoc:
@@ -9638,10 +9638,10 @@ String _formatCmdsubNode(Node node, int indent, bool inProcsub, bool compactRedi
       for (final r in nodeCommand.redirects) {
         parts.add(_formatRedirect(r, compactRedirects, true));
       }
-      late String result;
+      String result = "";
       if (compactRedirects && (nodeCommand.words.isNotEmpty) && (nodeCommand.redirects.isNotEmpty)) {
-        List<String> wordParts = parts.sublist(0, nodeCommand.words.length);
-        List<String> redirectParts = parts.sublist(nodeCommand.words.length);
+        List<String> wordParts = parts.sublist(0, nodeCommand.words.length); 
+        List<String> redirectParts = parts.sublist(nodeCommand.words.length); 
         result = wordParts.join(" ") + redirectParts.join("");
       } else {
         result = parts.join(" ");
@@ -9653,10 +9653,10 @@ String _formatCmdsubNode(Node node, int indent, bool inProcsub, bool compactRedi
   }
   switch (node) {
     case Pipeline nodePipeline:
-      List<(Node, bool)> cmds = <(Node, bool)>[];
-      int i = 0;
-      late Node cmd;
-      late bool needsRedirect;
+      List<(Node, bool)> cmds = <(Node, bool)>[]; 
+      int i = 0; 
+      dynamic cmd;
+      bool needsRedirect = false;
       while (i < nodePipeline.commands.length) {
         cmd = nodePipeline.commands[i];
         switch (cmd) {
@@ -9668,17 +9668,17 @@ String _formatCmdsubNode(Node node, int indent, bool inProcsub, bool compactRedi
         cmds.add((cmd, needsRedirect));
         i += 1;
       }
-      List<String> resultParts = <String>[];
-      int idx = 0;
+      List<String> resultParts = <String>[]; 
+      int idx = 0; 
       while (idx < cmds.length) {
         {
-          (Node, bool) _entry = cmds[idx];
+          (Node, bool) _entry = cmds[idx]; 
           cmd = _entry.$1;
           needsRedirect = _entry.$2;
         }
-        String formatted = _formatCmdsubNode(cmd, indent, inProcsub, false, procsubFirst && idx == 0);
-        bool isLast = idx == cmds.length - 1;
-        bool hasHeredoc = false;
+        String formatted = _formatCmdsubNode(cmd, indent, inProcsub, false, procsubFirst && idx == 0); 
+        bool isLast = idx == cmds.length - 1; 
+        bool hasHeredoc = false; 
         if (cmd.kind == "command" && ((cmd as Command).redirects.isNotEmpty)) {
           for (final r in (cmd as Command).redirects) {
             bool _breakLoop39 = false;
@@ -9691,12 +9691,12 @@ String _formatCmdsubNode(Node node, int indent, bool inProcsub, bool compactRedi
             if (_breakLoop39) break;
           }
         }
-        late int firstNl;
+        int firstNl = 0;
         if (needsRedirect) {
           if (hasHeredoc) {
             firstNl = formatted.indexOf("\n");
             if (firstNl != -1) {
-              formatted = formatted.substring(0, firstNl) + " 2>&1" + formatted.substring(firstNl);
+              formatted = _safeSubstring(formatted, 0, firstNl) + " 2>&1" + formatted.substring(firstNl);
             } else {
               formatted = formatted + " 2>&1";
             }
@@ -9707,7 +9707,7 @@ String _formatCmdsubNode(Node node, int indent, bool inProcsub, bool compactRedi
         if (!(isLast) && hasHeredoc) {
           firstNl = formatted.indexOf("\n");
           if (firstNl != -1) {
-            formatted = formatted.substring(0, firstNl) + " |" + formatted.substring(firstNl);
+            formatted = _safeSubstring(formatted, 0, firstNl) + " |" + formatted.substring(firstNl);
           }
           resultParts.add(formatted);
         } else {
@@ -9715,11 +9715,11 @@ String _formatCmdsubNode(Node node, int indent, bool inProcsub, bool compactRedi
         }
         idx += 1;
       }
-      bool compactPipe = inProcsub && (cmds.isNotEmpty) && cmds[0].$1.kind == "subshell";
-      String result = "";
+      bool compactPipe = inProcsub && (cmds.isNotEmpty) && cmds[0].$1.kind == "subshell"; 
+      String result = ""; 
       idx = 0;
       while (idx < resultParts.length) {
-        String part_ = resultParts[idx];
+        String part_ = resultParts[idx]; 
         if (idx > 0) {
           if (result.endsWith("\n")) {
             result = result + "  " + part_;
@@ -9739,7 +9739,7 @@ String _formatCmdsubNode(Node node, int indent, bool inProcsub, bool compactRedi
   }
   switch (node) {
     case List_ nodeList_:
-      bool hasHeredoc = false;
+      bool hasHeredoc = false; 
       for (final p in nodeList_.parts) {
         if (p.kind == "command" && ((p as Command).redirects.isNotEmpty)) {
           for (final r in (p as Command).redirects) {
@@ -9776,9 +9776,9 @@ String _formatCmdsubNode(Node node, int indent, bool inProcsub, bool compactRedi
           }
         }
       }
-      List<String> result = <String>[];
-      bool skippedSemi = false;
-      int cmdCount = 0;
+      List<String> result = <String>[]; 
+      bool skippedSemi = false; 
+      int cmdCount = 0; 
       for (final p in nodeList_.parts) {
         switch (p) {
           case Operator pOperator:
@@ -9807,8 +9807,8 @@ String _formatCmdsubNode(Node node, int indent, bool inProcsub, bool compactRedi
                 result.add("\n");
                 skippedSemi = false;
               } else {
-                late String last;
-                late int firstNl;
+                String last = "";
+                int firstNl = 0;
                 if (pOperator.op == "&") {
                   if ((result.isNotEmpty) && result[result.length - 1].contains("<<") && result[result.length - 1].contains("\n")) {
                     last = result[result.length - 1];
@@ -9816,7 +9816,7 @@ String _formatCmdsubNode(Node node, int indent, bool inProcsub, bool compactRedi
                       result[result.length - 1] = last + " &";
                     } else {
                       firstNl = last.indexOf("\n");
-                      result[result.length - 1] = last.substring(0, firstNl) + " &" + last.substring(firstNl);
+                      result[result.length - 1] = _safeSubstring(last, 0, firstNl) + " &" + last.substring(firstNl);
                     }
                   } else {
                     result.add(" &");
@@ -9825,7 +9825,7 @@ String _formatCmdsubNode(Node node, int indent, bool inProcsub, bool compactRedi
                   if ((result.isNotEmpty) && result[result.length - 1].contains("<<") && result[result.length - 1].contains("\n")) {
                     last = result[result.length - 1];
                     firstNl = last.indexOf("\n");
-                    result[result.length - 1] = last.substring(0, firstNl) + " " + pOperator.op + " " + last.substring(firstNl);
+                    result[result.length - 1] = _safeSubstring(last, 0, firstNl) + " " + pOperator.op + " " + last.substring(firstNl);
                   } else {
                     result.add(" " + pOperator.op);
                   }
@@ -9837,9 +9837,9 @@ String _formatCmdsubNode(Node node, int indent, bool inProcsub, bool compactRedi
             if ((result.isNotEmpty) && !((result[result.length - 1].endsWith(" ") || result[result.length - 1].endsWith("\n")))) {
               result.add(" ");
             }
-            String formattedCmd = _formatCmdsubNode(p, indent, inProcsub, compactRedirects, procsubFirst && cmdCount == 0);
+            String formattedCmd = _formatCmdsubNode(p, indent, inProcsub, compactRedirects, procsubFirst && cmdCount == 0); 
             if (result.length > 0) {
-              String last = result[result.length - 1];
+              String last = result[result.length - 1]; 
               if (last.contains(" || \n") || last.contains(" && \n")) {
                 formattedCmd = " " + formattedCmd;
               }
@@ -9853,7 +9853,7 @@ String _formatCmdsubNode(Node node, int indent, bool inProcsub, bool compactRedi
             break;
         }
       }
-      String s = result.join("");
+      String s = result.join(""); 
       if (s.contains(" &\n") && s.endsWith("\n")) {
         return s + " ";
       }
@@ -9869,11 +9869,11 @@ String _formatCmdsubNode(Node node, int indent, bool inProcsub, bool compactRedi
   }
   switch (node) {
     case If nodeIf:
-      String cond = _formatCmdsubNode(nodeIf.condition, indent, false, false, false);
-      String thenBody = _formatCmdsubNode(nodeIf.thenBody, indent + 4, false, false, false);
-      String result = "if " + cond + "; then\n" + innerSp + thenBody + ";";
+      String cond = _formatCmdsubNode(nodeIf.condition, indent, false, false, false); 
+      String thenBody = _formatCmdsubNode(nodeIf.thenBody, indent + 4, false, false, false); 
+      String result = "if " + cond + "; then\n" + innerSp + thenBody + ";"; 
       if (nodeIf.elseBody != null) {
-        String elseBody = _formatCmdsubNode(nodeIf.elseBody!, indent + 4, false, false, false);
+        String elseBody = _formatCmdsubNode(nodeIf.elseBody!, indent + 4, false, false, false); 
         result = result + "\n" + sp + "else\n" + innerSp + elseBody + ";";
       }
       result = result + "\n" + sp + "fi";
@@ -9881,9 +9881,9 @@ String _formatCmdsubNode(Node node, int indent, bool inProcsub, bool compactRedi
   }
   switch (node) {
     case While nodeWhile:
-      String cond = _formatCmdsubNode(nodeWhile.condition, indent, false, false, false);
-      String body = _formatCmdsubNode(nodeWhile.body, indent + 4, false, false, false);
-      String result = "while " + cond + "; do\n" + innerSp + body + ";\n" + sp + "done";
+      String cond = _formatCmdsubNode(nodeWhile.condition, indent, false, false, false); 
+      String body = _formatCmdsubNode(nodeWhile.body, indent + 4, false, false, false); 
+      String result = "while " + cond + "; do\n" + innerSp + body + ";\n" + sp + "done"; 
       if ((nodeWhile.redirects.isNotEmpty)) {
         for (final r in nodeWhile.redirects) {
           result = result + " " + _formatRedirect(r, false, false);
@@ -9893,9 +9893,9 @@ String _formatCmdsubNode(Node node, int indent, bool inProcsub, bool compactRedi
   }
   switch (node) {
     case Until nodeUntil:
-      String cond = _formatCmdsubNode(nodeUntil.condition, indent, false, false, false);
-      String body = _formatCmdsubNode(nodeUntil.body, indent + 4, false, false, false);
-      String result = "until " + cond + "; do\n" + innerSp + body + ";\n" + sp + "done";
+      String cond = _formatCmdsubNode(nodeUntil.condition, indent, false, false, false); 
+      String body = _formatCmdsubNode(nodeUntil.body, indent + 4, false, false, false); 
+      String result = "until " + cond + "; do\n" + innerSp + body + ";\n" + sp + "done"; 
       if ((nodeUntil.redirects.isNotEmpty)) {
         for (final r in nodeUntil.redirects) {
           result = result + " " + _formatRedirect(r, false, false);
@@ -9905,15 +9905,15 @@ String _formatCmdsubNode(Node node, int indent, bool inProcsub, bool compactRedi
   }
   switch (node) {
     case For nodeFor:
-      String var_ = nodeFor.var_;
-      String body = _formatCmdsubNode(nodeFor.body, indent + 4, false, false, false);
-      late String result;
+      String var_ = nodeFor.var_; 
+      String body = _formatCmdsubNode(nodeFor.body, indent + 4, false, false, false); 
+      String result = "";
       if (nodeFor.words != null) {
-        List<String> wordVals = <String>[];
+        List<String> wordVals = <String>[]; 
         for (final w in nodeFor.words!) {
           wordVals.add(w.value);
         }
-        String words = wordVals.join(" ");
+        String words = wordVals.join(" "); 
         if ((words.isNotEmpty)) {
           result = "for " + var_ + " in " + words + ";\n" + sp + "do\n" + innerSp + body + ";\n" + sp + "done";
         } else {
@@ -9931,8 +9931,8 @@ String _formatCmdsubNode(Node node, int indent, bool inProcsub, bool compactRedi
   }
   switch (node) {
     case ForArith nodeForArith:
-      String body = _formatCmdsubNode(nodeForArith.body, indent + 4, false, false, false);
-      String result = "for ((" + nodeForArith.init + "; " + nodeForArith.cond + "; " + nodeForArith.incr + "))\ndo\n" + innerSp + body + ";\n" + sp + "done";
+      String body = _formatCmdsubNode(nodeForArith.body, indent + 4, false, false, false); 
+      String result = "for ((" + nodeForArith.init + "; " + nodeForArith.cond + "; " + nodeForArith.incr + "))\ndo\n" + innerSp + body + ";\n" + sp + "done"; 
       if ((nodeForArith.redirects.isNotEmpty)) {
         for (final r in nodeForArith.redirects) {
           result = result + " " + _formatRedirect(r, false, false);
@@ -9942,22 +9942,22 @@ String _formatCmdsubNode(Node node, int indent, bool inProcsub, bool compactRedi
   }
   switch (node) {
     case Case nodeCase:
-      String word = nodeCase.word.value;
-      List<String> patterns = <String>[];
-      int i = 0;
+      String word = nodeCase.word.value; 
+      List<String> patterns = <String>[]; 
+      int i = 0; 
       while (i < nodeCase.patterns.length) {
-        CasePattern p = nodeCase.patterns[i];
-        String pat = p.pattern.replaceAll("|", " | ");
-        late String body;
+        CasePattern p = nodeCase.patterns[i]; 
+        String pat = p.pattern.replaceAll("|", " | "); 
+        String body = "";
         if (p.body != null) {
           body = _formatCmdsubNode(p.body!, indent + 8, false, false, false);
         } else {
           body = "";
         }
-        String term = p.terminator;
-        String patIndent = _repeatStr(" ", indent + 8);
-        String termIndent = _repeatStr(" ", indent + 4);
-        String bodyPart = ((body.isNotEmpty) ? patIndent + body + "\n" : "\n");
+        String term = p.terminator; 
+        String patIndent = _repeatStr(" ", indent + 8); 
+        String termIndent = _repeatStr(" ", indent + 4); 
+        String bodyPart = ((body.isNotEmpty) ? patIndent + body + "\n" : "\n"); 
         if (i == 0) {
           patterns.add(" " + pat + ")\n" + bodyPart + termIndent + term);
         } else {
@@ -9966,9 +9966,9 @@ String _formatCmdsubNode(Node node, int indent, bool inProcsub, bool compactRedi
         i += 1;
       }
       dynamic patternStr = patterns.join("\n" + _repeatStr(" ", indent + 4));
-      String redirects = "";
+      String redirects = ""; 
       if ((nodeCase.redirects.isNotEmpty)) {
-        List<String> redirectParts = <String>[];
+        List<String> redirectParts = <String>[]; 
         for (final r in nodeCase.redirects) {
           redirectParts.add(_formatRedirect(r, false, false));
         }
@@ -9978,17 +9978,17 @@ String _formatCmdsubNode(Node node, int indent, bool inProcsub, bool compactRedi
   }
   switch (node) {
     case Function_ nodeFunction_:
-      String name = nodeFunction_.name;
-      Node innerBody = (nodeFunction_.body.kind == "brace-group" ? (nodeFunction_.body as BraceGroup).body : nodeFunction_.body);
-      String body = _formatCmdsubNode(innerBody, indent + 4, false, false, false).trimRight();
+      String name = nodeFunction_.name; 
+      Node innerBody = (nodeFunction_.body.kind == "brace-group" ? (nodeFunction_.body as BraceGroup).body : nodeFunction_.body); 
+      String body = _formatCmdsubNode(innerBody, indent + 4, false, false, false).trimRight(); 
       return "function \${name} () \n{ \n\${innerSp}\${body}\n}";
   }
   switch (node) {
     case Subshell nodeSubshell:
-      String body = _formatCmdsubNode(nodeSubshell.body, indent, inProcsub, compactRedirects, false);
-      String redirects = "";
+      String body = _formatCmdsubNode(nodeSubshell.body, indent, inProcsub, compactRedirects, false); 
+      String redirects = ""; 
       if ((nodeSubshell.redirects != null && nodeSubshell.redirects!.isNotEmpty)) {
-        List<String> redirectParts = <String>[];
+        List<String> redirectParts = <String>[]; 
         for (final r in nodeSubshell.redirects!) {
           redirectParts.add(_formatRedirect(r, false, false));
         }
@@ -10007,12 +10007,12 @@ String _formatCmdsubNode(Node node, int indent, bool inProcsub, bool compactRedi
   }
   switch (node) {
     case BraceGroup nodeBraceGroup:
-      String body = _formatCmdsubNode(nodeBraceGroup.body, indent, false, false, false);
+      String body = _formatCmdsubNode(nodeBraceGroup.body, indent, false, false, false); 
       body = body.trimRight();
-      String terminator = (body.endsWith(" &") ? " }" : "; }");
-      String redirects = "";
+      String terminator = (body.endsWith(" &") ? " }" : "; }"); 
+      String redirects = ""; 
       if ((nodeBraceGroup.redirects != null && nodeBraceGroup.redirects!.isNotEmpty)) {
-        List<String> redirectParts = <String>[];
+        List<String> redirectParts = <String>[]; 
         for (final r in nodeBraceGroup.redirects!) {
           redirectParts.add(_formatRedirect(r, false, false));
         }
@@ -10029,7 +10029,7 @@ String _formatCmdsubNode(Node node, int indent, bool inProcsub, bool compactRedi
   }
   switch (node) {
     case ConditionalExpr nodeConditionalExpr:
-      String body = _formatCondBody((nodeConditionalExpr.body as Node));
+      String body = _formatCondBody((nodeConditionalExpr.body as Node)); 
       return "[[ " + body + " ]]";
   }
   switch (node) {
@@ -10041,7 +10041,7 @@ String _formatCmdsubNode(Node node, int indent, bool inProcsub, bool compactRedi
   }
   switch (node) {
     case Time nodeTime:
-      String prefix = (nodeTime.posix ? "time -p " : "time ");
+      String prefix = (nodeTime.posix ? "time -p " : "time "); 
       if (nodeTime.pipeline != null) {
         return prefix + _formatCmdsubNode(nodeTime.pipeline, indent, false, false, false);
       }
@@ -10051,7 +10051,7 @@ String _formatCmdsubNode(Node node, int indent, bool inProcsub, bool compactRedi
 }
 
 String _formatRedirect(Node r, bool compact, bool heredocOpOnly) {
-  late String op;
+  String op = "";
   switch (r) {
     case HereDoc rHereDoc:
       if (rHereDoc.stripTabs) {
@@ -10062,7 +10062,7 @@ String _formatRedirect(Node r, bool compact, bool heredocOpOnly) {
       if (rHereDoc.fd > 0) {
         op = rHereDoc.fd.toString() + op;
       }
-      late String delim;
+      String delim = "";
       if (rHereDoc.quoted) {
         delim = "'" + rHereDoc.delimiter + "'";
       } else {
@@ -10081,18 +10081,18 @@ String _formatRedirect(Node r, bool compact, bool heredocOpOnly) {
       op = "<";
     }
   }
-  String target = (r as Redirect).target.value;
+  String target = (r as Redirect).target.value; 
   target = (r as Redirect).target._expandAllAnsiCQuotes(target);
   target = (r as Redirect).target._stripLocaleStringDollars(target);
   target = (r as Redirect).target._formatCommandSubstitutions(target, false);
   if (target.startsWith("&")) {
-    bool wasInputClose = false;
+    bool wasInputClose = false; 
     if (target == "&-" && op.endsWith("<")) {
       wasInputClose = true;
       op = _substring(op, 0, op.length - 1) + ">";
     }
-    String afterAmp = _substring(target, 1, target.length);
-    bool isLiteralFd = afterAmp == "-" || afterAmp.length > 0 && ((afterAmp[0]).toString().isNotEmpty && RegExp(r'^\d+$').hasMatch((afterAmp[0]).toString()));
+    String afterAmp = _substring(target, 1, target.length); 
+    bool isLiteralFd = afterAmp == "-" || afterAmp.length > 0 && ((afterAmp[0]).toString().isNotEmpty && RegExp(r'^\d+$').hasMatch((afterAmp[0]).toString())); 
     if (isLiteralFd) {
       if (op == ">" || op == ">&") {
         op = (wasInputClose ? "0>" : "1>");
@@ -10126,11 +10126,11 @@ String _formatHeredocBody(HereDoc r) {
 }
 
 bool _lookaheadForEsac(String value, int start, int caseDepth) {
-  int i = start;
-  int depth = caseDepth;
-  QuoteState quote = newQuoteState();
+  int i = start; 
+  int depth = caseDepth; 
+  dynamic quote = newQuoteState();
   while (i < value.length) {
-    String c = (value[i]).toString();
+    String c = (value[i]).toString(); 
     if (c == "\\" && i + 1 < value.length && quote.double) {
       i += 2;
       continue;
@@ -10180,7 +10180,7 @@ bool _lookaheadForEsac(String value, int start, int caseDepth) {
 }
 
 int _skipBacktick(String value, int start) {
-  int i = start + 1;
+  int i = start + 1; 
   while (i < value.length && (value[i]).toString() != "`") {
     if ((value[i]).toString() == "\\" && i + 1 < value.length) {
       i += 2;
@@ -10195,7 +10195,7 @@ int _skipBacktick(String value, int start) {
 }
 
 int _skipSingleQuoted(String s, int start) {
-  int i = start;
+  int i = start; 
   while (i < s.length && (s[i]).toString() != "'") {
     i += 1;
   }
@@ -10203,12 +10203,12 @@ int _skipSingleQuoted(String s, int start) {
 }
 
 int _skipDoubleQuoted(String s, int start) {
-  int i = start;
-  int n = s.length;
-  bool passNext = false;
-  bool backq = false;
+  int i = start; 
+  int n = s.length; 
+  bool passNext = false; 
+  bool backq = false; 
   while (i < n) {
-    String c = (s[i]).toString();
+    String c = (s[i]).toString(); 
     if (passNext) {
       passNext = false;
       i += 1;
@@ -10250,10 +10250,10 @@ int _skipDoubleQuoted(String s, int start) {
 }
 
 bool _isValidArithmeticStart(String value, int start) {
-  int scanParen = 0;
-  int scanI = start + 3;
+  int scanParen = 0; 
+  int scanI = start + 3; 
   while (scanI < value.length) {
-    String scanC = (value[scanI]).toString();
+    String scanC = (value[scanI]).toString(); 
     if (_isExpansionStart(value, scanI, "\$(")) {
       scanI = _findCmdsubEnd(value, scanI + 2);
       continue;
@@ -10279,11 +10279,11 @@ bool _isValidArithmeticStart(String value, int start) {
 }
 
 int _findFunsubEnd(String value, int start) {
-  int depth = 1;
-  int i = start;
-  QuoteState quote = newQuoteState();
+  int depth = 1; 
+  int i = start; 
+  dynamic quote = newQuoteState();
   while (i < value.length && depth > 0) {
-    String c = (value[i]).toString();
+    String c = (value[i]).toString(); 
     if (c == "\\" && i + 1 < value.length && !(quote.single)) {
       i += 2;
       continue;
@@ -10318,14 +10318,14 @@ int _findFunsubEnd(String value, int start) {
 }
 
 int _findCmdsubEnd(String value, int start) {
-  int depth = 1;
-  int i = start;
-  int caseDepth = 0;
-  bool inCasePatterns = false;
-  int arithDepth = 0;
-  int arithParenDepth = 0;
+  int depth = 1; 
+  int i = start; 
+  int caseDepth = 0; 
+  bool inCasePatterns = false; 
+  int arithDepth = 0; 
+  int arithParenDepth = 0; 
   while (i < value.length && depth > 0) {
-    String c = (value[i]).toString();
+    String c = (value[i]).toString(); 
     if (c == "\\" && i + 1 < value.length) {
       i += 2;
       continue;
@@ -10384,7 +10384,7 @@ int _findCmdsubEnd(String value, int start) {
         i += 3;
         continue;
       }
-      int j = _findCmdsubEnd(value, i + 2);
+      int j = _findCmdsubEnd(value, i + 2); 
       i = j;
       continue;
     }
@@ -10455,12 +10455,12 @@ int _findCmdsubEnd(String value, int start) {
 }
 
 int _findBracedParamEnd(String value, int start) {
-  int depth = 1;
-  int i = start;
-  bool inDouble = false;
-  int dolbraceState = dolbracestateParam;
+  int depth = 1; 
+  int i = start; 
+  bool inDouble = false; 
+  int dolbraceState = dolbracestateParam; 
   while (i < value.length && depth > 0) {
-    String c = (value[i]).toString();
+    String c = (value[i]).toString(); 
     if (c == "\\" && i + 1 < value.length) {
       i += 2;
       continue;
@@ -10486,7 +10486,7 @@ int _findBracedParamEnd(String value, int start) {
       }
     }
     if (c == "[" && dolbraceState == dolbracestateParam && !(inDouble)) {
-      int end = _skipSubscript(value, i, 0);
+      int end = _skipSubscript(value, i, 0); 
       if (end != -1) {
         i = end;
         continue;
@@ -10520,16 +10520,16 @@ int _findBracedParamEnd(String value, int start) {
 }
 
 int _skipHeredoc(String value, int start) {
-  int i = start + 2;
+  int i = start + 2; 
   if (i < value.length && (value[i]).toString() == "-") {
     i += 1;
   }
   while (i < value.length && _isWhitespaceNoNewline((value[i]).toString())) {
     i += 1;
   }
-  int delimStart = i;
+  int delimStart = i; 
   dynamic? quoteChar = null;
-  late String delimiter;
+  String delimiter = "";
   if (i < value.length && ((value[i]).toString() == "\"" || (value[i]).toString() == "'")) {
     quoteChar = (value[i]).toString();
     i += 1;
@@ -10559,11 +10559,11 @@ int _skipHeredoc(String value, int start) {
       delimiter = _substring(value, delimStart, i);
     }
   }
-  int parenDepth = 0;
-  QuoteState quote = newQuoteState();
-  bool inBacktick = false;
+  int parenDepth = 0; 
+  dynamic quote = newQuoteState();
+  bool inBacktick = false; 
   while (i < value.length && (value[i]).toString() != "\n") {
-    String c = (value[i]).toString();
+    String c = (value[i]).toString(); 
     if (c == "\\" && i + 1 < value.length && (quote.double || inBacktick)) {
       i += 2;
       continue;
@@ -10606,14 +10606,14 @@ int _skipHeredoc(String value, int start) {
     i += 1;
   }
   while (i < value.length) {
-    int lineStart = i;
-    int lineEnd = i;
+    int lineStart = i; 
+    int lineEnd = i; 
     while (lineEnd < value.length && (value[lineEnd]).toString() != "\n") {
       lineEnd += 1;
     }
-    String line = _substring(value, lineStart, lineEnd);
+    String line = _substring(value, lineStart, lineEnd); 
     while (lineEnd < value.length) {
-      int trailingBs = 0;
+      int trailingBs = 0; 
       for (int j = line.length - 1; j > -1; j += -1) {
         if ((line[j]).toString() == "\\") {
           trailingBs += 1;
@@ -10624,15 +10624,15 @@ int _skipHeredoc(String value, int start) {
       if (trailingBs % 2 == 0) {
         break;
       }
-      line = line.substring(0, line.length - 1);
+      line = _safeSubstring(line, 0, line.length - 1);
       lineEnd += 1;
-      int nextLineStart = lineEnd;
+      int nextLineStart = lineEnd; 
       while (lineEnd < value.length && (value[lineEnd]).toString() != "\n") {
         lineEnd += 1;
       }
       line = line + _substring(value, nextLineStart, lineEnd);
     }
-    late String stripped;
+    String stripped = "";
     if (start + 2 < value.length && (value[start + 2]).toString() == "-") {
       stripped = line.trimLeft();
     } else {
@@ -10646,7 +10646,7 @@ int _skipHeredoc(String value, int start) {
       }
     }
     if (stripped.startsWith(delimiter) && stripped.length > delimiter.length) {
-      int tabsStripped = line.length - stripped.length;
+      int tabsStripped = line.length - stripped.length; 
       return lineStart + tabsStripped + delimiter.length;
     }
     if (lineEnd < value.length) {
@@ -10662,27 +10662,27 @@ int _skipHeredoc(String value, int start) {
   if (!((delimiters.isNotEmpty))) {
     return (start, start);
   }
-  int pos = start;
+  int pos = start; 
   while (pos < source.length && (source[pos]).toString() != "\n") {
     pos += 1;
   }
   if (pos >= source.length) {
     return (start, start);
   }
-  int contentStart = pos;
+  int contentStart = pos; 
   pos += 1;
   for (final _item in delimiters) {
-    String delimiter = _item.$1;
-    bool stripTabs = _item.$2;
+    String delimiter = _item.$1; 
+    bool stripTabs = _item.$2; 
     while (pos < source.length) {
-      int lineStart = pos;
-      int lineEnd = pos;
+      int lineStart = pos; 
+      int lineEnd = pos; 
       while (lineEnd < source.length && (source[lineEnd]).toString() != "\n") {
         lineEnd += 1;
       }
-      String line = _substring(source, lineStart, lineEnd);
+      String line = _substring(source, lineStart, lineEnd); 
       while (lineEnd < source.length) {
-        int trailingBs = 0;
+        int trailingBs = 0; 
         for (int j = line.length - 1; j > -1; j += -1) {
           if ((line[j]).toString() == "\\") {
             trailingBs += 1;
@@ -10693,15 +10693,15 @@ int _skipHeredoc(String value, int start) {
         if (trailingBs % 2 == 0) {
           break;
         }
-        line = line.substring(0, line.length - 1);
+        line = _safeSubstring(line, 0, line.length - 1);
         lineEnd += 1;
-        int nextLineStart = lineEnd;
+        int nextLineStart = lineEnd; 
         while (lineEnd < source.length && (source[lineEnd]).toString() != "\n") {
           lineEnd += 1;
         }
         line = line + _substring(source, nextLineStart, lineEnd);
       }
-      late String lineStripped;
+      String lineStripped = "";
       if (stripTabs) {
         lineStripped = line.trimLeft();
       } else {
@@ -10712,7 +10712,7 @@ int _skipHeredoc(String value, int start) {
         break;
       }
       if (lineStripped.startsWith(delimiter) && lineStripped.length > delimiter.length) {
-        int tabsStripped = line.length - lineStripped.length;
+        int tabsStripped = line.length - lineStripped.length; 
         pos = lineStart + tabsStripped + delimiter.length;
         break;
       }
@@ -10724,7 +10724,7 @@ int _skipHeredoc(String value, int start) {
 
 bool _isWordBoundary(String s, int pos, int wordLen) {
   if (pos > 0) {
-    String prev = (s[pos - 1]).toString();
+    String prev = (s[pos - 1]).toString(); 
     if ((prev.isNotEmpty && RegExp(r'^[a-zA-Z0-9]+$').hasMatch(prev)) || prev == "_") {
       return false;
     }
@@ -10732,7 +10732,7 @@ bool _isWordBoundary(String s, int pos, int wordLen) {
       return false;
     }
   }
-  int end = pos + wordLen;
+  int end = pos + wordLen; 
   if (end < s.length && (((s[end]).toString().isNotEmpty && RegExp(r'^[a-zA-Z0-9]+$').hasMatch((s[end]).toString())) || (s[end]).toString() == "_")) {
     return false;
   }
@@ -10744,8 +10744,8 @@ bool _isQuote(String c) {
 }
 
 String _collapseWhitespace(String s) {
-  List<String> result = <String>[];
-  bool prevWasWs = false;
+  List<String> result = <String>[]; 
+  bool prevWasWs = false; 
   for (final _c7 in s.split('')) {
     var c = _c7;
     if (c == " " || c == "\t") {
@@ -10758,12 +10758,12 @@ String _collapseWhitespace(String s) {
       prevWasWs = false;
     }
   }
-  String joined = result.join("");
+  String joined = result.join(""); 
   return joined.trim();
 }
 
 int _countTrailingBackslashes(String s) {
-  int count = 0;
+  int count = 0; 
   for (int i = s.length - 1; i > -1; i += -1) {
     if ((s[i]).toString() == "\\") {
       count += 1;
@@ -10775,13 +10775,13 @@ int _countTrailingBackslashes(String s) {
 }
 
 String _normalizeHeredocDelimiter(String delimiter) {
-  List<String> result = <String>[];
-  int i = 0;
+  List<String> result = <String>[]; 
+  int i = 0; 
   while (i < delimiter.length) {
-    late int depth;
-    late List<String> inner;
-    late String innerStr;
-    if (i + 1 < delimiter.length && delimiter.substring(i, i + 2) == "\$(") {
+    int depth = 0;
+    List<String> inner = <String>[];
+    String innerStr = "";
+    if (i + 1 < delimiter.length && _safeSubstring(delimiter, i, i + 2) == "\$(") {
       result.add("\$(");
       i += 2;
       depth = 1;
@@ -10808,7 +10808,7 @@ String _normalizeHeredocDelimiter(String delimiter) {
         i += 1;
       }
     } else {
-      if (i + 1 < delimiter.length && delimiter.substring(i, i + 2) == "\${") {
+      if (i + 1 < delimiter.length && _safeSubstring(delimiter, i, i + 2) == "\${") {
         result.add("\${");
         i += 2;
         depth = 1;
@@ -10909,8 +10909,8 @@ bool _isWordEndContext(String c) {
 }
 
 int _skipMatchedPair(String s, int start, String open, String close, int flags) {
-  int n = s.length;
-  late int i;
+  int n = s.length; 
+  int i = 0;
   if ((flags & _smpPastOpen != 0)) {
     i = start;
   } else {
@@ -10919,17 +10919,17 @@ int _skipMatchedPair(String s, int start, String open, String close, int flags) 
     }
     i = start + 1;
   }
-  int depth = 1;
-  bool passNext = false;
-  bool backq = false;
+  int depth = 1; 
+  bool passNext = false; 
+  bool backq = false; 
   while (i < n && depth > 0) {
-    String c = (s[i]).toString();
+    String c = (s[i]).toString(); 
     if (passNext) {
       passNext = false;
       i += 1;
       continue;
     }
-    int literal = flags & _smpLiteral;
+    int literal = flags & _smpLiteral; 
     if (!((literal != 0)) && c == "\\") {
       passNext = true;
       i += 1;
@@ -10986,15 +10986,15 @@ int _assignment(String s, int flags) {
   if (!(((s[0]).toString().isNotEmpty && RegExp(r'^[a-zA-Z]+$').hasMatch((s[0]).toString())) || (s[0]).toString() == "_")) {
     return -1;
   }
-  int i = 1;
+  int i = 1; 
   while (i < s.length) {
-    String c = (s[i]).toString();
+    String c = (s[i]).toString(); 
     if (c == "=") {
       return i;
     }
     if (c == "[") {
-      int subFlags = ((flags & 2 != 0) ? _smpLiteral : 0);
-      int end = _skipSubscript(s, i, subFlags);
+      int subFlags = ((flags & 2 != 0) ? _smpLiteral : 0); 
+      int end = _skipSubscript(s, i, subFlags); 
       if (end == -1) {
         return -1;
       }
@@ -11028,8 +11028,8 @@ bool _isArrayAssignmentPrefix(List<String> chars) {
   if (!((chars[0].isNotEmpty && RegExp(r'^[a-zA-Z]+$').hasMatch(chars[0])) || chars[0] == "_")) {
     return false;
   }
-  String s = chars.join("");
-  int i = 1;
+  String s = chars.join(""); 
+  int i = 1; 
   while (i < s.length && (((s[i]).toString().isNotEmpty && RegExp(r'^[a-zA-Z0-9]+$').hasMatch((s[i]).toString())) || (s[i]).toString() == "_")) {
     i += 1;
   }
@@ -11037,7 +11037,7 @@ bool _isArrayAssignmentPrefix(List<String> chars) {
     if ((s[i]).toString() != "[") {
       return false;
     }
-    int end = _skipSubscript(s, i, _smpLiteral);
+    int end = _skipSubscript(s, i, _smpLiteral); 
     if (end == -1) {
       return false;
     }
@@ -11067,8 +11067,8 @@ bool _isNegationBoundary(String c) {
 }
 
 bool _isBackslashEscaped(String value, int idx) {
-  int bsCount = 0;
-  int j = idx - 1;
+  int bsCount = 0; 
+  int j = idx - 1; 
   while (j >= 0 && (value[j]).toString() == "\\") {
     bsCount += 1;
     j -= 1;
@@ -11077,8 +11077,8 @@ bool _isBackslashEscaped(String value, int idx) {
 }
 
 bool _isDollarDollarParen(String value, int idx) {
-  int dollarCount = 0;
-  int j = idx - 1;
+  int dollarCount = 0; 
+  int j = idx - 1; 
   while (j >= 0 && (value[j]).toString() == "\$") {
     dollarCount += 1;
     j -= 1;
@@ -11131,12 +11131,12 @@ bool _isValidIdentifier(String name) {
 }
 
 List<Node> parse(String source, bool extglob) {
-  Parser parser = newParser(source, false, extglob);
+  dynamic parser = newParser(source, false, extglob);
   return parser.parse();
 }
 
 ParseError newParseError(String message, int pos, int line) {
-  ParseError self = ParseError("", 0, 0);
+  ParseError self = ParseError("", 0, 0); 
   self.message = message;
   self.pos = pos;
   self.line = line;
@@ -11148,7 +11148,7 @@ MatchedPairError newMatchedPairError(String message, int pos, int line) {
 }
 
 QuoteState newQuoteState() {
-  QuoteState self = QuoteState(false, false, <(bool, bool)>[]);
+  QuoteState self = QuoteState(false, false, <(bool, bool)>[]); 
   self.single = false;
   self.double = false;
   self._stack = <(bool, bool)>[];
@@ -11156,7 +11156,7 @@ QuoteState newQuoteState() {
 }
 
 ParseContext newParseContext(int kind) {
-  ParseContext self = ParseContext(0, 0, 0, 0, 0, 0, 0, null as dynamic);
+  ParseContext self = ParseContext(0, 0, 0, 0, 0, 0, 0, null as dynamic); 
   self.kind = kind;
   self.parenDepth = 0;
   self.braceDepth = 0;
@@ -11169,13 +11169,13 @@ ParseContext newParseContext(int kind) {
 }
 
 ContextStack newContextStack() {
-  ContextStack self = ContextStack(<ParseContext>[]);
+  ContextStack self = ContextStack(<ParseContext>[]); 
   self._stack = <ParseContext>[newParseContext(0)];
   return self;
 }
 
 Lexer newLexer(String source, bool extglob) {
-  Lexer self = Lexer({}, "", 0, 0, null as dynamic, null, 0, 0, <Node>[], false, null, "", null, 0, false, false, false, 0, 0, false, false, false);
+  Lexer self = Lexer({}, "", 0, 0, null as dynamic, null, 0, 0, <Node>[], false, null, "", null, 0, false, false, false, 0, 0, false, false, false); 
   self.source = source;
   self.pos = 0;
   self.length = source.length;
@@ -11201,7 +11201,7 @@ Lexer newLexer(String source, bool extglob) {
 }
 
 Parser newParser(String source, bool inProcessSub, bool extglob) {
-  Parser self = Parser("", 0, 0, <HereDoc>[], 0, false, false, false, null as dynamic, null as dynamic, <Token?>[], 0, 0, "", 0, false, false, false, "", 0, 0);
+  Parser self = Parser("", 0, 0, <HereDoc>[], 0, false, false, false, null as dynamic, null as dynamic, <Token?>[], 0, 0, "", 0, false, false, false, "", 0, 0); 
   self.source = source;
   self.pos = 0;
   self.length = source.length;
@@ -11230,6 +11230,14 @@ Parser newParser(String source, bool inProcessSub, bool extglob) {
 // Helper functions
 int _min(int a, int b) => a < b ? a : b;
 int _max(int a, int b) => a > b ? a : b;
+
+// Safe substring that clamps indices like Python slice semantics
+String _safeSubstring(String s, int start, int end) {
+  if (start < 0) start = 0;
+  if (end > s.length) end = s.length;
+  if (start >= end) return '';
+  return s.substring(start, end);
+}
 
 List<int> _range(int start, int stop, int step) {
   final result = <int>[];

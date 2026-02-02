@@ -284,6 +284,7 @@ def py_return_type_to_ir(
     # Handle unions before tuple
     if " | " in py_type:
         parts = split_union_types(py_type)
+        has_none = "None" in parts
         if len(parts) > 1:
             parts = [p for p in parts if p != "None"]
             if len(parts) == 1:

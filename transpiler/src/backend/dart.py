@@ -246,6 +246,8 @@ class DartBackend:
         self._module_name: str = ""
         self._interface_names: set[str] = set()
         self.temp_counter = 0
+        # Track methods that can return null (have dynamic return type)
+        self._nullable_methods: set[str] = set()
         self._type_switch_binding_rename: dict[str, str] = {}
         self._loop_temp_counter = 0
         self._func_params: set[str] = set()
@@ -288,7 +290,7 @@ class DartBackend:
         self._line("import 'dart:io';")
         self._line("")
         # Emit module doc comment if present
-        if getattr(module, "doc", None):
+        if module.doc:
             self._line(f"/// {module.doc}")
             self._line("")
         # Emit constants
@@ -360,9 +362,6 @@ class DartBackend:
             self._line("}")
 
     def _emit_interface(self, iface: InterfaceDef) -> None:
-        # Emit doc comment if present
-        if getattr(iface, "doc", None):
-            self._line(f"/// {iface.doc}")
         self._line(f"abstract class {_safe_pascal(iface.name)} {{")
         self.indent += 1
         # Emit interface fields as abstract getters
@@ -382,7 +381,7 @@ class DartBackend:
         class_name = _safe_pascal(struct.name)
         self.current_class = struct.name  # Keep original for field lookup
         # Emit doc comment if present
-        if getattr(struct, "doc", None):
+        if struct.doc:
             self._line(f"/// {struct.doc}")
         extends_clause = ""
         implements_clause = ""
@@ -432,13 +431,15 @@ class DartBackend:
                 self._line(f"{class_name}();")
             return
         # Make non-primitive constructor parameters nullable to allow null initialization
-        def param_type(f: Field) -> str:
+        param_parts: list[str] = []
+        for f in struct.fields:
             typ = self._type(f.typ)
             # Only make struct/pointer types nullable, keep primitives as-is
             if isinstance(f.typ, (Pointer, StructRef)) and not isinstance(f.typ, Optional):
-                return f"{typ}?"
-            return typ
-        params = ", ".join(f"{param_type(f)} {_safe_name(f.name)}" for f in struct.fields)
+                param_parts.append(f"{typ}? {_safe_name(f.name)}")
+            else:
+                param_parts.append(f"{typ} {_safe_name(f.name)}")
+        params = ", ".join(param_parts)
         if struct.is_exception and not struct.embedded_type:
             # Base exception class implements Exception, no super() call
             self._line(f"{class_name}({params}) {{")
@@ -455,16 +456,38 @@ class DartBackend:
         self.indent -= 1
         self._line("}")
 
+    def _has_null_return(self, stmts: list[Stmt]) -> bool:
+        """Check if any statement returns null."""
+        for stmt in stmts:
+            if isinstance(stmt, Return) and isinstance(stmt.value, NilLit):
+                return True
+            if isinstance(stmt, If):
+                if self._has_null_return(stmt.then_body):
+                    return True
+                if stmt.else_body and self._has_null_return(stmt.else_body):
+                    return True
+            if isinstance(stmt, While):
+                if self._has_null_return(stmt.body):
+                    return True
+            if isinstance(stmt, (ForRange, ForClassic)):
+                if self._has_null_return(stmt.body):
+                    return True
+        return False
+
     def _emit_function(self, func: Function) -> None:
         self._hoisted_vars = set()
         self._declared_vars = {p.name for p in func.params}
         self._func_params = {p.name for p in func.params if isinstance(p.typ, FuncType)}
         self._current_return_type = func.ret
         # Emit doc comment if present
-        if getattr(func, "doc", None):
+        if func.doc:
             self._line(f"/// {func.doc}")
         params = self._params(func.params)
         ret = self._type(func.ret)
+        # Use dynamic return type if function has return null statements
+        # This avoids cascading nullable type errors while allowing null returns
+        if func.body and self._has_null_return(func.body) and not isinstance(func.ret, Optional):
+            ret = "dynamic"
         name = _safe_name(func.name)
         self._line(f"{ret} {name}({params}) {{")
         self.indent += 1
@@ -482,11 +505,15 @@ class DartBackend:
         self._func_params = {p.name for p in func.params if isinstance(p.typ, FuncType)}
         self._current_return_type = func.ret
         # Emit doc comment if present
-        if getattr(func, "doc", None):
+        if func.doc:
             self._line(f"/// {func.doc}")
         params = self._params(func.params)
         ret = self._type(func.ret)
         name = _safe_name(func.name)
+        # Use dynamic return type if method has return null statements
+        if func.body and self._has_null_return(func.body) and not isinstance(func.ret, Optional):
+            ret = "dynamic"
+            self._nullable_methods.add(name)
         if func.receiver:
             self.receiver_name = func.receiver.name
         self._line(f"{ret} {name}({params}) {{")
@@ -507,21 +534,32 @@ class DartBackend:
             parts.append(f"{typ} {_safe_name(p.name)}")
         return ", ".join(parts)
 
+    def _is_nullable_reference_type(self, typ: Type) -> bool:
+        """Check if a type is a reference type that could be null during control flow."""
+        if isinstance(typ, (StructRef, InterfaceRef)):
+            return True
+        if isinstance(typ, Pointer) and isinstance(typ.target, (StructRef, InterfaceRef)):
+            return True
+        if isinstance(typ, Optional):
+            return self._is_nullable_reference_type(typ.inner)
+        return False
+
     def _emit_hoisted_vars(
         self, stmt: If | While | ForRange | ForClassic | TryCatch | Match | TypeSwitch
     ) -> None:
         hoisted_vars = stmt.hoisted_vars
         for name, typ in hoisted_vars:
             var_name = _safe_name(name)
-            # Use late keyword for hoisted vars - they will be assigned before use
             if typ:
-                if isinstance(typ, Optional):
-                    inner_type = self._type(typ.inner)
+                # Use dynamic for reference types - they may be null during control flow
+                if self._is_nullable_reference_type(typ):
+                    self._line(f"dynamic {var_name};")
                 else:
-                    inner_type = self._type(typ)
-                self._line(f"late {inner_type} {var_name};")
+                    dart_type = self._type(typ)
+                    default = self._default_value(typ)
+                    self._line(f"{dart_type} {var_name} = {default};")
             else:
-                self._line(f"late dynamic {var_name};")
+                self._line(f"dynamic {var_name};")
             self._hoisted_vars.add(name)
             self._declared_vars.add(name)
 
@@ -546,11 +584,15 @@ class DartBackend:
                     if isinstance(value, Ternary) and isinstance(value.else_expr, NilLit):
                         self._line(f"{dart_type}? {var_name} = {val};")
                     else:
-                        self._line(f"{dart_type} {var_name} = {val};")
+                        self._line(f"{dart_type} {var_name} = {val}; ")
                 else:
-                    dart_type = self._type(typ)
-                    default = self._default_value(typ)
-                    self._line(f"{dart_type} {var_name} = {default};")
+                    # No value - use dynamic for reference types to avoid null-safety issues
+                    if isinstance(typ, (StructRef, InterfaceRef)):
+                        self._line(f"dynamic {var_name}; ")
+                    else:
+                        dart_type = self._type(typ)
+                        default = self._default_value(typ)
+                        self._line(f"{dart_type} {var_name} = {default};")
             case Assign(target=target, value=value):
                 val = self._expr(value)
                 if isinstance(target, IndexLV) and isinstance(target.obj.typ, Slice):
@@ -576,18 +618,32 @@ class DartBackend:
                             dart_type = self._type(decl_type) if decl_type else "dynamic"
                             self._line(f"{dart_type}? {lv} = {val};")
                         else:
-                            dart_type = self._type(decl_type) if decl_type else "dynamic"
-                            self._line(f"{dart_type} {lv} = {val};")
+                            # Check if value is a call to a nullable method - use dynamic to avoid type errors
+                            # Also check if value is a method call returning a reference type that could be null
+                            if isinstance(value, (MethodCall, Call)) and self._is_nullable_reference_type(value.typ):
+                                self._line(f"dynamic {lv} = {val};")
+                            elif isinstance(value, MethodCall) and _safe_name(value.method) in self._nullable_methods:
+                                self._line(f"dynamic {lv} = {val};")
+                            else:
+                                dart_type = self._type(decl_type) if decl_type else "dynamic"
+                                self._line(f"{dart_type} {lv} = {val}; ")
                         if target_name:
                             self._declared_vars.add(target_name)
                     else:
+                        # Check if variable needs auto-declaration (not declared yet and not hoisted)
+                        needs_decl = target_name and target_name not in self._declared_vars and not is_hoisted
                         # For hoisted vars (late), add ! if value is Optional type
                         if is_hoisted and isinstance(value.typ, Optional):
                             val = f"{val}!"
                         # Cast null to dynamic to bypass null safety for assignments
                         if isinstance(value, NilLit):
                             val = "null as dynamic"
-                        self._line(f"{lv} = {val};")
+                        if needs_decl:
+                            # Auto-declare with dynamic type to handle null safely
+                            self._line(f"dynamic {lv} = {val};")
+                            self._declared_vars.add(target_name)
+                        else:
+                            self._line(f"{lv} = {val};")
             case OpAssign(target=target, op=op, value=value):
                 lv = self._lvalue(target)
                 val = self._expr(value)
@@ -606,9 +662,12 @@ class DartBackend:
             case Return(value=value):
                 if value is not None:
                     val = self._expr(value)
-                    # Cast null to dynamic to bypass strict null safety
+                    # For Optional return types, just return null directly
                     if isinstance(value, NilLit):
-                        val = "null as dynamic"
+                        if isinstance(self._current_return_type, Optional):
+                            val = "null"
+                        else:
+                            val = "null as dynamic"
                     # Add ! if returning Optional value to non-Optional return type
                     elif isinstance(value.typ, Optional) and self._current_return_type and not isinstance(self._current_return_type, Optional):
                         val = f"{val}!"
@@ -716,14 +775,13 @@ class DartBackend:
                 lv = self._lvalue(target)
                 accessor = f"{temp_var}.${i + 1}"
                 elem_type = value_type.elements[i] if i < len(value_type.elements) else None
-                # Add ! if element is Optional and target is hoisted (late)
-                if is_hoisted and isinstance(elem_type, Optional):
-                    accessor = f"{accessor}!"
                 if is_hoisted or not is_new:
                     self._line(f"{lv} = {accessor};")
                 else:
                     dart_type = self._type(elem_type) if elem_type else "dynamic"
                     self._line(f"{dart_type} {lv} = {accessor};")
+                    if target_name:
+                        self._declared_vars.add(target_name)
         else:
             # Fallback for non-tuple multi-returns
             val_str = self._expr(value)
@@ -736,6 +794,8 @@ class DartBackend:
                 is_hoisted = target_name and target_name in self._hoisted_vars
                 if (is_decl or (target_name and target_name in new_targets)) and not is_hoisted:
                     self._line(f"var {lv} = {temp_var}.${i + 1};")
+                    if target_name:
+                        self._declared_vars.add(target_name)
                 else:
                     self._line(f"{lv} = {temp_var}.${i + 1};")
 
@@ -768,6 +828,8 @@ class DartBackend:
                 field_type = "dynamic"
             if (is_decl or (target_name and target_name in new_targets)) and not is_hoisted:
                 self._line(f"{field_type} {lv} = {accessor};")
+                if target_name:
+                    self._declared_vars.add(target_name)
             else:
                 self._line(f"{lv} = {accessor};")
 
@@ -1247,12 +1309,13 @@ class DartBackend:
                 return f"{s_str}.length"
             case Substring(string=s, low=low, high=high):
                 s_str = self._expr(s)
+                # Use safe substring that clamps indices like Python does
                 if low and high:
-                    return f"{s_str}.substring({self._expr(low)}, {self._expr(high)})"
+                    return f"_safeSubstring({s_str}, {self._expr(low)}, {self._expr(high)})"
                 elif low:
                     return f"{s_str}.substring({self._expr(low)})"
                 elif high:
-                    return f"{s_str}.substring(0, {self._expr(high)})"
+                    return f"_safeSubstring({s_str}, 0, {self._expr(high)})"
                 return s_str
             case LastElement(sequence=seq):
                 seq_str = self._expr(seq)
@@ -1308,12 +1371,13 @@ class DartBackend:
 
     def _call(self, func: str, args: list[Expr]) -> str:
         # Add ! for Optional-typed arguments since Dart can't promote non-final fields
-        def arg_str(a: Expr) -> str:
+        arg_parts: list[str] = []
+        for a in args:
             s = self._expr(a)
             if isinstance(a.typ, Optional):
                 s = f"{s}!"
-            return s
-        args_str = ", ".join(arg_str(a) for a in args)
+            arg_parts.append(s)
+        args_str = ", ".join(arg_parts)
         if func == "int" and len(args) == 2:
             return f"int.parse({self._expr(args[0])}, radix: {self._expr(args[1])})"
         if func == "str":
@@ -1359,12 +1423,13 @@ class DartBackend:
 
     def _method_call(self, obj: Expr, method: str, args: list[Expr], receiver_type: Type) -> str:
         # Add ! for Optional-typed arguments since Dart can't promote non-final fields
-        def arg_str(a: Expr) -> str:
+        arg_parts: list[str] = []
+        for a in args:
             s = self._expr(a)
             if isinstance(a.typ, Optional):
                 s = f"{s}!"
-            return s
-        args_str = ", ".join(arg_str(a) for a in args)
+            arg_parts.append(s)
+        args_str = ", ".join(arg_parts)
         obj_str = self._expr(obj)
         # Use null assertion for Optional receiver types
         if isinstance(receiver_type, Optional):
@@ -1379,7 +1444,8 @@ class DartBackend:
                     return f"{obj_str}.removeAt({idx})"
                 return f"{obj_str}.removeLast()"
             if method == "copy":
-                return f"List.from({obj_str})"
+                elem_type = self._type(receiver_type.element)
+                return f"List<{elem_type}>.from({obj_str})"
             if method == "decode":
                 elem = receiver_type.element
                 if isinstance(elem, Primitive) and elem.kind == "byte":
@@ -1439,14 +1505,15 @@ class DartBackend:
     def _slice_expr(self, obj: Expr, low: Expr | None, high: Expr | None) -> str:
         obj_str = self._expr(obj)
         if isinstance(obj.typ, Primitive) and obj.typ.kind == "string":
+            # Use safe substring to clamp indices like Python slice semantics
             if low and high:
                 lo = self._expr(low)
                 hi = self._expr(high)
-                return f"{obj_str}.substring({lo}, {hi})"
+                return f"_safeSubstring({obj_str}, {lo}, {hi})"
             elif low:
                 return f"{obj_str}.substring({self._expr(low)})"
             elif high:
-                return f"{obj_str}.substring(0, {self._expr(high)})"
+                return f"_safeSubstring({obj_str}, 0, {self._expr(high)})"
             return obj_str
         if low and high:
             lo = self._expr(low)
@@ -1457,6 +1524,10 @@ class DartBackend:
             return f"{obj_str}.sublist({lo})"
         elif high:
             return f"{obj_str}.sublist(0, {self._expr(high)})"
+        # Full copy - need to preserve element type
+        if isinstance(obj.typ, Slice):
+            elem_type = self._type(obj.typ.element)
+            return f"List<{elem_type}>.from({obj_str})"
         return f"List.from({obj_str})"
 
     def _containment_check(self, item: Expr, container: Expr, negated: bool) -> str:
@@ -1683,6 +1754,16 @@ class DartBackend:
         self._line("// Helper functions")
         self._line("int _min(int a, int b) => a < b ? a : b;")
         self._line("int _max(int a, int b) => a > b ? a : b;")
+        self._line("")
+        self._line("// Safe substring that clamps indices like Python slice semantics")
+        self._line("String _safeSubstring(String s, int start, int end) {")
+        self.indent += 1
+        self._line("if (start < 0) start = 0;")
+        self._line("if (end > s.length) end = s.length;")
+        self._line("if (start >= end) return '';")
+        self._line("return s.substring(start, end);")
+        self.indent -= 1
+        self._line("}")
         self._line("")
         self._line("List<int> _range(int start, int stop, int step) {")
         self.indent += 1

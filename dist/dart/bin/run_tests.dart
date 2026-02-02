@@ -208,6 +208,6 @@ Future<void> main(List<String> args) async {
       print('\n... and ${totalFailed - maxFailures} more failures');
     }
   }
-  print('$totalPassed passed, $totalFailed failed in ${elapsed.toStringAsFixed(2)}s');
+  print('dart: $totalPassed passed, $totalFailed failed in ${elapsed.toStringAsFixed(2)}s');
   if (totalFailed > 0) exit(1);
 }

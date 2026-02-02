@@ -180,7 +180,7 @@ static const char *_kind_to_str(int kind) {
     case KIND_EMPTY: return "empty";
     case KIND_COMMENT: return "comment";
     case KIND_REDIRECT: return "redirect";
-    case KIND_HEREDOC: return "here-doc";
+    case KIND_HEREDOC: return "heredoc";
     case KIND_SUBSHELL: return "subshell";
     case KIND_BRACEGROUP: return "brace-group";
     case KIND_IF: return "if";
@@ -675,15 +675,31 @@ static uint64_t _hash_int(int64_t n) {
 }
 
 // Variable-argument string formatting helper
+// Pre-processes format string to convert %v to %s (vsnprintf doesn't know %v)
 static char *_str_format(Arena *a, const char *fmt, ...) {
+    // Convert %v to %s in format string
+    size_t flen = strlen(fmt);
+    char *cfmt = (char *)arena_alloc(a, flen + 1);
+    const char *src = fmt;
+    char *dst = cfmt;
+    while (*src) {
+        if (src[0] == '%' && src[1] == 'v') {
+            *dst++ = '%';
+            *dst++ = 's';
+            src += 2;
+        } else {
+            *dst++ = *src++;
+        }
+    }
+    *dst = '\0';
     va_list args1, args2;
     va_start(args1, fmt);
     va_copy(args2, args1);
-    int len = vsnprintf(NULL, 0, fmt, args1);
+    int len = vsnprintf(NULL, 0, cfmt, args1);
     va_end(args1);
     if (len < 0) { va_end(args2); return arena_strdup(a, ""); }
     char *buf = (char *)arena_alloc(a, len + 1);
-    vsnprintf(buf, len + 1, fmt, args2);
+    vsnprintf(buf, len + 1, cfmt, args2);
     va_end(args2);
     return buf;
 }
@@ -2654,7 +2670,7 @@ static const char * _format_cmdsub_node(Node * node, int64_t indent, bool in_pro
         for (size_t _idx = 0; _idx < node->redirects.len; _idx++) {
             Node * r = node->redirects.data[_idx];
             void *_tsexpr6 = r;
-            if (strcmp(((HereDoc *)_tsexpr6)->kind, "here-doc") == 0) {
+            if (strcmp(((HereDoc *)_tsexpr6)->kind, "heredoc") == 0) {
                 HereDoc *r = (HereDoc *)_tsexpr6;
                 VEC_PUSH(g_arena, &heredocs, (r));
             }
@@ -2720,7 +2736,7 @@ static const char * _format_cmdsub_node(Node * node, int64_t indent, bool in_pro
                 for (size_t _idx = 0; _idx < ((Command *)(cmd))->redirects.len; _idx++) {
                     Node * r = ((Command *)(cmd))->redirects.data[_idx];
                     void *_tsexpr9 = r;
-                    if (strcmp(((HereDoc *)_tsexpr9)->kind, "here-doc") == 0) {
+                    if (strcmp(((HereDoc *)_tsexpr9)->kind, "heredoc") == 0) {
                         HereDoc *r = (HereDoc *)_tsexpr9;
                         has_heredoc = true;
                         break;
@@ -2785,7 +2801,7 @@ static const char * _format_cmdsub_node(Node * node, int64_t indent, bool in_pro
                 for (size_t _idx = 0; _idx < ((Command *)(p))->redirects.len; _idx++) {
                     Node * r = ((Command *)(p))->redirects.data[_idx];
                     void *_tsexpr11 = r;
-                    if (strcmp(((HereDoc *)_tsexpr11)->kind, "here-doc") == 0) {
+                    if (strcmp(((HereDoc *)_tsexpr11)->kind, "heredoc") == 0) {
                         HereDoc *r = (HereDoc *)_tsexpr11;
                         has_heredoc = true;
                         break;
@@ -2801,7 +2817,7 @@ static const char * _format_cmdsub_node(Node * node, int64_t indent, bool in_pro
                             for (size_t _idx = 0; _idx < ((Command *)(cmd))->redirects.len; _idx++) {
                                 Node * r = ((Command *)(cmd))->redirects.data[_idx];
                                 void *_tsexpr13 = r;
-                                if (strcmp(((HereDoc *)_tsexpr13)->kind, "here-doc") == 0) {
+                                if (strcmp(((HereDoc *)_tsexpr13)->kind, "heredoc") == 0) {
                                     HereDoc *r = (HereDoc *)_tsexpr13;
                                     has_heredoc = true;
                                     break;
@@ -3131,7 +3147,7 @@ static const char * _format_redirect(Node * r, bool compact, bool heredoc_op_onl
     const char * op;
     const char * delim;
     void *_tsexpr28 = r;
-    if (strcmp(((HereDoc *)_tsexpr28)->kind, "here-doc") == 0) {
+    if (strcmp(((HereDoc *)_tsexpr28)->kind, "heredoc") == 0) {
         HereDoc *r = (HereDoc *)_tsexpr28;
         if (r->strip_tabs) {
             op = "<<-";
@@ -6684,7 +6700,7 @@ static const char * Word__strip_arith_line_continuations(Word *self, const char 
                     depth += 1;
                     i += 1;
                     if ((depth > 1)) {
-                        Any * first_close_idx = -(1);
+                        int64_t first_close_idx = -(1);
                     }
                 } else if ((strcmp((const char *)(_char_at_str(g_arena, value, i)), ")") == 0)) {
                     if ((depth == 2)) {
@@ -7431,7 +7447,7 @@ static const char * List_to_sexp(List *self) {
     Vec_Node parts = self->parts /* copy */;
     void * op_names = NULL;
     while ((((parts.len > 1) && (strcmp(parts.data[(parts.len - 1)]->kind, "operator") == 0)) && ((strcmp(((Operator *)(parts.data[(parts.len - 1)]))->op, ";") == 0) || (strcmp(((Operator *)(parts.data[(parts.len - 1)]))->op, "\n") == 0)))) {
-        parts = /* sublist */ parts;
+        parts = ((Vec_Node){(parts).data + (0), ((parts.len - 1)) - (0), ((parts.len - 1)) - (0)});
     }
     if ((parts.len == 1)) {
         return Node_to_sexp(parts.data[0]);
@@ -7441,8 +7457,8 @@ static const char * List_to_sexp(List *self) {
             const char * left_sexp;
             const char * right_sexp;
             if (((strcmp(parts.data[i]->kind, "operator") == 0) && ((strcmp(((Operator *)(parts.data[i]))->op, ";") == 0) || (strcmp(((Operator *)(parts.data[i]))->op, "\n") == 0)))) {
-                Vec_Node left = /* sublist */ parts;
-                Vec_Node right = /* sublist */ parts;
+                Vec_Node left = ((Vec_Node){(parts).data + (0), (i) - (0), (i) - (0)});
+                Vec_Node right = ((Vec_Node){(parts).data + ((i + 1)), ((parts.len - 1)) - ((i + 1)), ((parts.len - 1)) - ((i + 1))});
                 if ((left.len > 1)) {
                     left_sexp = List_to_sexp(List_new(left, "list"));
                 } else {
@@ -7456,7 +7472,7 @@ static const char * List_to_sexp(List *self) {
                 return _str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, "(semi ", left_sexp), " (background "), right_sexp), "))");
             }
         }
-        Vec_Node inner_parts = /* sublist */ parts;
+        Vec_Node inner_parts = ((Vec_Node){(parts).data + (0), ((parts.len - 1)) - (0), ((parts.len - 1)) - (0)});
         if ((inner_parts.len == 1)) {
             return _str_concat(g_arena, _str_concat(g_arena, "(background ", Node_to_sexp(inner_parts.data[0])), ")");
         }
@@ -7479,13 +7495,13 @@ static const char * List__to_sexp_with_precedence(List *self, Vec_Node parts, vo
         Vec_Node seg;
         for (size_t _idx = 0; _idx < semi_positions.len; _idx++) {
             int64_t pos = semi_positions.data[_idx];
-            seg = /* sublist */ parts;
+            seg = ((Vec_Node){(parts).data + (start), (pos) - (start), (pos) - (start)});
             if (((seg.len > 0) && (strcmp(seg.data[0]->kind, "operator") != 0))) {
                 VEC_PUSH(g_arena, &segments, (seg));
             }
             start = (pos + 1);
         }
-        seg = /* sublist */ parts;
+        seg = ((Vec_Node){(parts).data + (start), (parts.len) - (start), (parts.len) - (start)});
         if (((seg.len > 0) && (strcmp(seg.data[0]->kind, "operator") != 0))) {
             VEC_PUSH(g_arena, &segments, (seg));
         }
@@ -7516,10 +7532,10 @@ static const char * List__to_sexp_amp_and_higher(List *self, Vec_Node parts, voi
         int64_t start = 0;
         for (size_t _idx = 0; _idx < amp_positions.len; _idx++) {
             int64_t pos = amp_positions.data[_idx];
-            VEC_PUSH(g_arena, &segments, (/* sublist */ parts));
+            VEC_PUSH(g_arena, &segments, (((Vec_Node){(parts).data + (start), (pos) - (start), (pos) - (start)})));
             start = (pos + 1);
         }
-        VEC_PUSH(g_arena, &segments, (/* sublist */ parts));
+        VEC_PUSH(g_arena, &segments, (((Vec_Node){(parts).data + (start), (parts.len) - (start), (parts.len) - (start)})));
         const char * result = List__to_sexp_and_or(self, segments.data[0], op_names);
         for (int64_t i = 1; (i < segments.len); i++) {
             result = _str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, "(background ", result), " "), List__to_sexp_and_or(self, segments.data[i], op_names)), ")");
@@ -10696,8 +10712,9 @@ static Subshell * Parser_parse_subshell(Parser *self) {
     }
     Parser_advance(self);
     Parser__clear_state(self, PARSERSTATEFLAGS_PST_SUBSHELL);
-    Vec_Node _tmp_slice70 = Parser__collect_redirects(self);
-    return Subshell_new(body, &_tmp_slice70, "subshell");
+    Vec_Node *_tmp_slice70 = (Vec_Node *)arena_alloc(g_arena, sizeof(Vec_Node));
+    *_tmp_slice70 = Parser__collect_redirects(self);
+    return Subshell_new(body, _tmp_slice70, "subshell");
 }
 
 static ArithmeticCommand * Parser_parse_arithmetic_command(Parser *self) {
@@ -10972,8 +10989,9 @@ static BraceGroup * Parser_parse_brace_group(Parser *self) {
         snprintf(g_error_msg, sizeof(g_error_msg), "%s", "Expected } to close brace group");
         return NULL;
     }
-    Vec_Node _tmp_slice71 = Parser__collect_redirects(self);
-    return BraceGroup_new(body, &_tmp_slice71, "brace-group");
+    Vec_Node *_tmp_slice71 = (Vec_Node *)arena_alloc(g_arena, sizeof(Vec_Node));
+    *_tmp_slice71 = Parser__collect_redirects(self);
+    return BraceGroup_new(body, _tmp_slice71, "brace-group");
 }
 
 static If * Parser_parse_if(Parser *self) {
@@ -12370,7 +12388,7 @@ static const char * Node_get_kind(Node *self) {
         return Comment_get_kind((Comment *)self);
     } else if (strcmp(self->kind, "redirect") == 0) {
         return Redirect_get_kind((Redirect *)self);
-    } else if (strcmp(self->kind, "here-doc") == 0) {
+    } else if (strcmp(self->kind, "heredoc") == 0) {
         return HereDoc_get_kind((HereDoc *)self);
     } else if (strcmp(self->kind, "subshell") == 0) {
         return Subshell_get_kind((Subshell *)self);
@@ -12489,7 +12507,7 @@ static const char * Node_to_sexp(Node *self) {
         return Comment_to_sexp((Comment *)self);
     } else if (strcmp(self->kind, "redirect") == 0) {
         return Redirect_to_sexp((Redirect *)self);
-    } else if (strcmp(self->kind, "here-doc") == 0) {
+    } else if (strcmp(self->kind, "heredoc") == 0) {
         return HereDoc_to_sexp((HereDoc *)self);
     } else if (strcmp(self->kind, "subshell") == 0) {
         return Subshell_to_sexp((Subshell *)self);

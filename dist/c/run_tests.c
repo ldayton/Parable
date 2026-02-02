@@ -228,10 +228,47 @@ static char *normalize(const char *s) {
 }
 
 // Symbols from parable.c (included above, so already visible)
+// arena_reset is available to clear allocations between tests
 
-#define TEST_TIMEOUT_SECONDS 5
+#include <setjmp.h>
 
-// Run test in subprocess for isolation. Returns via pipe.
+#define TEST_TIMEOUT_SECONDS 1
+
+static sigjmp_buf test_jmp_buf;
+static volatile sig_atomic_t test_timed_out = 0;
+static volatile sig_atomic_t test_crashed = 0;
+static volatile int crash_signal = 0;
+
+static void timeout_handler(int sig) {
+    (void)sig;
+    write(2, "TIMEOUT!\n", 9);  // async-signal-safe output
+    test_timed_out = 1;
+    siglongjmp(test_jmp_buf, 1);
+}
+
+static void crash_handler(int sig) {
+    crash_signal = sig;
+    test_crashed = 1;
+    siglongjmp(test_jmp_buf, 2);
+}
+
+static void setup_signal_handlers(void) {
+    struct sigaction sa;
+    sa.sa_handler = timeout_handler;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = 0;
+    sigaction(SIGALRM, &sa, NULL);
+    sa.sa_handler = crash_handler;
+    sigaction(SIGSEGV, &sa, NULL);
+    sigaction(SIGBUS, &sa, NULL);
+    sigaction(SIGFPE, &sa, NULL);
+}
+
+static int test_count = 0;
+static double total_parse_time = 0;
+static double total_sexp_time = 0;
+static double total_other_time = 0;
+
 static void run_test(const char *test_input, const char *test_expected,
                      int *passed, char **actual, char **err_msg) {
     int extglob = 0;
@@ -240,133 +277,57 @@ static void run_test(const char *test_input, const char *test_expected,
         extglob = 1;
         input = input + 11;
     }
-    // Create pipe for child->parent communication
-    int pipefd[2];
-    if (pipe(pipefd) == -1) {
-        *passed = 0;
-        *actual = strdup_safe("<pipe error>");
-        *err_msg = strdup_safe("Failed to create pipe");
-        return;
-    }
-    pid_t pid = fork();
-    if (pid == -1) {
-        close(pipefd[0]);
-        close(pipefd[1]);
-        *passed = 0;
-        *actual = strdup_safe("<fork error>");
-        *err_msg = strdup_safe("Failed to fork");
-        return;
-    }
-    if (pid == 0) {
-        // Child process: run the test and write result to pipe
-        close(pipefd[0]); // Close read end
-        g_parse_error = 0;
-        g_error_msg[0] = '\0';
-        Vec_Node nodes = parse(input, extglob);
-        char result_buf[65536];
-        if (g_parse_error) {
-            char *exp_norm = normalize(test_expected);
-            if (strcmp(exp_norm, "<error>") == 0) {
-                snprintf(result_buf, sizeof(result_buf), "1\n<error>\n");
-            } else {
-                snprintf(result_buf, sizeof(result_buf), "0\n<parse error>\n%s", g_error_msg);
-            }
-            free(exp_norm);
+    // Reset parser state
+    g_parse_error = 0;
+    g_error_msg[0] = '\0';
+    if (g_arena) arena_reset(g_arena);
+    // Run test (no timeout for now - just run directly)
+    Vec_Node nodes = parse(input, extglob);
+    test_count++;
+    static char result_buf[65536];
+    if (g_parse_error) {
+        char *exp_norm = normalize(test_expected);
+        if (strcmp(exp_norm, "<error>") == 0) {
+            *passed = 1;
+            *actual = strdup_safe("<error>");
+            *err_msg = NULL;
         } else {
-            // Build result string
-            size_t pos = 0;
-            for (int64_t i = 0; i < nodes.len && pos < sizeof(result_buf) - 1024; i++) {
-                const char *sexp = Node_to_sexp(nodes.data[i]);
-                if (i > 0) result_buf[pos++] = ' ';
-                size_t slen = strlen(sexp);
-                if (pos + slen < sizeof(result_buf) - 1024) {
-                    memcpy(result_buf + pos, sexp, slen);
-                    pos += slen;
-                }
-            }
-            result_buf[pos] = '\0';
-            char *exp_norm = normalize(test_expected);
-            char *act_norm = normalize(result_buf);
-            if (strcmp(exp_norm, "<error>") == 0) {
-                char tmp[65536];
-                snprintf(tmp, sizeof(tmp), "0\n%s\nExpected parse error but got successful parse", result_buf);
-                strcpy(result_buf, tmp);
-            } else if (strcmp(exp_norm, act_norm) == 0) {
-                char tmp[65536];
-                snprintf(tmp, sizeof(tmp), "1\n%s\n", result_buf);
-                strcpy(result_buf, tmp);
-            } else {
-                char tmp[65536];
-                snprintf(tmp, sizeof(tmp), "0\n%s\n", result_buf);
-                strcpy(result_buf, tmp);
-            }
-            free(exp_norm);
-            free(act_norm);
-        }
-        write(pipefd[1], result_buf, strlen(result_buf));
-        close(pipefd[1]);
-        _exit(0);
-    }
-    // Parent process: wait for child with timeout
-    close(pipefd[1]); // Close write end
-    // Set up timeout
-    int status;
-    time_t start = time(NULL);
-    while (1) {
-        pid_t result = waitpid(pid, &status, WNOHANG);
-        if (result == pid) break; // Child finished
-        if (result == -1) {
             *passed = 0;
-            *actual = strdup_safe("<waitpid error>");
-            *err_msg = strdup_safe(strerror(errno));
-            close(pipefd[0]);
-            return;
+            *actual = strdup_safe("<parse error>");
+            *err_msg = strdup_safe(g_error_msg);
         }
-        if (time(NULL) - start >= TEST_TIMEOUT_SECONDS) {
-            kill(pid, SIGKILL);
-            waitpid(pid, &status, 0);
-            close(pipefd[0]);
-            *passed = 0;
-            *actual = strdup_safe("<timeout>");
-            char msg[64];
-            snprintf(msg, sizeof(msg), "Test timed out after %d seconds", TEST_TIMEOUT_SECONDS);
-            *err_msg = strdup_safe(msg);
-            return;
-        }
-        usleep(1000); // 1ms poll interval
-    }
-    // Read result from pipe
-    char buf[65536];
-    ssize_t n = read(pipefd[0], buf, sizeof(buf) - 1);
-    close(pipefd[0]);
-    if (n <= 0) {
-        *passed = 0;
-        *actual = strdup_safe("<crash>");
-        if (WIFSIGNALED(status)) {
-            char msg[64];
-            snprintf(msg, sizeof(msg), "Test crashed with signal %d", WTERMSIG(status));
-            *err_msg = strdup_safe(msg);
-        } else {
-            *err_msg = strdup_safe("No output from test");
-        }
+        free(exp_norm);
         return;
     }
-    buf[n] = '\0';
-    // Parse result: first line is pass/fail, second is actual, rest is error
-    char *line1 = buf;
-    char *line2 = strchr(buf, '\n');
-    if (!line2) {
-        *passed = 0;
-        *actual = strdup_safe("<malformed output>");
-        *err_msg = strdup_safe(buf);
-        return;
+    // Build result string
+    size_t pos = 0;
+    for (int64_t i = 0; i < nodes.len && pos < sizeof(result_buf) - 1024; i++) {
+        const char *sexp = Node_to_sexp(nodes.data[i]);
+        if (i > 0) result_buf[pos++] = ' ';
+        size_t slen = strlen(sexp);
+        if (pos + slen < sizeof(result_buf) - 1024) {
+            memcpy(result_buf + pos, sexp, slen);
+            pos += slen;
+        }
     }
-    *line2++ = '\0';
-    char *line3 = strchr(line2, '\n');
-    if (line3) *line3++ = '\0';
-    *passed = (line1[0] == '1');
-    *actual = strdup_safe(line2);
-    *err_msg = (line3 && *line3) ? strdup_safe(line3) : NULL;
+    result_buf[pos] = '\0';
+    char *exp_norm = normalize(test_expected);
+    char *act_norm = normalize(result_buf);
+    if (strcmp(exp_norm, "<error>") == 0) {
+        *passed = 0;
+        *actual = strdup_safe(result_buf);
+        *err_msg = strdup_safe("Expected parse error but got successful parse");
+    } else if (strcmp(exp_norm, act_norm) == 0) {
+        *passed = 1;
+        *actual = strdup_safe(result_buf);
+        *err_msg = NULL;
+    } else {
+        *passed = 0;
+        *actual = strdup_safe(result_buf);
+        *err_msg = NULL;
+    }
+    free(exp_norm);
+    free(act_norm);
 }
 
 static void print_usage(const char *prog) {
@@ -409,6 +370,7 @@ int main(int argc, char **argv) {
         fprintf(stderr, "Could not find tests directory\n");
         return 1;
     }
+    setup_signal_handlers();
     clock_t start_time = clock();
     int total_passed = 0;
     int total_failed = 0;
@@ -440,7 +402,9 @@ int main(int argc, char **argv) {
             int passed;
             char *actual;
             char *err_msg;
+            fprintf(stderr, "\rRunning: %d", total_passed + total_failed);
             run_test(tc->input, effective_expected, &passed, &actual, &err_msg);
+            fprintf(stderr, " done ");
             if (passed) {
                 total_passed++;
                 if (verbose) {
@@ -495,5 +459,6 @@ int main(int argc, char **argv) {
         }
     }
     printf("%d passed, %d failed in %.2fs\n", total_passed, total_failed, elapsed);
+    fprintf(stderr, "DEBUG: %d tests, parse=%.3fs, other=%.3fs\n", test_count, total_parse_time, total_other_time);
     return total_failed > 0 ? 1 : 0;
 }

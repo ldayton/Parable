@@ -1198,15 +1198,31 @@ static uint64_t _hash_int(int64_t n) {
 }
 
 // Variable-argument string formatting helper
+// Pre-processes format string to convert %v to %s (vsnprintf doesn't know %v)
 static char *_str_format(Arena *a, const char *fmt, ...) {
+    // Convert %v to %s in format string
+    size_t flen = strlen(fmt);
+    char *cfmt = (char *)arena_alloc(a, flen + 1);
+    const char *src = fmt;
+    char *dst = cfmt;
+    while (*src) {
+        if (src[0] == '%' && src[1] == 'v') {
+            *dst++ = '%';
+            *dst++ = 's';
+            src += 2;
+        } else {
+            *dst++ = *src++;
+        }
+    }
+    *dst = '\0';
     va_list args1, args2;
     va_start(args1, fmt);
     va_copy(args2, args1);
-    int len = vsnprintf(NULL, 0, fmt, args1);
+    int len = vsnprintf(NULL, 0, cfmt, args1);
     va_end(args1);
     if (len < 0) { va_end(args2); return arena_strdup(a, ""); }
     char *buf = (char *)arena_alloc(a, len + 1);
-    vsnprintf(buf, len + 1, fmt, args2);
+    vsnprintf(buf, len + 1, cfmt, args2);
     va_end(args2);
     return buf;
 }
@@ -1276,6 +1292,12 @@ static bool _map_contains(void *map, const char *key) {
 
     def _struct_name_to_kind(self, name: str) -> str:
         """Convert a struct name to its kind string."""
+        # Special cases where Python source uses different kind strings
+        special_cases = {
+            "HereDoc": "heredoc",
+        }
+        if name in special_cases:
+            return special_cases[name]
         # Convert PascalCase to kebab-case (e.g., UnaryTest -> unary-test)
         result = ""
         for i, c in enumerate(name):
@@ -1605,6 +1627,15 @@ static bool _map_contains(void *map, const char *key) {
         # Check if target variable was hoisted with same type - if so, just assign
         var_name = stmt.target.name if isinstance(stmt.target, VarLV) else None
         typ = stmt.decl_typ or stmt.value.typ
+        # Workaround: if type is 'any' but value is integer literal, use int64_t
+        if isinstance(typ, InterfaceRef) and typ.name == "any":
+            val_expr = stmt.value
+            # Check for integer literal (including unary minus: -1)
+            is_int_lit = isinstance(val_expr, IntLit)
+            if isinstance(val_expr, UnaryOp) and val_expr.op == "-" and isinstance(val_expr.operand, IntLit):
+                is_int_lit = True
+            if is_int_lit:
+                typ = INT
         c_type = self._type_to_c(typ) if typ else "void *"
         # Track interface-typed variables for TypeAssert emission
         if var_name is not None and isinstance(typ, InterfaceRef):
@@ -1629,11 +1660,19 @@ static bool _map_contains(void *map, const char *key) {
         elif (isinstance(stmt.value, Var) and stmt.value.name in self._interface_vars and
               isinstance(typ, (Pointer, StructRef)) and not isinstance(typ, InterfaceRef)):
             value = f"({c_type}){value}"
-        is_hoisted = (var_name in self._hoisted_vars and
-                      self._hoisted_vars.get(var_name) == c_type) if var_name else False
-        # Emit declaration if var was hoisted, or if middleend says is_declaration,
-        # or if var isn't tracked at all (middleend bug workaround)
-        needs_decl = (stmt.is_declaration and not is_hoisted) or (var_name is not None and var_name not in self._hoisted_vars)
+        already_declared = var_name in self._hoisted_vars if var_name else False
+        is_hoisted = already_declared and self._hoisted_vars.get(var_name) == c_type
+        # Emit declaration if middleend says is_declaration and not already hoisted with same type,
+        # OR if var isn't tracked at all.
+        # But if var IS tracked with different type AND the value is a primitive that's compatible
+        # with the existing type, skip redeclaration (workaround for middleend type inference bugs)
+        needs_decl = (stmt.is_declaration and not is_hoisted) or (var_name is not None and not already_declared)
+        # Workaround: if already declared with integer type and new value is compatible, don't redeclare
+        if (already_declared and not is_hoisted and
+            self._hoisted_vars.get(var_name) in ("int64_t", "int32_t", "int", "bool") and
+            (c_type in ("int64_t", "int32_t", "int", "bool", "Any *", "void *") or
+             c_type.startswith("Any"))):
+            needs_decl = False
         if needs_decl:
             self._line(f"{c_type} {target} = {value};")
             if var_name is not None:
@@ -1656,11 +1695,15 @@ static bool _map_contains(void *map, const char *key) {
                     continue
                 target = self._emit_lvalue(t)
                 field_type = self._type_to_c(value_type.elements[i]) if i < len(value_type.elements) else "void *"
-                is_hoisted = (var_name in self._hoisted_vars and
-                              self._hoisted_vars.get(var_name) == field_type) if var_name else False
-                # Emit declaration if var was hoisted, or if middleend says is_declaration,
-                # or if var isn't tracked at all (middleend bug workaround)
-                needs_decl = (stmt.is_declaration and not is_hoisted) or (var_name is not None and var_name not in self._hoisted_vars)
+                already_declared = var_name in self._hoisted_vars if var_name else False
+                is_hoisted = already_declared and self._hoisted_vars.get(var_name) == field_type
+                needs_decl = (stmt.is_declaration and not is_hoisted) or (var_name is not None and not already_declared)
+                # Same workaround as in _emit_stmt_Assign
+                if (already_declared and not is_hoisted and
+                    self._hoisted_vars.get(var_name) in ("int64_t", "int32_t", "int", "bool") and
+                    (field_type in ("int64_t", "int32_t", "int", "bool", "Any *", "void *") or
+                     field_type.startswith("Any"))):
+                    needs_decl = False
                 if needs_decl:
                     self._line(f"{field_type} {target} = {tmp_name}.F{i};")
                     if var_name is not None:
@@ -1676,8 +1719,9 @@ static bool _map_contains(void *map, const char *key) {
                 if not var_name or var_name == "_":
                     continue
                 target = self._emit_lvalue(t)
-                is_hoisted = var_name in self._hoisted_vars if var_name else False
-                needs_decl = (stmt.is_declaration and not is_hoisted) or (var_name is not None and var_name not in self._hoisted_vars)
+                already_declared = var_name in self._hoisted_vars if var_name else False
+                is_hoisted = already_declared and self._hoisted_vars.get(var_name) == "void *"
+                needs_decl = (stmt.is_declaration and not is_hoisted) or (var_name is not None and not already_declared)
                 if needs_decl:
                     self._line(f"void *{target} = ((void **)&({value}))[{i}];")
                     if var_name is not None:
@@ -2424,6 +2468,14 @@ static bool _map_contains(void *map, const char *key) {
             return f"_str_repeat(g_arena, {s}, {n})"
         if func == "_sublist" and len(expr.args) == 3:
             lst = self._emit_expr(expr.args[0])
+            start = self._emit_expr(expr.args[1])
+            end = self._emit_expr(expr.args[2])
+            # Get Vec type from the list argument's type
+            list_type = expr.args[0].typ
+            if isinstance(list_type, Slice):
+                sig = self._slice_elem_sig(list_type.element)
+                return f"((Vec_{sig}){{({lst}).data + ({start}), ({end}) - ({start}), ({end}) - ({start})}})"
+            # Fallback for unknown types
             return f"/* sublist */ {lst}"
         func_name = _safe_name(func)
         arg_list: list[str] = []
@@ -2796,9 +2848,11 @@ static bool _map_contains(void *map, const char *key) {
                         if (isinstance(ftyp, Optional) and isinstance(ftyp.inner, Slice) and
                             isinstance(val_type, Slice) and not isinstance(val_type, (Optional, Pointer))):
                             # Check if this field has a temp var (for rvalues)
-                            temp_name = self._get_rvalue_temp(name, fname)
-                            if temp_name is not None:
-                                val_str = f"&{temp_name}"
+                            temp_result = self._get_rvalue_temp(name, fname)
+                            if temp_result is not None:
+                                temp_name, is_pointer = temp_result
+                                # If temp is already a pointer (heap-allocated), use directly
+                                val_str = temp_name if is_pointer else f"&{temp_name}"
                             else:
                                 val_str = f"&{self._emit_expr(field_val)}"
                         # Cast when passing Slice(StructA) to Slice(StructB/Interface)
@@ -2849,13 +2903,15 @@ static bool _map_contains(void *map, const char *key) {
         """Check if expression is an lvalue (can take address of)."""
         return isinstance(expr, (Var, FieldAccess, Index, DerefLV))
 
-    def _get_rvalue_temp(self, struct_name: str, field_name: str) -> str | None:
-        """Get temp var name for an rvalue field, if one was created."""
-        for i, (sn, fn, temp) in enumerate(self._rvalue_temps):
+    def _get_rvalue_temp(self, struct_name: str, field_name: str) -> tuple[str, bool] | None:
+        """Get temp var name and is_pointer flag for an rvalue field, if one was created."""
+        for i, entry in enumerate(self._rvalue_temps):
+            sn, fn, temp = entry[0], entry[1], entry[2]
+            is_pointer = entry[3] if len(entry) > 3 else False
             if sn == struct_name and fn == field_name:
                 # Remove from list so nested structs with same field get different temps
                 self._rvalue_temps.pop(i)
-                return temp
+                return (temp, is_pointer)
         return None
 
     def _emit_rvalue_temps(self, expr: Expr) -> None:
@@ -2874,13 +2930,16 @@ static bool _map_contains(void *map, const char *key) {
                         # Check if this field needs &: Optional(Slice) param with Slice value
                         if (isinstance(ftyp, Optional) and isinstance(ftyp.inner, Slice) and
                             isinstance(val_type, Slice) and not isinstance(val_type, (Optional, Pointer))):
-                            # If it's an rvalue, emit temp var
+                            # If it's an rvalue, emit heap-allocated temp to avoid stack-use-after-return
                             if not self._is_lvalue(field_val):
                                 tmp_name = self._temp_name("_tmp_slice")
                                 vec_type = self._type_to_c(val_type)
                                 val_str = self._emit_expr(field_val)
-                                self._line(f"{vec_type} {tmp_name} = {val_str};")
-                                self._rvalue_temps.append((name, fname, tmp_name))
+                                # Allocate Vec on heap (arena) to outlive current stack frame
+                                self._line(f"{vec_type} *{tmp_name} = ({vec_type} *)arena_alloc(g_arena, sizeof({vec_type}));")
+                                self._line(f"*{tmp_name} = {val_str};")
+                                # Store tmp_name directly (it's already a pointer)
+                                self._rvalue_temps.append((name, fname, tmp_name, True))  # True = already a pointer
                         # Recurse into nested StructLits
                         self._emit_rvalue_temps(field_val)
             else:

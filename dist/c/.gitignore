@@ -1,2 +1,4 @@
 run_tests
+run_tests_asan
+run_tests_debug
 *.o

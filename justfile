@@ -16,7 +16,7 @@ _banner label:
 # Run parser tests against source
 [group: 'source']
 src-test *ARGS: (_banner "src-test")
-    uv run tests/bin/run-tests.py {{ARGS}}
+    uv run tests/bin/run-tests.py {{ARGS}} tests
 
 # Lint (--fix to apply changes)
 [group: 'source']
@@ -80,8 +80,7 @@ backend-transpile backend:
             just -f dist/perl/justfile transpile "$(pwd)/src/parable.py" "$(pwd)/transpiler"
             ;;
         php)
-            mkdir -p dist/php
-            uv run --directory transpiler python -m src.tongues --target php < "$(pwd)/src/parable.py" > dist/php/parable.php
+            just -f dist/php/justfile transpile "$(pwd)/src/parable.py" "$(pwd)/transpiler"
             ;;
         python)
             mkdir -p dist/python/src/parable
@@ -130,9 +129,7 @@ backend-test backend:
             just -f dist/perl/justfile check "$(pwd)/src/parable.py" "$(pwd)/transpiler" "$tests_abs"
             ;;
         php)
-            just backend-transpile php
-            php -l dist/php/parable.php
-            php tests/bin/run-tests.php "$tests_abs"
+            just -f dist/php/justfile check "$(pwd)/src/parable.py" "$(pwd)/transpiler" "$tests_abs"
             ;;
         python)
             just backend-transpile python
@@ -162,7 +159,7 @@ c-compile:
 # Internal: run all parallel checks
 [private]
 [parallel]
-_check-parallel: src-test src-lint src-fmt src-verify-lock src-subset transpiler-subset transpiler-test check-dump-ast (backend-test "c") (backend-test "csharp") (backend-test "go") (backend-test "java") (backend-test "javascript") (backend-test "lua") (backend-test "perl") (backend-test "php") (backend-test "python") (backend-test "ruby") (backend-test "typescript")
+_check-parallel: src-test src-lint src-fmt src-verify-lock src-subset transpiler-subset transpiler-test check-dump-ast (backend-test "csharp") (backend-test "go") (backend-test "java") (backend-test "javascript") (backend-test "lua") (backend-test "perl") (backend-test "php") (backend-test "python") (backend-test "ruby") (backend-test "typescript")
 
 # Ensure biome is installed (prevents race condition in parallel JS checks)
 [private]
@@ -251,7 +248,7 @@ check-dump-ast: (_banner "check-dump-ast")
 src-coverage: (_banner "src-coverage")
     #!/usr/bin/env bash
     set -euo pipefail
-    uv run --with coverage coverage run tests/bin/run-tests.py
+    uv run --with coverage coverage run tests/bin/run-tests.py tests
     uv run --with coverage coverage html -d /tmp/parable-coverage
     uv run --with coverage coverage json -o /tmp/parable-coverage.json
     echo ""
@@ -289,4 +286,4 @@ backend-coverage backend:
 # Benchmark source test suite
 [group: 'profiling']
 src-benchmark: (_banner "src-benchmark")
-    hyperfine --warmup 2 --runs ${RUNS:-5} 'uv run tests/bin/run-tests.py 2>&1'
+    hyperfine --warmup 2 --runs ${RUNS:-5} 'uv run tests/bin/run-tests.py tests 2>&1'

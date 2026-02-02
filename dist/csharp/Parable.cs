@@ -7373,9 +7373,9 @@ public class Parser
         return (new CommandSubstitution(cmd, true, "cmdsub"), text);
     }
 
-    public bool _IsAssignmentWord(INode word)
+    public bool _IsAssignmentWord(Word word)
     {
-        return ParableFunctions._Assignment(((Word)word).Value, 0) != -1;
+        return ParableFunctions._Assignment(word.Value, 0) != -1;
     }
 
     public (INode, string) _ParseBacktickSubstitution()
@@ -13014,9 +13014,9 @@ public static class ParableFunctions
         return op + " " + target;
     }
 
-    public static string _FormatHeredocBody(INode r)
+    public static string _FormatHeredocBody(HereDoc r)
     {
-        return "\n" + ((HereDoc)r).Content + ((HereDoc)r).Delimiter + "\n";
+        return "\n" + r.Content + r.Delimiter + "\n";
     }
 
     public static bool _LookaheadForEsac(string value, int start, int caseDepth)

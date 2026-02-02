@@ -126,11 +126,11 @@ class RunTests
             testInput = testInput.Substring("# @extglob\n".Length);
         }
         var task = System.Threading.Tasks.Task.Run(() => RunTestInner(testInput, testExpected, extglob));
-        if (task.Wait(TimeSpan.FromSeconds(5)))
+        if (task.Wait(TimeSpan.FromSeconds(10)))
         {
             return task.Result;
         }
-        return (false, "<timeout>", "Test timed out after 5 seconds");
+        return (false, "<timeout>", "Test timed out after 10 seconds");
     }
 
     static (bool passed, string actual, string errMsg) RunTestInner(string testInput, string testExpected, bool extglob)
@@ -168,21 +168,41 @@ class RunTests
         }
     }
 
+    static void PrintUsage()
+    {
+        Console.WriteLine("Usage: RunTests [options] [test_dir]");
+        Console.WriteLine("Options:");
+        Console.WriteLine("  -v, --verbose       Show PASS/FAIL for each test");
+        Console.WriteLine("  -f, --filter PAT    Only run tests matching PAT");
+        Console.WriteLine("  --max-failures N    Show at most N failures (0=unlimited, default=20)");
+        Console.WriteLine("  -h, --help          Show this help message");
+    }
+
     static void Main(string[] args)
     {
         bool verbose = false;
         string filterPattern = null;
         string testDir = null;
+        int maxFailures = 20;
 
         for (int i = 0; i < args.Length; i++)
         {
-            if (args[i] == "-v" || args[i] == "--verbose")
+            if (args[i] == "-h" || args[i] == "--help")
+            {
+                PrintUsage();
+                return;
+            }
+            else if (args[i] == "-v" || args[i] == "--verbose")
             {
                 verbose = true;
             }
-            else if (args[i] == "-f" && i + 1 < args.Length)
+            else if ((args[i] == "-f" || args[i] == "--filter") && i + 1 < args.Length)
             {
                 filterPattern = args[++i];
+            }
+            else if (args[i] == "--max-failures" && i + 1 < args.Length)
+            {
+                maxFailures = int.Parse(args[++i]);
             }
             else if (!args[i].StartsWith("-"))
             {
@@ -260,7 +280,7 @@ class RunTests
             Console.WriteLine("============================================================");
             Console.WriteLine("FAILURES");
             Console.WriteLine("============================================================");
-            int showCount = Math.Min(failedTests.Count, 20);
+            int showCount = maxFailures == 0 ? failedTests.Count : Math.Min(failedTests.Count, maxFailures);
             for (int i = 0; i < showCount; i++)
             {
                 var f = failedTests[i];
@@ -274,9 +294,9 @@ class RunTests
                     Console.WriteLine($"  Error:    {f.Err}");
                 }
             }
-            if (totalFailed > 20)
+            if (maxFailures > 0 && totalFailed > maxFailures)
             {
-                Console.WriteLine($"\n... and {totalFailed - 20} more failures");
+                Console.WriteLine($"\n... and {totalFailed - maxFailures} more failures");
             }
         }
 

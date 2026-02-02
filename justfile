@@ -80,8 +80,7 @@ backend-transpile backend:
             uv run --directory transpiler python -m src.tongues --target lua < "$(pwd)/src/parable.py" > dist/lua/parable.lua
             ;;
         perl)
-            mkdir -p dist/perl
-            uv run --directory transpiler python -m src.tongues --target perl < "$(pwd)/src/parable.py" > dist/perl/parable.pl
+            just -f dist/perl/justfile transpile "$(pwd)/src/parable.py" "$(pwd)/transpiler"
             ;;
         php)
             mkdir -p dist/php
@@ -92,8 +91,7 @@ backend-transpile backend:
             uv run --directory transpiler python -m src.tongues --target python < "$(pwd)/src/parable.py" > dist/python/src/parable/parable.py
             ;;
         ruby)
-            mkdir -p dist/ruby
-            uv run --directory transpiler python -m src.tongues --target ruby < "$(pwd)/src/parable.py" > dist/ruby/parable.rb
+            just -f dist/ruby/justfile transpile "$(pwd)/src/parable.py" "$(pwd)/transpiler"
             ;;
         typescript)
             mkdir -p dist/typescript
@@ -138,9 +136,7 @@ backend-test backend:
             lua -l ./dist/lua/parable tests/bin/run-tests.lua "$(pwd)/tests"
             ;;
         perl)
-            just backend-transpile perl
-            perl -c dist/perl/parable.pl
-            PERL5LIB=dist/perl perl tests/bin/run-tests.pl "$tests_abs"
+            just -f dist/perl/justfile check "$(pwd)/src/parable.py" "$(pwd)/transpiler" "$tests_abs"
             ;;
         php)
             just backend-transpile php
@@ -152,8 +148,7 @@ backend-test backend:
             uv run --directory dist/python parable-test "$tests_abs"
             ;;
         ruby)
-            just backend-transpile ruby
-            ruby -r ./dist/ruby/parable.rb tests/bin/run-tests.rb "$tests_abs"
+            just -f dist/ruby/justfile check "$(pwd)/src/parable.py" "$(pwd)/transpiler" "$tests_abs"
             ;;
         typescript)
             just backend-transpile typescript

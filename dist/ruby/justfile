@@ -1,0 +1,12 @@
+# Transpile source to lib/parable.rb
+transpile source_file transpiler_dir:
+    uv run --directory "{{transpiler_dir}}" python -m src.tongues --target ruby < "{{source_file}}" > lib/parable.rb
+
+# Syntax check
+check-syntax:
+    ruby -c lib/parable.rb
+
+# Run tests
+check source_file transpiler_dir tests_dir:
+    just transpile "{{source_file}}" "{{transpiler_dir}}"
+    ruby -Ilib bin/run_tests "{{tests_dir}}"

@@ -59,8 +59,8 @@ prep backend:
             php -l /tmp/transpile.php
             ;;
         ruby)
-            uv run python -m src.tongues --target ruby < {{source}} > /tmp/transpile.rb
-            ruby -c /tmp/transpile.rb
+            just -f ../dist/ruby/justfile transpile "$(pwd)/{{source}}" "$(pwd)"
+            ruby -c ../dist/ruby/lib/parable.rb
             ;;
         *)
             echo "Unknown backend: {{backend}}"
@@ -119,10 +119,7 @@ test backend:
             php {{tests}}/bin/run-tests.php {{tests}}
             ;;
         ruby)
-            rm -rf /tmp/transpile-test-rb && mkdir /tmp/transpile-test-rb
-            uv run python -m src.tongues --target ruby < {{source}} > /tmp/transpile-test-rb/parable.rb
-            ruby -c /tmp/transpile-test-rb/parable.rb
-            ruby -r /tmp/transpile-test-rb/parable.rb {{tests}}/bin/run-tests.rb {{tests}}
+            just -f ../dist/ruby/justfile check "$(pwd)/{{source}}" "$(pwd)" "$tests_abs"
             ;;
         *)
             echo "No test runner for backend: {{backend}}"

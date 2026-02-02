@@ -2725,7 +2725,7 @@ static const char * _format_cmdsub_node(Node * node, int64_t indent, bool in_pro
         idx = 0;
         while ((idx < cmds.len)) {
             {
-                Tuple_NodePtr_bool _entry = cmds.data[idx];
+                Tuple_NodePtr_bool _entry = cmds.data[idx];  // borrowed
                 cmd = (Node *)_entry.F0;
                 needs_redirect = _entry.F1;
             }
@@ -4187,7 +4187,7 @@ static Vec_Node parse(const char * source, bool extglob) {
 
 static ParseError * new_parse_error(const char * message, int64_t pos, int64_t line) {
     ParseError * self = ParseError_new(NULL, 0, 0);
-    self->message = message;
+    self->message = arena_strdup(g_arena, message);
     self->pos = pos;
     self->line = line;
     return self;
@@ -4226,7 +4226,7 @@ static ContextStack * new_context_stack(void) {
 
 static Lexer * new_lexer(const char * source, bool extglob) {
     Lexer * self = Lexer_new(NULL, NULL, 0, 0, NULL, NULL, 0, 0, (Vec_Node){NULL, 0, 0}, false, NULL, NULL, NULL, 0, false, false, false, 0, 0, false, false, false);
-    self->source = source;
+    self->source = arena_strdup(g_arena, source);
     self->pos = 0;
     self->length = _rune_len(source);
     self->quote = new_quote_state();
@@ -4252,7 +4252,7 @@ static Lexer * new_lexer(const char * source, bool extglob) {
 
 static Parser * new_parser(const char * source, bool in_process_sub, bool extglob) {
     Parser * self = Parser_new(NULL, 0, 0, (Vec_HereDoc){NULL, 0, 0}, 0, false, false, false, NULL, NULL, (Vec_Token){NULL, 0, 0}, 0, 0, NULL, 0, false, false, false, NULL, 0, 0);
-    self->source = source;
+    self->source = arena_strdup(g_arena, source);
     self->pos = 0;
     self->length = _rune_len(source);
     self->_pending_heredocs = (Vec_HereDoc){NULL, 0, 0};
@@ -8337,7 +8337,7 @@ static SavedParserState * Parser__save_parser_state(Parser *self) {
 static void Parser__restore_parser_state(Parser *self, SavedParserState * saved) {
     self->_parser_state = saved->parser_state;
     self->_dolbrace_state = saved->dolbrace_state;
-    self->_eof_token = saved->eof_token;
+    self->_eof_token = arena_strdup(g_arena, saved->eof_token);
     ContextStack_restore_from(self->_ctx, saved->ctx_stack);
 }
 
@@ -8379,7 +8379,7 @@ static void Parser__sync_lexer(Parser *self) {
     if ((self->_lexer->pos != self->pos)) {
         self->_lexer->pos = self->pos;
     }
-    self->_lexer->_eof_token = self->_eof_token;
+    self->_lexer->_eof_token = arena_strdup(g_arena, self->_eof_token);
     self->_lexer->_parser_state = self->_parser_state;
     self->_lexer->_last_read_token = self->_token_history.data[0];
     self->_lexer->_word_context = self->_word_context;
@@ -9355,7 +9355,7 @@ static Node * Parser__parse_arith_expr(Parser *self, const char * content) {
     int64_t saved_arith_len = self->_arith_len;
     int64_t saved_parser_state = self->_parser_state;
     Parser__set_state(self, PARSERSTATEFLAGS_PST_ARITH);
-    self->_arith_src = content;
+    self->_arith_src = arena_strdup(g_arena, content);
     self->_arith_pos = 0;
     self->_arith_len = _rune_len(content);
     Parser__arith_skip_ws(self);
@@ -9367,7 +9367,7 @@ static Node * Parser__parse_arith_expr(Parser *self, const char * content) {
     }
     self->_parser_state = saved_parser_state;
     if ((strcmp(saved_arith_src, "") != 0)) {
-        self->_arith_src = saved_arith_src;
+        self->_arith_src = arena_strdup(g_arena, saved_arith_src);
         self->_arith_pos = saved_arith_pos;
         self->_arith_len = saved_arith_len;
     }

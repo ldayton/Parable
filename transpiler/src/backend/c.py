@@ -32,6 +32,8 @@ def escape_string_c(value: str) -> str:
         .replace("\x01", "\\x01")
         .replace("\x7f", "\\x7f")
     )
+
+
 from src.ir import (
     BOOL,
     BYTE,
@@ -88,6 +90,7 @@ from src.ir import (
     NoOp,
     OpAssign,
     Optional,
+    Ownership,
     Param,
     ParseInt,
     Pointer,
@@ -131,16 +134,58 @@ from src.ir import (
 )
 
 # C reserved words that need renaming
-_C_RESERVED = frozenset({
-    "auto", "break", "case", "char", "const", "continue", "default", "do",
-    "double", "else", "enum", "extern", "float", "for", "goto", "if",
-    "inline", "int", "long", "register", "restrict", "return", "short",
-    "signed", "sizeof", "static", "struct", "switch", "typedef", "union",
-    "unsigned", "void", "volatile", "while", "_Bool", "_Complex", "_Imaginary",
-    "_Alignas", "_Alignof", "_Atomic", "_Generic", "_Noreturn", "_Static_assert",
-    "_Thread_local", "bool", "true", "false", "NULL",
-})
-
+_C_RESERVED = frozenset(
+    {
+        "auto",
+        "break",
+        "case",
+        "char",
+        "const",
+        "continue",
+        "default",
+        "do",
+        "double",
+        "else",
+        "enum",
+        "extern",
+        "float",
+        "for",
+        "goto",
+        "if",
+        "inline",
+        "int",
+        "long",
+        "register",
+        "restrict",
+        "return",
+        "short",
+        "signed",
+        "sizeof",
+        "static",
+        "struct",
+        "switch",
+        "typedef",
+        "union",
+        "unsigned",
+        "void",
+        "volatile",
+        "while",
+        "_Bool",
+        "_Complex",
+        "_Imaginary",
+        "_Alignas",
+        "_Alignof",
+        "_Atomic",
+        "_Generic",
+        "_Noreturn",
+        "_Static_assert",
+        "_Thread_local",
+        "bool",
+        "true",
+        "false",
+        "NULL",
+    }
+)
 
 
 def _safe_name(name: str) -> str:
@@ -184,7 +229,9 @@ class CBackend:
         self._constant_set_values: dict[str, SetLit] = {}  # Set constant values for membership
         self._temp_counter: int = 0  # Counter for generating unique temp names
         self._function_sigs: dict[str, list[Type]] = {}  # Function name -> parameter types
-        self._rvalue_temps: list[tuple[str, str, str]] = []  # List of (struct_name, field_name, temp_name)
+        self._rvalue_temps: list[
+            tuple[str, str, str]
+        ] = []  # List of (struct_name, field_name, temp_name)
 
     def emit(self, module: Module) -> str:
         """Emit C code from IR Module."""
@@ -428,7 +475,10 @@ class CBackend:
         parts = []
         for elem in typ.elements:
             parts.append(self._type_to_c(elem))
-        return "Tuple_" + "_".join(p.replace("*", "Ptr").replace(" ", "").replace("[", "Arr").replace("]", "") for p in parts)
+        return "Tuple_" + "_".join(
+            p.replace("*", "Ptr").replace(" ", "").replace("[", "Arr").replace("]", "")
+            for p in parts
+        )
 
     def _collect_slice_types(self, module: Module) -> None:
         """Scan module to collect all slice element types for typedef generation."""
@@ -670,12 +720,14 @@ class CBackend:
             if sig == "Byte":
                 continue
             elem_c = self._slice_sig_to_elem_type(sig)
-            self._line(f"typedef struct Vec_{sig} {{ {elem_c} *data; size_t len; size_t cap; }} Vec_{sig};")
+            self._line(
+                f"typedef struct Vec_{sig} {{ {elem_c} *data; size_t len; size_t cap; }} Vec_{sig};"
+            )
         self._line("")
         # Emit string join helper if we have Vec_Str
         if "Str" in self._slice_types:
             self._line("static char *_str_join(Arena *a, const char *sep, Vec_Str vec) {")
-            self._line("    if (vec.len == 0) return arena_strdup(a, \"\");")
+            self._line('    if (vec.len == 0) return arena_strdup(a, "");')
             self._line("    size_t sep_len = strlen(sep);")
             self._line("    size_t total = 0;")
             self._line("    for (size_t i = 0; i < vec.len; i++) {")
@@ -755,7 +807,7 @@ class CBackend:
 
     def _emit_helpers(self) -> None:
         """Emit helper functions for string ops, arena, etc."""
-        helpers = r'''
+        helpers = r"""
 // === Generic 'any' interface type ===
 // Used for interface{}/any types that need runtime type checking
 typedef struct Any {
@@ -1251,7 +1303,7 @@ static bool _map_contains(void *map, const char *key) {
     return false;
 }
 
-'''
+"""
         for line in helpers.strip().split("\n"):
             self._line(line)
         self._line("")
@@ -1283,8 +1335,8 @@ static bool _map_contains(void *map, const char *key) {
             const_name = f"KIND_{_type_name(struct.name).upper()}"
             # Get the original Python kind string from the struct name
             kind_str = self._struct_name_to_kind(struct.name)
-            self._line(f"case {const_name}: return \"{kind_str}\";")
-        self._line("default: return \"\";")
+            self._line(f'case {const_name}: return "{kind_str}";')
+        self._line('default: return "";')
         self._line("}")
         self.indent -= 1
         self._line("}")
@@ -1357,7 +1409,10 @@ static bool _map_contains(void *map, const char *key) {
         for fld in other_fields:
             c_type = self._type_to_c(fld.typ)
             c_name = _safe_name(fld.name)
-            self._line(f"{c_type} {c_name};")
+            ownership_comment = ""
+            if fld.ownership == "weak":
+                ownership_comment = "  // weak (back-ref)"
+            self._line(f"{c_type} {c_name};{ownership_comment}")
         self.indent -= 1
         self._line("};")
         self._line("")
@@ -1380,7 +1435,10 @@ static bool _map_contains(void *map, const char *key) {
         # Assign fields (order doesn't matter for assignment)
         for fld in struct.fields:
             c_name = _safe_name(fld.name)
-            self._line(f"self->{c_name} = {c_name};")
+            ownership_comment = ""
+            if fld.ownership == "weak":
+                ownership_comment = "  // weak (back-ref, no ownership)"
+            self._line(f"self->{c_name} = {c_name};{ownership_comment}")
         self._line("return self;")
         self.indent -= 1
         self._line("}")
@@ -1437,7 +1495,9 @@ static bool _map_contains(void *map, const char *key) {
                 continue
             emitted.add(name)
             ret_type = self._type_to_c(func.ret)
-            params = ", ".join(self._param_with_type(p.typ, _safe_name(p.name)) for p in func.params)
+            params = ", ".join(
+                self._param_with_type(p.typ, _safe_name(p.name)) for p in func.params
+            )
             if not params:
                 params = "void"
             self._line(f"static {ret_type} {name}({params});")
@@ -1581,6 +1641,12 @@ static bool _map_contains(void *map, const char *key) {
     def _emit_stmt_VarDecl(self, stmt: VarDecl) -> None:
         c_type = self._type_to_c(stmt.typ)
         name = _safe_name(stmt.name)
+        # Ownership comment for documentation
+        ownership_comment = ""
+        if stmt.ownership == "borrowed":
+            ownership_comment = "  // borrowed"
+        elif stmt.ownership == "weak":
+            ownership_comment = "  // weak"
         # Track interface-typed variables for TypeAssert emission
         if isinstance(stmt.typ, InterfaceRef):
             self._interface_vars.add(stmt.name)
@@ -1591,11 +1657,13 @@ static bool _map_contains(void *map, const char *key) {
                 # Cast if assigning struct pointer to interface type (but not primitives or "any")
                 if isinstance(stmt.typ, InterfaceRef) and stmt.typ.name != "any" and stmt.value.typ:
                     value_typ = stmt.value.typ
-                    if isinstance(value_typ, (StructRef, Pointer)) and not isinstance(value_typ, Primitive):
+                    if isinstance(value_typ, (StructRef, Pointer)) and not isinstance(
+                        value_typ, Primitive
+                    ):
                         val = f"({c_type}){val}"
                     elif isinstance(value_typ, InterfaceRef) and value_typ.name != "any":
                         val = f"({c_type}){val}"
-                self._line(f"{name} = {val};")
+                self._line(f"{name} = {val};{ownership_comment}")
             # else: no-op, already initialized
             return
         if stmt.value:
@@ -1603,27 +1671,34 @@ static bool _map_contains(void *map, const char *key) {
             # Cast if assigning struct pointer to interface type (but not primitives or "any")
             if isinstance(stmt.typ, InterfaceRef) and stmt.typ.name != "any" and stmt.value.typ:
                 value_typ = stmt.value.typ
-                if isinstance(value_typ, (StructRef, Pointer)) and not isinstance(value_typ, Primitive):
+                if isinstance(value_typ, (StructRef, Pointer)) and not isinstance(
+                    value_typ, Primitive
+                ):
                     val = f"({c_type}){val}"
                 elif isinstance(value_typ, InterfaceRef) and value_typ.name != "any":
                     val = f"({c_type}){val}"
-            self._line(f"{c_type} {name} = {val};")
+            self._line(f"{c_type} {name} = {val};{ownership_comment}")
         else:
             # Initialize to zero/NULL
             if c_type.endswith("*"):
-                self._line(f"{c_type} {name} = NULL;")
+                self._line(f"{c_type} {name} = NULL;{ownership_comment}")
             elif c_type in ("int64_t", "int32_t", "int", "size_t"):
-                self._line(f"{c_type} {name} = 0;")
+                self._line(f"{c_type} {name} = 0;{ownership_comment}")
             elif c_type == "bool":
-                self._line(f"{c_type} {name} = false;")
+                self._line(f"{c_type} {name} = false;{ownership_comment}")
             elif c_type == "double":
-                self._line(f"{c_type} {name} = 0.0;")
+                self._line(f"{c_type} {name} = 0.0;{ownership_comment}")
             else:
-                self._line(f"{c_type} {name} = {{0}};")
+                self._line(f"{c_type} {name} = {{0}};{ownership_comment}")
 
     def _emit_stmt_Assign(self, stmt: Assign) -> None:
         target = self._emit_lvalue(stmt.target)
         value = self._emit_expr(stmt.value)
+        # Check escape analysis: if borrowed string value escapes (stored in field), copy it
+        if isinstance(stmt.target, FieldLV) and stmt.value.escapes:
+            value_typ = stmt.value.typ
+            if isinstance(value_typ, Primitive) and value_typ.kind == "string":
+                value = f"arena_strdup(g_arena, {value})"
         # Check if target variable was hoisted with same type - if so, just assign
         var_name = stmt.target.name if isinstance(stmt.target, VarLV) else None
         typ = stmt.decl_typ or stmt.value.typ
@@ -1632,7 +1707,11 @@ static bool _map_contains(void *map, const char *key) {
             val_expr = stmt.value
             # Check for integer literal (including unary minus: -1)
             is_int_lit = isinstance(val_expr, IntLit)
-            if isinstance(val_expr, UnaryOp) and val_expr.op == "-" and isinstance(val_expr.operand, IntLit):
+            if (
+                isinstance(val_expr, UnaryOp)
+                and val_expr.op == "-"
+                and isinstance(val_expr.operand, IntLit)
+            ):
                 is_int_lit = True
             if is_int_lit:
                 typ = INT
@@ -1643,7 +1722,12 @@ static bool _map_contains(void *map, const char *key) {
         # Check if we're assigning struct/pointer to interface type - need cast
         # Skip "any" interface since it can hold any type and doesn't need casts
         value_typ = stmt.value.typ
-        if isinstance(typ, InterfaceRef) and typ.name != "any" and value_typ and not isinstance(value_typ, Primitive):
+        if (
+            isinstance(typ, InterfaceRef)
+            and typ.name != "any"
+            and value_typ
+            and not isinstance(value_typ, Primitive)
+        ):
             # Assigning struct pointer to interface - add cast (but not primitives)
             if isinstance(value_typ, (StructRef, Pointer)):
                 value = f"({c_type}){value}"
@@ -1651,14 +1735,22 @@ static bool _map_contains(void *map, const char *key) {
                 # Also cast interface to interface for consistency
                 value = f"({c_type}){value}"
         # Check if we're assigning interface type to concrete struct type - need cast
-        elif (value_typ and isinstance(value_typ, InterfaceRef) and
-            isinstance(typ, (Pointer, StructRef)) and not isinstance(typ, InterfaceRef)):
+        elif (
+            value_typ
+            and isinstance(value_typ, InterfaceRef)
+            and isinstance(typ, (Pointer, StructRef))
+            and not isinstance(typ, InterfaceRef)
+        ):
             # Assigning interface to concrete struct - direct cast works because
             # all Node subtypes have const char *kind as first field (same layout)
             value = f"({c_type}){value}"
         # Also check if source is a variable known to be interface-typed
-        elif (isinstance(stmt.value, Var) and stmt.value.name in self._interface_vars and
-              isinstance(typ, (Pointer, StructRef)) and not isinstance(typ, InterfaceRef)):
+        elif (
+            isinstance(stmt.value, Var)
+            and stmt.value.name in self._interface_vars
+            and isinstance(typ, (Pointer, StructRef))
+            and not isinstance(typ, InterfaceRef)
+        ):
             value = f"({c_type}){value}"
         already_declared = var_name in self._hoisted_vars if var_name else False
         is_hoisted = already_declared and self._hoisted_vars.get(var_name) == c_type
@@ -1666,12 +1758,19 @@ static bool _map_contains(void *map, const char *key) {
         # OR if var isn't tracked at all.
         # But if var IS tracked with different type AND the value is a primitive that's compatible
         # with the existing type, skip redeclaration (workaround for middleend type inference bugs)
-        needs_decl = (stmt.is_declaration and not is_hoisted) or (var_name is not None and not already_declared)
+        needs_decl = (stmt.is_declaration and not is_hoisted) or (
+            var_name is not None and not already_declared
+        )
         # Workaround: if already declared with integer type and new value is compatible, don't redeclare
-        if (already_declared and not is_hoisted and
-            self._hoisted_vars.get(var_name) in ("int64_t", "int32_t", "int", "bool") and
-            (c_type in ("int64_t", "int32_t", "int", "bool", "Any *", "void *") or
-             c_type.startswith("Any"))):
+        if (
+            already_declared
+            and not is_hoisted
+            and self._hoisted_vars.get(var_name) in ("int64_t", "int32_t", "int", "bool")
+            and (
+                c_type in ("int64_t", "int32_t", "int", "bool", "Any *", "void *")
+                or c_type.startswith("Any")
+            )
+        ):
             needs_decl = False
         if needs_decl:
             self._line(f"{c_type} {target} = {value};")
@@ -1694,15 +1793,26 @@ static bool _map_contains(void *map, const char *key) {
                 if not var_name or var_name == "_":
                     continue
                 target = self._emit_lvalue(t)
-                field_type = self._type_to_c(value_type.elements[i]) if i < len(value_type.elements) else "void *"
+                field_type = (
+                    self._type_to_c(value_type.elements[i])
+                    if i < len(value_type.elements)
+                    else "void *"
+                )
                 already_declared = var_name in self._hoisted_vars if var_name else False
                 is_hoisted = already_declared and self._hoisted_vars.get(var_name) == field_type
-                needs_decl = (stmt.is_declaration and not is_hoisted) or (var_name is not None and not already_declared)
+                needs_decl = (stmt.is_declaration and not is_hoisted) or (
+                    var_name is not None and not already_declared
+                )
                 # Same workaround as in _emit_stmt_Assign
-                if (already_declared and not is_hoisted and
-                    self._hoisted_vars.get(var_name) in ("int64_t", "int32_t", "int", "bool") and
-                    (field_type in ("int64_t", "int32_t", "int", "bool", "Any *", "void *") or
-                     field_type.startswith("Any"))):
+                if (
+                    already_declared
+                    and not is_hoisted
+                    and self._hoisted_vars.get(var_name) in ("int64_t", "int32_t", "int", "bool")
+                    and (
+                        field_type in ("int64_t", "int32_t", "int", "bool", "Any *", "void *")
+                        or field_type.startswith("Any")
+                    )
+                ):
                     needs_decl = False
                 if needs_decl:
                     self._line(f"{field_type} {target} = {tmp_name}.F{i};")
@@ -1721,7 +1831,9 @@ static bool _map_contains(void *map, const char *key) {
                 target = self._emit_lvalue(t)
                 already_declared = var_name in self._hoisted_vars if var_name else False
                 is_hoisted = already_declared and self._hoisted_vars.get(var_name) == "void *"
-                needs_decl = (stmt.is_declaration and not is_hoisted) or (var_name is not None and not already_declared)
+                needs_decl = (stmt.is_declaration and not is_hoisted) or (
+                    var_name is not None and not already_declared
+                )
                 if needs_decl:
                     self._line(f"void *{target} = ((void **)&({value}))[{i}];")
                     if var_name is not None:
@@ -1733,8 +1845,9 @@ static bool _map_contains(void *map, const char *key) {
         target = self._emit_lvalue(stmt.target)
         value = self._emit_expr(stmt.value)
         # String concatenation with += - check if value is or returns a string
-        value_is_str = (isinstance(stmt.value, StringLit) or
-                       (isinstance(stmt.value.typ, Primitive) and stmt.value.typ.kind == "string"))
+        value_is_str = isinstance(stmt.value, StringLit) or (
+            isinstance(stmt.value.typ, Primitive) and stmt.value.typ.kind == "string"
+        )
         if stmt.op == "+" and value_is_str:
             self._line(f"{target} = _str_concat(g_arena, {target}, {value});")
         else:
@@ -1754,8 +1867,12 @@ static bool _map_contains(void *map, const char *key) {
             if isinstance(actual_slice_type, Slice):
                 elem_type = actual_slice_type.element
                 arg_type = arg_expr.typ
-                if (isinstance(elem_type, Primitive) and elem_type.kind == "string" and
-                    isinstance(arg_type, Primitive) and arg_type.kind == "rune"):
+                if (
+                    isinstance(elem_type, Primitive)
+                    and elem_type.kind == "string"
+                    and isinstance(arg_type, Primitive)
+                    and arg_type.kind == "rune"
+                ):
                     arg = f"_rune_to_str(g_arena, {arg})"
             # If obj is already a pointer to slice (from function param), don't add &
             if isinstance(obj_type, Pointer) and isinstance(obj_type.target, Slice):
@@ -1905,7 +2022,9 @@ static bool _map_contains(void *map, const char *key) {
                 self._emit_stmt(s)
             self.indent -= 1
             self._line("}")
-        elif iter_type == STRING or (isinstance(iter_type, Primitive) and iter_type.kind == "string"):
+        elif iter_type == STRING or (
+            isinstance(iter_type, Primitive) and iter_type.kind == "string"
+        ):
             # Iterate over characters
             self._line(f"for (int {idx} = 0; {idx} < _rune_len({iterable}); {idx}++) {{")
             self.indent += 1
@@ -2019,7 +2138,7 @@ static bool _map_contains(void *map, const char *key) {
             return
         msg = self._emit_expr(stmt.message)
         self._line("g_parse_error = 1;")
-        self._line(f"snprintf(g_error_msg, sizeof(g_error_msg), \"%s\", {msg});")
+        self._line(f'snprintf(g_error_msg, sizeof(g_error_msg), "%s", {msg});')
         if err_val:
             self._line(f"return {err_val};")
         else:
@@ -2033,7 +2152,9 @@ static bool _map_contains(void *map, const char *key) {
         if isinstance(ret, Tuple):
             sig = self._tuple_sig(ret)
             zeros = ", ".join(
-                "0" if isinstance(e, Primitive) and e.kind in ("int", "bool", "float", "byte", "rune") else "NULL"
+                "0"
+                if isinstance(e, Primitive) and e.kind in ("int", "bool", "float", "byte", "rune")
+                else "NULL"
                 for e in ret.elements
             )
             return f"({sig}){{{zeros}}}"
@@ -2098,7 +2219,12 @@ static bool _map_contains(void *map, const char *key) {
                 if stmt.is_declaration:
                     for i, t in enumerate(stmt.targets):
                         if isinstance(t, VarLV):
-                            typ = stmt.value.typ.elements[i] if isinstance(stmt.value.typ, Tuple) and i < len(stmt.value.typ.elements) else None
+                            typ = (
+                                stmt.value.typ.elements[i]
+                                if isinstance(stmt.value.typ, Tuple)
+                                and i < len(stmt.value.typ.elements)
+                                else None
+                            )
                             result.append((t.name, typ))
             elif isinstance(stmt, VarDecl):
                 result.append((stmt.name, stmt.typ))
@@ -2174,7 +2300,9 @@ static bool _map_contains(void *map, const char *key) {
             type_name = self._type_to_c(case.typ).rstrip(" *")
             kind_str = self._struct_name_to_kind(type_name)
             kwd = "if" if first else "} else if"
-            self._line(f'{kwd} (strcmp((({type_name} *){switch_expr})->kind, "{kind_str}") == 0) {{')
+            self._line(
+                f'{kwd} (strcmp((({type_name} *){switch_expr})->kind, "{kind_str}") == 0) {{'
+            )
             self.indent += 1
             # Cast directly to concrete type (same memory, different view)
             self._line(f"{type_name} *{binding} = ({type_name} *){switch_expr};")
@@ -2192,9 +2320,7 @@ static bool _map_contains(void *map, const char *key) {
         # Note: Don't restore _hoisted_vars - let hoisted vars persist at function level
         # to avoid redeclaration of variables used across multiple TypeSwitches
 
-    def _emit_type_switch_with_primitives(
-        self, stmt: TypeSwitch, expr: str, binding: str
-    ) -> None:
+    def _emit_type_switch_with_primitives(self, stmt: TypeSwitch, expr: str, binding: str) -> None:
         """Emit a TypeSwitch that includes primitive type cases as if-else chain."""
         # If binding equals expr, we need a temp to avoid shadowing issues
         switch_expr = expr
@@ -2293,7 +2419,13 @@ static bool _map_contains(void *map, const char *key) {
             # Check if this is a nil for a Tuple type - return zeroed tuple
             if expr.typ is not None and isinstance(expr.typ, Tuple):
                 sig = self._tuple_sig(expr.typ)
-                zeros = ", ".join("0" if isinstance(e, Primitive) and e.kind in ("int", "bool", "float", "byte", "rune") else "NULL" for e in expr.typ.elements)
+                zeros = ", ".join(
+                    "0"
+                    if isinstance(e, Primitive)
+                    and e.kind in ("int", "bool", "float", "byte", "rune")
+                    else "NULL"
+                    for e in expr.typ.elements
+                )
                 return f"({sig}){{{zeros}}}"
             return "NULL"
         if isinstance(expr, Var):
@@ -2395,7 +2527,13 @@ static bool _map_contains(void *map, const char *key) {
             # Method reference
             obj_type = expr.obj.typ
             if isinstance(obj_type, (Pointer, StructRef)):
-                type_name = obj_type.name if isinstance(obj_type, StructRef) else obj_type.target.name if isinstance(obj_type.target, StructRef) else ""
+                type_name = (
+                    obj_type.name
+                    if isinstance(obj_type, StructRef)
+                    else obj_type.target.name
+                    if isinstance(obj_type.target, StructRef)
+                    else ""
+                )
                 return f"{_type_name(type_name)}_{_safe_name(expr.name)}"
         return _safe_name(expr.name)
 
@@ -2443,9 +2581,13 @@ static bool _map_contains(void *map, const char *key) {
             target_elem = target_type.element
             # Check if element types differ and need cast
             needs_cast = False
-            if isinstance(source_elem, StructRef) and isinstance(target_elem, (StructRef, InterfaceRef)):
+            if isinstance(source_elem, StructRef) and isinstance(
+                target_elem, (StructRef, InterfaceRef)
+            ):
                 needs_cast = source_elem.name != target_elem.name
-            elif isinstance(source_elem, Pointer) and isinstance(target_elem, (StructRef, InterfaceRef)):
+            elif isinstance(source_elem, Pointer) and isinstance(
+                target_elem, (StructRef, InterfaceRef)
+            ):
                 # Pointer(StructRef) -> StructRef/InterfaceRef
                 inner = source_elem.target
                 if isinstance(inner, StructRef):
@@ -2501,8 +2643,12 @@ static bool _map_contains(void *map, const char *key) {
                         arg_str = f"({param_c_type}){arg_str}"
                 # Add & when passing Slice value to Optional(Slice) parameter
                 # (matches logic in _emit_expr_StructLit)
-                elif (isinstance(param_type, Optional) and isinstance(param_type.inner, Slice) and
-                      isinstance(arg_type, Slice) and not isinstance(arg_type, (Optional, Pointer))):
+                elif (
+                    isinstance(param_type, Optional)
+                    and isinstance(param_type.inner, Slice)
+                    and isinstance(arg_type, Slice)
+                    and not isinstance(arg_type, (Optional, Pointer))
+                ):
                     arg_str = f"&{arg_str}"
             arg_list.append(arg_str)
         args = ", ".join(arg_list)
@@ -2521,13 +2667,17 @@ static bool _map_contains(void *map, const char *key) {
         if method == "startswith" and expr.args:
             # Handle tuple of prefixes: s.startswith(("a", "b")) -> (starts_with || starts_with)
             if isinstance(expr.args[0], TupleLit):
-                checks = [f"_str_startswith({obj}, {self._emit_expr(e)})" for e in expr.args[0].elements]
+                checks = [
+                    f"_str_startswith({obj}, {self._emit_expr(e)})" for e in expr.args[0].elements
+                ]
                 return "(" + " || ".join(checks) + ")"
             return f"_str_startswith({obj}, {args_expr[0]})"
         if method == "endswith" and expr.args:
             # Handle tuple of suffixes: s.endswith(("a", "b")) -> (ends_with || ends_with)
             if isinstance(expr.args[0], TupleLit):
-                checks = [f"_str_endswith({obj}, {self._emit_expr(e)})" for e in expr.args[0].elements]
+                checks = [
+                    f"_str_endswith({obj}, {self._emit_expr(e)})" for e in expr.args[0].elements
+                ]
                 return "(" + " || ".join(checks) + ")"
             return f"_str_endswith({obj}, {args_expr[0]})"
         if method == "replace" and len(expr.args) >= 2:
@@ -2566,7 +2716,7 @@ static bool _map_contains(void *map, const char *key) {
                 if val_type == BOOL:
                     return f"false /* map_get({obj}, {args_expr[0]}) */"
                 if val_type == STRING:
-                    return f"\"\" /* map_get({obj}, {args_expr[0]}) */"
+                    return f'"" /* map_get({obj}, {args_expr[0]}) */'
                 return f"NULL /* map_get({obj}, {args_expr[0]}) */"
         # Regular method call - handle struct, interface, and pointer types
         # Unwrap Optional if present
@@ -2622,11 +2772,21 @@ static bool _map_contains(void *map, const char *key) {
             right = self._emit_expr(expr.right)
             return f"({left} {op} {right})"
         # Handle single-char string comparisons with relational ops (for Python idioms like c >= "0")
-        if op in (">=", "<=", ">", "<") and expr.left.typ == STRING and isinstance(expr.right, StringLit) and len(expr.right.value) == 1:
+        if (
+            op in (">=", "<=", ">", "<")
+            and expr.left.typ == STRING
+            and isinstance(expr.right, StringLit)
+            and len(expr.right.value) == 1
+        ):
             left = self._emit_expr(expr.left)
             right = self._emit_char_literal(expr.right.value)
             return f"({left}[0] {op} {right})"
-        if op in (">=", "<=", ">", "<") and expr.right.typ == STRING and isinstance(expr.left, StringLit) and len(expr.left.value) == 1:
+        if (
+            op in (">=", "<=", ">", "<")
+            and expr.right.typ == STRING
+            and isinstance(expr.left, StringLit)
+            and len(expr.left.value) == 1
+        ):
             left = self._emit_char_literal(expr.left.value)
             right = self._emit_expr(expr.right)
             return f"({left} {op} {right}[0])"
@@ -2845,8 +3005,12 @@ static bool _map_contains(void *map, const char *key) {
                     else:
                         val_type = field_val.typ
                         # Add & when passing Slice value to Optional(Slice) parameter
-                        if (isinstance(ftyp, Optional) and isinstance(ftyp.inner, Slice) and
-                            isinstance(val_type, Slice) and not isinstance(val_type, (Optional, Pointer))):
+                        if (
+                            isinstance(ftyp, Optional)
+                            and isinstance(ftyp.inner, Slice)
+                            and isinstance(val_type, Slice)
+                            and not isinstance(val_type, (Optional, Pointer))
+                        ):
                             # Check if this field has a temp var (for rvalues)
                             temp_result = self._get_rvalue_temp(name, fname)
                             if temp_result is not None:
@@ -2857,8 +3021,11 @@ static bool _map_contains(void *map, const char *key) {
                                 val_str = f"&{self._emit_expr(field_val)}"
                         # Cast when passing Slice(StructA) to Slice(StructB/Interface)
                         # This handles cases like list[HereDoc] -> list[Node] where HereDoc implements Node
-                        elif (isinstance(ftyp, Slice) and isinstance(val_type, Slice) and
-                              self._needs_slice_cast(val_type, ftyp)):
+                        elif (
+                            isinstance(ftyp, Slice)
+                            and isinstance(val_type, Slice)
+                            and self._needs_slice_cast(val_type, ftyp)
+                        ):
                             val_str = self._emit_expr(field_val)
                             target_vec = self._type_to_c(ftyp)
                             val_str = f"*({target_vec} *)&{val_str}"
@@ -2928,18 +3095,26 @@ static bool _map_contains(void *map, const char *key) {
                         field_val = expr.fields[fname]
                         val_type = field_val.typ
                         # Check if this field needs &: Optional(Slice) param with Slice value
-                        if (isinstance(ftyp, Optional) and isinstance(ftyp.inner, Slice) and
-                            isinstance(val_type, Slice) and not isinstance(val_type, (Optional, Pointer))):
+                        if (
+                            isinstance(ftyp, Optional)
+                            and isinstance(ftyp.inner, Slice)
+                            and isinstance(val_type, Slice)
+                            and not isinstance(val_type, (Optional, Pointer))
+                        ):
                             # If it's an rvalue, emit heap-allocated temp to avoid stack-use-after-return
                             if not self._is_lvalue(field_val):
                                 tmp_name = self._temp_name("_tmp_slice")
                                 vec_type = self._type_to_c(val_type)
                                 val_str = self._emit_expr(field_val)
                                 # Allocate Vec on heap (arena) to outlive current stack frame
-                                self._line(f"{vec_type} *{tmp_name} = ({vec_type} *)arena_alloc(g_arena, sizeof({vec_type}));")
+                                self._line(
+                                    f"{vec_type} *{tmp_name} = ({vec_type} *)arena_alloc(g_arena, sizeof({vec_type}));"
+                                )
                                 self._line(f"*{tmp_name} = {val_str};")
                                 # Store tmp_name directly (it's already a pointer)
-                                self._rvalue_temps.append((name, fname, tmp_name, True))  # True = already a pointer
+                                self._rvalue_temps.append(
+                                    (name, fname, tmp_name, True)
+                                )  # True = already a pointer
                         # Recurse into nested StructLits
                         self._emit_rvalue_temps(field_val)
             else:
@@ -2986,9 +3161,13 @@ static bool _map_contains(void *map, const char *key) {
                 target_iface = None
                 if isinstance(expected_type, InterfaceRef):
                     target_iface = expected_type.name
-                elif isinstance(expected_type, Optional) and isinstance(expected_type.inner, InterfaceRef):
+                elif isinstance(expected_type, Optional) and isinstance(
+                    expected_type.inner, InterfaceRef
+                ):
                     target_iface = expected_type.inner.name
-                elif isinstance(expected_type, Pointer) and isinstance(expected_type.target, InterfaceRef):
+                elif isinstance(expected_type, Pointer) and isinstance(
+                    expected_type.target, InterfaceRef
+                ):
                     target_iface = expected_type.target.name
                 # Get the struct type from actual if it's wrapped in Pointer
                 source_is_struct = False
@@ -2998,7 +3177,9 @@ static bool _map_contains(void *map, const char *key) {
                     source_is_struct = True
                 elif isinstance(actual_type, InterfaceRef):
                     source_is_struct = True  # Also cast interface to interface (for consistency)
-                elif isinstance(actual_type, Optional) and isinstance(actual_type.inner, InterfaceRef):
+                elif isinstance(actual_type, Optional) and isinstance(
+                    actual_type.inner, InterfaceRef
+                ):
                     source_is_struct = True
                 # Cast if needed
                 if target_iface and source_is_struct:

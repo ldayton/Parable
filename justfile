@@ -90,8 +90,8 @@ backend-transpile backend:
             uv run --directory transpiler python -m src.tongues --target php < "$(pwd)/src/parable.py" > dist/php/parable.php
             ;;
         python)
-            mkdir -p dist/python
-            uv run --directory transpiler python -m src.tongues --target python < "$(pwd)/src/parable.py" > dist/python/parable.py
+            mkdir -p dist/python/src/parable
+            uv run --directory transpiler python -m src.tongues --target python < "$(pwd)/src/parable.py" > dist/python/src/parable/parable.py
             ;;
         ruby)
             mkdir -p dist/ruby
@@ -153,7 +153,7 @@ backend-test backend:
             ;;
         python)
             just backend-transpile python
-            PYTHONPATH=dist/python python3 tests/bin/run-tests.py
+            uv run --directory dist/python parable-test "$tests_abs"
             ;;
         ruby)
             just backend-transpile ruby

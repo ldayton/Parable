@@ -43,7 +43,8 @@ prep backend:
             luac -p /tmp/transpile.lua
             ;;
         python)
-            uv run python -m src.tongues --target python < {{source}} > /tmp/transpile.py
+            mkdir -p ../dist/python/src/parable
+            uv run python -m src.tongues --target python < {{source}} > ../dist/python/src/parable/parable.py
             ;;
         typescript)
             rm -rf /tmp/transpile-ts && mkdir -p /tmp/transpile-ts/src
@@ -100,9 +101,8 @@ test backend:
             lua -l /tmp/transpile-test-lua/parable {{tests}}/bin/run-tests.lua {{tests}}
             ;;
         python)
-            rm -rf /tmp/transpile-test && mkdir /tmp/transpile-test
-            uv run python -m src.tongues --target python < {{source}} > /tmp/transpile-test/parable.py
-            PYTHONPATH=/tmp/transpile-test python3 {{tests}}/bin/run-tests.py {{tests}}
+            just prep python
+            uv run --directory ../dist/python parable-test "$tests_abs"
             ;;
         typescript)
             just prep typescript

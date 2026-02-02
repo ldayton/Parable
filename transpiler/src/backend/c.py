@@ -142,12 +142,17 @@ _C_RESERVED = frozenset({
 })
 
 
+
 def _safe_name(name: str) -> str:
-    """Convert to snake_case and escape C reserved words."""
+    """Convert to snake_case and escape C reserved words, preserving leading underscores."""
+    # Preserve leading underscore (important for private methods like _parse_compound_command)
+    prefix = ""
+    if name.startswith("_"):
+        prefix = "_"
     result = to_snake(name)
     if result in _C_RESERVED:
-        return result + "_"
-    return result
+        return prefix + result + "_"
+    return prefix + result
 
 
 def _type_name(name: str) -> str:
@@ -758,50 +763,78 @@ typedef struct Any {
     void *data;
 } Any;
 
-// === Arena allocator ===
-typedef struct Arena {
+// === Arena allocator (chunked, never reallocates) ===
+typedef struct ArenaChunk {
+    struct ArenaChunk *next;
     char *base;
     char *ptr;
     size_t cap;
+} ArenaChunk;
+
+typedef struct Arena {
+    ArenaChunk *head;    // first chunk (for freeing)
+    ArenaChunk *current; // current allocation chunk
+    size_t chunk_size;   // default size for new chunks
 } Arena;
 
 static Arena *g_arena = NULL;
 static bool g_initialized = false;
 
+static ArenaChunk *arena_chunk_new(size_t cap) {
+    ArenaChunk *c = (ArenaChunk *)malloc(sizeof(ArenaChunk));
+    c->base = (char *)malloc(cap);
+    c->ptr = c->base;
+    c->cap = cap;
+    c->next = NULL;
+    return c;
+}
+
 static Arena *arena_new(size_t cap) {
     Arena *a = (Arena *)malloc(sizeof(Arena));
-    a->base = (char *)malloc(cap);
-    a->ptr = a->base;
-    a->cap = cap;
+    a->head = arena_chunk_new(cap);
+    a->current = a->head;
+    a->chunk_size = cap;
     return a;
 }
 
 static void *arena_alloc(Arena *a, size_t size) {
     size = (size + 7) & ~7;  // 8-byte align
-    if ((size_t)(a->ptr - a->base) + size > a->cap) {
-        // Grow arena
-        size_t used = a->ptr - a->base;
-        size_t new_cap = a->cap * 2;
-        while (used + size > new_cap) new_cap *= 2;
-        char *new_base = (char *)realloc(a->base, new_cap);
-        a->base = new_base;
-        a->ptr = new_base + used;
-        a->cap = new_cap;
+    ArenaChunk *c = a->current;
+    if ((size_t)(c->ptr - c->base) + size > c->cap) {
+        // Need new chunk - pick size that fits the allocation
+        size_t new_cap = a->chunk_size;
+        while (new_cap < size) new_cap *= 2;
+        ArenaChunk *new_chunk = arena_chunk_new(new_cap);
+        c->next = new_chunk;
+        a->current = new_chunk;
+        c = new_chunk;
     }
-    void *result = a->ptr;
-    a->ptr += size;
+    void *result = c->ptr;
+    c->ptr += size;
     return result;
 }
 
 static void arena_free(Arena *a) {
     if (a) {
-        free(a->base);
+        ArenaChunk *c = a->head;
+        while (c) {
+            ArenaChunk *next = c->next;
+            free(c->base);
+            free(c);
+            c = next;
+        }
         free(a);
     }
 }
 
 static void arena_reset(Arena *a) {
-    a->ptr = a->base;
+    // Reset all chunks to empty and set current back to head
+    ArenaChunk *c = a->head;
+    while (c) {
+        c->ptr = c->base;
+        c = c->next;
+    }
+    a->current = a->head;
 }
 
 static char *arena_strdup(Arena *a, const char *s) {
@@ -873,7 +906,7 @@ static char *_char_at_str(Arena *a, const char *s, int idx) {
     return arena_strdup(a, buf);
 }
 
-static char *_substring(Arena *a, const char *s, int start, int end) {
+static char *__c_substring(Arena *a, const char *s, int start, int end) {
     if (!s || start < 0) start = 0;
     if (end < start) return arena_strdup(a, "");
     const unsigned char *u = (const unsigned char *)s;
@@ -1264,12 +1297,16 @@ static bool _map_contains(void *map, const char *key) {
             self._emit_struct(struct)
 
     def _emit_interface(self, iface: InterfaceDef) -> None:
-        """Emit interface as a struct with kind tag and data pointer."""
+        """Emit interface as a struct with kind tag.
+
+        For Node interfaces, we use const char *kind as the first field so that
+        concrete Node subclass structs can be directly cast to Node * - they all
+        have 'kind' as their first field with the same type.
+        """
         self._line(f"// Interface: {iface.name}")
         self._line(f"struct {_type_name(iface.name)} {{")
         self.indent += 1
-        self._line("int kind;")
-        self._line("void *data;")
+        self._line("const char * kind;")  # Must match concrete struct layout
         self.indent -= 1
         self._line("};")
         self._line("")
@@ -1281,7 +1318,21 @@ static bool _map_contains(void *map, const char *key) {
         # Embedded type for exception inheritance
         if struct.embedded_type:
             self._line(f"{_type_name(struct.embedded_type)} base;")
+        # For Node subclasses, emit 'kind' field first so casting to Node * works
+        # (Node interface has const char *kind as first field)
+        kind_field = None
+        other_fields = []
         for fld in struct.fields:
+            if fld.name == "kind":
+                kind_field = fld
+            else:
+                other_fields.append(fld)
+        # Emit kind first if present (Node subclasses)
+        if kind_field:
+            c_type = self._type_to_c(kind_field.typ)
+            self._line(f"{c_type} kind;")
+        # Emit other fields
+        for fld in other_fields:
             c_type = self._type_to_c(fld.typ)
             c_name = _safe_name(fld.name)
             self._line(f"{c_type} {c_name};")
@@ -1294,6 +1345,7 @@ static bool _map_contains(void *map, const char *key) {
     def _emit_struct_constructor(self, struct: Struct) -> None:
         """Emit constructor function for struct."""
         name = _type_name(struct.name)
+        # Parameters stay in original order (to match call sites)
         params = []
         for fld in struct.fields:
             c_type = self._type_to_c(fld.typ)
@@ -1303,6 +1355,7 @@ static bool _map_contains(void *map, const char *key) {
         self._line(f"static {name} *{name}_new({param_str}) {{")
         self.indent += 1
         self._line(f"{name} *self = ({name} *)arena_alloc(g_arena, sizeof({name}));")
+        # Assign fields (order doesn't matter for assignment)
         for fld in struct.fields:
             c_name = _safe_name(fld.name)
             self._line(f"self->{c_name} = {c_name};")
@@ -1569,14 +1622,13 @@ static bool _map_contains(void *map, const char *key) {
         # Check if we're assigning interface type to concrete struct type - need cast
         elif (value_typ and isinstance(value_typ, InterfaceRef) and
             isinstance(typ, (Pointer, StructRef)) and not isinstance(typ, InterfaceRef)):
-            # Assigning interface to concrete struct - need ->data cast
-            target_type = typ.target if isinstance(typ, Pointer) else typ
-            if isinstance(target_type, StructRef):
-                value = f"({c_type})({value}->data)"
+            # Assigning interface to concrete struct - direct cast works because
+            # all Node subtypes have const char *kind as first field (same layout)
+            value = f"({c_type}){value}"
         # Also check if source is a variable known to be interface-typed
         elif (isinstance(stmt.value, Var) and stmt.value.name in self._interface_vars and
               isinstance(typ, (Pointer, StructRef)) and not isinstance(typ, InterfaceRef)):
-            value = f"({c_type})({value}->data)"
+            value = f"({c_type}){value}"
         is_hoisted = (var_name in self._hoisted_vars and
                       self._hoisted_vars.get(var_name) == c_type) if var_name else False
         # Emit declaration if var was hoisted, or if middleend says is_declaration,
@@ -2065,29 +2117,33 @@ static bool _map_contains(void *map, const char *key) {
         if has_primitive:
             self._emit_type_switch_with_primitives(stmt, expr, binding)
             return
-        # Capture data pointer before switch to avoid shadowing issues
-        tmp_data = self._temp_name("_data")
-        self._line(f"void *{tmp_data} = {expr}->data;")
-        # Type switches in C use kind field
-        self._line(f"switch ({expr}->kind) {{")
+        # Type switches in C use string comparison on kind field (all Node subtypes
+        # have const char *kind as first field, allowing direct casting)
+        # If binding equals expr, we need a temp to avoid shadowing issues
+        switch_expr = expr
+        if binding == expr:
+            tmp = self._temp_name("_tsexpr")
+            self._line(f"void *{tmp} = {expr};")
+            switch_expr = tmp
+        first = True
         for case in stmt.cases:
             type_name = self._type_to_c(case.typ).rstrip(" *")
-            self._line(f"case KIND_{type_name.upper()}: {{")
+            kind_str = self._struct_name_to_kind(type_name)
+            kwd = "if" if first else "} else if"
+            self._line(f'{kwd} (strcmp((({type_name} *){switch_expr})->kind, "{kind_str}") == 0) {{')
             self.indent += 1
-            # Cast to concrete type using captured data pointer
-            self._line(f"{type_name} *{binding} = ({type_name} *){tmp_data};")
+            # Cast directly to concrete type (same memory, different view)
+            self._line(f"{type_name} *{binding} = ({type_name} *){switch_expr};")
             for s in case.body:
                 self._emit_stmt(s)
-            self._line("break;")
             self.indent -= 1
-            self._line("}")
+            first = False
         if stmt.default:
-            self._line("default: {")
+            self._line("} else {")
             self.indent += 1
             for s in stmt.default:
                 self._emit_stmt(s)
             self.indent -= 1
-            self._line("}")
         self._line("}")
         # Note: Don't restore _hoisted_vars - let hoisted vars persist at function level
         # to avoid redeclaration of variables used across multiple TypeSwitches
@@ -2096,28 +2152,34 @@ static bool _map_contains(void *map, const char *key) {
         self, stmt: TypeSwitch, expr: str, binding: str
     ) -> None:
         """Emit a TypeSwitch that includes primitive type cases as if-else chain."""
-        # Capture data pointer to avoid shadowing issues when binding has same name as expr
-        tmp_data = self._temp_name("_tsdata")
-        self._line(f"void *{tmp_data} = {expr}->data;")
+        # If binding equals expr, we need a temp to avoid shadowing issues
+        switch_expr = expr
+        if binding == expr:
+            tmp = self._temp_name("_tsexpr")
+            self._line(f"void *{tmp} = {expr};")
+            switch_expr = tmp
         first = True
         for case in stmt.cases:
             if isinstance(case.typ, Primitive):
                 if case.typ.kind == "string":
-                    cond = f"{expr}->kind == KIND_STRING"
+                    cond = f'strcmp(((Node *){switch_expr})->kind, "string") == 0'
                     kwd = "if" if first else "} else if"
                     self._line(f"{kwd} ({cond}) {{")
                     self.indent += 1
-                    # For string case, cast data to const char*
-                    self._line(f"const char *{binding} = (const char *){tmp_data};")
+                    # For string case, we need special handling
+                    # The expr is actually a const char * wrapped in an Any
+                    self._line(f"const char *{binding} = (const char *){switch_expr};")
                 else:
                     raise NotImplementedError("primitive type in TypeSwitch")
             else:
                 type_name = self._type_to_c(case.typ).rstrip(" *")
-                cond = f"{expr}->kind == KIND_{type_name.upper()}"
+                kind_str = self._struct_name_to_kind(type_name)
+                cond = f'strcmp((({type_name} *){switch_expr})->kind, "{kind_str}") == 0'
                 kwd = "if" if first else "} else if"
                 self._line(f"{kwd} ({cond}) {{")
                 self.indent += 1
-                self._line(f"{type_name} *{binding} = ({type_name} *){tmp_data};")
+                # Cast directly to concrete type
+                self._line(f"{type_name} *{binding} = ({type_name} *){switch_expr};")
             first = False
             for s in case.body:
                 self._emit_stmt(s)
@@ -2271,11 +2333,11 @@ static bool _map_contains(void *map, const char *key) {
         if isinstance(obj_type, Tuple) and expr.field.startswith("F"):
             return f"{obj}.{expr.field}"
         field = _safe_name(expr.field)
-        # Handle interface types - need special handling for kind
+        # Handle interface types - kind is const char * first field
         if isinstance(obj_type, InterfaceRef):
-            # For 'kind' field, return string representation using helper
+            # For 'kind' field, return directly (it's already const char *)
             if field == "kind":
-                return f"_kind_to_str({obj}->kind)"
+                return f"{obj}->kind"
             # For other fields, we can't access them on the interface directly
             # The code should use type switches or casts first
             return f"{obj}->{field}"
@@ -2320,7 +2382,7 @@ static bool _map_contains(void *map, const char *key) {
         if obj_type == STRING:
             low = self._emit_expr(expr.low) if expr.low else "0"
             high = self._emit_expr(expr.high) if expr.high else f"_rune_len({obj})"
-            return f"_substring(g_arena, {obj}, {low}, {high})"
+            return f"__c_substring(g_arena, {obj}, {low}, {high})"
         # Slice of slice - simplified
         low = self._emit_expr(expr.low) if expr.low else "0"
         high = self._emit_expr(expr.high) if expr.high else f"{obj}.len"
@@ -2661,23 +2723,15 @@ static bool _map_contains(void *map, const char *key) {
     def _emit_expr_TypeAssert(self, expr: TypeAssert) -> str:
         inner = self._emit_expr(expr.expr)
         asserted = self._type_to_c(expr.asserted)
-        # When asserting from interface to another interface, just cast directly
-        # (both are already Node* pointers, no ->data needed)
-        if isinstance(expr.asserted, InterfaceRef):
-            return f"(({asserted})({inner}))"
-        # When asserting from interface to concrete type, access ->data
-        # Use extra parens to ensure correct operator precedence for field access
-        if isinstance(expr.expr.typ, InterfaceRef):
-            return f"(({asserted})({inner}->data))"
-        # If the types already match, just cast (needed when IR type is already concrete
-        # but TypeAssert is still present for type narrowing in Python)
+        # All Node subtypes have const char *kind as first field, so direct casting works
         # Double parens ensure proper precedence when followed by -> access
         return f"(({asserted})({inner}))"
 
     def _emit_expr_IsType(self, expr: IsType) -> str:
         inner = self._emit_expr(expr.expr)
         tested = self._type_to_c(expr.tested_type).rstrip(" *")
-        return f"({inner}->kind == KIND_{tested.upper()})"
+        kind_str = self._struct_name_to_kind(tested)
+        return f'(strcmp({inner}->kind, "{kind_str}") == 0)'
 
     def _emit_expr_IsNil(self, expr: IsNil) -> str:
         inner = self._emit_expr(expr.expr)
@@ -2709,11 +2763,13 @@ static bool _map_contains(void *map, const char *key) {
         vec_type = self._type_to_c(Slice(expr.element_type))
         if len(expr.elements) == 0:
             return f"({vec_type}){{NULL, 0, 0}}"
-        # Non-empty slice - need compound literal
-        elements = ", ".join(self._emit_expr(e) for e in expr.elements)
+        # Non-empty slice - allocate array on arena using GCC statement expression
+        # This avoids stack-allocated compound literals that become invalid after function return
         elem_type = self._type_to_c(expr.element_type)
         n = len(expr.elements)
-        return f"({vec_type}){{({elem_type}[]){{ {elements} }}, {n}, {n}}}"
+        elements = [self._emit_expr(e) for e in expr.elements]
+        assigns = "; ".join(f"_slc[{i}] = {e}" for i, e in enumerate(elements))
+        return f"({{ {elem_type} *_slc = ({elem_type} *)arena_alloc(g_arena, {n} * sizeof({elem_type})); {assigns}; ({vec_type}){{_slc, {n}, {n}}}; }})"
 
     def _emit_expr_MapLit(self, expr: MapLit) -> str:
         # Maps are void* for now - return NULL
@@ -3106,30 +3162,41 @@ static bool _map_contains(void *map, const char *key) {
                 param_str = ", ".join(params)
                 self._line(f"static {ret_type} {method_name}({param_str}) {{")
                 self.indent += 1
-                # Generate switch on kind field
-                self._line("switch (self->kind) {")
-                for i, impl in enumerate(impl_structs):
-                    self._line(f"case {i + 1}:")
+                # Generate if-else chain on kind string field
+                # (all Node subtypes have const char *kind as first field)
+                first = True
+                for impl in impl_structs:
+                    kind_str = self._struct_name_to_kind(impl)
+                    kwd = "if" if first else "} else if"
+                    self._line(f'{kwd} (strcmp(self->kind, "{kind_str}") == 0) {{')
                     self.indent += 1
-                    # Cast data to concrete type and call its method
+                    # Cast directly to concrete type and call its method
                     concrete_method = f"{_type_name(impl)}_{_safe_name(method.name)}"
-                    call_args = [f"({_type_name(impl)} *)self->data"] + param_names[1:]
+                    call_args = [f"({_type_name(impl)} *)self"] + param_names[1:]
                     if ret_type != "void":
                         self._line(f"return {concrete_method}({', '.join(call_args)});")
                     else:
                         self._line(f"{concrete_method}({', '.join(call_args)});")
-                        self._line("return;")
                     self.indent -= 1
-                self._line("default:")
-                self.indent += 1
-                if ret_type == "void":
-                    self._line("return;")
-                elif ret_type.endswith("*"):
-                    self._line("return NULL;")
+                    first = True  # Keep first=True since we're using if-else, not switch
+                    first = False
+                # Default case
+                if first:
+                    # No implementations - just return default
+                    if ret_type == "void":
+                        pass
+                    elif ret_type.endswith("*"):
+                        self._line("return NULL;")
+                    else:
+                        self._line("return 0;")
                 else:
-                    self._line("return 0;")
-                self.indent -= 1
-                self._line("}")
+                    self._line("}")
+                    # For void return, no need for else; for other returns, return default
+                    if ret_type != "void":
+                        if ret_type.endswith("*"):
+                            self._line("return NULL;")
+                        else:
+                            self._line("return 0;")
                 self.indent -= 1
                 self._line("}")
                 self._line("")

@@ -61,7 +61,7 @@ def extract_func_info(
     for i, arg in enumerate(non_self_args):
         annotation = arg.get("annotation")
         py_type = callbacks.annotation_to_str(annotation) if annotation else ""
-        typ = callbacks.py_type_to_ir(py_type, False) if py_type else InterfaceRef("any")
+        typ = callbacks.py_type_to_ir(py_type, True) if py_type else InterfaceRef("any")
         # Auto-wrap mutated slice params with Pointer
         if arg.get("arg") in mutated_params and isinstance(typ, Slice):
             typ = Pointer(typ)

@@ -1639,7 +1639,6 @@ class DartBackend:
         return f"({inner_str} as {dart_type})"
 
     def _format_string(self, template: str, args: list[Expr]) -> str:
-        import re
         # Escape the template FIRST (before adding interpolations),
         # so we don't escape the ${} we intentionally add
         escaped_template = escape_string(template)

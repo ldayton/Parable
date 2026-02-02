@@ -4,7 +4,7 @@ transpiler_image := "parable-transpiler"
 cc := env("CC", "gcc")
 cflags := "-Wall -Wextra -O2 -std=c11"
 
-# Build the transpiler Docker image
+# Build the transpiler Docker image (code is mounted at runtime, not baked in)
 [private]
 docker-build-transpiler transpiler_dir:
     docker build -t {{transpiler_image}} "{{transpiler_dir}}"
@@ -17,6 +17,7 @@ docker-build:
 # Transpile source to parable.c (in Docker)
 transpile source_file transpiler_dir: (docker-build-transpiler transpiler_dir)
     docker run --rm \
+        -v "{{transpiler_dir}}:/transpiler:ro" \
         -v "{{source_file}}:/source.py:ro" \
         -v "{{justfile_directory()}}:/output" \
         {{transpiler_image}} c /source.py /output/parable.c

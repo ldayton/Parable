@@ -4,8 +4,8 @@ set shell := ["bash", "-o", "pipefail", "-cu"]
 source := "../src/parable.py"
 tests := "../tests"
 dist := "../dist/go"
-backends := "c csharp go java javascript lua php perl python ruby typescript"
-testable := "go java javascript lua perl php python ruby typescript"
+backends := "c csharp dart go java javascript lua php perl python ruby typescript"
+testable := "dart csharp go java javascript lua perl php python ruby typescript"
 
 # Transpile source to stdout
 emit backend:
@@ -22,6 +22,9 @@ prep backend:
             ;;
         csharp)
             just -f ../dist/csharp/justfile build "$(pwd)/{{source}}" "$(pwd)"
+            ;;
+        dart)
+            just -f ../dist/dart/justfile build "$(pwd)/{{source}}" "$(pwd)"
             ;;
         go)
             just -f ../dist/go/justfile build "$(pwd)/{{source}}" "$(pwd)"
@@ -65,6 +68,9 @@ test backend:
     case "{{backend}}" in
         c)
             just -f ../dist/c/justfile check "$(pwd)/{{source}}" "$(pwd)" "$tests_abs"
+            ;;
+        dart)
+            just -f ../dist/dart/justfile check "$(pwd)/{{source}}" "$(pwd)" "$tests_abs"
             ;;
         go)
             just -f ../dist/go/justfile check "$(pwd)/{{source}}" "$(pwd)" "$tests_abs"

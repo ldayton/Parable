@@ -37,9 +37,9 @@ The transpiler supports these target languages:
 | Ruby       | Ruby 3.2     | Done   |
 | Typescript | tsc 5.3      | Done   |
 | C          | GCC 13       | WIP    |
-| Dart       | Dart 3.2     | Future |
+| Dart       | Dart 3.2     | WIP    |
+| Swift      | Swift 5.9    | WIP    |
 | Rust       | Rust 1.75    | Future |
-| Swift      | Swift 5.9    | Future |
 | Zig        | Zig 0.11     | Future |
 
 Output code quality is a work in progress. Currently the transpiler prioritizes correctness over readability; generated code may not yet match hand-written idioms.
@@ -145,6 +145,12 @@ print(ast[0].to_sexp())
 src/
 └── parable.py                   # Single-file Python parser
 
+transpiler/                      # Python → multi-language transpiler
+├── src/frontend/                # Parser and type inference
+├── src/middleend/               # Analysis passes
+└── src/backend/                 # Code generators
+├── src/ir.py                    # Intermediate representation
+
 tests/
 ├── bin/                         # Test runners + corpus utilities
 ├── parable/                     # Parable test cases
@@ -153,20 +159,7 @@ tests/
 tools/
 └── fuzzer/                      # Differential fuzzers
 
-transpiler/                      # Python → multi-language transpiler
-├── src/frontend/                # Parser and type inference
-├── src/middleend/               # Analysis passes
-└── src/backend/                 # Code generators
-
 dist/                            # Transpiled outputs
-├── csharp/Parable.cs
-├── go/parable.go
-├── java/Parable.java
-├── perl/parable.pl
-├── php/parable.php
-├── python/parable.py
-├── ruby/parable.rb
-└── ts/parable.ts
 ```
 
 ## License

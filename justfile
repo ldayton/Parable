@@ -3,7 +3,7 @@ set shell := ["bash", "-o", "pipefail", "-cu"]
 # --- Configuration ---
 project := "parable"
 run_id := `head -c 16 /dev/urandom | xxd -p`
-backends := "csharp go java javascript lua perl php python ruby typescript"
+backends := "csharp dart go java javascript lua perl php python ruby typescript"
 
 # --- Helpers ---
 

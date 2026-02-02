@@ -415,6 +415,10 @@ class DartBackend:
         # Make fields nullable if Optional type, otherwise use late
         if isinstance(fld.typ, Optional):
             self._line(f"{typ} {name};")
+        elif isinstance(fld.typ, InterfaceRef):
+            # Interface fields use dynamic to allow null (Python often passes None
+            # even without Optional annotation, and code may check for null)
+            self._line(f"dynamic {name};")
         else:
             self._line(f"late {typ} {name};")
 
@@ -1590,6 +1594,17 @@ class DartBackend:
             if to_type.kind == "int":
                 if isinstance(inner_type, Primitive) and inner_type.kind == "float":
                     return f"({inner_str}).toInt()"
+                # When casting from Index of a string to int, need codeUnitAt
+                # because Dart's string[i] returns String, not int
+                if isinstance(inner, Index):
+                    obj_type = inner.obj.typ
+                    if isinstance(obj_type, Primitive) and obj_type.kind == "string":
+                        obj_str = self._expr(inner.obj)
+                        idx_str = self._expr(inner.index)
+                        return f"{obj_str}.codeUnitAt({idx_str})"
+                # When inner is a string (single char), use codeUnitAt(0)
+                if isinstance(inner_type, Primitive) and inner_type.kind == "string":
+                    return f"({inner_str}).codeUnitAt(0)"
                 return f"({inner_str} as int)"
             if to_type.kind == "float":
                 if isinstance(inner_type, Primitive) and inner_type.kind == "int":
@@ -1616,12 +1631,15 @@ class DartBackend:
         return f"({inner_str} as {dart_type})"
 
     def _format_string(self, template: str, args: list[Expr]) -> str:
-        from re import sub as re_sub
-        result = template
+        import re
+        # Escape the template FIRST (before adding interpolations),
+        # so we don't escape the ${} we intentionally add
+        escaped_template = escape_string(template)
+        result = escaped_template
         # Handle {0}, {1} style placeholders
         for i, arg in enumerate(args):
             if isinstance(arg, StringLit):
-                val = arg.value.replace("\\", "\\\\").replace("$", r"\$")
+                val = arg.value.replace("\\", "\\\\").replace("$", r"\$").replace('"', r'\"')
                 result = result.replace(f"{{{i}}}", val, 1)
             else:
                 result = result.replace(f"{{{i}}}", f"${{{self._expr(arg)}}}", 1)
@@ -1633,12 +1651,11 @@ class DartBackend:
             arg = args[arg_idx]
             arg_idx += 1
             if isinstance(arg, StringLit):
-                val = arg.value.replace("\\", "\\\\").replace("$", r"\$")
+                val = arg.value.replace("\\", "\\\\").replace("$", r"\$").replace('"', r'\"')
                 result = result.replace("%v", val, 1)
             else:
                 result = result.replace("%v", f"${{{self._expr(arg)}}}", 1)
-        escaped = escape_string(result)
-        return f'"{escaped}"'
+        return f'"{result}"'
 
     def _struct_lit(self, struct_name: str, fields: dict[str, Expr], embedded_value: Expr | None) -> str:
         safe_name = _safe_pascal(struct_name)

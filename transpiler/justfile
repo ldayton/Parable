@@ -26,8 +26,7 @@ prep backend:
             dotnet build ../dist/csharp/csharp.csproj -c Release -v q --nologo
             ;;
         go)
-            uv run python -m src.tongues --target go < {{source}} > /tmp/transpile-ir.go
-            gofmt /tmp/transpile-ir.go > {{dist}}/parable.go
+            just -f ../dist/go/justfile transpile "$(pwd)/{{source}}" "$(pwd)"
             go build -C {{dist}} -o /dev/null .
             ;;
         java)
@@ -84,8 +83,7 @@ test backend:
             /tmp/transpile-test-c/run_tests "$tests_abs"
             ;;
         go)
-            just prep go
-            go run -C {{dist}} ./cmd/run-tests "$tests_abs"
+            just -f ../dist/go/justfile check "$(pwd)/{{source}}" "$(pwd)" "$tests_abs"
             ;;
         java)
             ../dist/java/gradlew -p ../dist/java run --quiet -PsourceFile="$(pwd)/../src/parable.py" -PtranspilerDir="$(pwd)" --args="$tests_abs"

@@ -66,9 +66,7 @@ backend-transpile backend:
             uv run --directory transpiler python -m src.tongues --target csharp < "$(pwd)/src/parable.py" > dist/csharp/Parable.cs
             ;;
         go)
-            out="dist/go/parable.go"
-            uv run --directory transpiler python -m src.tongues --target go < "$(pwd)/src/parable.py" > /tmp/parable-ir.go
-            gofmt /tmp/parable-ir.go > "$out"
+            just -f dist/go/justfile transpile "$(pwd)/src/parable.py" "$(pwd)/transpiler"
             ;;
         java)
             dist/java/gradlew -p dist/java transpile --quiet -PsourceFile="$(pwd)/src/parable.py" -PtranspilerDir="$(pwd)/transpiler"
@@ -125,9 +123,7 @@ backend-test backend:
             dotnet dist/csharp/bin/csharp.dll "$tests_abs"
             ;;
         go)
-            just backend-transpile go
-            go build -C dist/go -o /dev/null .
-            go run -C dist/go ./cmd/run-tests "$tests_abs"
+            just -f dist/go/justfile check "$(pwd)/src/parable.py" "$(pwd)/transpiler" "$tests_abs"
             ;;
         java)
             dist/java/gradlew -p dist/java run --quiet -PsourceFile="$(pwd)/src/parable.py" -PtranspilerDir="$(pwd)/transpiler" --args="$tests_abs"
@@ -290,7 +286,7 @@ backend-coverage backend:
         go)
             rm -rf /tmp/parable-coverage-go-raw
             mkdir -p /tmp/parable-coverage-go-raw
-            just backend-transpile go
+            just -f dist/go/justfile transpile "$(pwd)/src/parable.py" "$(pwd)/transpiler"
             GOCOVERDIR=/tmp/parable-coverage-go-raw go run -C dist/go -cover ./cmd/run-tests "$(pwd)/tests"
             go tool covdata textfmt -i=/tmp/parable-coverage-go-raw -o=/tmp/parable-coverage-go.txt
             cd dist/go && go tool cover -html=/tmp/parable-coverage-go.txt -o=/tmp/parable-coverage-go.html

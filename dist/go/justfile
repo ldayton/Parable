@@ -1,0 +1,12 @@
+# Transpile source to parable.go
+transpile source_file transpiler_dir:
+    uv run --directory "{{transpiler_dir}}" python -m src.tongues --target go < "{{source_file}}" | gofmt > parable.go
+
+# Build the module
+build:
+    go build -o /dev/null .
+
+# Run tests
+check source_file transpiler_dir tests_dir:
+    just transpile "{{source_file}}" "{{transpiler_dir}}"
+    go run ./cmd/run-tests "{{tests_dir}}"

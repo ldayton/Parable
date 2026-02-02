@@ -1,1 +1,0 @@
-../../dist/python/src/parable/run_tests.py

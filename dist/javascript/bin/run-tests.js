@@ -4,32 +4,106 @@ const fs = require('fs');
 const path = require('path');
 const { Worker, isMainThread, parentPort, workerData } = require('worker_threads');
 
-const parablePath = path.join(__dirname, '..', 'lib');
+const parablePath = process.env.PARABLE_PATH || path.join(__dirname, '..', 'lib');
 
-// Worker thread code for running tests with timeout
+// Worker thread: runs tests sequentially, responds to messages
 if (!isMainThread) {
   const { parse, ParseError } = require(path.join(workerData.parablePath, 'parable.js'));
-  let testInput = workerData.testInput;
-  const testExpected = workerData.testExpected;
-  let extglob = false;
-  if (testInput.startsWith('# @extglob\n')) {
-    extglob = true;
-    testInput = testInput.slice('# @extglob\n'.length);
-  }
-  try {
-    const nodes = parse(testInput, extglob);
-    const actual = nodes.map(n => n.toSexp()).join(' ');
-    parentPort.postMessage({ passed: null, actual, error: null, parseSuccess: true });
-  } catch (e) {
-    if (e instanceof ParseError) {
-      parentPort.postMessage({ passed: null, actual: '<parse error>', error: e.message, parseSuccess: false, isParseError: true });
-    } else {
-      parentPort.postMessage({ passed: null, actual: '<exception>', error: e.message + '\n' + e.stack, parseSuccess: false, isParseError: false });
+
+  parentPort.on('message', (msg) => {
+    let testInput = msg.testInput;
+    const testExpected = msg.testExpected;
+    let extglob = false;
+    if (testInput.startsWith('# @extglob\n')) {
+      extglob = true;
+      testInput = testInput.slice('# @extglob\n'.length);
     }
-  }
+    try {
+      const nodes = parse(testInput, extglob);
+      const actual = nodes.map(n => n.toSexp()).join(' ');
+      parentPort.postMessage({ actual, error: null, parseSuccess: true });
+    } catch (e) {
+      if (e instanceof ParseError) {
+        parentPort.postMessage({ actual: '<parse error>', error: e.message, parseSuccess: false, isParseError: true });
+      } else {
+        parentPort.postMessage({ actual: '<exception>', error: e.message + '\n' + e.stack, parseSuccess: false, isParseError: false });
+      }
+    }
+  });
 } else {
 
 const { parse, ParseError } = require(path.join(parablePath, 'parable.js'));
+
+function createWorker() {
+  return new Worker(__filename, { workerData: { parablePath } });
+}
+
+let worker = createWorker();
+let pendingResolve = null;
+let timeoutId = null;
+
+worker.on('message', (msg) => {
+  if (pendingResolve) {
+    clearTimeout(timeoutId);
+    pendingResolve(msg);
+    pendingResolve = null;
+  }
+});
+
+worker.on('error', (err) => {
+  if (pendingResolve) {
+    clearTimeout(timeoutId);
+    pendingResolve({ actual: '<exception>', error: err.message, parseSuccess: false, isParseError: false });
+    pendingResolve = null;
+  }
+});
+
+function runTestWithTimeout(testInput, testExpected) {
+  return new Promise((resolve) => {
+    const handleResult = (msg) => {
+      const expectedNorm = normalize(testExpected);
+      if (msg.parseSuccess) {
+        if (expectedNorm === '<error>') {
+          resolve({ passed: false, actual: msg.actual, error: 'Expected parse error but got successful parse' });
+        } else if (expectedNorm === normalize(msg.actual)) {
+          resolve({ passed: true, actual: msg.actual, error: null });
+        } else {
+          resolve({ passed: false, actual: msg.actual, error: null });
+        }
+      } else {
+        if (msg.isParseError && expectedNorm === '<error>') {
+          resolve({ passed: true, actual: '<error>', error: null });
+        } else {
+          resolve({ passed: false, actual: msg.actual, error: msg.error });
+        }
+      }
+    };
+
+    pendingResolve = handleResult;
+    timeoutId = setTimeout(() => {
+      pendingResolve = null;
+      worker.terminate();
+      worker = createWorker();
+      worker.on('message', (msg) => {
+        if (pendingResolve) {
+          clearTimeout(timeoutId);
+          pendingResolve(msg);
+          pendingResolve = null;
+        }
+      });
+      worker.on('error', (err) => {
+        if (pendingResolve) {
+          clearTimeout(timeoutId);
+          pendingResolve({ actual: '<exception>', error: err.message, parseSuccess: false, isParseError: false });
+          pendingResolve = null;
+        }
+      });
+      resolve({ passed: false, actual: '<timeout>', error: 'Test timed out after 10 seconds' });
+    }, 10000);
+
+    worker.postMessage({ testInput, testExpected });
+  });
+}
 
 function findTestFiles(directory) {
   const result = [];
@@ -98,42 +172,6 @@ function normalize(s) {
   return s.split(/\s+/).join(' ').trim();
 }
 
-function runTestWithTimeout(testInput, testExpected) {
-  return new Promise((resolve) => {
-    const worker = new Worker(__filename, {
-      workerData: { testInput, testExpected, parablePath }
-    });
-    const timeout = setTimeout(() => {
-      worker.terminate();
-      resolve({ passed: false, actual: '<timeout>', error: 'Test timed out after 10 seconds' });
-    }, 10000);
-    worker.on('message', (msg) => {
-      clearTimeout(timeout);
-      worker.terminate();
-      const expectedNorm = normalize(testExpected);
-      if (msg.parseSuccess) {
-        if (expectedNorm === '<error>') {
-          resolve({ passed: false, actual: msg.actual, error: 'Expected parse error but got successful parse' });
-        } else if (expectedNorm === normalize(msg.actual)) {
-          resolve({ passed: true, actual: msg.actual, error: null });
-        } else {
-          resolve({ passed: false, actual: msg.actual, error: null });
-        }
-      } else {
-        if (msg.isParseError && expectedNorm === '<error>') {
-          resolve({ passed: true, actual: '<error>', error: null });
-        } else {
-          resolve({ passed: false, actual: msg.actual, error: msg.error });
-        }
-      }
-    });
-    worker.on('error', (err) => {
-      clearTimeout(timeout);
-      resolve({ passed: false, actual: '<exception>', error: err.message });
-    });
-  });
-}
-
 function printUsage() {
   console.log('Usage: run-tests.js [options] <test_dir>');
   console.log('Options:');
@@ -162,7 +200,6 @@ async function main() {
     maxFailures = parseInt(process.argv[maxFailuresIdx + 1], 10);
   }
 
-  // Find test_dir from positional args (skip flags and their values)
   let testDir = null;
   const skipNext = new Set();
   for (let i = 2; i < process.argv.length; i++) {
@@ -205,9 +242,7 @@ async function main() {
         continue;
       }
 
-      // Treat <infinite> as <error> (bash-oracle hangs, but it's still a syntax error)
       const effectiveExpected = normalize(expected) === '<infinite>' ? '<error>' : expected;
-
       const { passed, actual, error } = await runTestWithTimeout(input, effectiveExpected);
 
       if (passed) {
@@ -226,6 +261,9 @@ async function main() {
   }
 
   const elapsed = ((Date.now() - startTime) / 1000).toFixed(2);
+
+  // Clean up worker
+  worker.terminate();
 
   if (totalFailed > 0) {
     const showCount = maxFailures === 0 ? failedTests.length : Math.min(failedTests.length, maxFailures);

@@ -16,7 +16,7 @@ _banner label:
 # Run parser tests against source
 [group: 'source']
 src-test *ARGS: (_banner "src-test")
-    uv run tests/bin/run-tests.py {{ARGS}} tests
+    uv run parable-test {{ARGS}} tests
 
 # Lint (--fix to apply changes)
 [group: 'source']
@@ -248,7 +248,7 @@ check-dump-ast: (_banner "check-dump-ast")
 src-coverage: (_banner "src-coverage")
     #!/usr/bin/env bash
     set -euo pipefail
-    uv run --with coverage coverage run tests/bin/run-tests.py tests
+    uv run --with coverage coverage run -m run_tests tests
     uv run --with coverage coverage html -d /tmp/parable-coverage
     uv run --with coverage coverage json -o /tmp/parable-coverage.json
     echo ""
@@ -286,4 +286,4 @@ backend-coverage backend:
 # Benchmark source test suite
 [group: 'profiling']
 src-benchmark: (_banner "src-benchmark")
-    hyperfine --warmup 2 --runs ${RUNS:-5} 'uv run tests/bin/run-tests.py tests 2>&1'
+    hyperfine --warmup 2 --runs ${RUNS:-5} 'uv run parable-test tests 2>&1'

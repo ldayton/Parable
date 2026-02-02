@@ -10,4 +10,4 @@ build:
 check source_file transpiler_dir tests_dir:
     just transpile "{{source_file}}" "{{transpiler_dir}}"
     npm run build
-    node dist/run_tests.js "{{tests_dir}}"
+    PARABLE_PATH="$(pwd)/dist" node bin/run-tests.js "{{tests_dir}}"

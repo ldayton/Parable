@@ -248,6 +248,7 @@ typedef struct Arena {
 } Arena;
 
 static Arena *g_arena = NULL;
+static bool g_initialized = false;
 
 static Arena *arena_new(size_t cap) {
     Arena *a = (Arena *)malloc(sizeof(Arena));
@@ -297,6 +298,12 @@ static char *arena_strndup(Arena *a, const char *s, size_t n) {
     memcpy(r, s, n);
     r[n] = '\0';
     return r;
+}
+
+static void init(void) {
+    if (g_initialized) return;
+    g_initialized = true;
+    g_arena = arena_new(65536);
 }
 
 // === String helpers ===
@@ -4214,6 +4221,7 @@ static bool is_valid_identifier(const char * name) {
 }
 
 static Vec_Node parse(const char * source, bool extglob) {
+    init();
     Parser * parser = new_parser(source, false, extglob);
     return Parser_parse(parser);
 }

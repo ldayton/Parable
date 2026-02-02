@@ -17,6 +17,7 @@ allow-redirect /tmp/**
 #---- Langs ----#
 allow dotnet
 allow go
+allow gcc
 allow java
 allow javac
 allow node

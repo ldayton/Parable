@@ -766,6 +766,7 @@ typedef struct Arena {
 } Arena;
 
 static Arena *g_arena = NULL;
+static bool g_initialized = false;
 
 static Arena *arena_new(size_t cap) {
     Arena *a = (Arena *)malloc(sizeof(Arena));
@@ -815,6 +816,12 @@ static char *arena_strndup(Arena *a, const char *s, size_t n) {
     memcpy(r, s, n);
     r[n] = '\0';
     return r;
+}
+
+static void init(void) {
+    if (g_initialized) return;
+    g_initialized = true;
+    g_arena = arena_new(65536);
 }
 
 // === String helpers ===
@@ -1412,6 +1419,8 @@ static bool _map_contains(void *map, const char *key) {
             params = "void"
         self._line(f"static {ret_type} {name}({params}) {{")
         self.indent += 1
+        if func.name == "parse":
+            self._line("init();")
         for stmt in func.body:
             self._emit_stmt(stmt)
         self.indent -= 1

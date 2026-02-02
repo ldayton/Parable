@@ -62,8 +62,7 @@ backend-transpile backend:
             uv run --directory transpiler python -m src.tongues --target c < "$(pwd)/src/parable.py" > dist/c/parable.c
             ;;
         csharp)
-            mkdir -p dist/csharp
-            uv run --directory transpiler python -m src.tongues --target csharp < "$(pwd)/src/parable.py" > dist/csharp/Parable.cs
+            just -f dist/csharp/justfile transpile "$(pwd)/src/parable.py" "$(pwd)/transpiler"
             ;;
         go)
             just -f dist/go/justfile transpile "$(pwd)/src/parable.py" "$(pwd)/transpiler"
@@ -113,9 +112,7 @@ backend-test backend:
             just -f dist/c/justfile check "$tests_abs"
             ;;
         csharp)
-            just backend-transpile csharp
-            dotnet build dist/csharp/csharp.csproj -o dist/csharp/bin --verbosity quiet
-            dotnet dist/csharp/bin/csharp.dll "$tests_abs"
+            just -f dist/csharp/justfile check "$(pwd)/src/parable.py" "$(pwd)/transpiler" "$tests_abs"
             ;;
         go)
             just -f dist/go/justfile check "$(pwd)/src/parable.py" "$(pwd)/transpiler" "$tests_abs"

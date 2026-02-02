@@ -1,0 +1,13 @@
+# Transpile source to Parable.cs
+transpile source_file transpiler_dir:
+    uv run --directory "{{transpiler_dir}}" python -m src.tongues --target csharp < "{{source_file}}" > Parable.cs
+
+# Build the project
+build:
+    dotnet build csharp.csproj -o bin --verbosity quiet
+
+# Run tests
+check source_file transpiler_dir tests_dir:
+    just transpile "{{source_file}}" "{{transpiler_dir}}"
+    just build
+    dotnet bin/csharp.dll "{{tests_dir}}"

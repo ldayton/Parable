@@ -179,7 +179,7 @@ class CBackend:
         self._constant_set_values: dict[str, SetLit] = {}  # Set constant values for membership
         self._temp_counter: int = 0  # Counter for generating unique temp names
         self._function_sigs: dict[str, list[Type]] = {}  # Function name -> parameter types
-        self._rvalue_temps: dict[int, str] = {}  # Map expression id -> temp var name for rvalue slice fields
+        self._rvalue_temps: list[tuple[str, str, str]] = []  # List of (struct_name, field_name, temp_name)
 
     def emit(self, module: Module) -> str:
         """Emit C code from IR Module."""
@@ -1678,6 +1678,8 @@ static bool _map_contains(void *map, const char *key) {
             if isinstance(stmt.value, NilLit) and self._current_return_type == VOID:
                 self._line("return;")
             else:
+                # Clear temps from previous statement and emit new ones
+                self._rvalue_temps = []
                 # Emit temp vars for rvalue slice fields in StructLits before the return
                 self._emit_rvalue_temps(stmt.value)
                 val = self._emit_expr(stmt.value)
@@ -2738,8 +2740,9 @@ static bool _map_contains(void *map, const char *key) {
                         if (isinstance(ftyp, Optional) and isinstance(ftyp.inner, Slice) and
                             isinstance(val_type, Slice) and not isinstance(val_type, (Optional, Pointer))):
                             # Check if this field has a temp var (for rvalues)
-                            if id(field_val) in self._rvalue_temps:
-                                val_str = f"&{self._rvalue_temps[id(field_val)]}"
+                            temp_name = self._get_rvalue_temp(name, fname)
+                            if temp_name is not None:
+                                val_str = f"&{temp_name}"
                             else:
                                 val_str = f"&{self._emit_expr(field_val)}"
                         # Cast when passing Slice(StructA) to Slice(StructB/Interface)
@@ -2790,6 +2793,15 @@ static bool _map_contains(void *map, const char *key) {
         """Check if expression is an lvalue (can take address of)."""
         return isinstance(expr, (Var, FieldAccess, Index, DerefLV))
 
+    def _get_rvalue_temp(self, struct_name: str, field_name: str) -> str | None:
+        """Get temp var name for an rvalue field, if one was created."""
+        for i, (sn, fn, temp) in enumerate(self._rvalue_temps):
+            if sn == struct_name and fn == field_name:
+                # Remove from list so nested structs with same field get different temps
+                self._rvalue_temps.pop(i)
+                return temp
+        return None
+
     def _emit_rvalue_temps(self, expr: Expr) -> None:
         """Emit temp var declarations for rvalue slice fields in StructLits.
 
@@ -2812,7 +2824,7 @@ static bool _map_contains(void *map, const char *key) {
                                 vec_type = self._type_to_c(val_type)
                                 val_str = self._emit_expr(field_val)
                                 self._line(f"{vec_type} {tmp_name} = {val_str};")
-                                self._rvalue_temps[id(field_val)] = tmp_name
+                                self._rvalue_temps.append((name, fname, tmp_name))
                         # Recurse into nested StructLits
                         self._emit_rvalue_temps(field_val)
             else:

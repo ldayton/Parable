@@ -6372,9 +6372,9 @@ class Parser {
         Node left = this._arithParseTernary();
         this._arithSkipWs();
         List<String> assignOps = new ArrayList<>(Arrays.asList("<<=", ">>=", "+=", "-=", "*=", "/=", "%=", "&=", "^=", "|=", "="));
-        for (Object op : assignOps) {
+        for (String op : assignOps) {
             if (this._arithMatch(op)) {
-                if (op == "=" && this._arithPeek(1).equals("=")) {
+                if (op.equals("=") && this._arithPeek(1).equals("=")) {
                     break;
                 }
                 this._arithConsume(op);
@@ -6415,7 +6415,7 @@ class Parser {
     }
 
     public Node _arithParseLeftAssoc(List<String> ops, Supplier<Node> parsefn) {
-        Object left = parsefn.get();
+        Node left = parsefn.get();
         while (true) {
             this._arithSkipWs();
             boolean matched = false;
@@ -8699,7 +8699,7 @@ class Parser {
     }
 
     public Node _parseCompoundCommand() {
-        BraceGroup result = this.parseBraceGroup();
+        Node result = this.parseBraceGroup();
         if (result != null) {
             return result;
         }

@@ -18,6 +18,7 @@ from ..ir import (
     INT,
     RUNE,
     FuncInfo,
+    FuncType,
     InterfaceRef,
     Map,
     Optional,
@@ -535,6 +536,15 @@ def infer_element_type_from_append_arg(
         # Function return types
         if func_name in symbols.functions:
             return symbols.functions[func_name].return_type
+        # Check if it's a callable variable/parameter
+        var_type = var_types.get(func_name)
+        if var_type is None and current_func_info:
+            for p in current_func_info.params:
+                if p.name == func_name:
+                    var_type = p.typ
+                    break
+        if var_type is not None and isinstance(var_type, FuncType):
+            return var_type.ret
     # Method calls: obj.method() -> look up method return type
     if is_type(arg, ["Call"]) and is_type(arg.get("func"), ["Attribute"]):
         func = arg.get("func", {})
@@ -600,6 +610,12 @@ def collect_var_types(
                         vars_all_types[var_name].append(INT)
                     elif func_id == "str":
                         vars_all_types[var_name].append(STRING)
+                    # Check for callable parameter calls
+                    elif current_func_info:
+                        for p in current_func_info.params:
+                            if p.name == func_id and isinstance(p.typ, FuncType):
+                                vars_all_types[var_name].append(p.typ.ret)
+                                break
                 # String method calls: x = "".join(...), etc.
                 elif is_type(value, ["Call"]) and is_type(value.get("func"), ["Attribute"]):
                     func = value.get("func", {})
@@ -778,9 +794,19 @@ def collect_var_types(
                             value.get("right")
                         ):
                             var_types[var_name] = INT
-                # Infer from list/dict literals - element type inferred later from appends
+                # Infer from list/dict literals - infer element type from first element if constant
                 elif is_type(value, ["List"]):
-                    var_types[var_name] = Slice(InterfaceRef("any"))
+                    elts = value.get("elts", [])
+                    if elts and is_type(elts[0], ["Constant"]):
+                        elt_value = elts[0].get("value")
+                        if isinstance(elt_value, str):
+                            var_types[var_name] = Slice(STRING)
+                        elif isinstance(elt_value, int) and not isinstance(elt_value, bool):
+                            var_types[var_name] = Slice(INT)
+                        else:
+                            var_types[var_name] = Slice(InterfaceRef("any"))
+                    else:
+                        var_types[var_name] = Slice(InterfaceRef("any"))
                 elif is_type(value, ["Dict"]):
                     var_types[var_name] = Map(STRING, InterfaceRef("any"))
                 # Infer from field access: var = obj.field -> var has field's type
@@ -916,6 +942,9 @@ def collect_var_types(
                         var_types[target.get("id")] = Slice(InterfaceRef("any"))
                     elif class_name == "dict":
                         var_types[target.get("id")] = Map(InterfaceRef("any"), InterfaceRef("any"))
+                    # Handle callable parameter calls and other cases: use infer_call_return_type result
+                    elif ret_type != InterfaceRef("any"):
+                        var_types[target.get("id")] = ret_type
     # Third pass: infer types from append() calls (after all variable types are collected)
     # Note: don't overwrite already-known specific slice types (e.g., bytearray -> []byte)
     for stmt in dict_walk({"_type": "Module", "body": stmts}):

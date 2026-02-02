@@ -721,12 +721,8 @@ class JavaBackend:
                     is_hoisted = target_name and target_name in self._hoisted_vars
                     if stmt.is_declaration and not is_hoisted:
                         # First assignment to variable - need type declaration
-                        value_type = value.typ
-                        if value_type is not None:
-                            java_type = self._type(value_type)
-                        else:
-                            # Fallback to Object if type unknown
-                            java_type = "Object"
+                        decl_type = stmt.decl_typ if stmt.decl_typ is not None else value.typ
+                        java_type = self._type(decl_type) if decl_type else "Object"
                         self._line(f"{java_type} {lv} = {val};")
                     else:
                         self._line(f"{lv} = {val};")

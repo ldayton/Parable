@@ -8150,7 +8150,7 @@ public class Parser
 
     public INode _ArithParseLeftAssoc(List<string> ops, Func<INode> parsefn)
     {
-        object left = parsefn();
+        INode left = parsefn();
         while (true)
         {
             this._ArithSkipWs();

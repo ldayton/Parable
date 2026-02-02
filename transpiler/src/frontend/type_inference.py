@@ -658,6 +658,15 @@ def infer_expr_type_from_ast(
             # Regular function calls
             if func_name in symbols.functions:
                 return symbols.functions[func_name].return_type
+            # Check if it's a callable variable/parameter
+            var_type = type_ctx.var_types.get(func_name)
+            if var_type is None and current_func_info:
+                for p in current_func_info.params:
+                    if p.name == func_name:
+                        var_type = p.typ
+                        break
+            if var_type is not None and isinstance(var_type, FuncType):
+                return var_type.ret
     # Subscript - derive element type from container
     if node_t == "Subscript":
         val_type = infer_expr_type_from_ast(
@@ -714,6 +723,15 @@ def infer_call_return_type(
         func_name = func.get("id")
         if func_name in symbols.functions:
             return symbols.functions[func_name].return_type
+        # Check if it's a callable variable/parameter
+        var_type = type_ctx.var_types.get(func_name)
+        if var_type is None and current_func_info:
+            for p in current_func_info.params:
+                if p.name == func_name:
+                    var_type = p.typ
+                    break
+        if var_type is not None and isinstance(var_type, FuncType):
+            return var_type.ret
     return InterfaceRef("any")
 
 

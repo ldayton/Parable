@@ -31,5 +31,6 @@ check source_file transpiler_dir tests_dir: (transpile source_file transpiler_di
     docker run --rm \
         -v "{{justfile_directory()}}:/workspace" \
         -v "{{tests_dir}}:/tests:ro" \
+        -v "{{justfile_directory()}}/../javascript/bin:/js-runner:ro" \
         -w /workspace \
         {{image}} check /tests

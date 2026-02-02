@@ -14,7 +14,7 @@ case "$cmd" in
             exit 1
         fi
         luac -p parable.lua
-        lua -l parable "$tests_dir/bin/run-tests.lua" "$tests_dir"
+        lua -l parable bin/run_tests.lua "$tests_dir"
         ;;
     *)
         echo "Unknown command: $cmd" >&2

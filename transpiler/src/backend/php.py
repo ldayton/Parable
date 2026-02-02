@@ -1095,6 +1095,7 @@ class PhpBackend:
 
     def _struct_lit(self, struct_name: str, fields: dict[str, Expr], embedded_value: Expr | None) -> str:
         # Use sorted field order to match constructor parameter order
+        # Wrap in parens for PHP 8.3 compatibility: (new Foo())->method()
         field_info = self.sorted_struct_fields.get(struct_name, [])
         safe_name = _safe_pascal(struct_name)
         if field_info:
@@ -1104,12 +1105,12 @@ class PhpBackend:
                     ordered_args.append(self._expr(fields[field_name]))
                 else:
                     ordered_args.append(self._default_value(field_type))
-            return f"new {safe_name}({', '.join(ordered_args)})"
+            return f"(new {safe_name}({', '.join(ordered_args)}))"
         elif not fields:
-            return f"new {safe_name}()"
+            return f"(new {safe_name}())"
         else:
             args = ", ".join(self._expr(v) for v in fields.values())
-            return f"new {safe_name}({args})"
+            return f"(new {safe_name}({args}))"
 
     def _lvalue(self, lv: LValue) -> str:
         match lv:

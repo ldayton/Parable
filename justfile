@@ -50,108 +50,15 @@ src-verify-lock: (_banner "src-verify-lock")
 
 # --- Backends (transpiled output in dist/) ---
 
-# Transpile base to dist/<backend>/
+# Transpile via Docker
 [group: 'backends']
-backend-transpile backend:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    printf '{{BOLD}}{{CYAN}}==> backend-transpile %s{{NORMAL}}\n' '{{backend}}'
-    case "{{backend}}" in
-        c)
-            mkdir -p dist/c
-            uv run --directory transpiler python -m src.tongues --target c < "$(pwd)/src/parable.py" > dist/c/parable.c
-            ;;
-        csharp)
-            just -f dist/csharp/justfile transpile "$(pwd)/src/parable.py" "$(pwd)/transpiler"
-            ;;
-        go)
-            just -f dist/go/justfile transpile "$(pwd)/src/parable.py" "$(pwd)/transpiler"
-            ;;
-        java)
-            just -f dist/java/justfile transpile "$(pwd)/src/parable.py" "$(pwd)/transpiler"
-            ;;
-        javascript)
-            SOURCE_FILE="$(pwd)/src/parable.py" TRANSPILER_DIR="$(pwd)/transpiler" npm --prefix dist/javascript run transpile
-            ;;
-        lua)
-            SOURCE_FILE="$(pwd)/src/parable.py" TRANSPILER_DIR="$(pwd)/transpiler" make -C dist/lua transpile
-            ;;
-        perl)
-            SOURCE_FILE="$(pwd)/src/parable.py" TRANSPILER_DIR="$(pwd)/transpiler" make -C dist/perl transpile
-            ;;
-        php)
-            SOURCE_FILE="$(pwd)/src/parable.py" TRANSPILER_DIR="$(pwd)/transpiler" composer --working-dir=dist/php run transpile
-            ;;
-        python)
-            SOURCE_FILE="$(pwd)/src/parable.py" TRANSPILER_DIR="$(pwd)/transpiler" make -C dist/python transpile
-            ;;
-        ruby)
-            SOURCE_FILE="$(pwd)/src/parable.py" TRANSPILER_DIR="$(pwd)/transpiler" rake -C dist/ruby transpile
-            ;;
-        typescript)
-            SOURCE_FILE="$(pwd)/src/parable.py" TRANSPILER_DIR="$(pwd)/transpiler" npm --prefix dist/typescript run transpile
-            ;;
-        *)
-            echo "Unknown backend: {{backend}}"
-            exit 1
-            ;;
-    esac
+backend-transpile backend: (_banner "backend-transpile " + backend)
+    just -f dist/{{backend}}/justfile transpile "$(pwd)/src/parable.py" "$(pwd)/transpiler"
 
-# Run tests on transpiled backend
+# Run tests via Docker
 [group: 'backends']
-backend-test backend:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    printf '{{BOLD}}{{CYAN}}==> backend-test %s{{NORMAL}}\n' '{{backend}}'
-    tests_abs="$(pwd)/tests"
-    case "{{backend}}" in
-        c)
-            just -f dist/c/justfile check "$(pwd)/src/parable.py" "$(pwd)/transpiler" "$tests_abs"
-            ;;
-        csharp)
-            just -f dist/csharp/justfile check "$(pwd)/src/parable.py" "$(pwd)/transpiler" "$tests_abs"
-            ;;
-        go)
-            just -f dist/go/justfile check "$(pwd)/src/parable.py" "$(pwd)/transpiler" "$tests_abs"
-            ;;
-        java)
-            just -f dist/java/justfile check "$(pwd)/src/parable.py" "$(pwd)/transpiler" "$tests_abs"
-            ;;
-        javascript)
-            SOURCE_FILE="$(pwd)/src/parable.py" TRANSPILER_DIR="$(pwd)/transpiler" npm --prefix dist/javascript run transpile
-            TESTS_DIR="$tests_abs" npm --prefix dist/javascript run check
-            ;;
-        lua)
-            SOURCE_FILE="$(pwd)/src/parable.py" TRANSPILER_DIR="$(pwd)/transpiler" make -C dist/lua transpile
-            TESTS_DIR="$tests_abs" make -C dist/lua check
-            ;;
-        perl)
-            SOURCE_FILE="$(pwd)/src/parable.py" TRANSPILER_DIR="$(pwd)/transpiler" make -C dist/perl transpile
-            TESTS_DIR="$tests_abs" make -C dist/perl check
-            ;;
-        php)
-            SOURCE_FILE="$(pwd)/src/parable.py" TRANSPILER_DIR="$(pwd)/transpiler" composer --working-dir=dist/php run transpile
-            TESTS_DIR="$tests_abs" composer --working-dir=dist/php run check
-            ;;
-        python)
-            SOURCE_FILE="$(pwd)/src/parable.py" TRANSPILER_DIR="$(pwd)/transpiler" make -C dist/python transpile
-            TESTS_DIR="$tests_abs" make -C dist/python check
-            ;;
-        ruby)
-            SOURCE_FILE="$(pwd)/src/parable.py" TRANSPILER_DIR="$(pwd)/transpiler" rake -C dist/ruby transpile
-            TESTS_DIR="$tests_abs" rake -C dist/ruby check
-            ;;
-        typescript)
-            SOURCE_FILE="$(pwd)/src/parable.py" TRANSPILER_DIR="$(pwd)/transpiler" npm --prefix dist/typescript run transpile
-            npm --prefix dist/typescript run build
-            TESTS_DIR="$tests_abs" npm --prefix dist/typescript run check
-            ;;
-        *)
-            echo "No test runner for backend: {{backend}}"
-            echo "Available backends: {{backends}}"
-            exit 1
-            ;;
-    esac
+backend-test backend: (_banner "backend-test " + backend)
+    just -f dist/{{backend}}/justfile check "$(pwd)/src/parable.py" "$(pwd)/transpiler" "$(pwd)/tests"
 
 # --- CI/Check ---
 
@@ -164,7 +71,23 @@ c-compile:
 # Internal: run all parallel checks
 [private]
 [parallel]
-_check-parallel: src-test src-lint src-fmt src-verify-lock src-subset transpiler-subset transpiler-test check-dump-ast (backend-test "csharp") (backend-test "go") (backend-test "java") (backend-test "javascript") (backend-test "lua") (backend-test "perl") (backend-test "php") (backend-test "python") (backend-test "ruby") (backend-test "typescript")
+_check-parallel: src-test src-lint src-fmt src-verify-lock src-subset transpiler-subset transpiler-test check-dump-ast _backend-test-all
+
+# Internal: run backend tests in parallel
+[private]
+_backend-test-all:
+    #!/usr/bin/env bash
+    set -e
+    pids=()
+    for backend in {{backends}}; do
+        just backend-test "$backend" &
+        pids+=($!)
+    done
+    failed=0
+    for pid in "${pids[@]}"; do
+        wait "$pid" || failed=1
+    done
+    exit $failed
 
 # Ensure biome is installed (prevents race condition in parallel JS checks)
 [private]

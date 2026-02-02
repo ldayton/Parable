@@ -12,6 +12,10 @@ class TranspileHook(BuildHookInterface):
     PLUGIN_NAME = "transpile"
 
     def initialize(self, version, build_data):
+        output_path = Path(self.root) / "src" / "parable" / "parable.py"
+        if output_path.exists():
+            return
+
         source_file = os.environ.get("PARABLE_SOURCE_FILE")
         transpiler_dir = os.environ.get("PARABLE_TRANSPILER_DIR")
 
@@ -28,7 +32,6 @@ class TranspileHook(BuildHookInterface):
         if not source_path.exists():
             raise RuntimeError(f"Source file not found: {source_file}")
 
-        output_path = Path(self.root) / "src" / "parable" / "parable.py"
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
         with open(source_path) as f:

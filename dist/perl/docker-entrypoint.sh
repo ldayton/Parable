@@ -14,7 +14,7 @@ case "$cmd" in
             exit 1
         fi
         perl -c parable.pl
-        PERL5LIB="$(pwd)" perl "$tests_dir/bin/run-tests.pl" "$tests_dir"
+        PERL5LIB="$(pwd)" perl bin/run_tests.pl "$tests_dir"
         ;;
     *)
         echo "Unknown command: $cmd" >&2

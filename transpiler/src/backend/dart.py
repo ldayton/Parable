@@ -1173,9 +1173,11 @@ class DartBackend:
                 return f"({char_str}.isNotEmpty && {regex_map[kind]}.hasMatch({char_str}))"
             case TrimChars(string=s, chars=chars, mode=mode):
                 s_str = self._expr(s)
-                # Dart's built-in trim only removes whitespace
-                # Only use built-in if chars is whitespace or empty
-                if isinstance(chars, StringLit) and (not chars.value or chars.value.isspace()):
+                # Dart's built-in trim removes ALL whitespace (space, tab, newline, etc.)
+                # Only use built-in if chars is empty (meaning trim all whitespace)
+                # NOT when chars is specified (even if it's just space/tab), since that
+                # would incorrectly trim newlines too
+                if isinstance(chars, StringLit) and not chars.value:
                     if mode == "both":
                         return f"{s_str}.trim()"
                     elif mode == "left":

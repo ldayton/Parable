@@ -3297,6 +3297,8 @@ static bool _map_contains(void *map, const char *key) {
             return f"({inner} != 0)"
         if isinstance(inner_type, (Slice, Map, Set)):
             return f"({inner}.len > 0)"
+        if isinstance(inner_type, Optional) and isinstance(inner_type.inner, (Slice, Map, Set)):
+            return f"({inner} != NULL && {inner}->len > 0)"
         return f"({inner} != NULL)"
 
     def _emit_expr_CharClassify(self, expr: CharClassify) -> str:

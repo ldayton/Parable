@@ -2484,7 +2484,7 @@ static const char * _strip_line_continuations_comment_aware(const char * text) {
 }
 
 static const char * _append_redirects(const char * base, Vec_Node * redirects) {
-    if ((redirects != NULL)) {
+    if ((redirects != NULL && redirects->len > 0)) {
         Vec_Str parts = (Vec_Str){NULL, 0, 0};
         if (redirects != NULL) {
             for (size_t _idx = 0; _idx < redirects->len; _idx++) {
@@ -3087,7 +3087,7 @@ static const char * _format_cmdsub_node(Node * node, int64_t indent, bool in_pro
         Subshell *node = (Subshell *)_tsexpr22;
         body = _format_cmdsub_node((Node *)node->body, indent, in_procsub, compact_redirects, false);
         redirects = "";
-        if ((node->redirects != NULL)) {
+        if ((node->redirects != NULL && node->redirects->len > 0)) {
             redirect_parts = (Vec_Str){NULL, 0, 0};
             if (node->redirects != NULL) {
                 for (size_t _idx = 0; _idx < node->redirects->len; _idx++) {
@@ -3116,7 +3116,7 @@ static const char * _format_cmdsub_node(Node * node, int64_t indent, bool in_pro
         body = _str_rtrim(g_arena, body, ";");
         terminator = (_str_endswith(body, " &") ? " }" : "; }");
         redirects = "";
-        if ((node->redirects != NULL)) {
+        if ((node->redirects != NULL && node->redirects->len > 0)) {
             redirect_parts = (Vec_Str){NULL, 0, 0};
             if (node->redirects != NULL) {
                 for (size_t _idx = 0; _idx < node->redirects->len; _idx++) {
@@ -7857,7 +7857,7 @@ static const char * Select_to_sexp(Select *self) {
             }
         }
         const char * word_strs = _str_join(g_arena, " ", word_parts);
-        if ((self->words != NULL)) {
+        if ((self->words != NULL && self->words->len > 0)) {
             in_clause = _str_concat(g_arena, _str_concat(g_arena, "(in ", word_strs), ")");
         } else {
             in_clause = "(in)";

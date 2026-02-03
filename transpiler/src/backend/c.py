@@ -2554,9 +2554,10 @@ static bool _map_contains(void *map, const char *key) {
             return "true" if expr.value else "false"
         if isinstance(expr, NilLit):
             # Check if this is a nil for a Slice type - needs empty Vec
+            # Use cap=(size_t)-1 as sentinel to distinguish None from []
             if expr.typ is not None and isinstance(expr.typ, Slice):
                 sig = self._slice_elem_sig(expr.typ.element)
-                return f"(Vec_{sig}){{NULL, 0, 0}}"
+                return f"(Vec_{sig}){{NULL, 0, (size_t)-1}}"
             # Check if this is a nil for a Tuple type - return zeroed tuple
             if expr.typ is not None and isinstance(expr.typ, Tuple):
                 sig = self._tuple_sig(expr.typ)
@@ -3275,16 +3276,18 @@ static bool _map_contains(void *map, const char *key) {
                             and isinstance(val_type, Slice)
                             and not isinstance(val_type, (Optional, Pointer))
                         ):
-                            # Always emit heap-allocated temp to avoid stack-use-after-return.
-                            # Local variables (lvalues) can also dangle if passed to returned structs.
+                            # Heap-allocate, but pass NULL if value is None (sentinel cap)
                             tmp_name = self._temp_name("_tmp_slice")
                             vec_type = self._type_to_c(val_type)
                             val_str = self._emit_expr(field_val)
-                            # Allocate Vec on heap (arena) to outlive current stack frame
+                            self._line(f"{vec_type} {tmp_name}_v = {val_str};")
                             self._line(
-                                f"{vec_type} *{tmp_name} = ({vec_type} *)arena_alloc(g_arena, sizeof({vec_type}));"
+                                f"{vec_type} *{tmp_name} = ({tmp_name}_v.cap == (size_t)-1) ? NULL "
+                                f": ({vec_type} *)arena_alloc(g_arena, sizeof({vec_type}));"
                             )
-                            self._line(f"*{tmp_name} = {val_str};")
+                            self._line(
+                                f"if ({tmp_name} != NULL) *{tmp_name} = {tmp_name}_v;"
+                            )
                             # Store tmp_name directly (it's already a pointer)
                             self._rvalue_temps.append(
                                 (name, fname, tmp_name, True)

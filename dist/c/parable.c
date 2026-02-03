@@ -10861,8 +10861,9 @@ static Subshell * Parser_parse_subshell(Parser *self) {
     }
     Parser_advance(self);
     Parser__clear_state(self, PARSERSTATEFLAGS_PST_SUBSHELL);
-    Vec_Node *_tmp_slice77 = (Vec_Node *)arena_alloc(g_arena, sizeof(Vec_Node));
-    *_tmp_slice77 = Parser__collect_redirects(self);
+    Vec_Node _tmp_slice77_v = Parser__collect_redirects(self);
+    Vec_Node *_tmp_slice77 = (_tmp_slice77_v.cap == (size_t)-1) ? NULL : (Vec_Node *)arena_alloc(g_arena, sizeof(Vec_Node));
+    if (_tmp_slice77 != NULL) *_tmp_slice77 = _tmp_slice77_v;
     return Subshell_new(body, _tmp_slice77, "subshell");
 }
 
@@ -11138,8 +11139,9 @@ static BraceGroup * Parser_parse_brace_group(Parser *self) {
         snprintf(g_error_msg, sizeof(g_error_msg), "%s", "Expected } to close brace group");
         return NULL;
     }
-    Vec_Node *_tmp_slice78 = (Vec_Node *)arena_alloc(g_arena, sizeof(Vec_Node));
-    *_tmp_slice78 = Parser__collect_redirects(self);
+    Vec_Node _tmp_slice78_v = Parser__collect_redirects(self);
+    Vec_Node *_tmp_slice78 = (_tmp_slice78_v.cap == (size_t)-1) ? NULL : (Vec_Node *)arena_alloc(g_arena, sizeof(Vec_Node));
+    if (_tmp_slice78 != NULL) *_tmp_slice78 = _tmp_slice78_v;
     return BraceGroup_new(body, _tmp_slice78, "brace-group");
 }
 
@@ -11352,7 +11354,7 @@ static Node * Parser_parse_for(Parser *self) {
         Parser_advance(self);
     }
     Parser_skip_whitespace_and_newlines(self);
-    Vec_Word words = (Vec_Word){NULL, 0, 0};
+    Vec_Word words = (Vec_Word){NULL, 0, (size_t)-1};
     if (Parser__lex_is_at_reserved_word(self, "in")) {
         Parser__lex_consume_word(self, "in");
         Parser_skip_whitespace(self);
@@ -11397,8 +11399,9 @@ static Node * Parser_parse_for(Parser *self) {
             snprintf(g_error_msg, sizeof(g_error_msg), "%s", "Expected brace group in for loop");
             return NULL;
         }
-        Vec_Word *_tmp_slice79 = (Vec_Word *)arena_alloc(g_arena, sizeof(Vec_Word));
-        *_tmp_slice79 = words;
+        Vec_Word _tmp_slice79_v = words;
+        Vec_Word *_tmp_slice79 = (_tmp_slice79_v.cap == (size_t)-1) ? NULL : (Vec_Word *)arena_alloc(g_arena, sizeof(Vec_Word));
+        if (_tmp_slice79 != NULL) *_tmp_slice79 = _tmp_slice79_v;
         return For_new(var_name, _tmp_slice79, brace_group->body, Parser__collect_redirects(self), "for");
     }
     if (!(Parser__lex_consume_word(self, "do"))) {
@@ -11418,8 +11421,9 @@ static Node * Parser_parse_for(Parser *self) {
         snprintf(g_error_msg, sizeof(g_error_msg), "%s", "Expected 'done' to close for loop");
         return NULL;
     }
-    Vec_Word *_tmp_slice80 = (Vec_Word *)arena_alloc(g_arena, sizeof(Vec_Word));
-    *_tmp_slice80 = words;
+    Vec_Word _tmp_slice80_v = words;
+    Vec_Word *_tmp_slice80 = (_tmp_slice80_v.cap == (size_t)-1) ? NULL : (Vec_Word *)arena_alloc(g_arena, sizeof(Vec_Word));
+    if (_tmp_slice80 != NULL) *_tmp_slice80 = _tmp_slice80_v;
     return For_new(var_name, _tmp_slice80, body, Parser__collect_redirects(self), "for");
 }
 
@@ -11489,7 +11493,7 @@ static Select * Parser_parse_select(Parser *self) {
         Parser_advance(self);
     }
     Parser_skip_whitespace_and_newlines(self);
-    Vec_Word words = (Vec_Word){NULL, 0, 0};
+    Vec_Word words = (Vec_Word){NULL, 0, (size_t)-1};
     if (Parser__lex_is_at_reserved_word(self, "in")) {
         Parser__lex_consume_word(self, "in");
         Parser_skip_whitespace_and_newlines(self);
@@ -11517,8 +11521,9 @@ static Select * Parser_parse_select(Parser *self) {
     }
     Parser_skip_whitespace_and_newlines(self);
     Node * body = (Node *)Parser__parse_loop_body(self, "select");
-    Vec_Word *_tmp_slice81 = (Vec_Word *)arena_alloc(g_arena, sizeof(Vec_Word));
-    *_tmp_slice81 = words;
+    Vec_Word _tmp_slice81_v = words;
+    Vec_Word *_tmp_slice81 = (_tmp_slice81_v.cap == (size_t)-1) ? NULL : (Vec_Word *)arena_alloc(g_arena, sizeof(Vec_Word));
+    if (_tmp_slice81 != NULL) *_tmp_slice81 = _tmp_slice81_v;
     return Select_new(var_name, _tmp_slice81, body, Parser__collect_redirects(self), "select");
 }
 

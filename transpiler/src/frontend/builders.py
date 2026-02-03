@@ -391,6 +391,7 @@ def build_struct(
         loc=callbacks.loc_from_node(node),
         is_exception=info.is_exception,
         embedded_type=embedded_type,
+        const_fields=dict(info.const_fields),
     )
     # Generate constructor function if needed
     ctor_func: Function | None = None

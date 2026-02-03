@@ -208,6 +208,10 @@ def _type_name(name: str) -> str:
     return name
 
 
+def _is_zero_literal(expr: Expr) -> bool:
+    return isinstance(expr, IntLit) and expr.value == 0
+
+
 class CBackend:
     """Emit C11 code from IR Module."""
 
@@ -232,6 +236,9 @@ class CBackend:
         self._rvalue_temps: list[
             tuple[str, str, str]
         ] = []  # List of (struct_name, field_name, temp_name)
+        self._deferred_constants: list[Constant] = []  # Constants needing runtime init
+        self._try_catch_labels: list[str] = []  # Stack of goto labels for try-with-catch
+        self._try_label_counter: int = 0
 
     def emit(self, module: Module) -> str:
         """Emit C code from IR Module."""
@@ -240,6 +247,11 @@ class CBackend:
         self._module_name = module.name
         self._struct_names = {s.name for s in module.structs}
         self._interface_names = {i.name for i in module.interfaces}
+        self._kind_cache: dict[str, str] = {
+            s.name: s.const_fields["kind"]
+            for s in module.structs
+            if "kind" in s.const_fields
+        }
         self._tuple_types: dict[str, Tuple] = {}
         self._slice_types = set()
         self._struct_fields = {}
@@ -730,17 +742,24 @@ class CBackend:
             self._line('    if (vec.len == 0) return arena_strdup(a, "");')
             self._line("    size_t sep_len = strlen(sep);")
             self._line("    size_t total = 0;")
+            self._line("    int first = 1;")
             self._line("    for (size_t i = 0; i < vec.len; i++) {")
+            self._line("        if (!vec.data[i]) continue;")
+            self._line("        if (!first) total += sep_len;")
             self._line("        total += strlen(vec.data[i]);")
-            self._line("        if (i > 0) total += sep_len;")
+            self._line("        first = 0;")
             self._line("    }")
+            self._line('    if (first) return arena_strdup(a, "");')
             self._line("    char *result = (char *)arena_alloc(a, total + 1);")
             self._line("    char *p = result;")
+            self._line("    first = 1;")
             self._line("    for (size_t i = 0; i < vec.len; i++) {")
-            self._line("        if (i > 0) { memcpy(p, sep, sep_len); p += sep_len; }")
+            self._line("        if (!vec.data[i]) continue;")
+            self._line("        if (!first) { memcpy(p, sep, sep_len); p += sep_len; }")
             self._line("        size_t len = strlen(vec.data[i]);")
             self._line("        memcpy(p, vec.data[i], len);")
             self._line("        p += len;")
+            self._line("        first = 0;")
             self._line("    }")
             self._line("    *p = '\\0';")
             self._line("    return result;")
@@ -984,6 +1003,15 @@ static bool _str_startswith(const char *s, const char *prefix) {
     if (!s || !prefix) return false;
     size_t plen = strlen(prefix);
     return strncmp(s, prefix, plen) == 0;
+}
+
+static bool _str_startswith_at(const char *s, int64_t pos, const char *prefix) {
+    if (!s || !prefix || pos < 0) return false;
+    size_t slen = strlen(s);
+    if ((size_t)pos >= slen) return false;
+    size_t plen = strlen(prefix);
+    if (slen - (size_t)pos < plen) return false;
+    return strncmp(s + pos, prefix, plen) == 0;
 }
 
 static bool _str_endswith(const char *s, const char *suffix) {
@@ -1238,7 +1266,70 @@ static void _vec_extend(Arena *a, void *dest_ptr, void *src_ptr) {
 }
 
 // === Map helpers ===
-// Simple linear-probe hash map for small maps
+// Simple linear-scan map for small maps (arena-allocated)
+typedef struct StrMap {
+    const char **keys;
+    const char **vals;
+    int64_t *ivals;
+    size_t len;
+    size_t cap;
+    bool is_int_val;
+} StrMap;
+
+static StrMap *_strmap_new(Arena *a, size_t cap, bool is_int_val) {
+    StrMap *m = (StrMap *)arena_alloc(a, sizeof(StrMap));
+    m->keys = (const char **)arena_alloc(a, cap * sizeof(const char *));
+    if (is_int_val) {
+        m->ivals = (int64_t *)arena_alloc(a, cap * sizeof(int64_t));
+        m->vals = NULL;
+    } else {
+        m->vals = (const char **)arena_alloc(a, cap * sizeof(const char *));
+        m->ivals = NULL;
+    }
+    m->len = 0;
+    m->cap = cap;
+    m->is_int_val = is_int_val;
+    return m;
+}
+
+static void _strmap_set_str(StrMap *m, const char *key, const char *val) {
+    for (size_t i = 0; i < m->len; i++) {
+        if (strcmp(m->keys[i], key) == 0) { m->vals[i] = val; return; }
+    }
+    if (m->len < m->cap) { m->keys[m->len] = key; m->vals[m->len] = val; m->len++; }
+}
+
+static void _strmap_set_int(StrMap *m, const char *key, int64_t val) {
+    for (size_t i = 0; i < m->len; i++) {
+        if (strcmp(m->keys[i], key) == 0) { m->ivals[i] = val; return; }
+    }
+    if (m->len < m->cap) { m->keys[m->len] = key; m->ivals[m->len] = val; m->len++; }
+}
+
+static const char *_strmap_get_str(StrMap *m, const char *key, const char *def) {
+    if (!m) return def;
+    for (size_t i = 0; i < m->len; i++) {
+        if (strcmp(m->keys[i], key) == 0) return m->vals[i];
+    }
+    return def;
+}
+
+static int64_t _strmap_get_int(StrMap *m, const char *key, int64_t def) {
+    if (!m) return def;
+    for (size_t i = 0; i < m->len; i++) {
+        if (strcmp(m->keys[i], key) == 0) return m->ivals[i];
+    }
+    return def;
+}
+
+static bool _strmap_contains(StrMap *m, const char *key) {
+    if (!m) return false;
+    for (size_t i = 0; i < m->len; i++) {
+        if (strcmp(m->keys[i], key) == 0) return true;
+    }
+    return false;
+}
+
 static uint64_t _hash_str(const char *s) {
     uint64_t h = 5381;
     while (*s) h = ((h << 5) + h) ^ (unsigned char)*s++;
@@ -1291,16 +1382,47 @@ static Vec_Byte _str_to_bytes(Arena *a, const char *s) {
     return (Vec_Byte){data, len, len};
 }
 
-// Generic set membership (placeholder - sets aren't fully implemented)
+// Bytes to string conversion with UTF-8 validation (replaces invalid sequences with U+FFFD)
+static const char *_bytes_to_str(Arena *a, Vec_Byte v) {
+    if (!v.data || v.len == 0) return "";
+    // Worst case: every byte is invalid -> 3 bytes (U+FFFD) each
+    char *s = (char *)arena_alloc(a, v.len * 3 + 1);
+    size_t j = 0;
+    for (size_t i = 0; i < v.len; ) {
+        unsigned char b = v.data[i];
+        if (b < 0x80) {
+            s[j++] = b;
+            i++;
+        } else if ((b & 0xE0) == 0xC0 && i + 1 < v.len && (v.data[i+1] & 0xC0) == 0x80) {
+            s[j++] = b; s[j++] = v.data[i+1];
+            i += 2;
+        } else if ((b & 0xF0) == 0xE0 && i + 2 < v.len && (v.data[i+1] & 0xC0) == 0x80 && (v.data[i+2] & 0xC0) == 0x80) {
+            s[j++] = b; s[j++] = v.data[i+1]; s[j++] = v.data[i+2];
+            i += 3;
+        } else if ((b & 0xF8) == 0xF0 && i + 3 < v.len && (v.data[i+1] & 0xC0) == 0x80 && (v.data[i+2] & 0xC0) == 0x80 && (v.data[i+3] & 0xC0) == 0x80) {
+            s[j++] = b; s[j++] = v.data[i+1]; s[j++] = v.data[i+2]; s[j++] = v.data[i+3];
+            i += 4;
+        } else {
+            s[j++] = (char)0xEF; s[j++] = (char)0xBF; s[j++] = (char)0xBD; // U+FFFD
+            i++;
+        }
+    }
+    s[j] = '\0';
+    return s;
+}
+
+// Generic set membership - string sets are NULL-terminated const char*[]
 static bool _set_contains(void *set, const char *key) {
-    (void)set; (void)key;
+    if (!set || !key) return false;
+    const char **elems = (const char **)set;
+    for (; *elems; elems++) {
+        if (strcmp(*elems, key) == 0) return true;
+    }
     return false;
 }
 
-// Generic map membership (placeholder - maps aren't fully implemented)
 static bool _map_contains(void *map, const char *key) {
-    (void)map; (void)key;
-    return false;
+    return _strmap_contains((StrMap *)map, key);
 }
 
 """
@@ -1343,14 +1465,10 @@ static bool _map_contains(void *map, const char *key) {
         self._line("")
 
     def _struct_name_to_kind(self, name: str) -> str:
-        """Convert a struct name to its kind string."""
-        # Special cases where Python source uses different kind strings
-        special_cases = {
-            "HereDoc": "heredoc",
-        }
-        if name in special_cases:
-            return special_cases[name]
-        # Convert PascalCase to kebab-case (e.g., UnaryTest -> unary-test)
+        """Get the kind string for a struct, using const_fields from the IR."""
+        if name in self._kind_cache:
+            return self._kind_cache[name]
+        # Fallback: convert PascalCase to kebab-case (e.g., UnaryTest -> unary-test)
         result = ""
         for i, c in enumerate(name):
             if c.isupper():
@@ -1476,6 +1594,7 @@ static bool _map_contains(void *map, const char *key) {
             if isinstance(const.typ, (Set, Map, Slice)):
                 # Complex constants need to be initialized at runtime
                 self._line(f"static {c_type} {name};  // initialized in init()")
+                self._deferred_constants.append(const)
             else:
                 self._line(f"static const {c_type} {name} = {value};")
         self._line("")
@@ -1556,6 +1675,10 @@ static bool _map_contains(void *map, const char *key) {
         self.indent += 1
         if func.name == "parse":
             self._line("init();")
+            for const in self._deferred_constants:
+                cname = _safe_name(const.name).upper()
+                value = self._emit_expr(const.value)
+                self._line(f"{cname} = {value};")
         for stmt in func.body:
             self._emit_stmt(stmt)
         self.indent -= 1
@@ -1692,6 +1815,17 @@ static bool _map_contains(void *map, const char *key) {
                 self._line(f"{c_type} {name} = {{0}};{ownership_comment}")
 
     def _emit_stmt_Assign(self, stmt: Assign) -> None:
+        # Map index assignment: map[key] = value -> _strmap_set_*(map, key, value)
+        if isinstance(stmt.target, IndexLV) and isinstance(stmt.target.obj.typ, Map):
+            obj = self._emit_expr(stmt.target.obj)
+            idx = self._emit_expr(stmt.target.index)
+            value = self._emit_expr(stmt.value)
+            val_type = stmt.target.obj.typ.value
+            if isinstance(val_type, Primitive) and val_type.kind == "int":
+                self._line(f"_strmap_set_int({obj}, {idx}, {value});")
+            else:
+                self._line(f"_strmap_set_str({obj}, {idx}, {value});")
+            return
         target = self._emit_lvalue(stmt.target)
         value = self._emit_expr(stmt.value)
         # Check escape analysis: if borrowed string value escapes (stored in field), copy it
@@ -1816,13 +1950,27 @@ static bool _map_contains(void *map, const char *key) {
                 else:
                     self._line(f"{target} = {tmp_name}.F{i};")
         else:
-            # Fallback for non-tuple types
+            # Fallback for non-tuple types - evaluate value once to avoid
+            # side effects (e.g., --len from .pop()) being repeated
             value = self._emit_expr(stmt.value)
-            for i, t in enumerate(stmt.targets):
+            active_targets = [
+                (i, t) for i, t in enumerate(stmt.targets)
+                if (t.name if isinstance(t, VarLV) else None) not in (None, "_")
+            ]
+            if len(active_targets) > 1:
+                # Multiple targets: capture value in a temp to avoid re-evaluation
+                tmp = self._temp_name("_tup")
+                val_type = stmt.value.typ
+                if isinstance(val_type, Tuple):
+                    sig = self._tuple_sig(val_type)
+                    self._line(f"{sig} {tmp} = {value};")
+                else:
+                    self._line(f"__auto_type {tmp} = {value};")
+                value_expr = tmp
+            else:
+                value_expr = value
+            for i, t in active_targets:
                 var_name = t.name if isinstance(t, VarLV) else None
-                # Skip discard targets (empty name or underscore)
-                if not var_name or var_name == "_":
-                    continue
                 target = self._emit_lvalue(t)
                 already_declared = var_name in self._hoisted_vars if var_name else False
                 is_hoisted = already_declared and self._hoisted_vars.get(var_name) == "void *"
@@ -1830,11 +1978,11 @@ static bool _map_contains(void *map, const char *key) {
                     var_name is not None and not already_declared
                 )
                 if needs_decl:
-                    self._line(f"void *{target} = ((void **)&({value}))[{i}];")
+                    self._line(f"void *{target} = ((void **)&({value_expr}))[{i}];")
                     if var_name is not None:
                         self._hoisted_vars[var_name] = "void *"
                 else:
-                    self._line(f"{target} = ((void **)&({value}))[{i}];")
+                    self._line(f"{target} = ((void **)&({value_expr}))[{i}];")
 
     def _emit_stmt_OpAssign(self, stmt: OpAssign) -> None:
         target = self._emit_lvalue(stmt.target)
@@ -1986,7 +2134,7 @@ static bool _map_contains(void *map, const char *key) {
             self._line(f"{c_type} {c_name};")
             self._hoisted_vars[name] = c_type
         cond = self._emit_expr(stmt.cond)
-        self._line(f"while ({cond}) {{")
+        self._line(f"while (!g_parse_error && ({cond})) {{")
         self.indent += 1
         for s in stmt.body:
             self._emit_stmt(s)
@@ -2106,8 +2254,7 @@ static bool _map_contains(void *map, const char *key) {
             self._line("}")
 
     def _emit_stmt_TryCatch(self, stmt: TryCatch) -> None:
-        # C doesn't have try/catch - use error returns
-        # For simplicity, just emit the try body and ignore errors
+        # C doesn't have try/catch - simulate with g_parse_error checks
         self._line("// try {")
         for name, typ in stmt.hoisted_vars:
             c_type = self._type_to_c(typ) if typ else "void *"
@@ -2118,15 +2265,47 @@ static bool _map_contains(void *map, const char *key) {
             c_name = _safe_name(name)
             self._line(f"{c_type} {c_name};")
             self._hoisted_vars[name] = c_type
+        if stmt.catch_body:
+            label = f"_catch_{self._try_label_counter}"
+            self._try_label_counter += 1
+            self._try_catch_labels.append(label)
         for s in stmt.body:
             self._emit_stmt(s)
-        self._line("// } catch handled via error returns")
+        if stmt.catch_body:
+            self._try_catch_labels.pop()
+            self._line(f"if (g_parse_error) goto {label};")
+            self._line(f"goto {label}_end;")
+            self._line(f"{label}:;")
+            self._line("if (g_parse_error) {")
+            self.indent += 1
+            self._line("g_parse_error = 0;")
+            self._line('g_error_msg[0] = \'\\0\';')
+            for s in stmt.catch_body:
+                self._emit_stmt(s)
+            self.indent -= 1
+            self._line("}")
+            self._line(f"{label}_end:;")
+        elif stmt.reraise:
+            self._line("if (g_parse_error) {")
+            self.indent += 1
+            err_val = self._error_return_value()
+            if err_val:
+                self._line(f"return {err_val};")
+            else:
+                self._line("return;")
+            self.indent -= 1
+            self._line("}")
+        self._line("// } catch")
 
     def _emit_stmt_Raise(self, stmt: Raise) -> None:
         err_val = self._error_return_value()
+        in_try_catch = bool(self._try_catch_labels)
         if stmt.reraise_var:
             self._line("// re-raise")
-            if err_val:
+            self._line("g_parse_error = 1;")
+            if in_try_catch:
+                self._line(f"goto {self._try_catch_labels[-1]};")
+            elif err_val:
                 self._line(f"return {err_val};")
             else:
                 self._line("return;")
@@ -2134,7 +2313,9 @@ static bool _map_contains(void *map, const char *key) {
         msg = self._emit_expr(stmt.message)
         self._line("g_parse_error = 1;")
         self._line(f'snprintf(g_error_msg, sizeof(g_error_msg), "%s", {msg});')
-        if err_val:
+        if in_try_catch:
+            self._line(f"goto {self._try_catch_labels[-1]};")
+        elif err_val:
             self._line(f"return {err_val};")
         else:
             self._line("return;")
@@ -2408,9 +2589,10 @@ static bool _map_contains(void *map, const char *key) {
             return "true" if expr.value else "false"
         if isinstance(expr, NilLit):
             # Check if this is a nil for a Slice type - needs empty Vec
+            # Use cap=(size_t)-1 as sentinel to distinguish None from []
             if expr.typ is not None and isinstance(expr.typ, Slice):
                 sig = self._slice_elem_sig(expr.typ.element)
-                return f"(Vec_{sig}){{NULL, 0, 0}}"
+                return f"(Vec_{sig}){{NULL, 0, (size_t)-1}}"
             # Check if this is a nil for a Tuple type - return zeroed tuple
             if expr.typ is not None and isinstance(expr.typ, Tuple):
                 sig = self._tuple_sig(expr.typ)
@@ -2545,7 +2727,10 @@ static bool _map_contains(void *map, const char *key) {
         if isinstance(obj_type, Slice):
             return f"{obj}.data[{idx}]"
         if isinstance(obj_type, Map):
-            return f"/* map index */ {obj}[{idx}]"
+            val_type = obj_type.value
+            if isinstance(val_type, Primitive) and val_type.kind == "int":
+                return f"_strmap_get_int({obj}, {idx}, 0)"
+            return f'_strmap_get_str({obj}, {idx}, "")'
         if isinstance(obj_type, Tuple):
             # Tuple indexing - use field name F0, F1, etc.
             if isinstance(expr.index, IntLit):
@@ -2560,10 +2745,11 @@ static bool _map_contains(void *map, const char *key) {
             low = self._emit_expr(expr.low) if expr.low else "0"
             high = self._emit_expr(expr.high) if expr.high else f"_rune_len({obj})"
             return f"__c_substring(g_arena, {obj}, {low}, {high})"
-        # Slice of slice - simplified
+        # Slice of slice
         low = self._emit_expr(expr.low) if expr.low else "0"
         high = self._emit_expr(expr.high) if expr.high else f"{obj}.len"
-        return f"/* slice[{low}:{high}] */ {obj}"
+        vec_type = self._type_to_c(obj_type)
+        return f"({vec_type}){{{obj}.data + {low}, {high} - {low}, {high} - {low}}}"
 
     def _emit_expr_SliceConvert(self, expr: SliceConvert) -> str:
         """Emit slice type conversion (e.g., list[HereDoc] -> list[Node])."""
@@ -2666,6 +2852,8 @@ static bool _map_contains(void *map, const char *key) {
                     f"_str_startswith({obj}, {self._emit_expr(e)})" for e in expr.args[0].elements
                 ]
                 return "(" + " || ".join(checks) + ")"
+            if len(expr.args) >= 2:
+                return f"_str_startswith_at({obj}, {args_expr[1]}, {args_expr[0]})"
             return f"_str_startswith({obj}, {args_expr[0]})"
         if method == "endswith" and expr.args:
             # Handle tuple of suffixes: s.endswith(("a", "b")) -> (ends_with || ends_with)
@@ -2698,21 +2886,27 @@ static bool _map_contains(void *map, const char *key) {
                 elem_type = self._type_to_c(obj_type.element)
                 return f"do {{ Vec_{self._slice_elem_sig(obj_type.element)} _src = {src_expr}; for (size_t _i = 0; _i < _src.len; _i++) {{ VEC_PUSH(g_arena, &{obj}, _src.data[_i]); }} }} while(0)"
             if method == "pop":
+                if expr.args and _is_zero_literal(expr.args[0]):
+                    # pop(0) - pop from front: grab first element, shift rest
+                    elem_sig = self._slice_elem_sig(obj_type.element)
+                    return (
+                        f"({{ {self._type_to_c(obj_type.element)} _pop0 = {obj}.data[0]; "
+                        f"memmove({obj}.data, {obj}.data + 1, --{obj}.len * sizeof({obj}.data[0])); "
+                        f"_pop0; }})"
+                    )
                 return f"{obj}.data[--{obj}.len]"
             if method == "copy":
                 return f"{obj} /* copy */"
         # Dict methods
         if isinstance(obj_type, Map):
             if method == "get" and expr.args:
-                # Map.get returns default value for missing keys
+                key_expr = args_expr[0]
                 val_type = obj_type.value
-                if val_type == INT:
-                    return f"0 /* map_get({obj}, {args_expr[0]}) */"
-                if val_type == BOOL:
-                    return f"false /* map_get({obj}, {args_expr[0]}) */"
-                if val_type == STRING:
-                    return f'"" /* map_get({obj}, {args_expr[0]}) */'
-                return f"NULL /* map_get({obj}, {args_expr[0]}) */"
+                if isinstance(val_type, Primitive) and val_type.kind == "int":
+                    default = args_expr[1] if len(args_expr) > 1 else "0"
+                    return f"_strmap_get_int({obj}, {key_expr}, {default})"
+                default = args_expr[1] if len(args_expr) > 1 else '""'
+                return f"_strmap_get_str({obj}, {key_expr}, {default})"
         # Regular method call - handle struct, interface, and pointer types
         # Unwrap Optional if present
         actual_type = obj_type
@@ -2917,14 +3111,22 @@ static bool _map_contains(void *map, const char *key) {
             and expr.expr.typ.kind == "string"
         ):
             return f"_str_to_bytes(g_arena, {inner})"
-        # []byte to string: access the data pointer (bytes are null-terminated or we use length)
+        # []byte to string: null-terminate and return as C string
         if (
             isinstance(expr.expr.typ, Slice)
             and expr.expr.typ.element == BYTE
             and isinstance(expr.to_type, Primitive)
             and expr.to_type.kind == "string"
         ):
-            return f"((const char *)({inner}.data))"
+            return f"_bytes_to_str(g_arena, {inner})"
+        # int/rune to string: chr() — convert codepoint to UTF-8 string
+        if (
+            isinstance(expr.to_type, Primitive)
+            and expr.to_type.kind == "string"
+            and isinstance(expr.expr.typ, Primitive)
+            and expr.expr.typ.kind in ("int", "rune", "byte")
+        ):
+            return f"_rune_to_str(g_arena, {inner})"
         return f"({to_type})({inner})"
 
     def _emit_expr_TypeAssert(self, expr: TypeAssert) -> str:
@@ -2938,7 +3140,7 @@ static bool _map_contains(void *map, const char *key) {
         inner = self._emit_expr(expr.expr)
         tested = self._type_to_c(expr.tested_type).rstrip(" *")
         kind_str = self._struct_name_to_kind(tested)
-        return f'(strcmp({inner}->kind, "{kind_str}") == 0)'
+        return f'({inner} != NULL && strcmp({inner}->kind, "{kind_str}") == 0)'
 
     def _emit_expr_IsNil(self, expr: IsNil) -> str:
         inner = self._emit_expr(expr.expr)
@@ -2955,6 +3157,8 @@ static bool _map_contains(void *map, const char *key) {
             return f"{inner}.len"
         if isinstance(inner_type, Map):
             return f"{inner}.len"
+        if isinstance(inner_type, Optional) and isinstance(inner_type.inner, (Slice, Map)):
+            return f"{inner}->len"
         return f"strlen({inner})"
 
     def _emit_expr_MakeSlice(self, expr: MakeSlice) -> str:
@@ -2963,8 +3167,8 @@ static bool _map_contains(void *map, const char *key) {
         return f"((Vec_{sig}){{NULL, 0, 0}})"
 
     def _emit_expr_MakeMap(self, expr: MakeMap) -> str:
-        # Maps are void* for now - return NULL
-        return "NULL"
+        is_int = isinstance(expr.value_type, Primitive) and expr.value_type.kind == "int"
+        return f"_strmap_new(g_arena, 16, {'true' if is_int else 'false'})"
 
     def _emit_expr_SliceLit(self, expr: SliceLit) -> str:
         vec_type = self._type_to_c(Slice(expr.element_type))
@@ -2979,11 +3183,22 @@ static bool _map_contains(void *map, const char *key) {
         return f"({{ {elem_type} *_slc = ({elem_type} *)arena_alloc(g_arena, {n} * sizeof({elem_type})); {assigns}; ({vec_type}){{_slc, {n}, {n}}}; }})"
 
     def _emit_expr_MapLit(self, expr: MapLit) -> str:
-        # Maps are void* for now - return NULL
-        return "NULL"
+        is_int = isinstance(expr.value_type, Primitive) and expr.value_type.kind == "int"
+        n = len(expr.entries)
+        cap = max(n, 4)
+        alloc = f"_strmap_new(g_arena, {cap}, {'true' if is_int else 'false'})"
+        setter = "_strmap_set_int" if is_int else "_strmap_set_str"
+        tmp = self._temp_name("_map")
+        sets = "; ".join(
+            f"{setter}({tmp}, {self._emit_expr(k)}, {self._emit_expr(v)})"
+            for k, v in expr.entries
+        )
+        return f"({{ StrMap *{tmp} = {alloc}; {sets}; {tmp}; }})"
 
     def _emit_expr_SetLit(self, expr: SetLit) -> str:
-        # Sets are void* for now - return NULL
+        if isinstance(expr.element_type, Primitive) and expr.element_type.kind == "string":
+            elems = ", ".join(self._emit_expr(e) for e in expr.elements)
+            return f"(const char *[]){{{elems}, NULL}}"
         return "NULL"
 
     def _emit_expr_StructLit(self, expr: StructLit) -> str:
@@ -3096,16 +3311,18 @@ static bool _map_contains(void *map, const char *key) {
                             and isinstance(val_type, Slice)
                             and not isinstance(val_type, (Optional, Pointer))
                         ):
-                            # Always emit heap-allocated temp to avoid stack-use-after-return.
-                            # Local variables (lvalues) can also dangle if passed to returned structs.
+                            # Heap-allocate, but pass NULL if value is None (sentinel cap)
                             tmp_name = self._temp_name("_tmp_slice")
                             vec_type = self._type_to_c(val_type)
                             val_str = self._emit_expr(field_val)
-                            # Allocate Vec on heap (arena) to outlive current stack frame
+                            self._line(f"{vec_type} {tmp_name}_v = {val_str};")
                             self._line(
-                                f"{vec_type} *{tmp_name} = ({vec_type} *)arena_alloc(g_arena, sizeof({vec_type}));"
+                                f"{vec_type} *{tmp_name} = ({tmp_name}_v.cap == (size_t)-1) ? NULL "
+                                f": ({vec_type} *)arena_alloc(g_arena, sizeof({vec_type}));"
                             )
-                            self._line(f"*{tmp_name} = {val_str};")
+                            self._line(
+                                f"if ({tmp_name} != NULL) *{tmp_name} = {tmp_name}_v;"
+                            )
                             # Store tmp_name directly (it's already a pointer)
                             self._rvalue_temps.append(
                                 (name, fname, tmp_name, True)
@@ -3225,6 +3442,8 @@ static bool _map_contains(void *map, const char *key) {
             return f"({inner} != 0)"
         if isinstance(inner_type, (Slice, Map, Set)):
             return f"({inner}.len > 0)"
+        if isinstance(inner_type, Optional) and isinstance(inner_type.inner, (Slice, Map, Set)):
+            return f"({inner} != NULL && {inner}->len > 0)"
         return f"({inner} != NULL)"
 
     def _emit_expr_CharClassify(self, expr: CharClassify) -> str:
@@ -3317,7 +3536,7 @@ static bool _map_contains(void *map, const char *key) {
             elem = self._type_to_c(typ.element)
             return f"{elem}[{typ.size}]"
         if isinstance(typ, Map):
-            return "void *"  # Simplified - would need proper map struct
+            return "StrMap *"
         if isinstance(typ, Set):
             return "void *"  # Simplified - would need proper set struct
         if isinstance(typ, Tuple):

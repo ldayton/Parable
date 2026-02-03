@@ -190,11 +190,14 @@ class SwiftBackend:
         self.struct_fields: dict[str, list[tuple[str, Type]]] = {}
         self._hoisted_vars: set[str] = set()
         self._declared_vars: set[str] = set()
+        self._optional_hoisted: set[str] = set()
         self._interface_names: set[str] = set()
         self.temp_counter = 0
         self._type_switch_binding_rename: dict[str, str] = {}
         self._func_params: set[str] = set()
         self._current_return_type: Type | None = None
+        self._throwing_funcs: set[str] = set()
+        self._expr_has_try: bool = False
 
     def emit(self, module: Module) -> str:
         """Emit Swift code from IR Module."""
@@ -202,8 +205,11 @@ class SwiftBackend:
         self.lines = []
         self.struct_fields = {}
         self._hoisted_vars = set()
+        self._optional_hoisted = set()
         self._interface_names = {iface.name for iface in module.interfaces}
+        self._throwing_funcs = set()
         self._collect_struct_fields(module)
+        self._collect_throwing_funcs(module)
         self._emit_module(module)
         return "\n".join(self.lines)
 
@@ -211,6 +217,25 @@ class SwiftBackend:
         """Collect field information for all structs."""
         for struct in module.structs:
             self.struct_fields[struct.name] = [(f.name, f.typ) for f in struct.fields]
+
+    def _collect_throwing_funcs(self, module: Module) -> None:
+        """Collect names of functions/methods that can throw (direct or indirect)."""
+        all_funcs: list[Function] = list(module.functions)
+        for struct in module.structs:
+            all_funcs.extend(struct.methods)
+        # Direct throws
+        for func in all_funcs:
+            if _can_throw(func.body):
+                self._throwing_funcs.add(func.name)
+        # Iterate to find indirect throws (calls to throwing functions)
+        changed = True
+        while changed:
+            changed = False
+            for func in all_funcs:
+                if func.name not in self._throwing_funcs:
+                    if _calls_any(func.body, self._throwing_funcs):
+                        self._throwing_funcs.add(func.name)
+                        changed = True
 
     def _line(self, text: str = "") -> None:
         if text:
@@ -454,6 +479,7 @@ class SwiftBackend:
 
     def _emit_function(self, func: Function) -> None:
         self._hoisted_vars = set()
+        self._optional_hoisted = set()
         self._declared_vars = {p.name for p in func.params}
         self._func_params = {p.name for p in func.params if isinstance(p.typ, FuncType)}
         self._current_return_type = func.ret
@@ -462,10 +488,11 @@ class SwiftBackend:
         params = self._params(func.params)
         ret = self._type(func.ret)
         name = _safe_name(func.name)
+        throws = " throws" if func.name in self._throwing_funcs else ""
         if ret == "Void":
-            self._line(f"func {name}({params}) {{")
+            self._line(f"func {name}({params}){throws} {{")
         else:
-            self._line(f"func {name}({params}) -> {ret} {{")
+            self._line(f"func {name}({params}){throws} -> {ret} {{")
         self.indent += 1
         for stmt in func.body:
             self._emit_stmt(stmt)
@@ -475,6 +502,7 @@ class SwiftBackend:
 
     def _emit_method(self, func: Function) -> None:
         self._hoisted_vars = set()
+        self._optional_hoisted = set()
         self._declared_vars = {p.name for p in func.params}
         self._func_params = {p.name for p in func.params if isinstance(p.typ, FuncType)}
         self._current_return_type = func.ret
@@ -485,10 +513,11 @@ class SwiftBackend:
         name = _safe_name(func.name)
         if func.receiver:
             self.receiver_name = func.receiver.name
+        throws = " throws" if func.name in self._throwing_funcs else ""
         if ret == "Void":
-            self._line(f"func {name}({params}) {{")
+            self._line(f"func {name}({params}){throws} {{")
         else:
-            self._line(f"func {name}({params}) -> {ret} {{")
+            self._line(f"func {name}({params}){throws} -> {ret} {{")
         self.indent += 1
         for stmt in func.body:
             self._emit_stmt(stmt)
@@ -514,11 +543,24 @@ class SwiftBackend:
             if typ:
                 swift_type = self._type(typ)
                 default = self._default_value(typ)
+                if default == "nil" and not swift_type.endswith("?"):
+                    swift_type += "?"
+                if default == "nil":
+                    self._optional_hoisted.add(name)
                 self._line(f"var {var_name}: {swift_type} = {default}")
             else:
                 self._line(f"var {var_name}: Any?")
+                self._optional_hoisted.add(name)
             self._hoisted_vars.add(name)
             self._declared_vars.add(name)
+
+    def _try_expr(self, expr: Expr) -> str:
+        """Emit expression, prefixing 'try' if it contains a throwing call."""
+        self._expr_has_try = False
+        result = self._expr(expr)
+        if self._expr_has_try:
+            return f"try {result}"
+        return result
 
     def _emit_stmt(self, stmt: Stmt) -> None:
         match stmt:
@@ -526,19 +568,24 @@ class SwiftBackend:
                 var_name = _safe_name(name)
                 self._declared_vars.add(name)
                 swift_type = self._type(typ)
+                if isinstance(typ, Optional):
+                    self._optional_hoisted.add(name)
                 if value is not None:
-                    val = self._expr(value)
-                    # Use let for non-reassigned, var for potentially reassigned
+                    val = self._try_expr(value)
+                    if isinstance(value, NilLit) and not swift_type.endswith("?"):
+                        swift_type += "?"
+                        self._optional_hoisted.add(name)
                     keyword = "var" if stmt.is_reassigned else "let"
                     self._line(f"{keyword} {var_name}: {swift_type} = {val}")
                 else:
                     self._line(f"var {var_name}: {swift_type}")
             case Assign(target=target, value=value):
-                val = self._expr(value)
+                val = self._try_expr(value)
                 lv = self._lvalue(target)
                 target_name = target.name if isinstance(target, VarLV) else None
                 is_hoisted = target_name and target_name in self._hoisted_vars
-                if stmt.is_declaration and not is_hoisted:
+                needs_decl = target_name and target_name not in self._declared_vars and not is_hoisted
+                if (stmt.is_declaration and not is_hoisted) or needs_decl:
                     decl_type = stmt.decl_typ if stmt.decl_typ is not None else value.typ
                     swift_type = self._type(decl_type) if decl_type else "Any"
                     self._line(f"var {lv}: {swift_type} = {val}")
@@ -548,18 +595,18 @@ class SwiftBackend:
                     self._line(f"{lv} = {val}")
             case OpAssign(target=target, op=op, value=value):
                 lv = self._lvalue(target)
-                val = self._expr(value)
+                val = self._try_expr(value)
                 self._line(f"{lv} {op}= {val}")
             case TupleAssign(targets=targets, value=value):
                 self._emit_tuple_assign(stmt)
             case NoOp():
                 pass
             case ExprStmt(expr=expr):
-                e = self._expr(expr)
+                e = self._try_expr(expr)
                 self._line(f"{e}")
             case Return(value=value):
                 if value is not None:
-                    val = self._expr(value)
+                    val = self._try_expr(value)
                     self._line(f"return {val}")
                 else:
                     self._line("return")
@@ -567,7 +614,7 @@ class SwiftBackend:
                 self._emit_hoisted_vars(stmt)
                 if init is not None:
                     self._emit_stmt(init)
-                self._line(f"if {self._expr(cond)} {{")
+                self._line(f"if {self._try_expr(cond)} {{")
                 self.indent += 1
                 for s in then_body:
                     self._emit_stmt(s)
@@ -589,7 +636,7 @@ class SwiftBackend:
                 self._emit_for_classic(stmt)
             case While(cond=cond, body=body):
                 self._emit_hoisted_vars(stmt)
-                self._line(f"while {self._expr(cond)} {{")
+                self._line(f"while {self._try_expr(cond)} {{")
                 self.indent += 1
                 for s in body:
                     self._emit_stmt(s)
@@ -615,13 +662,15 @@ class SwiftBackend:
                 if reraise_var:
                     self._line(f"throw {_safe_name(reraise_var)}")
                 else:
+                    self._expr_has_try = False
                     msg = self._expr(message)
                     pos_expr = self._expr(pos)
-                    self._line(f"throw {_safe_type_name(error_type)}(message: {msg}, pos: {pos_expr})")
+                    prefix = "try " if self._expr_has_try else ""
+                    self._line(f"throw {prefix}{_safe_type_name(error_type)}(message: {msg}, pos: {pos_expr})")
             case SoftFail():
                 self._line("return nil")
             case Print(value=value, newline=newline, stderr=stderr):
-                val = self._expr(value)
+                val = self._try_expr(value)
                 if stderr:
                     if newline:
                         self._line(f'fputs({val} + "\\n", stderr)')
@@ -644,7 +693,7 @@ class SwiftBackend:
         new_targets = stmt.new_targets
         value_type = value.typ
         if isinstance(value_type, Tuple):
-            val_str = self._expr(value)
+            val_str = self._try_expr(value)
             self.temp_counter += 1
             temp_var = f"_tuple{self.temp_counter}"
             self._line(f"let {temp_var} = {val_str}")
@@ -662,8 +711,10 @@ class SwiftBackend:
                     self._line(f"var {lv}: {swift_type} = {accessor}")
                     if target_name:
                         self._declared_vars.add(target_name)
+                        if isinstance(elem_type, Optional):
+                            self._optional_hoisted.add(target_name)
         else:
-            val_str = self._expr(value)
+            val_str = self._try_expr(value)
             self.temp_counter += 1
             temp_var = f"_tuple{self.temp_counter}"
             self._line(f"let {temp_var} = {val_str}")
@@ -691,15 +742,27 @@ class SwiftBackend:
             self._line(f"case let {binding} as {type_name}:")
             self.indent += 1
             self._type_switch_binding_rename[stmt.binding] = binding
+            saved_decl = set(self._declared_vars)
+            saved_hoist = set(self._hoisted_vars)
+            saved_opt = set(self._optional_hoisted)
             for s in case.body:
                 self._emit_stmt(s)
+            self._declared_vars = saved_decl
+            self._hoisted_vars = saved_hoist
+            self._optional_hoisted = saved_opt
             self._type_switch_binding_rename.pop(stmt.binding, None)
             self.indent -= 1
         if default:
             self._line("default:")
             self.indent += 1
+            saved_decl = set(self._declared_vars)
+            saved_hoist = set(self._hoisted_vars)
+            saved_opt = set(self._optional_hoisted)
             for s in default:
                 self._emit_stmt(s)
+            self._declared_vars = saved_decl
+            self._hoisted_vars = saved_hoist
+            self._optional_hoisted = saved_opt
             self.indent -= 1
         else:
             self._line("default:")
@@ -716,14 +779,26 @@ class SwiftBackend:
             patterns_str = ", ".join(self._expr(p) for p in case.patterns)
             self._line(f"case {patterns_str}:")
             self.indent += 1
+            saved_decl = set(self._declared_vars)
+            saved_hoist = set(self._hoisted_vars)
+            saved_opt = set(self._optional_hoisted)
             for s in case.body:
                 self._emit_stmt(s)
+            self._declared_vars = saved_decl
+            self._hoisted_vars = saved_hoist
+            self._optional_hoisted = saved_opt
             self.indent -= 1
         if stmt.default:
             self._line("default:")
             self.indent += 1
+            saved_decl = set(self._declared_vars)
+            saved_hoist = set(self._hoisted_vars)
+            saved_opt = set(self._optional_hoisted)
             for s in stmt.default:
                 self._emit_stmt(s)
+            self._declared_vars = saved_decl
+            self._hoisted_vars = saved_hoist
+            self._optional_hoisted = saved_opt
             self.indent -= 1
         else:
             self._line("default:")
@@ -865,7 +940,10 @@ class SwiftBackend:
                     return self._type_switch_binding_rename[name]
                 if name == self.receiver_name:
                     return "self"
-                return _safe_name(name)
+                result = _safe_name(name)
+                if name in self._optional_hoisted:
+                    result += "!"
+                return result
             case FieldAccess(obj=obj, field=field):
                 obj_str = self._expr(obj)
                 obj_type = obj.typ
@@ -979,15 +1057,18 @@ class SwiftBackend:
                 type_name = self._type(asserted)
                 inner_str = self._expr(inner)
                 if expr.safe:
-                    return f"({inner_str} as? {type_name})"
+                    return f"({inner_str} as! {type_name})"
                 return f"({inner_str} as! {type_name})"
             case IsType(expr=inner, tested_type=tested_type):
                 type_name = self._type_name_for_check(tested_type)
                 return f"({self._expr(inner)} is {type_name})"
             case IsNil(expr=inner, negated=negated):
+                inner_str = self._expr(inner)
+                if inner_str.endswith("!"):
+                    inner_str = inner_str[:-1]
                 if negated:
-                    return f"{self._expr(inner)} != nil"
-                return f"{self._expr(inner)} == nil"
+                    return f"{inner_str} != nil"
+                return f"{inner_str} == nil"
             case Len(expr=inner):
                 inner_str = self._expr(inner)
                 inner_type = inner.typ
@@ -1124,6 +1205,8 @@ class SwiftBackend:
             return f"max({args_str})"
         if func in ("_intPtr", "_int_ptr"):
             return self._expr(args[0])
+        if func in self._throwing_funcs:
+            self._expr_has_try = True
         return f"{_safe_name(func)}({args_str})"
 
     def _method_call(self, obj: Expr, method: str, args: list[Expr], receiver_type: Type) -> str:
@@ -1202,6 +1285,8 @@ class SwiftBackend:
                 return f"{obj_str}.remove({args_str})"
             if method == "contains":
                 return f"{obj_str}.contains({args_str})"
+        if method in self._throwing_funcs:
+            self._expr_has_try = True
         return f"{obj_str}.{_safe_name(method)}({args_str})"
 
     def _slice_expr(self, obj: Expr, low: Expr | None, high: Expr | None) -> str:
@@ -1469,6 +1554,119 @@ def _binary_op(op: str) -> str:
             return "||"
         case _:
             return op
+
+
+def _can_throw(stmts: list[Stmt]) -> bool:
+    """Check if a list of statements contains a Raise not caught by TryCatch."""
+    for s in stmts:
+        if isinstance(s, Raise):
+            return True
+        if isinstance(s, If):
+            if _can_throw(s.then_body) or _can_throw(s.else_body):
+                return True
+        elif isinstance(s, (While, ForRange, ForClassic)):
+            if _can_throw(s.body):
+                return True
+        elif isinstance(s, Block):
+            if _can_throw(s.body):
+                return True
+        elif isinstance(s, TypeSwitch):
+            for c in s.cases:
+                if _can_throw(c.body):
+                    return True
+            if s.default and _can_throw(s.default):
+                return True
+        elif isinstance(s, Match):
+            for c in s.cases:
+                if _can_throw(c.body):
+                    return True
+            if s.default and _can_throw(s.default):
+                return True
+        elif isinstance(s, TryCatch):
+            # Raises inside try body are caught, but catch body can re-throw
+            if _can_throw(s.catch_body):
+                return True
+    return False
+
+
+def _calls_any(stmts: list[Stmt], func_names: set[str]) -> bool:
+    """Check if statements contain a call to any of the named functions."""
+    for s in stmts:
+        if _stmt_calls_any(s, func_names):
+            return True
+    return False
+
+
+def _stmt_calls_any(s: Stmt, names: set[str]) -> bool:
+    """Check if a statement calls any of the named functions."""
+    if isinstance(s, (ExprStmt, Return)):
+        expr = s.expr if isinstance(s, ExprStmt) else s.value
+        if expr and _expr_calls_any(expr, names):
+            return True
+    elif isinstance(s, (VarDecl, Assign)):
+        val = s.value
+        if val and _expr_calls_any(val, names):
+            return True
+    elif isinstance(s, OpAssign):
+        if _expr_calls_any(s.value, names):
+            return True
+    elif isinstance(s, TupleAssign):
+        if _expr_calls_any(s.value, names):
+            return True
+    elif isinstance(s, Print):
+        if _expr_calls_any(s.value, names):
+            return True
+    elif isinstance(s, Raise):
+        if s.message and _expr_calls_any(s.message, names):
+            return True
+        if s.pos and _expr_calls_any(s.pos, names):
+            return True
+    elif isinstance(s, If):
+        return _calls_any(s.then_body, names) or _calls_any(s.else_body, names)
+    elif isinstance(s, (While, ForRange, ForClassic)):
+        return _calls_any(s.body, names)
+    elif isinstance(s, Block):
+        return _calls_any(s.body, names)
+    elif isinstance(s, TypeSwitch):
+        for c in s.cases:
+            if _calls_any(c.body, names):
+                return True
+        if s.default and _calls_any(s.default, names):
+            return True
+    elif isinstance(s, Match):
+        for c in s.cases:
+            if _calls_any(c.body, names):
+                return True
+        if s.default and _calls_any(s.default, names):
+            return True
+    elif isinstance(s, TryCatch):
+        # Calls in try body are handled, but catch body propagates
+        if _calls_any(s.catch_body, names):
+            return True
+    return False
+
+
+def _expr_calls_any(e: Expr, names: set[str]) -> bool:
+    """Check if an expression calls any of the named functions."""
+    if isinstance(e, Call):
+        if e.func in names:
+            return True
+        return any(_expr_calls_any(a, names) for a in e.args)
+    if isinstance(e, MethodCall):
+        if e.method in names:
+            return True
+        if _expr_calls_any(e.obj, names):
+            return True
+        return any(_expr_calls_any(a, names) for a in e.args)
+    if isinstance(e, StaticCall):
+        return any(_expr_calls_any(a, names) for a in e.args)
+    if isinstance(e, BinaryOp):
+        return _expr_calls_any(e.left, names) or _expr_calls_any(e.right, names)
+    if isinstance(e, UnaryOp):
+        return _expr_calls_any(e.operand, names)
+    if isinstance(e, Ternary):
+        return _expr_calls_any(e.cond, names) or _expr_calls_any(e.then_expr, names) or _expr_calls_any(e.else_expr, names)
+    return False
 
 
 def _is_string_type(typ: Type) -> bool:

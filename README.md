@@ -24,23 +24,23 @@ Parse bash exactly as bash does. One file, zero dependencies, in your language. 
 
 The transpiler supports these target languages:
 
-| Language   | Min Version  | Status |
-| ---------- | ------------ | ------ |
-| C#         | .NET 8       | Done   |
-| Go         | Go 1.21      | Done   |
-| Java       | Temurin 21   | Done   |
-| Javascript | Node.js 21   | Done   |
-| Lua        | Lua 5.4      | Done   |
-| Perl       | Perl 5.38    | Done   |
-| PHP        | PHP 8.3      | Done   |
-| Python     | CPython 3.12 | Done   |
-| Ruby       | Ruby 3.2     | Done   |
-| Typescript | tsc 5.3      | Done   |
-| C          | GCC 13       | WIP    |
-| Dart       | Dart 3.2     | WIP    |
-| Swift      | Swift 5.9    | WIP    |
-| Rust       | Rust 1.75    | Future |
-| Zig        | Zig 0.11     | Future |
+| Language   | Min Version  | Status     |
+| ---------- | ------------ | ---------- |
+| C          | GCC 13       | Tests pass |
+| C#         | .NET 8       | Tests pass |
+| Dart       | Dart 3.2     | Test pass  |
+| Go         | Go 1.21      | Tests pass |
+| Java       | Temurin 21   | Tests pass |
+| Javascript | Node.js 21   | Tests pass |
+| Lua        | Lua 5.4      | Tests pass |
+| Perl       | Perl 5.38    | Tests pass |
+| PHP        | PHP 8.3      | Tests pass |
+| Python     | CPython 3.12 | Tests pass |
+| Ruby       | Ruby 3.2     | Tests pass |
+| Typescript | tsc 5.3      | Tests pass |
+| Swift      | Swift 5.9    | WIP        |
+| Rust       | Rust 1.75    | Future     |
+| Zig        | Zig 0.11     | Future     |
 
 Output code quality is a work in progress. Currently the transpiler prioritizes correctness over readability; generated code may not yet match hand-written idioms.
 

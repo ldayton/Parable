@@ -434,6 +434,7 @@ class Struct:
     loc: Loc = field(default_factory=loc_unknown)
     is_exception: bool = False
     embedded_type: str | None = None  # Exception inheritance
+    const_fields: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass

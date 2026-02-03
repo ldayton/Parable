@@ -6,10 +6,6 @@ COMPENSATIONS FOR EARLIER STAGE DEFICIENCIES
 Frontend deficiencies (should be fixed in frontend.py):
 - SliceConvert IR node is not handled - either frontend shouldn't emit it for
   Java-targeted code, or this backend needs to implement covariant conversion.
-- VAR_TYPE_OVERRIDES and FIELD_TYPE_OVERRIDES imported from src/type_overrides
-  are workarounds for Python's weak/missing type annotations. Frontend should
-  infer types from usage patterns rather than requiring manual override tables.
-  Backend shouldn't need to consult these - IR should have complete types.
 - Loop variable types in ForRange sometimes fall back to "Object" when element
   type is unknown - frontend should infer element types from iterable types and
   include them in the IR.
@@ -60,7 +56,6 @@ Backend deficiencies (Java-specific, fixable in java.py):
 from __future__ import annotations
 
 from src.backend.util import escape_string, to_camel, to_pascal, to_screaming_snake
-from src.type_overrides import FIELD_TYPE_OVERRIDES, VAR_TYPE_OVERRIDES
 
 # Java reserved words that need escaping
 _JAVA_RESERVED = frozenset(
@@ -635,8 +630,7 @@ class JavaBackend:
 
     def _emit_function(self, func: Function) -> None:
         self._hoisted_vars = set()  # Reset for new function scope
-        self._current_func = func.name  # Track for VAR_TYPE_OVERRIDES
-        # Track function-typed parameters for proper call emission
+        self._current_func = func.name        # Track function-typed parameters for proper call emission
         self._func_params = {p.name for p in func.params if isinstance(p.typ, FuncType)}
         params = self._params(func.params)
         ret = self._type(func.ret)
@@ -676,8 +670,7 @@ class JavaBackend:
 
     def _emit_method(self, func: Function) -> None:
         self._hoisted_vars = set()  # Reset for new function scope
-        self._current_func = func.name  # Track for VAR_TYPE_OVERRIDES
-        # Track function-typed parameters for proper call emission
+        self._current_func = func.name        # Track function-typed parameters for proper call emission
         self._func_params = {p.name for p in func.params if isinstance(p.typ, FuncType)}
         params = self._params(func.params)
         ret = self._type(func.ret)
@@ -707,12 +700,7 @@ class JavaBackend:
     def _emit_stmt(self, stmt: Stmt) -> None:
         match stmt:
             case VarDecl(name=name, typ=typ, value=value, mutable=mutable):
-                # Check for type override
-                override_key = (self._current_func, name) if self._current_func else None
-                if override_key and override_key in VAR_TYPE_OVERRIDES:
-                    java_type = self._type(VAR_TYPE_OVERRIDES[override_key])
-                else:
-                    java_type = self._type(typ)
+                java_type = self._type(typ)
                 var_name = _java_safe_name(name)
                 if value is not None:
                     val = self._expr(value)
@@ -733,21 +721,8 @@ class JavaBackend:
                     is_hoisted = target_name and target_name in self._hoisted_vars
                     if stmt.is_declaration and not is_hoisted:
                         # First assignment to variable - need type declaration
-                        # Check for type override first
-                        override_key = (
-                            (self._current_func, target_name)
-                            if self._current_func and target_name
-                            else None
-                        )
-                        if override_key and override_key in VAR_TYPE_OVERRIDES:
-                            java_type = self._type(VAR_TYPE_OVERRIDES[override_key])
-                        else:
-                            value_type = value.typ
-                            if value_type is not None:
-                                java_type = self._type(value_type)
-                            else:
-                                # Fallback to Object if type unknown
-                                java_type = "Object"
+                        decl_type = stmt.decl_typ if stmt.decl_typ is not None else value.typ
+                        java_type = self._type(decl_type) if decl_type else "Object"
                         self._line(f"{java_type} {lv} = {val};")
                     else:
                         self._line(f"{lv} = {val};")
@@ -966,11 +941,6 @@ class JavaBackend:
         self._emit_hoisted_vars(stmt)
         iter_expr = self._expr(iterable)
         iter_type = iterable.typ
-        # Look up field type from FIELD_TYPE_OVERRIDES when iter_type is None
-        if iter_type is None and isinstance(iterable, FieldAccess):
-            field_key = (self.current_class, iterable.field)
-            if field_key in FIELD_TYPE_OVERRIDES:
-                iter_type = FIELD_TYPE_OVERRIDES[field_key]
         is_string = isinstance(iter_type, Primitive) and iter_type.kind == "string"
         if value is not None and index is not None:
             # Need index - use traditional for loop
@@ -988,11 +958,6 @@ class JavaBackend:
                 self._line(f"for (int {idx} = 0; {idx} < {iter_expr}.size(); {idx}++) {{")
                 self.indent += 1
                 elem_type = self._element_type(iter_type)
-                # Check VAR_TYPE_OVERRIDES for loop variable when element type is unknown
-                if elem_type == "Object" and self._current_func and value:
-                    override_key = (self._current_func, value)
-                    if override_key in VAR_TYPE_OVERRIDES:
-                        elem_type = self._type(VAR_TYPE_OVERRIDES[override_key])
                 if val_hoisted:
                     self._line(f"{val} = {iter_expr}.get({idx});")
                 else:
@@ -1017,11 +982,6 @@ class JavaBackend:
                 # Check if iterating over range() - element type is Integer
                 if isinstance(iterable, Call) and iterable.func == "range":
                     elem_type = "Integer"
-                # Check VAR_TYPE_OVERRIDES for loop variable when element type is unknown
-                if elem_type == "Object" and self._current_func and value:
-                    override_key = (self._current_func, value)
-                    if override_key in VAR_TYPE_OVERRIDES:
-                        elem_type = self._type(VAR_TYPE_OVERRIDES[override_key])
                 if val_hoisted:
                     # Can't use enhanced for loop with hoisted var, use indexed loop
                     self._line(f"for (int _i = 0; _i < {iter_expr}.size(); _i++) {{")
@@ -1351,7 +1311,7 @@ class JavaBackend:
                 if _is_string_type(inner_type) or isinstance(inner_type, (Slice, Map, Set)):
                     return f"(!{inner_str}.isEmpty())"
                 if isinstance(inner_type, Optional) and isinstance(inner_type.inner, (Slice, Map, Set)):
-                    return f"(!{inner_str}.isEmpty())"
+                    return f"({inner_str} != null && !{inner_str}.isEmpty())"
                 if inner_type == Primitive(kind="int"):
                     # Wrap binary ops in parens for correct precedence with !=
                     if isinstance(e, BinaryOp):

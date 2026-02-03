@@ -1,0 +1,28 @@
+{
+    "name": "ldayton/parable",
+    "description": "A bash parser that exactly matches bash's behavior",
+    "type": "library",
+    "license": "MIT",
+    "authors": [
+        {
+            "name": "Lily Dayton"
+        }
+    ],
+    "homepage": "https://github.com/ldayton/Parable",
+    "support": {
+        "issues": "https://github.com/ldayton/Parable/issues",
+        "source": "https://github.com/ldayton/Parable"
+    },
+    "keywords": ["bash", "parser", "shell", "ast"],
+    "require": {
+        "php": ">=8.3"
+    },
+    "autoload": {
+        "files": ["lib/parable.php"]
+    },
+    "scripts": {
+        "transpile": "mkdir -p lib && uv run --directory \"$TRANSPILER_DIR\" python -m src.tongues --target php < \"$SOURCE_FILE\" > lib/parable.php",
+        "check-syntax": "php -l lib/parable.php",
+        "check": "php bin/run_tests \"$TESTS_DIR\""
+    }
+}

@@ -4,8 +4,8 @@ set shell := ["bash", "-o", "pipefail", "-cu"]
 source := "../src/parable.py"
 tests := "../tests"
 dist := "../dist/go"
-backends := "c csharp go java javascript lua php perl python ruby typescript"
-testable := "c go javascript lua perl php python ruby typescript"
+backends := "c csharp dart go java javascript lua php perl python ruby typescript"
+testable := "dart csharp go java javascript lua perl php python ruby typescript"
 
 # Transpile source to stdout
 emit backend:
@@ -18,50 +18,40 @@ prep backend:
     just style
     case "{{backend}}" in
         c)
-            uv run python -m src.tongues --target c < {{source}} > /tmp/transpile.c
-            gcc -Wall -Wextra -fsyntax-only -std=c11 /tmp/transpile.c
+            just -f ../dist/c/justfile build "$(pwd)/{{source}}" "$(pwd)"
             ;;
         csharp)
-            uv run python -m src.tongues --target csharp < {{source}} > ../dist/csharp/Parable.cs
-            dotnet build ../dist/csharp/csharp.csproj -c Release -v q --nologo
+            just -f ../dist/csharp/justfile build "$(pwd)/{{source}}" "$(pwd)"
+            ;;
+        dart)
+            just -f ../dist/dart/justfile build "$(pwd)/{{source}}" "$(pwd)"
             ;;
         go)
-            uv run python -m src.tongues --target go < {{source}} > /tmp/transpile-ir.go
-            gofmt /tmp/transpile-ir.go > {{dist}}/parable.go
-            go build -C {{dist}} -o /dev/null .
+            just -f ../dist/go/justfile build "$(pwd)/{{source}}" "$(pwd)"
             ;;
         java)
-            uv run python -m src.tongues --target java < {{source}} > /tmp/Output.java
-            javac /tmp/Output.java -d /tmp
+            just -f ../dist/java/justfile build "$(pwd)/{{source}}" "$(pwd)"
             ;;
         javascript)
-            rm -rf /tmp/transpile-js && mkdir -p /tmp/transpile-js
-            uv run python -m src.tongues --target javascript < {{source}} > /tmp/transpile-js/parable.js
-            node --check /tmp/transpile-js/parable.js
+            just -f ../dist/javascript/justfile build "$(pwd)/{{source}}" "$(pwd)"
             ;;
         lua)
-            uv run python -m src.tongues --target lua < {{source}} > /tmp/transpile.lua
-            luac -p /tmp/transpile.lua
+            just -f ../dist/lua/justfile build "$(pwd)/{{source}}" "$(pwd)"
             ;;
         python)
-            uv run python -m src.tongues --target python < {{source}} > /tmp/transpile.py
+            just -f ../dist/python/justfile build "$(pwd)/{{source}}" "$(pwd)"
             ;;
         typescript)
-            rm -rf /tmp/transpile-ts && mkdir -p /tmp/transpile-ts/src
-            uv run python -m src.tongues --target typescript < {{source}} > /tmp/transpile-ts/src/output.ts
-            tsc --outDir /tmp/transpile-ts/src --lib es2019 --module commonjs --esModuleInterop /tmp/transpile-ts/src/output.ts
+            just -f ../dist/typescript/justfile build "$(pwd)/{{source}}" "$(pwd)"
             ;;
         perl)
-            uv run python -m src.tongues --target perl < {{source}} > /tmp/transpile.pl
-            perl -c /tmp/transpile.pl
+            just -f ../dist/perl/justfile build "$(pwd)/{{source}}" "$(pwd)"
             ;;
         php)
-            uv run python -m src.tongues --target php < {{source}} > /tmp/transpile.php
-            php -l /tmp/transpile.php
+            just -f ../dist/php/justfile build "$(pwd)/{{source}}" "$(pwd)"
             ;;
         ruby)
-            uv run python -m src.tongues --target ruby < {{source}} > /tmp/transpile.rb
-            ruby -c /tmp/transpile.rb
+            just -f ../dist/ruby/justfile build "$(pwd)/{{source}}" "$(pwd)"
             ;;
         *)
             echo "Unknown backend: {{backend}}"
@@ -77,52 +67,37 @@ test backend:
     tests_abs=$(cd "$(dirname "{{tests}}")" && pwd)/$(basename "{{tests}}")
     case "{{backend}}" in
         c)
-            rm -rf /tmp/transpile-test-c && mkdir /tmp/transpile-test-c
-            uv run python -m src.tongues --target c < {{source}} > /tmp/transpile-test-c/parable.c
-            cp {{tests}}/bin/run-tests.c /tmp/transpile-test-c/ 2>/dev/null || cp ../dist/c/run_tests.c /tmp/transpile-test-c/
-            gcc -Wall -Wextra -O2 -std=c11 -o /tmp/transpile-test-c/run_tests /tmp/transpile-test-c/run_tests.c
-            /tmp/transpile-test-c/run_tests "$tests_abs"
+            just -f ../dist/c/justfile check "$(pwd)/{{source}}" "$(pwd)" "$tests_abs"
+            ;;
+        dart)
+            just -f ../dist/dart/justfile check "$(pwd)/{{source}}" "$(pwd)" "$tests_abs"
             ;;
         go)
-            just prep go
-            go run -C {{dist}} ./cmd/run-tests "$tests_abs"
+            just -f ../dist/go/justfile check "$(pwd)/{{source}}" "$(pwd)" "$tests_abs"
+            ;;
+        java)
+            just -f ../dist/java/justfile check "$(pwd)/../src/parable.py" "$(pwd)" "$tests_abs"
             ;;
         javascript)
-            just prep javascript
-            node {{tests}}/bin/run-js-tests.js /tmp/transpile-js
+            just -f ../dist/javascript/justfile check "$(pwd)/{{source}}" "$(pwd)" "$tests_abs"
             ;;
         lua)
-            rm -rf /tmp/transpile-test-lua && mkdir /tmp/transpile-test-lua
-            uv run python -m src.tongues --target lua < {{source}} > /tmp/transpile-test-lua/parable.lua
-            luac -p /tmp/transpile-test-lua/parable.lua
-            lua -l /tmp/transpile-test-lua/parable {{tests}}/bin/run-tests.lua {{tests}}
+            just -f ../dist/lua/justfile check "$(pwd)/{{source}}" "$(pwd)" "$tests_abs"
             ;;
         python)
-            rm -rf /tmp/transpile-test && mkdir /tmp/transpile-test
-            uv run python -m src.tongues --target python < {{source}} > /tmp/transpile-test/parable.py
-            PYTHONPATH=/tmp/transpile-test python3 {{tests}}/bin/run-tests.py {{tests}}
+            just -f ../dist/python/justfile check "$(pwd)/{{source}}" "$(pwd)" "$tests_abs"
             ;;
         typescript)
-            just prep typescript
-            node {{tests}}/bin/run-js-tests.js /tmp/transpile-ts
+            just -f ../dist/typescript/justfile check "$(pwd)/{{source}}" "$(pwd)" "$tests_abs"
             ;;
         perl)
-            rm -rf /tmp/transpile-test-pl && mkdir /tmp/transpile-test-pl
-            uv run python -m src.tongues --target perl < {{source}} > /tmp/transpile-test-pl/parable.pl
-            perl -c /tmp/transpile-test-pl/parable.pl
-            PERL5LIB=/tmp/transpile-test-pl perl {{tests}}/bin/run-tests.pl {{tests}}
+            just -f ../dist/perl/justfile check "$(pwd)/{{source}}" "$(pwd)" "$tests_abs"
             ;;
         php)
-            rm -rf /tmp/transpile-test-php && mkdir /tmp/transpile-test-php
-            uv run python -m src.tongues --target php < {{source}} > /tmp/transpile-test-php/parable.php
-            php -l /tmp/transpile-test-php/parable.php
-            php {{tests}}/bin/run-tests.php {{tests}}
+            just -f ../dist/php/justfile check "$(pwd)/{{source}}" "$(pwd)" "$tests_abs"
             ;;
         ruby)
-            rm -rf /tmp/transpile-test-rb && mkdir /tmp/transpile-test-rb
-            uv run python -m src.tongues --target ruby < {{source}} > /tmp/transpile-test-rb/parable.rb
-            ruby -c /tmp/transpile-test-rb/parable.rb
-            ruby -r /tmp/transpile-test-rb/parable.rb {{tests}}/bin/run-tests.rb {{tests}}
+            just -f ../dist/ruby/justfile check "$(pwd)/{{source}}" "$(pwd)" "$tests_abs"
             ;;
         *)
             echo "No test runner for backend: {{backend}}"

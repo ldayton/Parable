@@ -7,7 +7,6 @@ from typing import TYPE_CHECKING
 from .ast_compat import ASTNode, dict_walk, is_type
 from .collection import CollectionCallbacks
 from ..ir import FieldInfo
-from ..type_overrides import FIELD_TYPE_OVERRIDES
 
 if TYPE_CHECKING:
     from ..ir import StructInfo, SymbolTable
@@ -42,10 +41,6 @@ def collect_init_fields(
                 if field_name not in info.fields:
                     py_type = callbacks.annotation_to_str(stmt.get("annotation"))
                     typ = callbacks.py_type_to_ir(py_type, True)  # concrete_nodes=True
-                    # Apply field type overrides (keep for compatibility)
-                    override_key = (info.name, field_name)
-                    if override_key in FIELD_TYPE_OVERRIDES:
-                        typ = FIELD_TYPE_OVERRIDES[override_key]
                     info.fields[field_name] = FieldInfo(
                         name=field_name, typ=typ, py_name=field_name
                     )
@@ -81,10 +76,6 @@ def collect_init_fields(
                     if field_name not in info.fields:
                         assert callbacks.infer_type_from_value is not None
                         typ = callbacks.infer_type_from_value(value, param_types)
-                        # Apply field type overrides
-                        override_key = (info.name, field_name)
-                        if override_key in FIELD_TYPE_OVERRIDES:
-                            typ = FIELD_TYPE_OVERRIDES[override_key]
                         info.fields[field_name] = FieldInfo(
                             name=field_name, typ=typ, py_name=field_name
                         )
@@ -108,11 +99,7 @@ def collect_class_fields(
             target = stmt.get("target", {})
             field_name = target.get("id")
             py_type = callbacks.annotation_to_str(stmt.get("annotation"))
-            typ = callbacks.py_type_to_ir(py_type, False)
-            # Apply field type overrides
-            override_key = (info.name, field_name)
-            if override_key in FIELD_TYPE_OVERRIDES:
-                typ = FIELD_TYPE_OVERRIDES[override_key]
+            typ = callbacks.py_type_to_ir(py_type, True)  # concrete_nodes=True for struct fields
             info.fields[field_name] = FieldInfo(name=field_name, typ=typ, py_name=field_name)
     # Collect fields from __init__
     for stmt in node.get("body", []):
@@ -121,6 +108,13 @@ def collect_class_fields(
     # Exception classes always need constructors for panic(NewXxx(...)) pattern
     if info.is_exception:
         info.needs_constructor = True
+    # Build field-to-structs mapping for Node subclasses
+    if info.is_node:
+        for field_name in info.fields:
+            if field_name not in symbols.field_to_structs:
+                symbols.field_to_structs[field_name] = []
+            if info.name not in symbols.field_to_structs[field_name]:
+                symbols.field_to_structs[field_name].append(info.name)
 
 
 def collect_fields(

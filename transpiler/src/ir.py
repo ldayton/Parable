@@ -412,6 +412,7 @@ class Module:
     constants: list[Constant] = field(default_factory=list)
     enums: list[Enum] = field(default_factory=list)
     exports: list[Export] = field(default_factory=list)
+    hierarchy_root: str | None = None  # Root interface for Node-like class hierarchies
 
 
 @dataclass
@@ -2309,6 +2310,10 @@ class SymbolTable:
     structs: dict[str, StructInfo] = field(default_factory=dict)
     functions: dict[str, FuncInfo] = field(default_factory=dict)
     constants: dict[str, Type] = field(default_factory=dict)
+    # Maps field_name -> list of struct names that have this field (for Node subclasses)
+    field_to_structs: dict[str, list[str]] = field(default_factory=dict)
+    # Maps method_name -> struct name that has this method (for Node subclasses)
+    method_to_structs: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass

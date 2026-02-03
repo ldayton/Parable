@@ -1,0 +1,12 @@
+name: parable
+description: A bash parser that exactly matches bash's behavior
+version: 0.1.0
+repository: https://github.com/ldayton/Parable
+homepage: https://github.com/ldayton/Parable
+issue_tracker: https://github.com/ldayton/Parable/issues
+
+environment:
+  sdk: ^3.2.0
+
+dev_dependencies:
+  lints: ^3.0.0

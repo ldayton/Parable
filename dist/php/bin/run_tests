@@ -1,0 +1,229 @@
+#!/usr/bin/env php
+<?php
+/**
+ * Simple test runner for PHP backend. Mirrors run-tests.py.
+ */
+
+declare(strict_types=1);
+declare(ticks=1);
+
+require_once __DIR__ . '/../lib/parable.php';
+
+class TimeoutException extends Exception {}
+
+function setup_timeout_handler(): void {
+    pcntl_signal(SIGALRM, function() {
+        throw new TimeoutException("Test timed out after 10 seconds");
+    });
+}
+
+function findTestFiles(string $directory): array {
+    $result = [];
+    $iterator = new RecursiveIteratorIterator(
+        new RecursiveDirectoryIterator($directory)
+    );
+    foreach ($iterator as $file) {
+        if ($file->isFile() && str_ends_with($file->getFilename(), '.tests')) {
+            $result[] = $file->getPathname();
+        }
+    }
+    sort($result);
+    return $result;
+}
+
+function parseTestFile(string $filepath): array {
+    $tests = [];
+    $lines = explode("\n", file_get_contents($filepath));
+    $i = 0;
+    $n = count($lines);
+    while ($i < $n) {
+        $line = $lines[$i];
+        if (str_starts_with($line, '#') || trim($line) === '') {
+            $i++;
+            continue;
+        }
+        if (str_starts_with($line, '=== ')) {
+            $name = trim(substr($line, 4));
+            $startLine = $i + 1;
+            $i++;
+            $inputLines = [];
+            while ($i < $n && $lines[$i] !== '---') {
+                $inputLines[] = $lines[$i];
+                $i++;
+            }
+            if ($i < $n && $lines[$i] === '---') {
+                $i++;
+            }
+            $expectedLines = [];
+            while ($i < $n && $lines[$i] !== '---' && !str_starts_with($lines[$i], '=== ')) {
+                $expectedLines[] = $lines[$i];
+                $i++;
+            }
+            if ($i < $n && $lines[$i] === '---') {
+                $i++;
+            }
+            while (count($expectedLines) > 0 && trim($expectedLines[count($expectedLines) - 1]) === '') {
+                array_pop($expectedLines);
+            }
+            $testInput = implode("\n", $inputLines);
+            $testExpected = implode("\n", $expectedLines);
+            $tests[] = [$name, $testInput, $testExpected, $startLine];
+        } else {
+            $i++;
+        }
+    }
+    return $tests;
+}
+
+function normalize(string $s): string {
+    return implode(' ', preg_split('/\s+/', trim($s)));
+}
+
+function runTest(string $testInput, string $testExpected): array {
+    $extglob = false;
+    if (str_starts_with($testInput, "# @extglob\n")) {
+        $extglob = true;
+        $testInput = substr($testInput, strlen("# @extglob\n"));
+    }
+    try {
+        pcntl_alarm(10);
+        $nodes = parse($testInput, $extglob);
+        $parts = [];
+        foreach ($nodes as $node) {
+            $parts[] = $node->toSexp();
+        }
+        $actual = implode(' ', $parts);
+        pcntl_alarm(0);
+    } catch (TimeoutException $e) {
+        pcntl_alarm(0);
+        return [false, '<timeout>', 'Test timed out after 10 seconds'];
+    } catch (Parseerror_ $e) {
+        pcntl_alarm(0);
+        if (normalize($testExpected) === '<error>') {
+            return [true, '<error>', null];
+        }
+        return [false, '<parse error>', $e->getMessage()];
+    } catch (Exception $e) {
+        pcntl_alarm(0);
+        return [false, '<exception>', $e->getMessage()];
+    }
+    if (normalize($testExpected) === '<error>') {
+        return [false, $actual, 'Expected parse error but got successful parse'];
+    }
+    $expectedNorm = normalize($testExpected);
+    $actualNorm = normalize($actual);
+    if ($expectedNorm === $actualNorm) {
+        return [true, $actual, null];
+    }
+    return [false, $actual, null];
+}
+
+function printUsage(): void {
+    echo "Usage: run_tests [options] [test_dir]\n";
+    echo "Options:\n";
+    echo "  -v, --verbose       Show PASS/FAIL for each test\n";
+    echo "  -f, --filter PAT    Only run tests matching PAT\n";
+    echo "  --max-failures N    Show at most N failures (0=unlimited, default=20)\n";
+    echo "  -h, --help          Show this help message\n";
+}
+
+function main(): int {
+    global $argv;
+    setup_timeout_handler();
+    $scriptDir = dirname(__FILE__);
+    $distDir = dirname($scriptDir);
+    $verbose = false;
+    $filterPattern = null;
+    $maxFailures = 20;
+    $testDir = null;
+    $i = 1;
+    while ($i < count($argv)) {
+        $arg = $argv[$i];
+        if ($arg === '-h' || $arg === '--help') {
+            printUsage();
+            return 0;
+        } elseif ($arg === '-v' || $arg === '--verbose') {
+            $verbose = true;
+        } elseif ($arg === '-f' || $arg === '--filter') {
+            $i++;
+            if ($i < count($argv)) {
+                $filterPattern = $argv[$i];
+            }
+        } elseif ($arg === '--max-failures') {
+            $i++;
+            if ($i < count($argv)) {
+                $maxFailures = (int)$argv[$i];
+            }
+        } elseif (file_exists($arg)) {
+            $testDir = $arg;
+        }
+        $i++;
+    }
+    if ($testDir === null) {
+        $testDir = dirname($distDir) . '/tests';
+    }
+    $repoRoot = dirname(dirname($distDir));
+    $startTime = microtime(true);
+    $totalPassed = 0;
+    $totalFailed = 0;
+    $failedTests = [];
+    if (is_file($testDir)) {
+        $testFiles = [$testDir];
+    } else {
+        $testFiles = findTestFiles($testDir);
+    }
+    foreach ($testFiles as $filepath) {
+        $tests = parseTestFile($filepath);
+        $relPath = str_replace($repoRoot . '/', '', $filepath);
+        foreach ($tests as [$name, $testInput, $testExpected, $lineNum]) {
+            if ($filterPattern !== null) {
+                if (strpos($name, $filterPattern) === false && strpos($relPath, $filterPattern) === false) {
+                    continue;
+                }
+            }
+            $effectiveExpected = $testExpected;
+            if (normalize($testExpected) === '<infinite>') {
+                $effectiveExpected = '<error>';
+            }
+            [$passed, $actual, $errorMsg] = runTest($testInput, $effectiveExpected);
+            if ($passed) {
+                $totalPassed++;
+                if ($verbose) {
+                    echo "PASS {$relPath}:{$lineNum} {$name}\n";
+                }
+            } else {
+                $totalFailed++;
+                $failedTests[] = [$relPath, $lineNum, $name, $testInput, $testExpected, $actual, $errorMsg];
+                if ($verbose) {
+                    echo "FAIL {$relPath}:{$lineNum} {$name}\n";
+                }
+            }
+        }
+    }
+    $elapsed = microtime(true) - $startTime;
+    echo "\n";
+    if ($totalFailed > 0) {
+        echo str_repeat('=', 60) . "\n";
+        echo "FAILURES\n";
+        echo str_repeat('=', 60) . "\n";
+        $showCount = $maxFailures === 0 ? count($failedTests) : min(count($failedTests), $maxFailures);
+        for ($j = 0; $j < $showCount; $j++) {
+            [$relPath, $lineNum, $name, $inp, $expected, $actual, $errorMsg] = $failedTests[$j];
+            echo "\n{$relPath}:{$lineNum} {$name}\n";
+            echo "  Input:    " . var_export($inp, true) . "\n";
+            echo "  Expected: {$expected}\n";
+            echo "  Actual:   {$actual}\n";
+            if ($errorMsg !== null) {
+                echo "  Error:    {$errorMsg}\n";
+            }
+        }
+        if ($maxFailures > 0 && $totalFailed > $maxFailures) {
+            echo "\n... and " . ($totalFailed - $maxFailures) . " more failures\n";
+        }
+        echo "\n";
+    }
+    printf("php: %d passed, %d failed in %.2fs\n", $totalPassed, $totalFailed, $elapsed);
+    return $totalFailed > 0 ? 1 : 0;
+}
+
+exit(main());

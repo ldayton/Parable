@@ -992,7 +992,7 @@ class CSharpBackend:
                 if isinstance(inner_type, (Slice, Map, Set)):
                     return f"({inner_str}.Count > 0)"
                 if isinstance(inner_type, Optional) and isinstance(inner_type.inner, (Slice, Map, Set)):
-                    return f"({inner_str}.Count > 0)"
+                    return f"({inner_str} != null && {inner_str}.Count > 0)"
                 if isinstance(inner_type, Primitive) and inner_type.kind == "int":
                     return f"({inner_str} != 0)"
                 return f"({inner_str} != null)"

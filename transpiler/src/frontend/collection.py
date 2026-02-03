@@ -12,7 +12,6 @@ from ..ir import (
     Set,
     STRING,
 )
-from ..type_overrides import MODULE_CONSTANTS
 
 if TYPE_CHECKING:
     from .. import ir
@@ -54,16 +53,10 @@ def build_kind_mapping(
 
 def collect_constants(tree: ASTNode, symbols: SymbolTable) -> None:
     """Pass 5: Collect module-level and class-level constants."""
-    # First, register overridden constants from type_overrides
-    for const_name, (const_type, _) in MODULE_CONSTANTS.items():
-        symbols.constants[const_name] = const_type
     for node in tree.get("body", []):
         if is_type(node, ["Assign"]) and len(node.get("targets", [])) == 1:
             target = node.get("targets", [])[0]
             if is_type(target, ["Name"]) and target.get("id", "").isupper():
-                # Skip if already registered via MODULE_CONSTANTS
-                if target.get("id") in MODULE_CONSTANTS:
-                    continue
                 # All-caps name = constant
                 value = node.get("value", {})
                 if is_type(value, ["Constant"]) and isinstance(value.get("value"), int):

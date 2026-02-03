@@ -13,7 +13,7 @@ import (
 	"strings"
 	"time"
 
-	"parable"
+	"github.com/ldayton/parable"
 )
 
 type testCase struct {
@@ -178,16 +178,39 @@ func runTest(testInput, testExpected string) (passed bool, actual string, errMsg
 	}
 }
 
+func printUsage() {
+	fmt.Println("Usage: run-tests [options] [test_dir]")
+	fmt.Println("Options:")
+	fmt.Println("  -v, --verbose       Show PASS/FAIL for each test")
+	fmt.Println("  -f, --filter PAT    Only run tests matching PAT")
+	fmt.Println("  --max-failures N    Show at most N failures (0=unlimited, default=20)")
+	fmt.Println("  -h, --help          Show this help message")
+}
+
 func main() {
 	verbose := flag.Bool("v", false, "Verbose output")
 	flag.Bool("verbose", false, "Verbose output")
 	filterPattern := flag.String("f", "", "Filter pattern for test names")
+	flag.String("filter", "", "Filter pattern for test names")
+	maxFailures := flag.Int("max-failures", 20, "Max failures to show (0=unlimited)")
+	showHelp := flag.Bool("h", false, "Show help")
+	flag.Bool("help", false, "Show help")
 	flag.Parse()
-	// Also check for --verbose
-	for _, arg := range os.Args[1:] {
+	// Also check for --verbose, --filter, --help
+	for i, arg := range os.Args[1:] {
 		if arg == "--verbose" {
 			*verbose = true
 		}
+		if arg == "--filter" && i+2 < len(os.Args) {
+			*filterPattern = os.Args[i+2]
+		}
+		if arg == "--help" {
+			*showHelp = true
+		}
+	}
+	if *showHelp {
+		printUsage()
+		return
 	}
 	// Find tests directory - use arg if provided, otherwise search
 	testDir := flag.Arg(0)
@@ -247,7 +270,11 @@ func main() {
 		fmt.Println(strings.Repeat("=", 60))
 		fmt.Println("FAILURES")
 		fmt.Println(strings.Repeat("=", 60))
-		for _, f := range failedTests[:min(len(failedTests), 20)] {
+		showCount := len(failedTests)
+		if *maxFailures > 0 && showCount > *maxFailures {
+			showCount = *maxFailures
+		}
+		for _, f := range failedTests[:showCount] {
 			fmt.Printf("\n%s:%d %s\n", f.relPath, f.lineNum, f.name)
 			fmt.Printf("  Input:    %q\n", f.input)
 			fmt.Printf("  Expected: %s\n", f.expected)
@@ -256,11 +283,11 @@ func main() {
 				fmt.Printf("  Error:    %s\n", f.err)
 			}
 		}
-		if totalFailed > 20 {
-			fmt.Printf("\n... and %d more failures\n", totalFailed-20)
+		if *maxFailures > 0 && totalFailed > *maxFailures {
+			fmt.Printf("\n... and %d more failures\n", totalFailed-*maxFailures)
 		}
 	}
-	fmt.Printf("%d passed, %d failed in %.2fs\n", totalPassed, totalFailed, elapsed)
+	fmt.Printf("go: %d passed, %d failed in %.2fs\n", totalPassed, totalFailed, elapsed)
 	if totalFailed > 0 {
 		os.Exit(1)
 	}

@@ -3737,7 +3737,7 @@ function Redirect:new(op, target, fd, kind)
   self.op = op
   if target == nil then target = nil end
   self.target = target
-  if fd == nil then fd = nil end
+  if fd == nil then fd = 0 end
   self.fd = fd
   if kind == nil then kind = "" end
   self.kind = kind
@@ -3828,7 +3828,7 @@ function HereDoc:new(delimiter, content, strip_tabs, quoted, fd, complete, start
   self.strip_tabs = strip_tabs
   if quoted == nil then quoted = false end
   self.quoted = quoted
-  if fd == nil then fd = nil end
+  if fd == nil then fd = 0 end
   self.fd = fd
   if complete == nil then complete = false end
   self.complete = complete
@@ -3860,7 +3860,7 @@ function Subshell:new(body, redirects, kind)
   local self = setmetatable({}, Subshell)
   if body == nil then body = nil end
   self.body = body
-  if redirects == nil then redirects = {} end
+  if redirects == nil then redirects = nil end
   self.redirects = redirects
   if kind == nil then kind = "" end
   self.kind = kind
@@ -3884,7 +3884,7 @@ function BraceGroup:new(body, redirects, kind)
   local self = setmetatable({}, BraceGroup)
   if body == nil then body = nil end
   self.body = body
-  if redirects == nil then redirects = {} end
+  if redirects == nil then redirects = nil end
   self.redirects = redirects
   if kind == nil then kind = "" end
   self.kind = kind
@@ -7126,7 +7126,7 @@ function Parser:parse_redirect()
     end
   end
   if op == "<<" then
-    return self:parse_heredoc(((fd) == -1 and nil or (fd)), strip_tabs)
+    return self:parse_heredoc(fd, strip_tabs)
   end
   if varfd ~= "" then
     op = "{" .. varfd .. "}" .. op
@@ -7708,7 +7708,7 @@ function Parser:parse_cond_and()
 end
 
 function Parser:parse_cond_term()
-  local inner, op, op_word, operand, saved_pos, word1, word2
+  local inner, op, op_word, operand, saved_pos, unary_operand, word1, word2
   self:cond_skip_whitespace()
   if self:cond_at_end() then
     error({ParseError = true, message = "Unexpected end of conditional expression", pos = self.pos})
@@ -7738,11 +7738,11 @@ function Parser:parse_cond_term()
   end
   self:cond_skip_whitespace()
   if _set_contains(COND_UNARY_OPS, word1.value) then
-    operand = self:parse_cond_word()
-    if (operand == nil) then
+    unary_operand = self:parse_cond_word()
+    if (unary_operand == nil) then
       error({ParseError = true, message = "Expected operand after " .. word1.value, pos = self.pos})
     end
-    return UnaryTest:new(word1.value, operand, "unary-test")
+    return UnaryTest:new(word1.value, unary_operand, "unary-test")
   end
   if not self:cond_at_end() and self:peek() ~= "&" and self:peek() ~= "|" and self:peek() ~= ")" then
     if is_redirect_char(self:peek()) and not (self.pos + 1 < self.length and string.sub(self.source, self.pos + 1 + 1, self.pos + 1 + 1) == "(") then
@@ -9244,7 +9244,7 @@ end
 
 function append_redirects(base, redirects)
   local parts, r
-  if (#(redirects) > 0) then
+  if (redirects ~= nil and #(redirects) > 0) then
     parts = {}
     for _, r in ipairs(redirects) do
       ;(function() table.insert(parts, r:to_sexp()); return parts end)()
@@ -9769,7 +9769,7 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
     local node = node
     body = format_cmdsub_node(node.body, indent, in_procsub, compact_redirects, false)
     redirects = ""
-    if (#(node.redirects) > 0) then
+    if (node.redirects ~= nil and #(node.redirects) > 0) then
       redirect_parts = {}
       for _, r in ipairs(node.redirects) do
         ;(function() table.insert(redirect_parts, format_redirect(r, false, false)); return redirect_parts end)()
@@ -9793,7 +9793,7 @@ function format_cmdsub_node(node, indent, in_procsub, compact_redirects, procsub
     body = (string.gsub(body, '[' .. ";" .. ']+$', ''))
     terminator = ((string.sub(body, -#" &") == " &") and " }" or "; }")
     redirects = ""
-    if (#(node.redirects) > 0) then
+    if (node.redirects ~= nil and #(node.redirects) > 0) then
       redirect_parts = {}
       for _, r in ipairs(node.redirects) do
         ;(function() table.insert(redirect_parts, format_redirect(r, false, false)); return redirect_parts end)()
@@ -9841,7 +9841,7 @@ function format_redirect(r, compact, heredoc_op_only)
     else
       op = "<<"
     end
-    if (r.fd ~= nil) and r.fd > 0 then
+    if r.fd > 0 then
       op = tostring(r.fd) .. op
     end
     if r.quoted then

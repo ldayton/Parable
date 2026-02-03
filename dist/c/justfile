@@ -1,12 +1,48 @@
-set shell := ["bash", "-o", "pipefail", "-cu"]
+image := "parable-c"
+transpiler_image := "parable-transpiler"
 
 cc := env("CC", "gcc")
 cflags := "-Wall -Wextra -O2 -std=c11"
 
-build:
+# Build the transpiler Docker image (code is mounted at runtime, not baked in)
+[private]
+docker-build-transpiler transpiler_dir:
+    docker build -t {{transpiler_image}} "{{transpiler_dir}}"
+
+# Build the C Docker image
+[private]
+docker-build:
+    docker build -t {{image}} .
+
+# Transpile source to parable.c (in Docker)
+transpile source_file transpiler_dir: (docker-build-transpiler transpiler_dir)
+    docker run --rm \
+        -v "{{transpiler_dir}}:/transpiler:ro" \
+        -v "{{source_file}}:/source.py:ro" \
+        -v "{{justfile_directory()}}:/output" \
+        {{transpiler_image}} c /source.py /output/parable.c
+
+# Build the project (in Docker)
+build source_file transpiler_dir: (transpile source_file transpiler_dir) docker-build
+    docker run --rm \
+        -v "{{justfile_directory()}}:/workspace" \
+        -w /workspace \
+        {{image}} build
+
+# Run tests (in Docker)
+check source_file transpiler_dir tests_dir: (transpile source_file transpiler_dir) docker-build
+    docker run --rm \
+        -v "{{justfile_directory()}}:/workspace" \
+        -v "{{tests_dir}}:/tests:ro" \
+        -w /workspace \
+        {{image}} check /tests
+
+# Local build (without Docker)
+build-local:
     {{cc}} {{cflags}} -o run_tests run_tests.c parable.c
 
-check tests_dir: build
+# Local check (without Docker)
+check-local tests_dir: build-local
     ./run_tests "{{tests_dir}}"
 
 clean:

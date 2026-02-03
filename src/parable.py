@@ -16,16 +16,16 @@ from typing import Union
 class ParseError(Exception):
     """Raised when parsing fails."""
 
-    def __init__(self, message: str, pos: int | None = None, line: int | None = None):
+    def __init__(self, message: str, pos: int = 0, line: int = 0):
         self.message = message
-        self.pos = pos
-        self.line = line
+        self.pos = pos  # 0 = not specified
+        self.line = line  # 0 = not specified
         super().__init__(self._format_message())
 
     def _format_message(self) -> str:
-        if self.line is not None and self.pos is not None:
+        if self.line != 0 and self.pos != 0:
             return f"Parse error at line {self.line}, position {self.pos}: {self.message}"
-        elif self.pos is not None:
+        elif self.pos != 0:
             return f"Parse error at position {self.pos}: {self.message}"
         return f"Parse error: {self.message}"
 
@@ -74,7 +74,7 @@ def _is_whitespace(c: str) -> bool:
     return c == " " or c == "\t" or c == "\n"
 
 
-def _string_to_bytes(s: str) -> list[int]:
+def _string_to_bytes(s: str) -> bytearray:
     """Convert a string to a list of UTF-8 bytes."""
     return list(s.encode("utf-8"))
 
@@ -1089,7 +1089,7 @@ class Lexer:
         chars: list[str] = []
         parts: list[Node] = []
         bracket_depth = 0  # Track [...] for array subscripts (NORMAL only)
-        bracket_start_pos: int | None = None  # Position where bracket tracking started
+        bracket_start_pos: int = -1  # Position where bracket tracking started (-1 = not set)
         seen_equals = False  # Track if we've seen = (NORMAL only)
         paren_depth = 0  # Track regex grouping parens (REGEX only)
         while not self.at_end():
@@ -1383,7 +1383,7 @@ class Lexer:
             # Regular character
             chars.append(self.advance())
         # Check for unclosed bracket at EOF
-        if bracket_depth > 0 and bracket_start_pos is not None and self.at_end():
+        if bracket_depth > 0 and bracket_start_pos != -1 and self.at_end():
             raise MatchedPairError("unexpected EOF looking for `]'", pos=bracket_start_pos)
         if not chars:
             return None
@@ -2078,7 +2078,7 @@ def _strip_line_continuations_comment_aware(text: str) -> str:
     return "".join(result)
 
 
-def _append_redirects(base: str, redirects: list[Node]) -> str:
+def _append_redirects(base: str, redirects: list[Node] | None) -> str:
     """Append redirect sexp strings to a base sexp string."""
     if redirects:
         parts = []
@@ -2941,15 +2941,15 @@ class Word(Node):
                 i += 3
                 depth = 2  # Track single parens: $(( starts at depth 2
                 arith_content = []
-                # Track position of first ) that brings depth 2→1
-                first_close_idx: int | None = None
+                # Track position of first ) that brings depth 2→1 (-1 = not set)
+                first_close_idx: int = -1
                 while i < len(value) and depth > 0:
                     if value[i] == "(":
                         arith_content.append("(")
                         depth += 1
                         i += 1
                         if depth > 1:
-                            first_close_idx = None  # Content after first close
+                            first_close_idx = -1  # Content after first close
                     elif value[i] == ")":
                         if depth == 2:
                             first_close_idx = len(arith_content)
@@ -2976,15 +2976,15 @@ class Word(Node):
                             # Skip backslash-newline (line continuation)
                             i += 2
                         if depth == 1:
-                            first_close_idx = None  # Content after first close
+                            first_close_idx = -1  # Content after first close
                     else:
                         arith_content.append(value[i])
                         i += 1
                         if depth == 1:
-                            first_close_idx = None  # Content after first close
-                if depth == 0 or (depth == 1 and first_close_idx is not None):
+                            first_close_idx = -1  # Content after first close
+                if depth == 0 or (depth == 1 and first_close_idx != -1):
                     content = "".join(arith_content)
-                    if first_close_idx is not None:
+                    if first_close_idx != -1:
                         # Standard close: trim content, add ))
                         content = content[:first_close_idx]
                         # If depth==1, we only found one closing paren, add )
@@ -3895,13 +3895,13 @@ class Redirect(Node):
 
     op: str
     target: Word
-    fd: int | None = None
+    fd: int = -1  # -1 = no fd specified
 
-    def __init__(self, op: str, target: Word, fd: int | None = None):
+    def __init__(self, op: str, target: Word, fd: int = -1):
         self.kind = "redirect"
         self.op = op
         self.target = target
-        self.fd = fd
+        self.fd = fd  # -1 = no fd specified
 
     def to_sexp(self) -> str:
         # Strip fd prefix from operator (e.g., "2>" -> ">", "{fd}>" -> ">")
@@ -3981,7 +3981,7 @@ class HereDoc(Node):
     content: str
     strip_tabs: bool = False
     quoted: bool = False
-    fd: int | None = None
+    fd: int = -1  # -1 = no fd specified
     complete: bool = True
     _start_pos: int = -1  # Parser position where heredoc redirect started (for dedup)
 
@@ -3991,7 +3991,7 @@ class HereDoc(Node):
         content: str,
         strip_tabs: bool = False,
         quoted: bool = False,
-        fd: int | None = None,
+        fd: int = -1,
         complete: bool = True,
     ):
         self.kind = "heredoc"
@@ -3999,7 +3999,7 @@ class HereDoc(Node):
         self.content = content
         self.strip_tabs = strip_tabs
         self.quoted = quoted
-        self.fd = fd
+        self.fd = fd  # -1 = no fd specified
         self.complete = complete
         self._start_pos = -1
 
@@ -5216,7 +5216,7 @@ def _format_cmdsub_node(
             val = w._format_command_substitutions(val)
             parts.append(val)
         # Check for heredocs - their bodies need to come at the end
-        heredocs = []
+        heredocs: list[HereDoc] = []
         for r in node.redirects:
             if r.kind == "heredoc":
                 heredocs.append(r)
@@ -5236,7 +5236,7 @@ def _format_cmdsub_node(
         return result
     if node.kind == "pipeline":
         # Build list of (cmd, needs_pipe_both_redirect) filtering out PipeBoth markers
-        cmds = []
+        cmds: list[tuple[Node, bool]] = []
         i = 0
         while i < len(node.commands):
             cmd = node.commands[i]
@@ -5445,7 +5445,7 @@ def _format_cmdsub_node(
         var = node.var
         body = _format_cmdsub_node(node.body, indent + 4)
         if node.words is not None:
-            word_vals = []
+            word_vals: list[str] = []
             for w in node.words:
                 word_vals.append(w.value)
             words = " ".join(word_vals)
@@ -5500,7 +5500,7 @@ def _format_cmdsub_node(
         return result
     if node.kind == "case":
         word = node.word.value
-        patterns = []
+        patterns: list[str] = []
         i = 0
         while i < len(node.patterns):
             p = node.patterns[i]
@@ -5522,7 +5522,7 @@ def _format_cmdsub_node(
         pattern_str = ("\n" + _repeat_str(" ", indent + 4)).join(patterns)
         redirects = ""
         if node.redirects:
-            redirect_parts = []
+            redirect_parts: list[str] = []
             for r in node.redirects:
                 redirect_parts.append(_format_redirect(r))
             redirects = " " + " ".join(redirect_parts)
@@ -5537,7 +5537,7 @@ def _format_cmdsub_node(
         body = _format_cmdsub_node(node.body, indent, in_procsub, compact_redirects)
         redirects = ""
         if node.redirects:
-            redirect_parts = []
+            redirect_parts: list[str] = []
             for r in node.redirects:
                 redirect_parts.append(_format_redirect(r))
             redirects = " ".join(redirect_parts)
@@ -5556,7 +5556,7 @@ def _format_cmdsub_node(
         terminator = " }" if body.endswith(" &") else "; }"
         redirects = ""
         if node.redirects:
-            redirect_parts = []
+            redirect_parts: list[str] = []
             for r in node.redirects:
                 redirect_parts.append(_format_redirect(r))
             redirects = " ".join(redirect_parts)
@@ -5591,8 +5591,8 @@ def _format_redirect(
         else:
             op = "<<"
         # fd > 0: explicitly specified and non-default (0 is default for heredoc input)
-        # Note: also handles sentinel value -1 used in transpiled code
-        if r.fd is not None and r.fd > 0:
+        # fd == -1 means "not specified" (sentinel value)
+        if r.fd > 0:
             op = str(r.fd) + op
         if r.quoted:
             delim = "'" + r.delimiter + "'"
@@ -6723,7 +6723,7 @@ class Parser:
         self._pending_heredocs: list[HereDoc] = []
         # Track heredoc content that was consumed into command/process substitutions
         # and needs to be skipped when we reach a newline
-        self._cmdsub_heredoc_end: int | None = None
+        self._cmdsub_heredoc_end: int = -1  # -1 = not set
         self._saw_newline_in_single_quote = False
         self._in_process_sub = in_process_sub
         # Extglob parsing enabled (bash shopt extglob)
@@ -7072,9 +7072,9 @@ class Parser:
                 if ch == "\n":
                     self._gather_heredoc_bodies()
                     # Skip heredoc content consumed by command/process substitutions
-                    if self._cmdsub_heredoc_end is not None and self._cmdsub_heredoc_end > self.pos:
+                    if self._cmdsub_heredoc_end != -1 and self._cmdsub_heredoc_end > self.pos:
                         self.pos = self._cmdsub_heredoc_end
-                        self._cmdsub_heredoc_end = None
+                        self._cmdsub_heredoc_end = -1
             elif ch == "#":
                 # Skip comment to end of line
                 while not self.at_end() and self.peek() != "\n":
@@ -7671,7 +7671,7 @@ class Parser:
             )
             if heredoc_end > heredoc_start:
                 content = content + _substring(self.source, heredoc_start, heredoc_end)
-                if self._cmdsub_heredoc_end is None:
+                if self._cmdsub_heredoc_end == -1:
                     self._cmdsub_heredoc_end = heredoc_end
                 else:
                     self._cmdsub_heredoc_end = max(self._cmdsub_heredoc_end, heredoc_end)
@@ -7823,7 +7823,7 @@ class Parser:
         # Find matching )) by tracking paren depth
         content_start = self.pos
         depth = 2
-        first_close_pos: int | None = None
+        first_close_pos: int = -1  # -1 = not set
         while not self.at_end() and depth > 0:
             c = self.peek()
             # Skip single-quoted strings (parens inside don't count)
@@ -7861,7 +7861,7 @@ class Parser:
                 self.advance()
             else:
                 if depth == 1:
-                    first_close_pos = None
+                    first_close_pos = -1
                 self.advance()
         if depth != 0:
             if self.at_end():
@@ -7869,7 +7869,7 @@ class Parser:
             self.pos = start
             return None, ""
         # Content ends at first_close_pos if set, else at final )
-        if first_close_pos is not None:
+        if first_close_pos != -1:
             content = _substring(self.source, content_start, first_close_pos)
         else:
             content = _substring(self.source, content_start, self.pos)
@@ -8622,8 +8622,8 @@ class Parser:
             return None
 
         start = self.pos
-        fd = None
-        varfd = None  # Variable fd like {fd}
+        fd: int = -1  # -1 = no fd specified
+        varfd = ""  # Variable fd like {fd}, "" = none
 
         # Check for variable fd {varname} or {varname[subscript]} before redirect
         if self.peek() == "{":
@@ -8676,7 +8676,7 @@ class Parser:
                 self.pos = saved
 
         # Check for optional fd number before redirect (if no varfd)
-        if varfd is None and self.peek() and self.peek().isdigit():
+        if varfd == "" and self.peek() and self.peek().isdigit():
             fd_chars = []
             while not self.at_end() and self.peek().isdigit():
                 fd_chars.append(self.advance())
@@ -8689,7 +8689,7 @@ class Parser:
         # they should be a separate word, not an fd. E.g., "2&>1" is command "2"
         # with redirect "&> 1", not fd 2 redirected.
         if ch == "&" and self.pos + 1 < self.length and self.source[self.pos + 1] == ">":
-            if fd is not None or varfd is not None:
+            if fd != -1 or varfd != "":
                 # We consumed digits/varfd that should be a word, not an fd
                 # Restore position and let parse_word handle them
                 self.pos = start
@@ -8714,7 +8714,7 @@ class Parser:
 
         # Check for process substitution <(...) or >(...) - not a redirect
         # Only treat as redirect if there's a space before ( or an fd number
-        if fd is None and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
+        if fd == -1 and self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
             # This is a process substitution, not a redirect
             self.pos = start
             return None
@@ -8751,12 +8751,12 @@ class Parser:
             # Only consume >& or <& as operators if NOT followed by a digit or -
             # (>&2 should be > with target &2, not >& with target 2)
             # (>&- should be > with target &-, not >& with target -)
-            elif fd is None and varfd is None and op == ">" and next_ch == "&":
+            elif fd == -1 and varfd == "" and op == ">" and next_ch == "&":
                 # Peek ahead to see if there's a digit or - after &
                 if self.pos + 1 >= self.length or not _is_digit_or_dash(self.source[self.pos + 1]):
                     self.advance()
                     op = ">&"
-            elif fd is None and varfd is None and op == "<" and next_ch == "&":
+            elif fd == -1 and varfd == "" and op == "<" and next_ch == "&":
                 if self.pos + 1 >= self.length or not _is_digit_or_dash(self.source[self.pos + 1]):
                     self.advance()
                     op = "<&"
@@ -8766,9 +8766,9 @@ class Parser:
             return self._parse_heredoc(fd, strip_tabs)
 
         # Combine fd or varfd with operator if present
-        if varfd is not None:
+        if varfd != "":
             op = "{" + varfd + "}" + op
-        elif fd is not None:
+        elif fd != -1:
             op = str(fd) + op
 
         # Handle fd duplication targets like &1, &2, &-, &10-, &$var
@@ -9124,7 +9124,7 @@ class Parser:
             heredoc.content = "".join(content_lines)
         self._pending_heredocs = []
 
-    def _parse_heredoc(self, fd: int | None, strip_tabs: bool) -> HereDoc:
+    def _parse_heredoc(self, fd: int, strip_tabs: bool) -> HereDoc:
         """Parse a here document <<DELIM ... DELIM.
 
         Parses the delimiter only. Content is gathered later by _gather_heredoc_bodies
@@ -9503,10 +9503,10 @@ class Parser:
         # Check if word1 is a unary operator
         if word1.value in COND_UNARY_OPS:
             # Unary test: -f file
-            operand = self._parse_cond_word()
-            if operand is None:
+            unary_operand = self._parse_cond_word()
+            if unary_operand is None:
                 raise ParseError("Expected operand after " + word1.value, pos=self.pos)
-            return UnaryTest(word1.value, operand)
+            return UnaryTest(word1.value, unary_operand)
 
         # Check if next token is a binary operator
         if not self._cond_at_end() and (
@@ -9984,7 +9984,7 @@ class Parser:
         self.skip_whitespace_and_newlines()
 
         # Parse pattern clauses until 'esac'
-        patterns = []
+        patterns: list[CasePattern] = []
         self._set_state(ParserStateFlags.PST_CASEPAT)
         while True:
             self.skip_whitespace_and_newlines()
@@ -10505,9 +10505,9 @@ class Parser:
                     # compound_list context: newline acts as separator
                     self.advance()  # consume \n
                     self._gather_heredoc_bodies()
-                    if self._cmdsub_heredoc_end is not None and self._cmdsub_heredoc_end > self.pos:
+                    if self._cmdsub_heredoc_end != -1 and self._cmdsub_heredoc_end > self.pos:
                         self.pos = self._cmdsub_heredoc_end
-                        self._cmdsub_heredoc_end = None
+                        self._cmdsub_heredoc_end = -1
                     self.skip_whitespace_and_newlines()
                     if self._at_list_until_terminator(stop_words):
                         break
@@ -10848,9 +10848,9 @@ class Parser:
                     # compound_list: newline acts as separator
                     self.advance()  # consume \n
                     self._gather_heredoc_bodies()
-                    if self._cmdsub_heredoc_end is not None and self._cmdsub_heredoc_end > self.pos:
+                    if self._cmdsub_heredoc_end != -1 and self._cmdsub_heredoc_end > self.pos:
                         self.pos = self._cmdsub_heredoc_end
-                        self._cmdsub_heredoc_end = None
+                        self._cmdsub_heredoc_end = -1
                     self.skip_whitespace_and_newlines()
                     if self.at_end() or self._at_list_terminating_bracket():
                         break
@@ -10954,9 +10954,9 @@ class Parser:
                 self.advance()
                 # Gather pending heredoc content after newline
                 self._gather_heredoc_bodies()
-                if self._cmdsub_heredoc_end is not None and self._cmdsub_heredoc_end > self.pos:
+                if self._cmdsub_heredoc_end != -1 and self._cmdsub_heredoc_end > self.pos:
                     self.pos = self._cmdsub_heredoc_end
-                    self._cmdsub_heredoc_end = None
+                    self._cmdsub_heredoc_end = -1
                 self.skip_whitespace()
 
             # If no newline and not at end, we have unparsed content

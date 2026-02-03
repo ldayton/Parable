@@ -1,9 +1,9 @@
 """Type flow analysis: compute types at control flow join points."""
 
-from src.ir import InterfaceRef, StructRef, Type
+from src.ir import InterfaceRef, Pointer, StructRef, Type
 
 
-def join_types(t1: Type | None, t2: Type | None) -> Type | None:
+def join_types(t1: Type | None, t2: Type | None, hierarchy_root: str | None = None) -> Type | None:
     """Compute joined type for variables assigned in multiple branches.
 
     For hoisting variables assigned in multiple branches:
@@ -17,6 +17,14 @@ def join_types(t1: Type | None, t2: Type | None) -> Type | None:
         return t1
     if t1 == t2:
         return t1
+    # Handle Pointer types - unwrap and join the inner types
+    if isinstance(t1, Pointer) and isinstance(t2, Pointer):
+        inner1, inner2 = t1.target, t2.target
+        # Different struct pointer types widen to hierarchy root interface
+        if isinstance(inner1, StructRef) and isinstance(inner2, StructRef) and inner1.name != inner2.name:
+            if hierarchy_root:
+                return InterfaceRef(hierarchy_root)
+            return InterfaceRef("any")
     # Prefer named interface over "any" (nil gets typed as InterfaceRef("any"))
     if isinstance(t1, InterfaceRef) and t1.name == "any" and isinstance(t2, InterfaceRef):
         return t2

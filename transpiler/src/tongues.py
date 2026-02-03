@@ -19,27 +19,31 @@ from .backend.python import PythonBackend
 from .backend.ruby import RubyBackend
 from .backend.typescript import TsBackend
 from .backend.csharp import CSharpBackend
+from .backend.dart import DartBackend
 from .backend.php import PhpBackend
+from .backend.swift import SwiftBackend
 
-BACKENDS: dict[str, type[CBackend] | type[GoBackend] | type[JavaBackend] | type[JsBackend] | type[LuaBackend] | type[PerlBackend] | type[PythonBackend] | type[RubyBackend] | type[TsBackend] | type[CSharpBackend] | type[PhpBackend]] = {
+BACKENDS: dict[str, type[CBackend] | type[GoBackend] | type[JavaBackend] | type[JsBackend] | type[LuaBackend] | type[PerlBackend] | type[PythonBackend] | type[RubyBackend] | type[TsBackend] | type[CSharpBackend] | type[DartBackend] | type[PhpBackend] | type[SwiftBackend]] = {
     "c": CBackend,
+    "csharp": CSharpBackend,
+    "dart": DartBackend,
     "go": GoBackend,
     "java": JavaBackend,
     "javascript": JsBackend,
     "lua": LuaBackend,
     "perl": PerlBackend,
+    "php": PhpBackend,
     "python": PythonBackend,
     "ruby": RubyBackend,
+    "swift": SwiftBackend,
     "typescript": TsBackend,
-    "csharp": CSharpBackend,
-    "php": PhpBackend,
 }
 
 USAGE: str = """\
 tongues [OPTIONS] < input.py > output.go
 
 Options:
-  --target TARGET   Output language: c, csharp, go, java, javascript, lua, perl, php, python, ruby, typescript
+  --target TARGET   Output language: c, csharp, dart, go, java, javascript, lua, perl, php, python, ruby, swift, typescript
   --verify [PATH]   Check subset compliance only, no codegen
                     PATH can be a file or directory (reads stdin if omitted)
   --help            Show this help message

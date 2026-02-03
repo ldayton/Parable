@@ -1,0 +1,36 @@
+image := "parable-dart"
+transpiler_image := "parable-transpiler"
+
+# Build the transpiler Docker image (code is mounted at runtime, not baked in)
+[private]
+docker-build-transpiler transpiler_dir:
+    docker build -t {{transpiler_image}} "{{transpiler_dir}}"
+
+# Build the Dart Docker image
+[private]
+docker-build:
+    docker build -t {{image}} .
+
+# Transpile source to lib/parable.dart (in Docker)
+transpile source_file transpiler_dir: (docker-build-transpiler transpiler_dir)
+    mkdir -p lib
+    docker run --rm \
+        -v "{{transpiler_dir}}:/transpiler:ro" \
+        -v "{{source_file}}:/source.py:ro" \
+        -v "{{justfile_directory()}}/lib:/output" \
+        {{transpiler_image}} dart /source.py /output/parable.dart
+
+# Build the project (in Docker)
+build source_file transpiler_dir: (transpile source_file transpiler_dir) docker-build
+    docker run --rm \
+        -v "{{justfile_directory()}}:/workspace" \
+        -w /workspace \
+        {{image}} build
+
+# Run tests (in Docker)
+check source_file transpiler_dir tests_dir: (transpile source_file transpiler_dir) docker-build
+    docker run --rm \
+        -v "{{justfile_directory()}}:/workspace" \
+        -v "{{tests_dir}}:/tests:ro" \
+        -w /workspace \
+        {{image}} check /tests

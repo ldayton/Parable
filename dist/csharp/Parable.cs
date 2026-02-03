@@ -4989,10 +4989,10 @@ public class Redirect : INode
 {
     public string Op { get; set; }
     public Word Target { get; set; }
-    public int? Fd { get; set; }
+    public int Fd { get; set; }
     public string Kind { get; set; }
 
-    public Redirect(string op, Word target, int? fd, string kind)
+    public Redirect(string op, Word target, int fd, string kind)
     {
         this.Op = op;
         this.Target = target;
@@ -5101,12 +5101,12 @@ public class HereDoc : INode
     public string Content { get; set; }
     public bool StripTabs { get; set; }
     public bool Quoted { get; set; }
-    public int? Fd { get; set; }
+    public int Fd { get; set; }
     public bool Complete { get; set; }
     public int _StartPos { get; set; }
     public string Kind { get; set; }
 
-    public HereDoc(string delimiter, string content, bool stripTabs, bool quoted, int? fd, bool complete, int _startPos, string kind)
+    public HereDoc(string delimiter, string content, bool stripTabs, bool quoted, int fd, bool complete, int _startPos, string kind)
     {
         this.Delimiter = delimiter;
         this.Content = content;
@@ -5424,7 +5424,7 @@ public class Select : INode
                 wordParts.Add(((INode)w).ToSexp());
             }
             string wordStrs = string.Join(" ", wordParts);
-            if ((this.Words.Count > 0))
+            if ((this.Words != null && this.Words.Count > 0))
             {
                 inClause = "(in " + wordStrs + ")";
             }
@@ -5448,12 +5448,12 @@ public class Select : INode
 
 public class Case : INode
 {
-    public INode Word { get; set; }
-    public List<INode> Patterns { get; set; }
+    public Word Word { get; set; }
+    public List<CasePattern> Patterns { get; set; }
     public List<INode> Redirects { get; set; }
     public string Kind { get; set; }
 
-    public Case(INode word, List<INode> patterns, List<INode> redirects, string kind)
+    public Case(Word word, List<CasePattern> patterns, List<INode> redirects, string kind)
     {
         this.Word = word;
         this.Patterns = patterns;
@@ -5465,7 +5465,7 @@ public class Case : INode
     {
         List<string> parts = new List<string>();
         parts.Add("(case " + this.Word.ToSexp());
-        foreach (INode p in this.Patterns)
+        foreach (CasePattern p in this.Patterns)
         {
             parts.Add(p.ToSexp());
         }
@@ -6398,10 +6398,10 @@ public class ConditionalExpr : INode
 public class UnaryTest : INode
 {
     public string Op { get; set; }
-    public INode Operand { get; set; }
+    public Word Operand { get; set; }
     public string Kind { get; set; }
 
-    public UnaryTest(string op, INode operand, string kind)
+    public UnaryTest(string op, Word operand, string kind)
     {
         this.Op = op;
         this.Operand = operand;
@@ -6410,7 +6410,7 @@ public class UnaryTest : INode
 
     public string ToSexp()
     {
-        string operandVal = ((Word)this.Operand).GetCondFormattedValue();
+        string operandVal = this.Operand.GetCondFormattedValue();
         return "(cond-unary \"" + this.Op + "\" (cond-term \"" + operandVal + "\"))";
     }
 
@@ -6423,11 +6423,11 @@ public class UnaryTest : INode
 public class BinaryTest : INode
 {
     public string Op { get; set; }
-    public INode Left { get; set; }
-    public INode Right { get; set; }
+    public Word Left { get; set; }
+    public Word Right { get; set; }
     public string Kind { get; set; }
 
-    public BinaryTest(string op, INode left, INode right, string kind)
+    public BinaryTest(string op, Word left, Word right, string kind)
     {
         this.Op = op;
         this.Left = left;
@@ -6437,8 +6437,8 @@ public class BinaryTest : INode
 
     public string ToSexp()
     {
-        string leftVal = ((Word)this.Left).GetCondFormattedValue();
-        string rightVal = ((Word)this.Right).GetCondFormattedValue();
+        string leftVal = this.Left.GetCondFormattedValue();
+        string rightVal = this.Right.GetCondFormattedValue();
         return "(cond-binary \"" + this.Op + "\" (cond-term \"" + leftVal + "\") (cond-term \"" + rightVal + "\"))";
     }
 
@@ -7373,9 +7373,9 @@ public class Parser
         return (new CommandSubstitution(cmd, true, "cmdsub"), text);
     }
 
-    public bool _IsAssignmentWord(INode word)
+    public bool _IsAssignmentWord(Word word)
     {
-        return ParableFunctions._Assignment(((Word)word).Value, 0) != -1;
+        return ParableFunctions._Assignment(word.Value, 0) != -1;
     }
 
     public (INode, string) _ParseBacktickSubstitution()
@@ -9123,7 +9123,7 @@ public class Parser
             {
                 throw new ParseError("Expected target for redirect " + op, this.Pos, 0);
             }
-            return new Redirect(op, target, null, "redirect");
+            return new Redirect(op, target, 0, "redirect");
         }
         if (ch == "" || !(ParableFunctions._IsRedirectChar(ch)))
         {
@@ -9326,7 +9326,7 @@ public class Parser
         {
             throw new ParseError("Expected target for redirect " + op, this.Pos, 0);
         }
-        return new Redirect(op, target, null, "redirect");
+        return new Redirect(op, target, 0, "redirect");
     }
 
     public (string, bool) _ParseHeredocDelimiter()
@@ -9747,7 +9747,7 @@ public class Parser
         this._PendingHeredocs = new List<HereDoc>();
     }
 
-    public HereDoc _ParseHeredoc(int? fd, bool stripTabs)
+    public HereDoc _ParseHeredoc(int fd, bool stripTabs)
     {
         int startPos = this.Pos;
         this._SetState(Constants.PARSERSTATEFLAGS_PST_HEREDOC);
@@ -10057,7 +10057,6 @@ public class Parser
         {
             throw new ParseError("Unexpected end of conditional expression", this.Pos, 0);
         }
-        INode operand = null;
         if (this.Peek() == "!")
         {
             if (this.Pos + 1 < this.Length && !(ParableFunctions._IsWhitespaceNoNewline((this.Source[this.Pos + 1]).ToString())))
@@ -10066,7 +10065,7 @@ public class Parser
             else
             {
                 this.Advance();
-                operand = this._ParseCondTerm();
+                INode operand = this._ParseCondTerm();
                 return new CondNot(operand, "cond-not");
             }
         }
@@ -10090,12 +10089,12 @@ public class Parser
         this._CondSkipWhitespace();
         if (Constants.COND_UNARY_OPS.Contains(word1.Value))
         {
-            operand = this._ParseCondWord();
-            if (operand == null)
+            Word unaryOperand = this._ParseCondWord();
+            if (unaryOperand == null)
             {
                 throw new ParseError("Expected operand after " + word1.Value, this.Pos, 0);
             }
-            return new UnaryTest(word1.Value, operand, "unary-test");
+            return new UnaryTest(word1.Value, unaryOperand, "unary-test");
         }
         if (!(this._CondAtEnd()) && this.Peek() != "&" && this.Peek() != "|" && this.Peek() != ")")
         {
@@ -10644,7 +10643,7 @@ public class Parser
             throw new ParseError("Expected 'in' after case word", this._LexPeekToken().Pos, 0);
         }
         this.SkipWhitespaceAndNewlines();
-        List<INode> patterns = new List<INode>();
+        List<CasePattern> patterns = new List<CasePattern>();
         this._SetState(Constants.PARSERSTATEFLAGS_PST_CASEPAT);
         while (true)
         {
@@ -12131,12 +12130,12 @@ public static class ParableFunctions
 
     public static string _AppendRedirects(string @base, List<INode> redirects)
     {
-        if ((redirects.Count > 0))
+        if ((redirects != null && redirects.Count > 0))
         {
             List<string> parts = new List<string>();
             foreach (INode r in redirects)
             {
-                parts.Add(r.ToSexp());
+                parts.Add(((INode)r).ToSexp());
             }
             return @base + " " + string.Join(" ", parts);
         }
@@ -12280,13 +12279,13 @@ public static class ParableFunctions
         string kind = node.Kind;
         if (kind == "unary-test")
         {
-            string operandVal = ((Word)((UnaryTest)node).Operand).GetCondFormattedValue();
+            string operandVal = ((UnaryTest)node).Operand.GetCondFormattedValue();
             return ((UnaryTest)node).Op + " " + operandVal;
         }
         if (kind == "binary-test")
         {
-            string leftVal = ((Word)((BinaryTest)node).Left).GetCondFormattedValue();
-            string rightVal = ((Word)((BinaryTest)node).Right).GetCondFormattedValue();
+            string leftVal = ((BinaryTest)node).Left.GetCondFormattedValue();
+            string rightVal = ((BinaryTest)node).Right.GetCondFormattedValue();
             return leftVal + " " + ((BinaryTest)node).Op + " " + rightVal;
         }
         if (kind == "cond-and")
@@ -12781,23 +12780,23 @@ public static class ParableFunctions
         switch (node)
         {
             case Case nodeCase:
-                string word = ((Word)nodeCase.Word).Value;
+                string word = nodeCase.Word.Value;
                 List<string> patterns = new List<string>();
                 int i = 0;
                 while (i < nodeCase.Patterns.Count)
                 {
-                    INode p = nodeCase.Patterns[i];
-                    object pat = ((CasePattern)p).Pattern.Replace("|", " | ");
+                    CasePattern p = nodeCase.Patterns[i];
+                    string pat = p.Pattern.Replace("|", " | ");
                     string body = "";
-                    if (((CasePattern)p).Body != null)
+                    if (p.Body != null)
                     {
-                        body = ParableFunctions._FormatCmdsubNode(((CasePattern)p).Body, indent + 8, false, false, false);
+                        body = ParableFunctions._FormatCmdsubNode(p.Body, indent + 8, false, false, false);
                     }
                     else
                     {
                         body = "";
                     }
-                    string term = ((CasePattern)p).Terminator;
+                    string term = p.Terminator;
                     string patIndent = ParableFunctions._RepeatStr(" ", indent + 8);
                     string termIndent = ParableFunctions._RepeatStr(" ", indent + 4);
                     string bodyPart = ((!string.IsNullOrEmpty(body)) ? patIndent + body + "\n" : "\n");
@@ -12837,7 +12836,7 @@ public static class ParableFunctions
             case Subshell nodeSubshell:
                 string body = ParableFunctions._FormatCmdsubNode(nodeSubshell.Body, indent, inProcsub, compactRedirects, false);
                 string redirects = "";
-                if ((nodeSubshell.Redirects.Count > 0))
+                if ((nodeSubshell.Redirects != null && nodeSubshell.Redirects.Count > 0))
                 {
                     List<string> redirectParts = new List<string>();
                     foreach (INode r in nodeSubshell.Redirects)
@@ -12867,7 +12866,7 @@ public static class ParableFunctions
                 body = body.TrimEnd(";".ToCharArray());
                 string terminator = (body.EndsWith(" &", StringComparison.Ordinal) ? " }" : "; }");
                 string redirects = "";
-                if ((nodeBraceGroup.Redirects.Count > 0))
+                if ((nodeBraceGroup.Redirects != null && nodeBraceGroup.Redirects.Count > 0))
                 {
                     List<string> redirectParts = new List<string>();
                     foreach (INode r in nodeBraceGroup.Redirects)
@@ -12929,7 +12928,7 @@ public static class ParableFunctions
                 {
                     op = "<<";
                 }
-                if (rHereDoc.Fd != null && rHereDoc.Fd > 0)
+                if (rHereDoc.Fd > 0)
                 {
                     op = rHereDoc.Fd.ToString() + op;
                 }
@@ -13015,9 +13014,9 @@ public static class ParableFunctions
         return op + " " + target;
     }
 
-    public static string _FormatHeredocBody(INode r)
+    public static string _FormatHeredocBody(HereDoc r)
     {
-        return "\n" + ((HereDoc)r).Content + ((HereDoc)r).Delimiter + "\n";
+        return "\n" + r.Content + r.Delimiter + "\n";
     }
 
     public static bool _LookaheadForEsac(string value, int start, int caseDepth)

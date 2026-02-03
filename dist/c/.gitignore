@@ -1,2 +1,9 @@
 run_tests
+run_tests_asan
+run_tests_debug
+run_tests_profile
+run_tests_fast
+run_tests_opt
+test_standalone
 *.o
+callgrind.out.*

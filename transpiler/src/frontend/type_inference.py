@@ -199,8 +199,8 @@ def py_type_to_ir(
             parts = [p for p in parts if p != "None"]
             if len(parts) == 1:
                 inner = py_type_to_ir(parts[0], symbols, node_types, concrete_nodes, hierarchy_root)
-                # For Node | None, use Node interface (interfaces are nilable in Go)
-                if (hierarchy_root and parts[0] == hierarchy_root) or is_node_subclass(parts[0], symbols, hierarchy_root):
+                # For Node | None when not using concrete types, use Node interface (nilable)
+                if not concrete_nodes and ((hierarchy_root and parts[0] == hierarchy_root) or is_node_subclass(parts[0], symbols, hierarchy_root)):
                     return InterfaceRef(hierarchy_root) if hierarchy_root else InterfaceRef("any")
                 # For str | None, just use string (empty string represents None)
                 if inner == STRING:
@@ -216,7 +216,12 @@ def py_type_to_ir(
     # Handle list[X]
     if py_type.startswith("list["):
         inner = py_type[5:-1]
-        return Slice(py_type_to_ir(inner, symbols, node_types, concrete_nodes, hierarchy_root))
+        inner_type = py_type_to_ir(inner, symbols, node_types, concrete_nodes, hierarchy_root)
+        # Auto-wrap struct refs in Pointer for slice elements (Go slices need pointers for mutability)
+        # InterfaceRef stays unwrapped (interfaces are already reference types)
+        if isinstance(inner_type, StructRef):
+            inner_type = Pointer(inner_type)
+        return Slice(inner_type)
     # Handle dict[K, V]
     if py_type.startswith("dict["):
         inner = py_type[5:-1]
@@ -279,6 +284,7 @@ def py_return_type_to_ir(
     # Handle unions before tuple
     if " | " in py_type:
         parts = split_union_types(py_type)
+        has_none = "None" in parts
         if len(parts) > 1:
             parts = [p for p in parts if p != "None"]
             if len(parts) == 1:
@@ -303,6 +309,7 @@ def infer_type_from_value(
     symbols: SymbolTable,
     node_types: set[str],
     hierarchy_root: str | None = None,
+    concrete_nodes: bool = True,
 ) -> Type:
     """Infer IR type from an expression."""
     from .ast_compat import is_type
@@ -321,7 +328,7 @@ def infer_type_from_value(
     elif node_t == "List":
         elts = node.get("elts", [])
         if elts:
-            return Slice(infer_type_from_value(elts[0], param_types, symbols, node_types, hierarchy_root))
+            return Slice(infer_type_from_value(elts[0], param_types, symbols, node_types, hierarchy_root, concrete_nodes))
         return Slice(InterfaceRef("any"))
     elif node_t == "Dict":
         values = node.get("values", [])
@@ -334,7 +341,7 @@ def infer_type_from_value(
     elif node_t == "Name":
         name = node.get("id")
         if name in param_types:
-            return py_type_to_ir(param_types[name], symbols, node_types, hierarchy_root=hierarchy_root)
+            return py_type_to_ir(param_types[name], symbols, node_types, concrete_nodes=concrete_nodes, hierarchy_root=hierarchy_root)
         if name in ("True", "False"):
             return BOOL
         if name == "None":
@@ -652,6 +659,15 @@ def infer_expr_type_from_ast(
             # Regular function calls
             if func_name in symbols.functions:
                 return symbols.functions[func_name].return_type
+            # Check if it's a callable variable/parameter
+            var_type = type_ctx.var_types.get(func_name)
+            if var_type is None and current_func_info:
+                for p in current_func_info.params:
+                    if p.name == func_name:
+                        var_type = p.typ
+                        break
+            if var_type is not None and isinstance(var_type, FuncType):
+                return var_type.ret
     # Subscript - derive element type from container
     if node_t == "Subscript":
         val_type = infer_expr_type_from_ast(
@@ -708,6 +724,15 @@ def infer_call_return_type(
         func_name = func.get("id")
         if func_name in symbols.functions:
             return symbols.functions[func_name].return_type
+        # Check if it's a callable variable/parameter
+        var_type = type_ctx.var_types.get(func_name)
+        if var_type is None and current_func_info:
+            for p in current_func_info.params:
+                if p.name == func_name:
+                    var_type = p.typ
+                    break
+        if var_type is not None and isinstance(var_type, FuncType):
+            return var_type.ret
     return InterfaceRef("any")
 
 

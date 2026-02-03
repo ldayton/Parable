@@ -27,7 +27,6 @@ from ..ir import (
     Tuple,
     loc_unknown,
 )
-from ..type_overrides import NODE_METHOD_TYPES, SENTINEL_INT_FIELDS, VAR_TYPE_OVERRIDES
 from . import type_inference
 from . import inference
 
@@ -636,7 +635,7 @@ def lower_expr_Attribute(
         if node_attr in node_field_types:
             struct_names = node_field_types[node_attr]
             # If the variable is from a union type, prefer a struct from the union
-            chosen_struct = struct_names[0]  # Default: first in NODE_FIELD_TYPES
+            chosen_struct = struct_names[0]  # Default: first in field_to_structs
             # Check if the object expression has a narrowed type from a kind check
             obj_attr_path = get_attr_path(node_value)
             if obj_attr_path and obj_attr_path in type_ctx.narrowed_attr_paths:
@@ -1637,8 +1636,8 @@ def lower_expr_Call(
             )
         # Check if calling a method on a Node-typed expression that needs type assertion
         # Do this early so we can use the asserted type for default arg lookup
-        if type_inference.is_node_interface_type(obj_type, ctx.hierarchy_root) and method in NODE_METHOD_TYPES:
-            struct_name = NODE_METHOD_TYPES[method]
+        if type_inference.is_node_interface_type(obj_type, ctx.hierarchy_root) and method in ctx.symbols.method_to_structs:
+            struct_name = ctx.symbols.method_to_structs[method]
             asserted_type = Pointer(StructRef(struct_name))
             obj = ir.TypeAssert(
                 expr=obj,
@@ -1981,16 +1980,10 @@ def lower_stmt_Assign(
     type_ctx = ctx.type_ctx
     node_targets = node.get("targets", [])
     node_value = node.get("value")
-    # Check VAR_TYPE_OVERRIDES to set expected type before lowering
+    # For field assignments (self.field = value), use field type as expected
     if len(node_targets) == 1:
         target = node_targets[0]
-        if is_type(target, ["Name"]):
-            func_name = ctx.current_func_info.name if ctx.current_func_info else ""
-            override_key = (func_name, target.get("id"))
-            if override_key in VAR_TYPE_OVERRIDES:
-                type_ctx.expected = VAR_TYPE_OVERRIDES[override_key]
-        # For field assignments (self.field = value), use field type as expected
-        elif is_type(target, ["Attribute"]) and is_type(target.get("value"), ["Name"]):
+        if is_type(target, ["Attribute"]) and is_type(target.get("value"), ["Name"]):
             target_value = target.get("value")
             if target_value.get("id") == "self" and ctx.current_class_name:
                 struct_info = ctx.symbols.structs.get(ctx.current_class_name)
@@ -2145,19 +2138,7 @@ def lower_stmt_Assign(
                 )
                 block.no_scope = True  # Don't emit braces
                 return block
-        # Handle sentinel ints: var = None -> var = -1
-        if isinstance(value, ir.NilLit) and is_sentinel_int(
-            target, ctx.type_ctx, ctx.current_class_name, SENTINEL_INT_FIELDS
-        ):
-            value = ir.IntLit(value=-1, typ=INT, loc=loc_from_node(node))
         # Track variable type dynamically for later use in nested scopes
-        # Apply VAR_TYPE_OVERRIDES first, then coerce
-        if is_type(target, ["Name"]):
-            func_name = ctx.current_func_info.name if ctx.current_func_info else ""
-            target_id = target.get("id")
-            override_key = (func_name, target_id)
-            if override_key in VAR_TYPE_OVERRIDES:
-                type_ctx.var_types[target_id] = VAR_TYPE_OVERRIDES[override_key]
         # Coerce value to target type if known
         target_id = target.get("id") if is_type(target, ["Name"]) else None
         if is_type(target, ["Name"]) and target_id in type_ctx.var_types:
@@ -2178,22 +2159,32 @@ def lower_stmt_Assign(
         # Track variable type dynamically for later use in nested scopes
         if is_type(target, ["Name"]):
             target_id = target.get("id")
-            # Check VAR_TYPE_OVERRIDES first
-            func_name = ctx.current_func_info.name if ctx.current_func_info else ""
-            override_key = (func_name, target_id)
-            if override_key in VAR_TYPE_OVERRIDES:
-                pass  # Already set above
-            else:
-                value_type = type_inference.synthesize_type(
-                    value, type_ctx, ctx.current_func_info, ctx.symbols, ctx.node_types, ctx.hierarchy_root
-                )
-                # Update type if it's concrete (not any) and either:
+            value_type = type_inference.synthesize_type(
+                value, type_ctx, ctx.current_func_info, ctx.symbols, ctx.node_types, ctx.hierarchy_root
+            )
+            # Update type if it's concrete (not any) and either:
+            # - Variable not yet tracked, or
+            # - Variable was RUNE from for-loop but now assigned STRING (from method call)
+            current_type = type_ctx.var_types.get(target_id)
+            if value_type != InterfaceRef("any"):
+                # Update type if:
                 # - Variable not yet tracked, or
-                # - Variable was RUNE from for-loop but now assigned STRING (from method call)
-                current_type = type_ctx.var_types.get(target_id)
-                if value_type != InterfaceRef("any"):
-                    if current_type is None or (current_type == RUNE and value_type == STRING):
-                        type_ctx.var_types[target_id] = value_type
+                # - Variable was RUNE from for-loop but now assigned STRING (from method call), or
+                # - Variable was Node (from for-loop) but now has specific type AND not unified
+                # Note: Do NOT update if variable was UNIFIED to Node (multiple subtypes → Node)
+                hierarchy_root_type = InterfaceRef(ctx.hierarchy_root) if ctx.hierarchy_root else None
+                should_update = (
+                    current_type is None
+                    or (current_type == RUNE and value_type == STRING)
+                    or (
+                        hierarchy_root_type
+                        and current_type == hierarchy_root_type
+                        and value_type != hierarchy_root_type
+                        and target_id not in type_ctx.unified_to_node
+                    )
+                )
+                if should_update:
+                    type_ctx.var_types[target_id] = value_type
         # Propagate narrowed status: if assigning from a narrowed var, target is also narrowed
         if is_type(target, ["Name"]) and is_type(node_value, ["Name"]):
             target_id = target.get("id")
@@ -2222,23 +2213,15 @@ def lower_stmt_Assign(
                     type_ctx.var_types[target_id] = InterfaceRef(ctx.hierarchy_root) if ctx.hierarchy_root else InterfaceRef("any")
         lval = dispatch.lower_lvalue(target)
         assign = ir.Assign(target=lval, value=value, loc=loc_from_node(node))
-        # Add declaration type if VAR_TYPE_OVERRIDE applies or if var_types has a unified Node type
+        # Add declaration type if var_types has a unified Node type
+        # This ensures the hoisting phase uses the unified type for the variable declaration
         if is_type(target, ["Name"]):
             target_id = target.get("id")
-            func_name = ctx.current_func_info.name if ctx.current_func_info else ""
-            override_key = (func_name, target_id)
-            if override_key in VAR_TYPE_OVERRIDES:
-                assign.decl_typ = VAR_TYPE_OVERRIDES[override_key]
-            elif target_id in type_ctx.var_types:
-                # Use unified Node type from var_types for hoisted variables
+            if target_id in type_ctx.var_types:
                 unified_type = type_ctx.var_types[target_id]
                 hierarchy_root_type = InterfaceRef(ctx.hierarchy_root) if ctx.hierarchy_root else None
                 if hierarchy_root_type and unified_type == hierarchy_root_type:
-                    expr_type = type_inference.synthesize_type(
-                        value, type_ctx, ctx.current_func_info, ctx.symbols, ctx.node_types, ctx.hierarchy_root
-                    )
-                    if unified_type != expr_type:
-                        assign.decl_typ = unified_type
+                    assign.decl_typ = unified_type
         return assign
     # Multiple targets: a = b = val -> emit assignment for each target
     stmts: list[ir.Stmt] = []
@@ -2272,7 +2255,8 @@ def lower_stmt_AnnAssign(
     node_value = node.get("value")
     node_target = node.get("target")
     py_type = dispatch.annotation_to_str(node_annotation)
-    typ = type_inference.py_type_to_ir(py_type, ctx.symbols, ctx.node_types, False, ctx.hierarchy_root)
+    # Use concrete_nodes=True for local variables to preserve explicit type annotations
+    typ = type_inference.py_type_to_ir(py_type, ctx.symbols, ctx.node_types, True, ctx.hierarchy_root)
     type_ctx = ctx.type_ctx
     # Handle int | None = None -> use -1 as sentinel
     if (
@@ -2333,11 +2317,6 @@ def lower_stmt_AnnAssign(
     # Attribute target - treat as assignment
     lval = dispatch.lower_lvalue(node_target)
     if value:
-        # Handle sentinel ints for field assignments: self.field = None -> self.field = -1
-        if isinstance(value, ir.NilLit) and is_sentinel_int(
-            node_target, type_ctx, ctx.current_class_name, SENTINEL_INT_FIELDS
-        ):
-            value = ir.IntLit(value=-1, typ=INT, loc=loc_from_node(node))
         # For field assignments, coerce to the actual field type (from struct info)
         if (
             is_type(node_target, ["Attribute"])
@@ -2726,14 +2705,12 @@ def _lower_expr_Name_dispatch(
 def _lower_expr_Attribute_dispatch(
     node: ASTNode, ctx: "FrontendContext", d: "LoweringDispatch"
 ) -> "ir.Expr":
-    from ..type_overrides import NODE_FIELD_TYPES
-
     return lower_expr_Attribute(
         node,
         ctx.symbols,
         ctx.type_ctx,
         ctx.current_class_name,
-        NODE_FIELD_TYPES,
+        ctx.symbols.field_to_structs,
         d.lower_expr,
         ctx.hierarchy_root,
     )
@@ -2758,14 +2735,12 @@ def _lower_expr_BinOp_dispatch(
 def _lower_expr_Compare_dispatch(
     node: ASTNode, ctx: "FrontendContext", d: "LoweringDispatch"
 ) -> "ir.Expr":
-    from ..type_overrides import SENTINEL_INT_FIELDS
-
     return lower_expr_Compare(
         node,
         d.lower_expr,
         ctx.type_ctx,
         ctx.current_class_name,
-        SENTINEL_INT_FIELDS,
+        {},  # Sentinel int fields now handled in Python source
     )
 
 

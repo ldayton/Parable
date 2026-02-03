@@ -1,0 +1,23 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <WarningsAsErrors></WarningsAsErrors>
+    <NoWarn>CS8600;CS8602;CS8603;CS8604;CS8618;CS8619;CS8625</NoWarn>
+
+    <!-- NuGet package metadata -->
+    <PackageId>Parable</PackageId>
+    <Version>0.1.0</Version>
+    <Authors>Lily Dayton</Authors>
+    <Description>A bash parser that exactly matches bash's behavior</Description>
+    <PackageLicenseExpression>MIT</PackageLicenseExpression>
+    <PackageProjectUrl>https://github.com/ldayton/Parable</PackageProjectUrl>
+    <RepositoryUrl>https://github.com/ldayton/Parable</RepositoryUrl>
+    <RepositoryType>git</RepositoryType>
+    <PackageTags>bash;parser;shell;ast</PackageTags>
+  </PropertyGroup>
+
+</Project>

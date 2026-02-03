@@ -3,7 +3,7 @@ set shell := ["bash", "-o", "pipefail", "-cu"]
 # --- Configuration ---
 project := "parable"
 run_id := `head -c 16 /dev/urandom | xxd -p`
-backends := "c csharp go java javascript lua perl php python ruby typescript"  # All backends
+backends := "csharp dart go java javascript lua perl php python ruby typescript"
 
 # --- Helpers ---
 
@@ -16,7 +16,7 @@ _banner label:
 # Run parser tests against source
 [group: 'source']
 src-test *ARGS: (_banner "src-test")
-    uv run tests/bin/run-tests.py {{ARGS}}
+    uv run parable-test {{ARGS}} tests
 
 # Lint (--fix to apply changes)
 [group: 'source']
@@ -50,130 +50,15 @@ src-verify-lock: (_banner "src-verify-lock")
 
 # --- Backends (transpiled output in dist/) ---
 
-# Transpile base to dist/<backend>/
+# Transpile via Docker
 [group: 'backends']
-backend-transpile backend:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    printf '{{BOLD}}{{CYAN}}==> backend-transpile %s{{NORMAL}}\n' '{{backend}}'
-    case "{{backend}}" in
-        c)
-            mkdir -p dist/c
-            uv run --directory transpiler python -m src.tongues --target c < "$(pwd)/src/parable.py" > dist/c/parable.c
-            ;;
-        csharp)
-            mkdir -p dist/csharp
-            uv run --directory transpiler python -m src.tongues --target csharp < "$(pwd)/src/parable.py" > dist/csharp/Parable.cs
-            ;;
-        go)
-            out="dist/go/parable.go"
-            uv run --directory transpiler python -m src.tongues --target go < "$(pwd)/src/parable.py" > /tmp/parable-ir.go
-            gofmt /tmp/parable-ir.go > "$out"
-            ;;
-        java)
-            mkdir -p dist/java
-            uv run --directory transpiler python -m src.tongues --target java < "$(pwd)/src/parable.py" > dist/java/Parable.java
-            ;;
-        javascript)
-            mkdir -p dist/js
-            uv run --directory transpiler python -m src.tongues --target javascript < "$(pwd)/src/parable.py" > dist/js/parable.js
-            ;;
-        lua)
-            mkdir -p dist/lua
-            uv run --directory transpiler python -m src.tongues --target lua < "$(pwd)/src/parable.py" > dist/lua/parable.lua
-            ;;
-        perl)
-            mkdir -p dist/perl
-            uv run --directory transpiler python -m src.tongues --target perl < "$(pwd)/src/parable.py" > dist/perl/parable.pl
-            ;;
-        php)
-            mkdir -p dist/php
-            uv run --directory transpiler python -m src.tongues --target php < "$(pwd)/src/parable.py" > dist/php/parable.php
-            ;;
-        python)
-            mkdir -p dist/python
-            uv run --directory transpiler python -m src.tongues --target python < "$(pwd)/src/parable.py" > dist/python/parable.py
-            ;;
-        ruby)
-            mkdir -p dist/ruby
-            uv run --directory transpiler python -m src.tongues --target ruby < "$(pwd)/src/parable.py" > dist/ruby/parable.rb
-            ;;
-        typescript)
-            mkdir -p dist/typescript
-            uv run --directory transpiler python -m src.tongues --target typescript < "$(pwd)/src/parable.py" > dist/typescript/parable.ts
-            ;;
-        *)
-            echo "Unknown backend: {{backend}}"
-            exit 1
-            ;;
-    esac
+backend-transpile backend: (_banner "backend-transpile " + backend)
+    just -f dist/{{backend}}/justfile transpile "$(pwd)/src/parable.py" "$(pwd)/transpiler"
 
-# Run tests on transpiled backend
+# Run tests via Docker
 [group: 'backends']
-backend-test backend:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    printf '{{BOLD}}{{CYAN}}==> backend-test %s{{NORMAL}}\n' '{{backend}}'
-    tests_abs="$(pwd)/tests"
-    case "{{backend}}" in
-        c)
-            just backend-transpile c
-            just -f dist/c/justfile check "$tests_abs"
-            ;;
-        csharp)
-            just backend-transpile csharp
-            dotnet build dist/csharp/csharp.csproj -o dist/csharp/bin --verbosity quiet
-            dotnet dist/csharp/bin/csharp.dll "$tests_abs"
-            ;;
-        go)
-            just backend-transpile go
-            go build -C dist/go -o /dev/null .
-            go run -C dist/go ./cmd/run-tests "$tests_abs"
-            ;;
-        java)
-            just backend-transpile java
-            mkdir -p dist/java/classes
-            javac -d dist/java/classes dist/java/Parable.java dist/java/RunTests.java
-            java -cp dist/java/classes RunTests "$tests_abs"
-            ;;
-        javascript)
-            just backend-transpile javascript
-            node tests/bin/run-js-tests.js dist/js
-            ;;
-        lua)
-            just backend-transpile lua
-            luac -p dist/lua/parable.lua
-            lua -l ./dist/lua/parable tests/bin/run-tests.lua "$(pwd)/tests"
-            ;;
-        perl)
-            just backend-transpile perl
-            perl -c dist/perl/parable.pl
-            PERL5LIB=dist/perl perl tests/bin/run-tests.pl "$tests_abs"
-            ;;
-        php)
-            just backend-transpile php
-            php -l dist/php/parable.php
-            php tests/bin/run-tests.php "$tests_abs"
-            ;;
-        python)
-            just backend-transpile python
-            PYTHONPATH=dist/python python3 tests/bin/run-tests.py
-            ;;
-        ruby)
-            just backend-transpile ruby
-            ruby -r ./dist/ruby/parable.rb tests/bin/run-tests.rb "$tests_abs"
-            ;;
-        typescript)
-            just backend-transpile typescript
-            tsc --outDir dist/js --lib es2019 --module commonjs --esModuleInterop dist/typescript/parable.ts
-            node tests/bin/run-js-tests.js dist/js
-            ;;
-        *)
-            echo "No test runner for backend: {{backend}}"
-            echo "Available backends: {{backends}}"
-            exit 1
-            ;;
-    esac
+backend-test backend: (_banner "backend-test " + backend)
+    just -f dist/{{backend}}/justfile check "$(pwd)/src/parable.py" "$(pwd)/transpiler" "$(pwd)/tests"
 
 # --- CI/Check ---
 
@@ -186,7 +71,23 @@ c-compile:
 # Internal: run all parallel checks
 [private]
 [parallel]
-_check-parallel: src-test src-lint src-fmt src-verify-lock src-subset transpiler-subset transpiler-test check-dump-ast c-compile (backend-test "csharp") (backend-test "go") (backend-test "java") (backend-test "javascript") (backend-test "lua") (backend-test "perl") (backend-test "php") (backend-test "python") (backend-test "ruby") (backend-test "typescript")
+_check-parallel: src-test src-lint src-fmt src-verify-lock src-subset transpiler-subset transpiler-test check-dump-ast _backend-test-all
+
+# Internal: run backend tests in parallel
+[private]
+_backend-test-all:
+    #!/usr/bin/env bash
+    set -e
+    pids=()
+    for backend in {{backends}}; do
+        just backend-test "$backend" &
+        pids+=($!)
+    done
+    failed=0
+    for pid in "${pids[@]}"; do
+        wait "$pid" || failed=1
+    done
+    exit $failed
 
 # Ensure biome is installed (prevents race condition in parallel JS checks)
 [private]
@@ -275,7 +176,7 @@ check-dump-ast: (_banner "check-dump-ast")
 src-coverage: (_banner "src-coverage")
     #!/usr/bin/env bash
     set -euo pipefail
-    uv run --with coverage coverage run tests/bin/run-tests.py
+    uv run --with coverage coverage run -m run_tests tests
     uv run --with coverage coverage html -d /tmp/parable-coverage
     uv run --with coverage coverage json -o /tmp/parable-coverage.json
     echo ""
@@ -294,7 +195,7 @@ backend-coverage backend:
         go)
             rm -rf /tmp/parable-coverage-go-raw
             mkdir -p /tmp/parable-coverage-go-raw
-            just backend-transpile go
+            just -f dist/go/justfile transpile "$(pwd)/src/parable.py" "$(pwd)/transpiler"
             GOCOVERDIR=/tmp/parable-coverage-go-raw go run -C dist/go -cover ./cmd/run-tests "$(pwd)/tests"
             go tool covdata textfmt -i=/tmp/parable-coverage-go-raw -o=/tmp/parable-coverage-go.txt
             cd dist/go && go tool cover -html=/tmp/parable-coverage-go.txt -o=/tmp/parable-coverage-go.html
@@ -313,4 +214,4 @@ backend-coverage backend:
 # Benchmark source test suite
 [group: 'profiling']
 src-benchmark: (_banner "src-benchmark")
-    hyperfine --warmup 2 --runs ${RUNS:-5} 'uv run tests/bin/run-tests.py 2>&1'
+    hyperfine --warmup 2 --runs ${RUNS:-5} 'uv run parable-test tests 2>&1'

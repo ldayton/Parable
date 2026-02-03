@@ -1317,9 +1317,13 @@ static Vec_Byte _str_to_bytes(Arena *a, const char *s) {
     return (Vec_Byte){data, len, len};
 }
 
-// Generic set membership (placeholder - sets aren't fully implemented)
+// Generic set membership - string sets are NULL-terminated const char*[]
 static bool _set_contains(void *set, const char *key) {
-    (void)set; (void)key;
+    if (!set || !key) return false;
+    const char **elems = (const char **)set;
+    for (; *elems; elems++) {
+        if (strcmp(*elems, key) == 0) return true;
+    }
     return false;
 }
 
@@ -2615,10 +2619,11 @@ static bool _map_contains(void *map, const char *key) {
             low = self._emit_expr(expr.low) if expr.low else "0"
             high = self._emit_expr(expr.high) if expr.high else f"_rune_len({obj})"
             return f"__c_substring(g_arena, {obj}, {low}, {high})"
-        # Slice of slice - simplified
+        # Slice of slice
         low = self._emit_expr(expr.low) if expr.low else "0"
         high = self._emit_expr(expr.high) if expr.high else f"{obj}.len"
-        return f"/* slice[{low}:{high}] */ {obj}"
+        vec_type = self._type_to_c(obj_type)
+        return f"({vec_type}){{{obj}.data + {low}, {high} - {low}, {high} - {low}}}"
 
     def _emit_expr_SliceConvert(self, expr: SliceConvert) -> str:
         """Emit slice type conversion (e.g., list[HereDoc] -> list[Node])."""
@@ -3048,7 +3053,9 @@ static bool _map_contains(void *map, const char *key) {
         return "NULL"
 
     def _emit_expr_SetLit(self, expr: SetLit) -> str:
-        # Sets are void* for now - return NULL
+        if isinstance(expr.element_type, Primitive) and expr.element_type.kind == "string":
+            elems = ", ".join(self._emit_expr(e) for e in expr.elements)
+            return f"(const char *[]){{{elems}, NULL}}"
         return "NULL"
 
     def _emit_expr_StructLit(self, expr: StructLit) -> str:

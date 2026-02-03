@@ -725,9 +725,13 @@ static Vec_Byte _str_to_bytes(Arena *a, const char *s) {
     return (Vec_Byte){data, len, len};
 }
 
-// Generic set membership (placeholder - sets aren't fully implemented)
+// Generic set membership - string sets are NULL-terminated const char*[]
 static bool _set_contains(void *set, const char *key) {
-    (void)set; (void)key;
+    if (!set || !key) return false;
+    const char **elems = (const char **)set;
+    for (; *elems; elems++) {
+        if (strcmp(*elems, key) == 0) return true;
+    }
     return false;
 }
 
@@ -2424,7 +2428,7 @@ static bool _is_expansion_start(const char * s, int64_t pos, const char * delimi
 }
 
 static Vec_Node _sublist(Vec_Node lst, int64_t start, int64_t end) {
-    return /* slice[start:end] */ lst;
+    return (Vec_Node){lst.data + start, end - start, end - start};
 }
 
 static const char * _repeat_str(const char * s, int64_t n) {
@@ -2696,8 +2700,8 @@ static const char * _format_cmdsub_node(Node * node, int64_t indent, bool in_pro
             VEC_PUSH(g_arena, &parts, (_format_redirect((Node *)r, compact_redirects, true)));
         }
         if (((compact_redirects && (node->words.len > 0)) && (node->redirects.len > 0))) {
-            word_parts = /* slice[0:node->words.len] */ parts;
-            redirect_parts = /* slice[node->words.len:parts.len] */ parts;
+            word_parts = (Vec_Str){parts.data + 0, node->words.len - 0, node->words.len - 0};
+            redirect_parts = (Vec_Str){parts.data + node->words.len, parts.len - node->words.len, parts.len - node->words.len};
             result = _str_concat(g_arena, _str_join(g_arena, " ", word_parts), _str_join(g_arena, "", redirect_parts));
         } else {
             result = _str_join(g_arena, " ", parts);
@@ -4944,7 +4948,7 @@ static const char * Lexer__parse_matched_pair(Lexer *self, const char * open_cha
         }
         if ((((strcmp(ch, "(") == 0) && was_gtlt) && ((flags & (MATCHEDPAIRFLAGS_DOLBRACE | MATCHEDPAIRFLAGS_ARRAYSUB)) != 0))) {
             const char * direction = chars.data[(chars.len - 1)];
-            chars = /* slice[0:(chars.len - 1)] */ chars;
+            chars = (Vec_Str){chars.data + 0, (chars.len - 1) - 0, (chars.len - 1) - 0};
             self->pos -= 1;
             Lexer__sync_to_parser(self);
             Tuple_NodePtr_constcharPtr _tup35 = Parser__parse_process_substitution(self->_parser);
@@ -5225,9 +5229,9 @@ static Word * Lexer__read_word_internal(Lexer *self, int64_t ctx, bool at_comman
         if (((((ctx == WORD_CTX_NORMAL) && (strcmp(ch, "(") == 0)) && (chars.len > 0)) && (bracket_depth == 0))) {
             bool is_array_assign = false;
             if ((((chars.len >= 3) && (strcmp(chars.data[(chars.len - 2)], "+") == 0)) && (strcmp(chars.data[(chars.len - 1)], "=") == 0))) {
-                is_array_assign = _is_array_assignment_prefix(/* slice[0:(chars.len - 2)] */ chars);
+                is_array_assign = _is_array_assignment_prefix((Vec_Str){chars.data + 0, (chars.len - 2) - 0, (chars.len - 2) - 0});
             } else if (((strcmp(chars.data[(chars.len - 1)], "=") == 0) && (chars.len >= 2))) {
-                is_array_assign = _is_array_assignment_prefix(/* slice[0:(chars.len - 1)] */ chars);
+                is_array_assign = _is_array_assignment_prefix((Vec_Str){chars.data + 0, (chars.len - 1) - 0, (chars.len - 1) - 0});
             }
             if ((is_array_assign && (at_command_start || in_assign_builtin))) {
                 Lexer__sync_to_parser(self);
@@ -8693,7 +8697,7 @@ static Node * Parser__parse_loop_body(Parser *self, const char * context) {
         return (Node *)brace->body;
     }
     if (Parser__lex_consume_word(self, "do")) {
-        Node * body = (Node *)Parser_parse_list_until(self, NULL);
+        Node * body = (Node *)Parser_parse_list_until(self, (const char *[]){"done", NULL});
         if ((body == NULL)) {
             g_parse_error = 1;
             snprintf(g_error_msg, sizeof(g_error_msg), "%s", "Expected commands after 'do'");
@@ -11068,7 +11072,7 @@ static If * Parser_parse_if(Parser *self) {
     if (!(Parser__lex_consume_word(self, "if"))) {
         return NULL;
     }
-    Node * condition = (Node *)Parser_parse_list_until(self, NULL);
+    Node * condition = (Node *)Parser_parse_list_until(self, (const char *[]){"then", NULL});
     if ((condition == NULL)) {
         g_parse_error = 1;
         snprintf(g_error_msg, sizeof(g_error_msg), "%s", "Expected condition after 'if'");
@@ -11080,7 +11084,7 @@ static If * Parser_parse_if(Parser *self) {
         snprintf(g_error_msg, sizeof(g_error_msg), "%s", "Expected 'then' after if condition");
         return NULL;
     }
-    Node * then_body = (Node *)Parser_parse_list_until(self, NULL);
+    Node * then_body = (Node *)Parser_parse_list_until(self, (const char *[]){"elif", "else", "fi", NULL});
     if ((then_body == NULL)) {
         g_parse_error = 1;
         snprintf(g_error_msg, sizeof(g_error_msg), "%s", "Expected commands after 'then'");
@@ -11090,7 +11094,7 @@ static If * Parser_parse_if(Parser *self) {
     Node * else_body = (Node *)NULL;
     if (Parser__lex_is_at_reserved_word(self, "elif")) {
         Parser__lex_consume_word(self, "elif");
-        Node * elif_condition = (Node *)Parser_parse_list_until(self, NULL);
+        Node * elif_condition = (Node *)Parser_parse_list_until(self, (const char *[]){"then", NULL});
         if ((elif_condition == NULL)) {
             g_parse_error = 1;
             snprintf(g_error_msg, sizeof(g_error_msg), "%s", "Expected condition after 'elif'");
@@ -11102,7 +11106,7 @@ static If * Parser_parse_if(Parser *self) {
             snprintf(g_error_msg, sizeof(g_error_msg), "%s", "Expected 'then' after elif condition");
             return NULL;
         }
-        Node * elif_then_body = (Node *)Parser_parse_list_until(self, NULL);
+        Node * elif_then_body = (Node *)Parser_parse_list_until(self, (const char *[]){"elif", "else", "fi", NULL});
         if ((elif_then_body == NULL)) {
             g_parse_error = 1;
             snprintf(g_error_msg, sizeof(g_error_msg), "%s", "Expected commands after 'then'");
@@ -11114,7 +11118,7 @@ static If * Parser_parse_if(Parser *self) {
             inner_else = (Node *)Parser__parse_elif_chain(self);
         } else if (Parser__lex_is_at_reserved_word(self, "else")) {
             Parser__lex_consume_word(self, "else");
-            inner_else = (Node *)Parser_parse_list_until(self, NULL);
+            inner_else = (Node *)Parser_parse_list_until(self, (const char *[]){"fi", NULL});
             if ((inner_else == NULL)) {
                 g_parse_error = 1;
                 snprintf(g_error_msg, sizeof(g_error_msg), "%s", "Expected commands after 'else'");
@@ -11124,7 +11128,7 @@ static If * Parser_parse_if(Parser *self) {
         else_body = (Node *)If_new(elif_condition, elif_then_body, inner_else, (Vec_Node){NULL, 0, 0}, "if");
     } else if (Parser__lex_is_at_reserved_word(self, "else")) {
         Parser__lex_consume_word(self, "else");
-        else_body = (Node *)Parser_parse_list_until(self, NULL);
+        else_body = (Node *)Parser_parse_list_until(self, (const char *[]){"fi", NULL});
         if ((else_body == NULL)) {
             g_parse_error = 1;
             snprintf(g_error_msg, sizeof(g_error_msg), "%s", "Expected commands after 'else'");
@@ -11142,7 +11146,7 @@ static If * Parser_parse_if(Parser *self) {
 
 static If * Parser__parse_elif_chain(Parser *self) {
     Parser__lex_consume_word(self, "elif");
-    Node * condition = (Node *)Parser_parse_list_until(self, NULL);
+    Node * condition = (Node *)Parser_parse_list_until(self, (const char *[]){"then", NULL});
     if ((condition == NULL)) {
         g_parse_error = 1;
         snprintf(g_error_msg, sizeof(g_error_msg), "%s", "Expected condition after 'elif'");
@@ -11154,7 +11158,7 @@ static If * Parser__parse_elif_chain(Parser *self) {
         snprintf(g_error_msg, sizeof(g_error_msg), "%s", "Expected 'then' after elif condition");
         return NULL;
     }
-    Node * then_body = (Node *)Parser_parse_list_until(self, NULL);
+    Node * then_body = (Node *)Parser_parse_list_until(self, (const char *[]){"elif", "else", "fi", NULL});
     if ((then_body == NULL)) {
         g_parse_error = 1;
         snprintf(g_error_msg, sizeof(g_error_msg), "%s", "Expected commands after 'then'");
@@ -11166,7 +11170,7 @@ static If * Parser__parse_elif_chain(Parser *self) {
         else_body = (Node *)Parser__parse_elif_chain(self);
     } else if (Parser__lex_is_at_reserved_word(self, "else")) {
         Parser__lex_consume_word(self, "else");
-        else_body = (Node *)Parser_parse_list_until(self, NULL);
+        else_body = (Node *)Parser_parse_list_until(self, (const char *[]){"fi", NULL});
         if ((else_body == NULL)) {
             g_parse_error = 1;
             snprintf(g_error_msg, sizeof(g_error_msg), "%s", "Expected commands after 'else'");
@@ -11181,7 +11185,7 @@ static While * Parser_parse_while(Parser *self) {
     if (!(Parser__lex_consume_word(self, "while"))) {
         return NULL;
     }
-    Node * condition = (Node *)Parser_parse_list_until(self, NULL);
+    Node * condition = (Node *)Parser_parse_list_until(self, (const char *[]){"do", NULL});
     if ((condition == NULL)) {
         g_parse_error = 1;
         snprintf(g_error_msg, sizeof(g_error_msg), "%s", "Expected condition after 'while'");
@@ -11193,7 +11197,7 @@ static While * Parser_parse_while(Parser *self) {
         snprintf(g_error_msg, sizeof(g_error_msg), "%s", "Expected 'do' after while condition");
         return NULL;
     }
-    Node * body = (Node *)Parser_parse_list_until(self, NULL);
+    Node * body = (Node *)Parser_parse_list_until(self, (const char *[]){"done", NULL});
     if ((body == NULL)) {
         g_parse_error = 1;
         snprintf(g_error_msg, sizeof(g_error_msg), "%s", "Expected commands after 'do'");
@@ -11213,7 +11217,7 @@ static Until * Parser_parse_until(Parser *self) {
     if (!(Parser__lex_consume_word(self, "until"))) {
         return NULL;
     }
-    Node * condition = (Node *)Parser_parse_list_until(self, NULL);
+    Node * condition = (Node *)Parser_parse_list_until(self, (const char *[]){"do", NULL});
     if ((condition == NULL)) {
         g_parse_error = 1;
         snprintf(g_error_msg, sizeof(g_error_msg), "%s", "Expected condition after 'until'");
@@ -11225,7 +11229,7 @@ static Until * Parser_parse_until(Parser *self) {
         snprintf(g_error_msg, sizeof(g_error_msg), "%s", "Expected 'do' after until condition");
         return NULL;
     }
-    Node * body = (Node *)Parser_parse_list_until(self, NULL);
+    Node * body = (Node *)Parser_parse_list_until(self, (const char *[]){"done", NULL});
     if ((body == NULL)) {
         g_parse_error = 1;
         snprintf(g_error_msg, sizeof(g_error_msg), "%s", "Expected commands after 'do'");
@@ -11326,7 +11330,7 @@ static Node * Parser_parse_for(Parser *self) {
         snprintf(g_error_msg, sizeof(g_error_msg), "%s", "Expected 'do' in for loop");
         return NULL;
     }
-    Node * body = (Node *)Parser_parse_list_until(self, NULL);
+    Node * body = (Node *)Parser_parse_list_until(self, (const char *[]){"done", NULL});
     if ((body == NULL)) {
         g_parse_error = 1;
         snprintf(g_error_msg, sizeof(g_error_msg), "%s", "Expected commands after 'do'");
@@ -11643,7 +11647,7 @@ static Case * Parser_parse_case(Parser *self) {
             if ((!(Parser_at_end(self)) && !(Parser__lex_is_at_reserved_word(self, "esac")))) {
                 bool is_at_terminator = (strcmp(Parser__lex_peek_case_terminator(self), "") != 0);
                 if (!(is_at_terminator)) {
-                    body = (Node *)Parser_parse_list_until(self, NULL);
+                    body = (Node *)Parser_parse_list_until(self, (const char *[]){"esac", NULL});
                     Parser_skip_whitespace(self);
                 }
             }

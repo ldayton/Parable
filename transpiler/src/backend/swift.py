@@ -508,6 +508,7 @@ class SwiftBackend:
         else:
             self._line(f"func {name}({params}){throws} -> {ret} {{")
         self.indent += 1
+        self._emit_param_var_shadows(func.params)
         for stmt in func.body:
             self._emit_stmt(stmt)
         self.indent -= 1
@@ -535,6 +536,7 @@ class SwiftBackend:
         else:
             self._line(f"func {name}({params}){throws} -> {ret} {{")
         self.indent += 1
+        self._emit_param_var_shadows(func.params)
         for stmt in func.body:
             self._emit_stmt(stmt)
         self.indent -= 1
@@ -547,11 +549,21 @@ class SwiftBackend:
         for p in params:
             typ = self._type(p.typ)
             name = _safe_name(p.name)
-            if p.is_modified and _is_mutable_value_type(p.typ):
+            if isinstance(p.typ, Pointer) and _is_mutable_value_type(p.typ.target):
                 parts.append(f"_ {name}: inout {typ}")
             else:
                 parts.append(f"_ {name}: {typ}")
         return ", ".join(parts)
+
+    def _emit_param_var_shadows(self, params: list[Param]) -> None:
+        """Emit var shadows for collection-type parameters that need mutation."""
+        for p in params:
+            # Skip Pointer params - those use inout instead of var shadows
+            if isinstance(p.typ, Pointer):
+                continue
+            if p.typ and _is_mutable_value_type(p.typ):
+                name = _safe_name(p.name)
+                self._line(f"var {name} = {name}")
 
     def _emit_hoisted_vars(
         self, stmt: If | While | ForRange | ForClassic | TryCatch | Match | TypeSwitch
@@ -598,6 +610,8 @@ class SwiftBackend:
                     if _expr_can_be_nil(value, self._nil_returning_funcs) and not swift_type.endswith("?"):
                         swift_type += "?"
                         self._optional_hoisted.add(name)
+                    elif isinstance(value, TupleLit) and isinstance(typ, Tuple):
+                        swift_type = self._tuple_type_with_nil(typ, value)
                     keyword = "var" if stmt.is_reassigned or _is_mutable_value_type(typ) else "let"
                     self._line(f"{keyword} {var_name}: {swift_type} = {val}")
                 else:
@@ -760,15 +774,17 @@ class SwiftBackend:
         self._emit_hoisted_vars(stmt)
         var = self._expr(stmt.expr)
         binding = _safe_name(stmt.binding)
+        # Use a unique name to avoid shadowing the switched variable
+        case_binding = f"_{binding}" if binding == var else binding
         cases = stmt.cases
         default = stmt.default
         # Use switch with case let pattern matching
         self._line(f"switch {var} {{")
         for case in cases:
             type_name = self._type_name_for_check(case.typ)
-            self._line(f"case let {binding} as {type_name}:")
+            self._line(f"case let {case_binding} as {type_name}:")
             self.indent += 1
-            self._type_switch_binding_rename[stmt.binding] = binding
+            self._type_switch_binding_rename[stmt.binding] = case_binding
             saved_decl = set(self._declared_vars)
             saved_hoist = set(self._hoisted_vars)
             saved_opt = set(self._optional_hoisted)
@@ -932,7 +948,7 @@ class SwiftBackend:
         self.indent -= 1
         exc_type = stmt.catch_type.name if isinstance(stmt.catch_type, StructRef) else "Error"
         is_generic = exc_type in ("Exception", "Error")
-        needs_binding = not stmt.catch_var_unused and stmt.catch_var
+        needs_binding = (not stmt.catch_var_unused or stmt.reraise) and stmt.catch_var
         needs_reraise_binding = stmt.reraise and not stmt.catch_var
         if is_generic:
             if needs_binding:
@@ -988,7 +1004,7 @@ class SwiftBackend:
             case FieldAccess(obj=obj, field=field):
                 obj_str = self._expr(obj)
                 obj_type = obj.typ
-                if isinstance(obj_type, Optional):
+                if isinstance(obj_type, Optional) and not obj_str.endswith("!"):
                     obj_str = f"{obj_str}!"
                     obj_type = obj_type.inner
                 # Handle tuple field access (F0, F1 -> .0, .1)
@@ -1055,7 +1071,7 @@ class SwiftBackend:
             case MethodCall(obj=obj, method=method, args=args, receiver_type=receiver_type):
                 return self._method_call(obj, method, args, receiver_type)
             case StaticCall(on_type=on_type, method=method, args=args):
-                args_str = ", ".join(self._expr(a) for a in args)
+                args_str = ", ".join(self._emit_arg(a) for a in args)
                 type_name = self._type_name_for_check(on_type)
                 return f"{type_name}.{_safe_name(method)}({args_str})"
             case Truthy(expr=e):
@@ -1075,6 +1091,11 @@ class SwiftBackend:
                 if isinstance(inner_type, Primitive) and inner_type.kind == "int":
                     return f"({inner_str} != 0)"
                 if isinstance(inner_type, Primitive) and inner_type.kind == "bool":
+                    # Check if this is a negated optional check (e.g., !comment where comment is nullable)
+                    if isinstance(e, UnaryOp) and e.op == "!" and isinstance(e.operand, Var):
+                        var_name = e.operand.name
+                        if var_name in self._optional_hoisted:
+                            return f"({self._expr(e.operand)} == nil)"
                     return inner_str
                 return f"({inner_str} != nil)"
             case BinaryOp(op="in", left=left, right=right):
@@ -1087,7 +1108,10 @@ class SwiftBackend:
                 swift_op = _binary_op(op)
                 return f"{left_str} {swift_op} {right_str}"
             case UnaryOp(op="&", operand=operand):
-                return self._expr(operand)
+                inner = self._expr(operand)
+                if operand.typ and _is_mutable_value_type(operand.typ):
+                    return f"&{inner}"
+                return inner
             case UnaryOp(op="*", operand=operand):
                 return self._expr(operand)
             case UnaryOp(op=op, operand=operand):
@@ -1223,8 +1247,15 @@ class SwiftBackend:
             case _:
                 return "nil /* TODO: unknown expression */"
 
+    def _emit_arg(self, arg: Expr) -> str:
+        """Emit an argument expression, adding & for inout (Pointer-to-value-type) args."""
+        s = self._expr(arg)
+        if isinstance(arg.typ, Pointer) and _is_mutable_value_type(arg.typ.target) and not s.startswith("&"):
+            return f"&{s}"
+        return s
+
     def _call(self, func: str, args: list[Expr]) -> str:
-        args_str = ", ".join(self._expr(a) for a in args)
+        args_str = ", ".join(self._emit_arg(a) for a in args)
         if func == "int" and len(args) == 2:
             return f"Int({self._expr(args[0])}, radix: {self._expr(args[1])})!"
         if func == "str":
@@ -1256,7 +1287,7 @@ class SwiftBackend:
         return f"{_safe_name(func)}({args_str})"
 
     def _method_call(self, obj: Expr, method: str, args: list[Expr], receiver_type: Type) -> str:
-        args_str = ", ".join(self._expr(a) for a in args)
+        args_str = ", ".join(self._emit_arg(a) for a in args)
         obj_str = self._expr(obj)
         if isinstance(receiver_type, Optional):
             obj_str = f"{obj_str}!"
@@ -1461,7 +1492,11 @@ class SwiftBackend:
                 param_name = _safe_name(field_name)
                 if field_name in fields:
                     field_val = fields[field_name]
-                    ordered_args.append(f"{param_name}: {self._expr(field_val)}")
+                    # NilLit for collection fields should use empty collection, not nil
+                    if isinstance(field_val, NilLit) and isinstance(field_type, (Slice, Array, Map, Set)):
+                        ordered_args.append(f"{param_name}: {self._default_value(field_type)}")
+                    else:
+                        ordered_args.append(f"{param_name}: {self._expr(field_val)}")
                 else:
                     default = self._default_value(field_type)
                     ordered_args.append(f"{param_name}: {default}")
@@ -1476,6 +1511,16 @@ class SwiftBackend:
         else:
             args = ", ".join(f"{_safe_name(k)}: {self._expr(v)}" for k, v in fields.items())
             return f"{safe_name}({args})"
+
+    def _tuple_type_with_nil(self, typ: Tuple, lit: TupleLit) -> str:
+        """Emit a tuple type, making elements optional where the literal has nil."""
+        parts = []
+        for i, elem_type in enumerate(typ.elements):
+            t = self._type(elem_type)
+            if i < len(lit.elements) and isinstance(lit.elements[i], NilLit) and not t.endswith("?"):
+                t += "?"
+            parts.append(t)
+        return f"({', '.join(parts)})"
 
     def _lvalue(self, lv: LValue) -> str:
         match lv:
@@ -1756,6 +1801,8 @@ def _is_mutable_value_type(typ: Type) -> bool:
     """Check if a type is a mutable value type in Swift (needs var for mutation)."""
     if isinstance(typ, Optional):
         return _is_mutable_value_type(typ.inner)
+    if isinstance(typ, Pointer):
+        return _is_mutable_value_type(typ.target)
     return isinstance(typ, (Slice, Array, Map, Set))
 
 

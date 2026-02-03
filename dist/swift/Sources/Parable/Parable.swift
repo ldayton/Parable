@@ -330,6 +330,7 @@ class ContextStack {
     }
 
     func restoreFrom(_ savedStack: [ParseContext]) {
+        var savedStack = savedStack
         var result: [ParseContext] = []
         for ctx in savedStack {
             result.append(ctx.copy())
@@ -626,7 +627,8 @@ class Lexer {
         return _isMetachar(ch) && bracketDepth == 0
     }
 
-    func _readBracketExpression(_ chars: [String], _ parts: [Node], _ forRegex: Bool, _ parenDepth: Int) -> Bool {
+    func _readBracketExpression(_ chars: inout [String], _ parts: [Node], _ forRegex: Bool, _ parenDepth: Int) -> Bool {
+        var parts = parts
         if forRegex {
             var scan: Int = self.pos + 1
             if scan < self.length && String(_charAt(self.source, scan)) == "^" {
@@ -723,7 +725,7 @@ class Lexer {
                     } else {
                         if forRegex && c == "$" {
                             self._syncToParser()
-                            if try !self._parser!._parseDollarExpansion(chars, parts, false) {
+                            if try !self._parser!._parseDollarExpansion(&chars, &parts, false) {
                                 self._syncFromParser()
                                 chars.append(self.advance())
                             } else {
@@ -1048,7 +1050,7 @@ class Lexer {
             }
             if ctx == wordCtxCond || ctx == wordCtxRegex && ch == "[" {
                 var forRegex: Bool = ctx == wordCtxRegex
-                if self._readBracketExpression(chars, parts, forRegex, parenDepth) {
+                if self._readBracketExpression(&chars, parts, forRegex, parenDepth) {
                     continue
                 }
                 chars.append(self.advance())
@@ -1110,7 +1112,7 @@ class Lexer {
                         } else {
                             if c == "$" {
                                 self._syncToParser()
-                                if try !self._parser!._parseDollarExpansion(chars, parts, true) {
+                                if try !self._parser!._parseDollarExpansion(&chars, &parts, true) {
                                     self._syncFromParser()
                                     chars.append(self.advance())
                                 } else {
@@ -1142,7 +1144,7 @@ class Lexer {
                 } else {
                     var handleLineContinuation: Bool = ctx == wordCtxCond
                     self._syncToParser()
-                    try self._parser!._scanDoubleQuote(chars, parts, start, handleLineContinuation)
+                    try self._parser!._scanDoubleQuote(&chars, parts, start, handleLineContinuation)
                     self._syncFromParser()
                 }
                 continue
@@ -1186,7 +1188,7 @@ class Lexer {
             }
             if ch == "$" {
                 self._syncToParser()
-                if try !self._parser!._parseDollarExpansion(chars, parts, false) {
+                if try !self._parser!._parseDollarExpansion(&chars, &parts, false) {
                     self._syncFromParser()
                     chars.append(self.advance())
                 } else {
@@ -1287,7 +1289,7 @@ class Lexer {
         if (!parts.isEmpty) {
             return Word(value: chars.joined(separator: ""), parts: parts, kind: "word")
         }
-        return Word(value: chars.joined(separator: ""), parts: nil, kind: "word")
+        return Word(value: chars.joined(separator: ""), parts: [], kind: "word")
     }
 
     func _readWord() throws -> Token? {
@@ -1308,7 +1310,7 @@ class Lexer {
         if word == nil {
             return nil
         }
-        return Token(type: tokentypeWord, value: word!.value, pos: start, parts: nil, word: word!)
+        return Token(type: tokentypeWord, value: word!.value, pos: start, parts: [], word: word!)
     }
 
     func nextToken() throws -> Token {
@@ -1977,7 +1979,7 @@ class Word: Node {
         return "(word \"" + escaped + "\")"
     }
 
-    func _appendWithCtlesc(_ result: [UInt8], _ byteVal: Int) {
+    func _appendWithCtlesc(_ result: inout [UInt8], _ byteVal: Int) {
         result.append(UInt8(byteVal))
     }
 
@@ -2147,7 +2149,7 @@ class Word: Node {
                                 if byteVal == 0 {
                                     return result
                                 }
-                                self._appendWithCtlesc(result, byteVal)
+                                self._appendWithCtlesc(&result, byteVal)
                                 i = j
                             } else {
                                 j = i + 2
@@ -2159,7 +2161,7 @@ class Word: Node {
                                     if byteVal == 0 {
                                         return result
                                     }
-                                    self._appendWithCtlesc(result, byteVal)
+                                    self._appendWithCtlesc(&result, byteVal)
                                     i = j
                                 } else {
                                     result.append(UInt8(_charAt(String(_charAt(inner, i)), 0)))
@@ -2213,7 +2215,7 @@ class Word: Node {
                                             if ctrlVal == 0 {
                                                 return result
                                             }
-                                            self._appendWithCtlesc(result, ctrlVal)
+                                            self._appendWithCtlesc(&result, ctrlVal)
                                             i += 3 + skipExtra
                                         } else {
                                             result.append(UInt8(_charAt(String(_charAt(inner, i)), 0)))
@@ -2230,7 +2232,7 @@ class Word: Node {
                                                 if byteVal == 0 {
                                                     return result
                                                 }
-                                                self._appendWithCtlesc(result, byteVal)
+                                                self._appendWithCtlesc(&result, byteVal)
                                                 i = j
                                             } else {
                                                 return result
@@ -2245,7 +2247,7 @@ class Word: Node {
                                                 if byteVal == 0 {
                                                     return result
                                                 }
-                                                self._appendWithCtlesc(result, byteVal)
+                                                self._appendWithCtlesc(&result, byteVal)
                                                 i = j
                                             } else {
                                                 result.append(UInt8(92))
@@ -2938,46 +2940,46 @@ class Word: Node {
     func _collectCmdsubs(_ node: Node) -> [Node] {
         var result: [Node] = []
         switch node {
-        case let node as CommandSubstitution:
-            result.append(node)
-        case let node as `Array`:
-            for elem in node.elements {
+        case let _node as CommandSubstitution:
+            result.append(_node)
+        case let _node as `Array`:
+            for elem in _node.elements {
                 for p in elem.parts {
                     switch p {
-                    case let p as CommandSubstitution:
-                        result.append(p)
+                    case let _p as CommandSubstitution:
+                        result.append(_p)
                     default:
                         result.append(contentsOf: self._collectCmdsubs(p))
                     }
                 }
             }
-        case let node as ArithmeticExpansion:
-            if node.expression != nil {
-                result.append(contentsOf: self._collectCmdsubs(node.expression))
+        case let _node as ArithmeticExpansion:
+            if _node.expression != nil {
+                result.append(contentsOf: self._collectCmdsubs(_node.expression))
             }
-        case let node as ArithBinaryOp:
-            result.append(contentsOf: self._collectCmdsubs(node.`left`))
-            result.append(contentsOf: self._collectCmdsubs(node.`right`))
-        case let node as ArithComma:
-            result.append(contentsOf: self._collectCmdsubs(node.`left`))
-            result.append(contentsOf: self._collectCmdsubs(node.`right`))
-        case let node as ArithUnaryOp:
-            result.append(contentsOf: self._collectCmdsubs(node.operand))
-        case let node as ArithPreIncr:
-            result.append(contentsOf: self._collectCmdsubs(node.operand))
-        case let node as ArithPostIncr:
-            result.append(contentsOf: self._collectCmdsubs(node.operand))
-        case let node as ArithPreDecr:
-            result.append(contentsOf: self._collectCmdsubs(node.operand))
-        case let node as ArithPostDecr:
-            result.append(contentsOf: self._collectCmdsubs(node.operand))
-        case let node as ArithTernary:
-            result.append(contentsOf: self._collectCmdsubs(node.condition))
-            result.append(contentsOf: self._collectCmdsubs(node.ifTrue))
-            result.append(contentsOf: self._collectCmdsubs(node.ifFalse))
-        case let node as ArithAssign:
-            result.append(contentsOf: self._collectCmdsubs(node.target))
-            result.append(contentsOf: self._collectCmdsubs(node.value))
+        case let _node as ArithBinaryOp:
+            result.append(contentsOf: self._collectCmdsubs(_node.`left`))
+            result.append(contentsOf: self._collectCmdsubs(_node.`right`))
+        case let _node as ArithComma:
+            result.append(contentsOf: self._collectCmdsubs(_node.`left`))
+            result.append(contentsOf: self._collectCmdsubs(_node.`right`))
+        case let _node as ArithUnaryOp:
+            result.append(contentsOf: self._collectCmdsubs(_node.operand))
+        case let _node as ArithPreIncr:
+            result.append(contentsOf: self._collectCmdsubs(_node.operand))
+        case let _node as ArithPostIncr:
+            result.append(contentsOf: self._collectCmdsubs(_node.operand))
+        case let _node as ArithPreDecr:
+            result.append(contentsOf: self._collectCmdsubs(_node.operand))
+        case let _node as ArithPostDecr:
+            result.append(contentsOf: self._collectCmdsubs(_node.operand))
+        case let _node as ArithTernary:
+            result.append(contentsOf: self._collectCmdsubs(_node.condition))
+            result.append(contentsOf: self._collectCmdsubs(_node.ifTrue))
+            result.append(contentsOf: self._collectCmdsubs(_node.ifFalse))
+        case let _node as ArithAssign:
+            result.append(contentsOf: self._collectCmdsubs(_node.target))
+            result.append(contentsOf: self._collectCmdsubs(_node.value))
         default:
             break
         }
@@ -2987,14 +2989,14 @@ class Word: Node {
     func _collectProcsubs(_ node: Node) -> [Node] {
         var result: [Node] = []
         switch node {
-        case let node as ProcessSubstitution:
-            result.append(node)
-        case let node as `Array`:
-            for elem in node.elements {
+        case let _node as ProcessSubstitution:
+            result.append(_node)
+        case let _node as `Array`:
+            for elem in _node.elements {
                 for p in elem.parts {
                     switch p {
-                    case let p as ProcessSubstitution:
-                        result.append(p)
+                    case let _p as ProcessSubstitution:
+                        result.append(_p)
                     default:
                         result.append(contentsOf: self._collectProcsubs(p))
                     }
@@ -3012,11 +3014,11 @@ class Word: Node {
         var hasArith: Bool = false
         for p in self.parts {
             switch p {
-            case let p as CommandSubstitution:
-                cmdsubParts.append(p)
-            case let p as ProcessSubstitution:
-                procsubParts.append(p)
-            case let p as ArithmeticExpansion:
+            case let _p as CommandSubstitution:
+                cmdsubParts.append(_p)
+            case let _p as ProcessSubstitution:
+                procsubParts.append(_p)
+            case let _p as ArithmeticExpansion:
                 hasArith = true
             default:
                 cmdsubParts.append(contentsOf: self._collectCmdsubs(p))
@@ -3654,12 +3656,12 @@ class Pipeline: Node {
             return cmd.toSexp()
         }
         switch cmd {
-        case let cmd as Command:
+        case let _cmd as Command:
             var parts: [String] = []
-            for w in cmd.words {
+            for w in _cmd.words {
                 parts.append(w.toSexp())
             }
-            for r in cmd.redirects {
+            for r in _cmd.redirects {
                 parts.append(r.toSexp())
             }
             parts.append("(redirect \">&\" 1)")
@@ -3726,6 +3728,8 @@ class List: Node {
     }
 
     func _toSexpWithPrecedence(_ parts: [Node], _ opNames: [String: String]) -> String {
+        var parts = parts
+        var opNames = opNames
         var semiPositions: [Int] = []
         var i: Int = 0
         while i < parts.count {
@@ -3764,6 +3768,8 @@ class List: Node {
     }
 
     func _toSexpAmpAndHigher(_ parts: [Node], _ opNames: [String: String]) -> String {
+        var parts = parts
+        var opNames = opNames
         if parts.count == 1 {
             return parts[0].toSexp()
         }
@@ -3794,7 +3800,9 @@ class List: Node {
         return self._toSexpAndOr(parts, opNames)
     }
 
-    func _toSexpAndOr(_ parts: [Node], _ opNames: inout [String: String]) -> String {
+    func _toSexpAndOr(_ parts: [Node], _ opNames: [String: String]) -> String {
+        var parts = parts
+        var opNames = opNames
         if parts.count == 1 {
             return parts[0].toSexp()
         }
@@ -5015,8 +5023,8 @@ class ConditionalExpr: Node {
         var body: Any = self.body
         var result: String = ""
         switch body {
-        case let body as String:
-            var escaped: String = body.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"").replacingOccurrences(of: "\n", with: "\\n")
+        case let _body as String:
+            var escaped: String = _body.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"").replacingOccurrences(of: "\n", with: "\\n")
             result = "(cond \"" + escaped + "\")"
         default:
             result = "(cond " + body.toSexp() + ")"
@@ -5673,7 +5681,8 @@ class Parser {
         return self._lexer._isWordTerminator(ctx, ch, bracketDepth, parenDepth)
     }
 
-    func _scanDoubleQuote(_ chars: [String], _ parts: [Node], _ start: Int, _ handleLineContinuation: Bool) throws {
+    func _scanDoubleQuote(_ chars: inout [String], _ parts: [Node], _ start: Int, _ handleLineContinuation: Bool) throws {
+        var parts = parts
         chars.append("\"")
         while !self.atEnd() && self.peek() != "\"" {
             var c: String = self.peek()
@@ -5688,7 +5697,7 @@ class Parser {
                 }
             } else {
                 if c == "$" {
-                    if try !self._parseDollarExpansion(chars, parts, true) {
+                    if try !self._parseDollarExpansion(&chars, &parts, true) {
                         chars.append(self.advance())
                     }
                 } else {
@@ -5702,7 +5711,7 @@ class Parser {
         chars.append(self.advance())
     }
 
-    func _parseDollarExpansion(_ chars: [String], _ parts: [Node], _ inDquote: Bool) throws -> Bool {
+    func _parseDollarExpansion(_ chars: inout [String], _ parts: inout [Node], _ inDquote: Bool) throws -> Bool {
         var result0: Node? = nil
         var result1: String = ""
         if self.pos + 2 < self.length && String(_charAt(self.source, self.pos + 1)) == "(" && String(_charAt(self.source, self.pos + 2)) == "(" {
@@ -6449,6 +6458,7 @@ class Parser {
     }
 
     func _arithParseLeftAssoc(_ ops: [String], _ parsefn: () throws -> Node) -> Node {
+        var ops = ops
         var `left`: Node = try parsefn()
         while true {
             self._arithSkipWs()
@@ -6725,7 +6735,7 @@ class Parser {
                 } else {
                     if self._arithPeek(0) == "[" {
                         switch `left` {
-                        case let `left` as ArithVar:
+                        case let _`left` as ArithVar:
                             self._arithAdvance()
                             self._arithSkipWs()
                             var index: Node = self._arithParseComma()
@@ -6733,7 +6743,7 @@ class Parser {
                             if !self._arithConsume("]") {
                                 throw ParseError(message: "Expected ']' in array subscript", pos: self._arithPos)
                             }
-                            `left` = ArithSubscript(array: `left`.name, index: index, kind: "subscript")
+                            `left` = ArithSubscript(array: _`left`.name, index: index, kind: "subscript")
                         default:
                             break
                         }
@@ -8780,6 +8790,7 @@ class Parser {
     }
 
     func _atListUntilTerminator(_ stopWords: Set<String>) throws -> Bool {
+        var stopWords = stopWords
         if self.atEnd() {
             return true
         }
@@ -8803,6 +8814,7 @@ class Parser {
     }
 
     func parseListUntil(_ stopWords: Set<String>) throws -> Node? {
+        var stopWords = stopWords
         self.skipWhitespaceAndNewlines()
         var reserved: String = try self._lexPeekReservedWord()
         if reserved != "" && stopWords.contains(reserved) {
@@ -9279,10 +9291,12 @@ class Parser {
     }
 
     func _lastWordOnOwnLine(_ nodes: [Node]) -> Bool {
+        var nodes = nodes
         return nodes.count >= 2
     }
 
     func _stripTrailingBackslashFromLastWord(_ nodes: [Node]) {
+        var nodes = nodes
         if !(!nodes.isEmpty) {
             return
         }
@@ -9298,46 +9312,46 @@ class Parser {
 
     func _findLastWord(_ node: Node) -> Word? {
         switch node {
-        case let node as Word:
-            return node
+        case let _node as Word:
+            return _node
         default:
             break
         }
         switch node {
-        case let node as Command:
-            if (!node.words.isEmpty) {
-                var lastWord: Word = node.words[node.words.count - 1]
+        case let _node as Command:
+            if (!_node.words.isEmpty) {
+                var lastWord: Word = _node.words[_node.words.count - 1]
                 if lastWord.value.hasSuffix("\\") {
                     return lastWord
                 }
             }
-            if (!node.redirects.isEmpty) {
-                var lastRedirect: Node = node.redirects[node.redirects.count - 1]
+            if (!_node.redirects.isEmpty) {
+                var lastRedirect: Node = _node.redirects[_node.redirects.count - 1]
                 switch lastRedirect {
-                case let lastRedirect as Redirect:
-                    return lastRedirect.target
+                case let _lastRedirect as Redirect:
+                    return _lastRedirect.target
                 default:
                     break
                 }
             }
-            if (!node.words.isEmpty) {
-                return node.words[node.words.count - 1]
+            if (!_node.words.isEmpty) {
+                return _node.words[_node.words.count - 1]
             }
         default:
             break
         }
         switch node {
-        case let node as Pipeline:
-            if (!node.commands.isEmpty) {
-                return self._findLastWord(node.commands[node.commands.count - 1])
+        case let _node as Pipeline:
+            if (!_node.commands.isEmpty) {
+                return self._findLastWord(_node.commands[_node.commands.count - 1])
             }
         default:
             break
         }
         switch node {
-        case let node as List:
-            if (!node.parts.isEmpty) {
-                return self._findLastWord(node.parts[node.parts.count - 1])
+        case let _node as List:
+            if (!_node.parts.isEmpty) {
+                return self._findLastWord(_node.parts[_node.parts.count - 1])
             }
         default:
             break
@@ -9405,6 +9419,7 @@ func _isExpansionStart(_ s: String, _ pos: Int, _ delimiter: String) -> Bool {
 }
 
 func _sublist(_ lst: [Node], _ start: Int, _ end: Int) -> [Node] {
+    var lst = lst
     return Swift.Array(lst[(start)..<(end)])
 }
 
@@ -9465,6 +9480,7 @@ func _stripLineContinuationsCommentAware(_ text: String) -> String {
 }
 
 func _appendRedirects(_ base: String, _ redirects: [Node]?) -> String {
+    var redirects = redirects
     if (redirects != nil && !redirects!.isEmpty) {
         var parts: [String] = []
         for r in redirects! {
@@ -9609,14 +9625,14 @@ func _formatCondBody(_ node: Node) -> String {
 
 func _startsWithSubshell(_ node: Node) -> Bool {
     switch node {
-    case let node as Subshell:
+    case let _node as Subshell:
         return true
     default:
         break
     }
     switch node {
-    case let node as List:
-        for p in node.parts {
+    case let _node as List:
+        for p in _node.parts {
             if p.kind != "operator" {
                 return _startsWithSubshell(p)
             }
@@ -9626,9 +9642,9 @@ func _startsWithSubshell(_ node: Node) -> Bool {
         break
     }
     switch node {
-    case let node as Pipeline:
-        if (!node.commands.isEmpty) {
-            return _startsWithSubshell(node.commands[0])
+    case let _node as Pipeline:
+        if (!_node.commands.isEmpty) {
+            return _startsWithSubshell(_node.commands[0])
         }
         return false
     default:
@@ -9644,15 +9660,15 @@ func _formatCmdsubNode(_ node: Node, _ indent: Int, _ inProcsub: Bool, _ compact
     var sp: String = _repeatStr(" ", indent)
     var innerSp: String = _repeatStr(" ", indent + 4)
     switch node {
-    case let node as ArithEmpty:
+    case let _node as ArithEmpty:
         return ""
     default:
         break
     }
     switch node {
-    case let node as Command:
+    case let _node as Command:
         var parts: [String] = []
-        for w in node.words {
+        for w in _node.words {
             var val: String = w._expandAllAnsiCQuotes(w.value)
             val = w._stripLocaleStringDollars(val)
             val = w._normalizeArrayWhitespace(val)
@@ -9660,21 +9676,21 @@ func _formatCmdsubNode(_ node: Node, _ indent: Int, _ inProcsub: Bool, _ compact
             parts.append(val)
         }
         var heredocs: [HereDoc] = []
-        for r in node.redirects {
+        for r in _node.redirects {
             switch r {
-            case let r as HereDoc:
-                heredocs.append(r)
+            case let _r as HereDoc:
+                heredocs.append(_r)
             default:
                 break
             }
         }
-        for r in node.redirects {
+        for r in _node.redirects {
             parts.append(_formatRedirect(r, compactRedirects, true))
         }
         var result: String = ""
-        if compactRedirects && (!node.words.isEmpty) && (!node.redirects.isEmpty) {
-            var wordParts: [String] = Swift.Array(parts[..<(node.words.count)])
-            var redirectParts: [String] = Swift.Array(parts[(node.words.count)...])
+        if compactRedirects && (!_node.words.isEmpty) && (!_node.redirects.isEmpty) {
+            var wordParts: [String] = Swift.Array(parts[..<(_node.words.count)])
+            var redirectParts: [String] = Swift.Array(parts[(_node.words.count)...])
             result = wordParts.joined(separator: " ") + redirectParts.joined(separator: "")
         } else {
             result = parts.joined(separator: " ")
@@ -9687,13 +9703,13 @@ func _formatCmdsubNode(_ node: Node, _ indent: Int, _ inProcsub: Bool, _ compact
         break
     }
     switch node {
-    case let node as Pipeline:
+    case let _node as Pipeline:
         var cmds: [(Node, Bool)] = []
         var i: Int = 0
         var cmd: Node? = nil
         var needsRedirect: Bool = false
-        while i < node.commands.count {
-            cmd = node.commands[i]
+        while i < _node.commands.count {
+            cmd = _node.commands[i]
             switch cmd! {
             case let cmd as PipeBoth:
                 i += 1
@@ -9701,7 +9717,7 @@ func _formatCmdsubNode(_ node: Node, _ indent: Int, _ inProcsub: Bool, _ compact
             default:
                 break
             }
-            needsRedirect = i + 1 < node.commands.count && node.commands[i + 1].kind == "pipe-both"
+            needsRedirect = i + 1 < _node.commands.count && _node.commands[i + 1].kind == "pipe-both"
             cmds.append((cmd!, needsRedirect))
             i += 1
         }
@@ -9719,7 +9735,7 @@ func _formatCmdsubNode(_ node: Node, _ indent: Int, _ inProcsub: Bool, _ compact
             if cmd!.kind == "command" && (!(cmd! as! Command).redirects.isEmpty) {
                 for r in (cmd! as! Command).redirects {
                     switch r {
-                    case let r as HereDoc:
+                    case let _r as HereDoc:
                         hasHeredoc = true
                         break
                     default:
@@ -9776,13 +9792,13 @@ func _formatCmdsubNode(_ node: Node, _ indent: Int, _ inProcsub: Bool, _ compact
         break
     }
     switch node {
-    case let node as List:
+    case let _node as List:
         var hasHeredoc: Bool = false
-        for p in node.parts {
+        for p in _node.parts {
             if p.kind == "command" && (!(p as! Command).redirects.isEmpty) {
                 for r in (p as! Command).redirects {
                     switch r {
-                    case let r as HereDoc:
+                    case let _r as HereDoc:
                         hasHeredoc = true
                         break
                     default:
@@ -9791,12 +9807,12 @@ func _formatCmdsubNode(_ node: Node, _ indent: Int, _ inProcsub: Bool, _ compact
                 }
             } else {
                 switch p {
-                case let p as Pipeline:
-                    for cmd in p.commands {
+                case let _p as Pipeline:
+                    for cmd in _p.commands {
                         if cmd.kind == "command" && (!(cmd as! Command).redirects.isEmpty) {
                             for r in (cmd as! Command).redirects {
                                 switch r {
-                                case let r as HereDoc:
+                                case let _r as HereDoc:
                                     hasHeredoc = true
                                     break
                                 default:
@@ -9816,10 +9832,10 @@ func _formatCmdsubNode(_ node: Node, _ indent: Int, _ inProcsub: Bool, _ compact
         var result: [String] = []
         var skippedSemi: Bool = false
         var cmdCount: Int = 0
-        for p in node.parts {
+        for p in _node.parts {
             switch p {
-            case let p as Operator:
-                if p.op == ";" {
+            case let _p as Operator:
+                if _p.op == ";" {
                     if (!result.isEmpty) && result[result.count - 1].hasSuffix("\n") {
                         skippedSemi = true
                         continue
@@ -9831,7 +9847,7 @@ func _formatCmdsubNode(_ node: Node, _ indent: Int, _ inProcsub: Bool, _ compact
                     result.append(";")
                     skippedSemi = false
                 } else {
-                    if p.op == "\n" {
+                    if _p.op == "\n" {
                         if (!result.isEmpty) && result[result.count - 1] == ";" {
                             skippedSemi = false
                             continue
@@ -9846,7 +9862,7 @@ func _formatCmdsubNode(_ node: Node, _ indent: Int, _ inProcsub: Bool, _ compact
                     } else {
                         var last: String = ""
                         var firstNl: Int = 0
-                        if p.op == "&" {
+                        if _p.op == "&" {
                             if (!result.isEmpty) && result[result.count - 1].contains("<<") && result[result.count - 1].contains("\n") {
                                 last = result[result.count - 1]
                                 if last.contains(" |") || last.hasPrefix("|") {
@@ -9862,9 +9878,9 @@ func _formatCmdsubNode(_ node: Node, _ indent: Int, _ inProcsub: Bool, _ compact
                             if (!result.isEmpty) && result[result.count - 1].contains("<<") && result[result.count - 1].contains("\n") {
                                 last = result[result.count - 1]
                                 firstNl = (last.range(of: "\n").map { last.distance(from: last.startIndex, to: $0.lowerBound) } ?? -1)
-                                result[result.count - 1] = String(last.prefix(firstNl)) + " " + p.op + " " + String(last.dropFirst(firstNl))
+                                result[result.count - 1] = String(last.prefix(firstNl)) + " " + _p.op + " " + String(last.dropFirst(firstNl))
                             } else {
-                                result.append(" " + p.op)
+                                result.append(" " + _p.op)
                             }
                         }
                     }
@@ -9905,12 +9921,12 @@ func _formatCmdsubNode(_ node: Node, _ indent: Int, _ inProcsub: Bool, _ compact
         break
     }
     switch node {
-    case let node as If:
-        var cond: String = _formatCmdsubNode(node.condition, indent, false, false, false)
-        var thenBody: String = _formatCmdsubNode(node.thenBody, indent + 4, false, false, false)
+    case let _node as If:
+        var cond: String = _formatCmdsubNode(_node.condition, indent, false, false, false)
+        var thenBody: String = _formatCmdsubNode(_node.thenBody, indent + 4, false, false, false)
         var result: String = "if " + cond + "; then\n" + innerSp + thenBody + ";"
-        if node.elseBody != nil {
-            var elseBody: String = _formatCmdsubNode(node.elseBody, indent + 4, false, false, false)
+        if _node.elseBody != nil {
+            var elseBody: String = _formatCmdsubNode(_node.elseBody, indent + 4, false, false, false)
             result = result + "\n" + sp + "else\n" + innerSp + elseBody + ";"
         }
         result = result + "\n" + sp + "fi"
@@ -9919,12 +9935,12 @@ func _formatCmdsubNode(_ node: Node, _ indent: Int, _ inProcsub: Bool, _ compact
         break
     }
     switch node {
-    case let node as While:
-        var cond: String = _formatCmdsubNode(node.condition, indent, false, false, false)
-        var body: String = _formatCmdsubNode(node.body, indent + 4, false, false, false)
+    case let _node as While:
+        var cond: String = _formatCmdsubNode(_node.condition, indent, false, false, false)
+        var body: String = _formatCmdsubNode(_node.body, indent + 4, false, false, false)
         var result: String = "while " + cond + "; do\n" + innerSp + body + ";\n" + sp + "done"
-        if (!node.redirects.isEmpty) {
-            for r in node.redirects {
+        if (!_node.redirects.isEmpty) {
+            for r in _node.redirects {
                 result = result + " " + _formatRedirect(r, false, false)
             }
         }
@@ -9933,12 +9949,12 @@ func _formatCmdsubNode(_ node: Node, _ indent: Int, _ inProcsub: Bool, _ compact
         break
     }
     switch node {
-    case let node as Until:
-        var cond: String = _formatCmdsubNode(node.condition, indent, false, false, false)
-        var body: String = _formatCmdsubNode(node.body, indent + 4, false, false, false)
+    case let _node as Until:
+        var cond: String = _formatCmdsubNode(_node.condition, indent, false, false, false)
+        var body: String = _formatCmdsubNode(_node.body, indent + 4, false, false, false)
         var result: String = "until " + cond + "; do\n" + innerSp + body + ";\n" + sp + "done"
-        if (!node.redirects.isEmpty) {
-            for r in node.redirects {
+        if (!_node.redirects.isEmpty) {
+            for r in _node.redirects {
                 result = result + " " + _formatRedirect(r, false, false)
             }
         }
@@ -9947,13 +9963,13 @@ func _formatCmdsubNode(_ node: Node, _ indent: Int, _ inProcsub: Bool, _ compact
         break
     }
     switch node {
-    case let node as For:
-        var `var`: String = node.`var`
-        var body: String = _formatCmdsubNode(node.body, indent + 4, false, false, false)
+    case let _node as For:
+        var `var`: String = _node.`var`
+        var body: String = _formatCmdsubNode(_node.body, indent + 4, false, false, false)
         var result: String = ""
-        if node.words != nil {
+        if _node.words != nil {
             var wordVals: [String] = []
-            for w in node.words! {
+            for w in _node.words! {
                 wordVals.append(w.value)
             }
             var words: String = wordVals.joined(separator: " ")
@@ -9965,8 +9981,8 @@ func _formatCmdsubNode(_ node: Node, _ indent: Int, _ inProcsub: Bool, _ compact
         } else {
             result = "for " + `var` + " in \"$@\";\n" + sp + "do\n" + innerSp + body + ";\n" + sp + "done"
         }
-        if (!node.redirects.isEmpty) {
-            for r in node.redirects {
+        if (!_node.redirects.isEmpty) {
+            for r in _node.redirects {
                 result = result + " " + _formatRedirect(r, false, false)
             }
         }
@@ -9975,11 +9991,11 @@ func _formatCmdsubNode(_ node: Node, _ indent: Int, _ inProcsub: Bool, _ compact
         break
     }
     switch node {
-    case let node as ForArith:
-        var body: String = _formatCmdsubNode(node.body, indent + 4, false, false, false)
-        var result: String = "for ((" + node.`init` + "; " + node.cond + "; " + node.incr + "))\ndo\n" + innerSp + body + ";\n" + sp + "done"
-        if (!node.redirects.isEmpty) {
-            for r in node.redirects {
+    case let _node as ForArith:
+        var body: String = _formatCmdsubNode(_node.body, indent + 4, false, false, false)
+        var result: String = "for ((" + _node.`init` + "; " + _node.cond + "; " + _node.incr + "))\ndo\n" + innerSp + body + ";\n" + sp + "done"
+        if (!_node.redirects.isEmpty) {
+            for r in _node.redirects {
                 result = result + " " + _formatRedirect(r, false, false)
             }
         }
@@ -9988,12 +10004,12 @@ func _formatCmdsubNode(_ node: Node, _ indent: Int, _ inProcsub: Bool, _ compact
         break
     }
     switch node {
-    case let node as Case:
-        var word: String = node.word.value
+    case let _node as Case:
+        var word: String = _node.word.value
         var patterns: [String] = []
         var i: Int = 0
-        while i < node.patterns.count {
-            var p: CasePattern = node.patterns[i]
+        while i < _node.patterns.count {
+            var p: CasePattern = _node.patterns[i]
             var pat: String = p.pattern.replacingOccurrences(of: "|", with: " | ")
             var body: String = ""
             if p.body != nil {
@@ -10014,9 +10030,9 @@ func _formatCmdsubNode(_ node: Node, _ indent: Int, _ inProcsub: Bool, _ compact
         }
         var patternStr: Any = patterns.joined(separator: "\n" + _repeatStr(" ", indent + 4))
         var redirects: String = ""
-        if (!node.redirects.isEmpty) {
+        if (!_node.redirects.isEmpty) {
             var redirectParts: [String] = []
-            for r in node.redirects {
+            for r in _node.redirects {
                 redirectParts.append(_formatRedirect(r, false, false))
             }
             redirects = " " + redirectParts.joined(separator: " ")
@@ -10026,21 +10042,21 @@ func _formatCmdsubNode(_ node: Node, _ indent: Int, _ inProcsub: Bool, _ compact
         break
     }
     switch node {
-    case let node as Function:
-        var name: String = node.name
-        var innerBody: Node = (node.body.kind == "brace-group" ? (node.body as! BraceGroup).body : node.body)
+    case let _node as Function:
+        var name: String = _node.name
+        var innerBody: Node = (_node.body.kind == "brace-group" ? (_node.body as! BraceGroup).body : _node.body)
         var body: String = _formatCmdsubNode(innerBody, indent + 4, false, false, false).trimmingCharacters(in: CharacterSet(charactersIn: ";"))
         return "function \\(name) () \n{ \n\\(innerSp)\\(body)\n}"
     default:
         break
     }
     switch node {
-    case let node as Subshell:
-        var body: String = _formatCmdsubNode(node.body, indent, inProcsub, compactRedirects, false)
+    case let _node as Subshell:
+        var body: String = _formatCmdsubNode(_node.body, indent, inProcsub, compactRedirects, false)
         var redirects: String = ""
-        if (node.redirects != nil && !node.redirects!.isEmpty) {
+        if (_node.redirects != nil && !_node.redirects!.isEmpty) {
             var redirectParts: [String] = []
-            for r in node.redirects! {
+            for r in _node.redirects! {
                 redirectParts.append(_formatRedirect(r, false, false))
             }
             redirects = redirectParts.joined(separator: " ")
@@ -10059,14 +10075,14 @@ func _formatCmdsubNode(_ node: Node, _ indent: Int, _ inProcsub: Bool, _ compact
         break
     }
     switch node {
-    case let node as BraceGroup:
-        var body: String = _formatCmdsubNode(node.body, indent, false, false, false)
+    case let _node as BraceGroup:
+        var body: String = _formatCmdsubNode(_node.body, indent, false, false, false)
         body = body.trimmingCharacters(in: CharacterSet(charactersIn: ";"))
         var terminator: String = (body.hasSuffix(" &") ? " }" : "; }")
         var redirects: String = ""
-        if (node.redirects != nil && !node.redirects!.isEmpty) {
+        if (_node.redirects != nil && !_node.redirects!.isEmpty) {
             var redirectParts: [String] = []
-            for r in node.redirects! {
+            for r in _node.redirects! {
                 redirectParts.append(_formatRedirect(r, false, false))
             }
             redirects = redirectParts.joined(separator: " ")
@@ -10079,32 +10095,32 @@ func _formatCmdsubNode(_ node: Node, _ indent: Int, _ inProcsub: Bool, _ compact
         break
     }
     switch node {
-    case let node as ArithmeticCommand:
-        return "((" + node.rawContent + "))"
+    case let _node as ArithmeticCommand:
+        return "((" + _node.rawContent + "))"
     default:
         break
     }
     switch node {
-    case let node as ConditionalExpr:
-        var body: String = _formatCondBody((node.body as! Node))
+    case let _node as ConditionalExpr:
+        var body: String = _formatCondBody((_node.body as! Node))
         return "[[ " + body + " ]]"
     default:
         break
     }
     switch node {
-    case let node as Negation:
-        if node.pipeline != nil {
-            return "! " + _formatCmdsubNode(node.pipeline, indent, false, false, false)
+    case let _node as Negation:
+        if _node.pipeline != nil {
+            return "! " + _formatCmdsubNode(_node.pipeline, indent, false, false, false)
         }
         return "! "
     default:
         break
     }
     switch node {
-    case let node as Time:
-        var `prefix`: String = (node.posix ? "time -p " : "time ")
-        if node.pipeline != nil {
-            return `prefix` + _formatCmdsubNode(node.pipeline, indent, false, false, false)
+    case let _node as Time:
+        var `prefix`: String = (_node.posix ? "time -p " : "time ")
+        if _node.pipeline != nil {
+            return `prefix` + _formatCmdsubNode(_node.pipeline, indent, false, false, false)
         }
         return `prefix`
     default:
@@ -10116,25 +10132,25 @@ func _formatCmdsubNode(_ node: Node, _ indent: Int, _ inProcsub: Bool, _ compact
 func _formatRedirect(_ r: Node, _ compact: Bool, _ heredocOpOnly: Bool) -> String {
     var op: String = ""
     switch r {
-    case let r as HereDoc:
-        if r.stripTabs {
+    case let _r as HereDoc:
+        if _r.stripTabs {
             op = "<<-"
         } else {
             op = "<<"
         }
-        if r.fd > 0 {
-            op = String(r.fd) + op
+        if _r.fd > 0 {
+            op = String(_r.fd) + op
         }
         var delim: String = ""
-        if r.quoted {
-            delim = "'" + r.delimiter + "'"
+        if _r.quoted {
+            delim = "'" + _r.delimiter + "'"
         } else {
-            delim = r.delimiter
+            delim = _r.delimiter
         }
         if heredocOpOnly {
             return op + delim
         }
-        return op + delim + "\n" + r.content + r.delimiter + "\n"
+        return op + delim + "\n" + _r.content + _r.delimiter + "\n"
     default:
         break
     }
@@ -10726,6 +10742,7 @@ func _skipHeredoc(_ value: String, _ start: Int) -> Int {
 }
 
 func _findHeredocContentEnd(_ source: String, _ start: Int, _ delimiters: [(String, Bool)]) -> (Int, Int) {
+    var delimiters = delimiters
     if !(!delimiters.isEmpty) {
         return (start, start)
     }
@@ -11093,6 +11110,7 @@ func _assignment(_ s: String, _ flags: Int) -> Int {
 }
 
 func _isArrayAssignmentPrefix(_ chars: [String]) -> Bool {
+    var chars = chars
     if !(!chars.isEmpty) {
         return false
     }

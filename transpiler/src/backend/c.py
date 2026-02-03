@@ -232,6 +232,7 @@ class CBackend:
         self._rvalue_temps: list[
             tuple[str, str, str]
         ] = []  # List of (struct_name, field_name, temp_name)
+        self._deferred_constants: list[Constant] = []  # Constants needing runtime init
 
     def emit(self, module: Module) -> str:
         """Emit C code from IR Module."""
@@ -1572,6 +1573,7 @@ static bool _map_contains(void *map, const char *key) {
             if isinstance(const.typ, (Set, Map, Slice)):
                 # Complex constants need to be initialized at runtime
                 self._line(f"static {c_type} {name};  // initialized in init()")
+                self._deferred_constants.append(const)
             else:
                 self._line(f"static const {c_type} {name} = {value};")
         self._line("")
@@ -1652,6 +1654,10 @@ static bool _map_contains(void *map, const char *key) {
         self.indent += 1
         if func.name == "parse":
             self._line("init();")
+            for const in self._deferred_constants:
+                cname = _safe_name(const.name).upper()
+                value = self._emit_expr(const.value)
+                self._line(f"{cname} = {value};")
         for stmt in func.body:
             self._emit_stmt(stmt)
         self.indent -= 1
@@ -3115,6 +3121,8 @@ static bool _map_contains(void *map, const char *key) {
             return f"{inner}.len"
         if isinstance(inner_type, Map):
             return f"{inner}.len"
+        if isinstance(inner_type, Optional) and isinstance(inner_type.inner, (Slice, Map)):
+            return f"{inner}->len"
         return f"strlen({inner})"
 
     def _emit_expr_MakeSlice(self, expr: MakeSlice) -> str:

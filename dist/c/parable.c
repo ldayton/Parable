@@ -4271,6 +4271,12 @@ static bool _is_valid_identifier(const char * name) {
 
 static Vec_Node parse(const char * source, bool extglob) {
     init();
+    ANSI_C_ESCAPES = ({ StrMap *_map30 = _strmap_new(g_arena, 12, true); _strmap_set_int(_map30, "a", 7); _strmap_set_int(_map30, "b", 8); _strmap_set_int(_map30, "e", 27); _strmap_set_int(_map30, "E", 27); _strmap_set_int(_map30, "f", 12); _strmap_set_int(_map30, "n", 10); _strmap_set_int(_map30, "r", 13); _strmap_set_int(_map30, "t", 9); _strmap_set_int(_map30, "v", 11); _strmap_set_int(_map30, "\\", 92); _strmap_set_int(_map30, "\"", 34); _strmap_set_int(_map30, "?", 63); _map30; });
+    RESERVED_WORDS = (const char *[]){"if", "then", "elif", "else", "fi", "while", "until", "for", "select", "do", "done", "case", "esac", "in", "function", "coproc", NULL};
+    COND_UNARY_OPS = (const char *[]){"-a", "-b", "-c", "-d", "-e", "-f", "-g", "-h", "-k", "-p", "-r", "-s", "-t", "-u", "-w", "-x", "-G", "-L", "-N", "-O", "-S", "-z", "-n", "-o", "-v", "-R", NULL};
+    COND_BINARY_OPS = (const char *[]){"==", "!=", "=~", "=", "<", ">", "-eq", "-ne", "-lt", "-le", "-gt", "-ge", "-nt", "-ot", "-ef", NULL};
+    COMPOUND_KEYWORDS = (const char *[]){"while", "until", "for", "if", "case", "select", NULL};
+    ASSIGNMENT_BUILTINS = (const char *[]){"alias", "declare", "typeset", "local", "export", "readonly", "eval", "let", NULL};
     Parser * parser = new_parser(source, false, extglob);
     return Parser_parse(parser);
 }
@@ -4394,7 +4400,7 @@ static void QuoteState_push(QuoteState *self) {
 
 static void QuoteState_pop(QuoteState *self) {
     if ((self->_stack.len > 0)) {
-        Tuple_bool_bool _tup30 = self->_stack.data[--self->_stack.len];
+        Tuple_bool_bool _tup31 = self->_stack.data[--self->_stack.len];
     }
 }
 
@@ -4937,9 +4943,9 @@ static const char * Lexer__parse_matched_pair(Lexer *self, const char * open_cha
                 self->pos -= 1;
                 Lexer__sync_to_parser(self);
                 bool in_dquote = ((flags & MATCHEDPAIRFLAGS_DQUOTE) != 0);
-                Tuple_NodePtr_constcharPtr _tup31 = Parser__parse_param_expansion(self->_parser, in_dquote);
-                Node * param_node = _tup31.F0;
-                const char * param_text = _tup31.F1;
+                Tuple_NodePtr_constcharPtr _tup32 = Parser__parse_param_expansion(self->_parser, in_dquote);
+                Node * param_node = _tup32.F0;
+                const char * param_text = _tup32.F1;
                 Lexer__sync_from_parser(self);
                 if ((param_node != NULL)) {
                     VEC_PUSH(g_arena, &chars, (param_text));
@@ -4955,9 +4961,9 @@ static const char * Lexer__parse_matched_pair(Lexer *self, const char * open_cha
                 self->pos -= 1;
                 Lexer__sync_to_parser(self);
                 if ((((self->pos + 2) < self->length) && (strcmp((const char *)(_char_at_str(g_arena, self->source, (self->pos + 2))), "(") == 0))) {
-                    Tuple_NodePtr_constcharPtr _tup32 = Parser__parse_arithmetic_expansion(self->_parser);
-                    arith_node = _tup32.F0;
-                    arith_text = _tup32.F1;
+                    Tuple_NodePtr_constcharPtr _tup33 = Parser__parse_arithmetic_expansion(self->_parser);
+                    arith_node = _tup33.F0;
+                    arith_text = _tup33.F1;
                     Lexer__sync_from_parser(self);
                     if ((arith_node != NULL)) {
                         VEC_PUSH(g_arena, &chars, (arith_text));
@@ -4965,9 +4971,9 @@ static const char * Lexer__parse_matched_pair(Lexer *self, const char * open_cha
                         was_gtlt = false;
                     } else {
                         Lexer__sync_to_parser(self);
-                        Tuple_NodePtr_constcharPtr _tup33 = Parser__parse_command_substitution(self->_parser);
-                        cmd_node = _tup33.F0;
-                        cmd_text = _tup33.F1;
+                        Tuple_NodePtr_constcharPtr _tup34 = Parser__parse_command_substitution(self->_parser);
+                        cmd_node = _tup34.F0;
+                        cmd_text = _tup34.F1;
                         Lexer__sync_from_parser(self);
                         if ((cmd_node != NULL)) {
                             VEC_PUSH(g_arena, &chars, (cmd_text));
@@ -4981,9 +4987,9 @@ static const char * Lexer__parse_matched_pair(Lexer *self, const char * open_cha
                         }
                     }
                 } else {
-                    Tuple_NodePtr_constcharPtr _tup34 = Parser__parse_command_substitution(self->_parser);
-                    cmd_node = _tup34.F0;
-                    cmd_text = _tup34.F1;
+                    Tuple_NodePtr_constcharPtr _tup35 = Parser__parse_command_substitution(self->_parser);
+                    cmd_node = _tup35.F0;
+                    cmd_text = _tup35.F1;
                     Lexer__sync_from_parser(self);
                     if ((cmd_node != NULL)) {
                         VEC_PUSH(g_arena, &chars, (cmd_text));
@@ -5000,9 +5006,9 @@ static const char * Lexer__parse_matched_pair(Lexer *self, const char * open_cha
             } else if ((strcmp(next_ch, "[") == 0)) {
                 self->pos -= 1;
                 Lexer__sync_to_parser(self);
-                Tuple_NodePtr_constcharPtr _tup35 = Parser__parse_deprecated_arithmetic(self->_parser);
-                arith_node = _tup35.F0;
-                arith_text = _tup35.F1;
+                Tuple_NodePtr_constcharPtr _tup36 = Parser__parse_deprecated_arithmetic(self->_parser);
+                arith_node = _tup36.F0;
+                arith_text = _tup36.F1;
                 Lexer__sync_from_parser(self);
                 if ((arith_node != NULL)) {
                     VEC_PUSH(g_arena, &chars, (arith_text));
@@ -5021,9 +5027,9 @@ static const char * Lexer__parse_matched_pair(Lexer *self, const char * open_cha
             chars = (Vec_Str){chars.data + 0, (chars.len - 1) - 0, (chars.len - 1) - 0};
             self->pos -= 1;
             Lexer__sync_to_parser(self);
-            Tuple_NodePtr_constcharPtr _tup36 = Parser__parse_process_substitution(self->_parser);
-            Node * procsub_node = _tup36.F0;
-            const char * procsub_text = _tup36.F1;
+            Tuple_NodePtr_constcharPtr _tup37 = Parser__parse_process_substitution(self->_parser);
+            Node * procsub_node = _tup37.F0;
+            const char * procsub_text = _tup37.F1;
             Lexer__sync_from_parser(self);
             if ((procsub_node != NULL)) {
                 VEC_PUSH(g_arena, &chars, (procsub_text));
@@ -5138,9 +5144,9 @@ static Word * Lexer__read_word_internal(Lexer *self, int64_t ctx, bool at_comman
         if ((strcmp(ch, "'") == 0)) {
             Lexer_advance(self);
             bool track_newline = (ctx == WORD_CTX_NORMAL);
-            Tuple_constcharPtr_bool _tup37 = Lexer__read_single_quote(self, start);
-            content = _tup37.F0;
-            bool saw_newline = _tup37.F1;
+            Tuple_constcharPtr_bool _tup38 = Lexer__read_single_quote(self, start);
+            content = _tup38.F0;
+            bool saw_newline = _tup38.F1;
             VEC_PUSH(g_arena, &chars, (content));
             if (((track_newline && saw_newline) && (self->_parser != NULL))) {
                 self->_parser->_saw_newline_in_single_quote = true;
@@ -5182,9 +5188,9 @@ static Word * Lexer__read_word_internal(Lexer *self, int64_t ctx, bool at_comman
                         }
                     } else if ((strcmp(c, "`") == 0)) {
                         Lexer__sync_to_parser(self);
-                        Tuple_NodePtr_constcharPtr _tup38 = Parser__parse_backtick_substitution(self->_parser);
-                        cmdsub_result0 = _tup38.F0;
-                        cmdsub_result1 = _tup38.F1;
+                        Tuple_NodePtr_constcharPtr _tup39 = Parser__parse_backtick_substitution(self->_parser);
+                        cmdsub_result0 = _tup39.F0;
+                        cmdsub_result1 = _tup39.F1;
                         Lexer__sync_from_parser(self);
                         if ((cmdsub_result0 != NULL)) {
                             VEC_PUSH(g_arena, &parts, (cmdsub_result0));
@@ -5222,9 +5228,9 @@ static Word * Lexer__read_word_internal(Lexer *self, int64_t ctx, bool at_comman
             continue;
         }
         if (((((ctx != WORD_CTX_REGEX) && (strcmp(ch, "$") == 0)) && ((self->pos + 1) < self->length)) && (strcmp((const char *)(_char_at_str(g_arena, self->source, (self->pos + 1))), "'") == 0))) {
-            Tuple_NodePtr_constcharPtr _tup39 = Lexer__read_ansi_c_quote(self);
-            Node * ansi_result0 = _tup39.F0;
-            const char * ansi_result1 = _tup39.F1;
+            Tuple_NodePtr_constcharPtr _tup40 = Lexer__read_ansi_c_quote(self);
+            Node * ansi_result0 = _tup40.F0;
+            const char * ansi_result1 = _tup40.F1;
             if ((ansi_result0 != NULL)) {
                 VEC_PUSH(g_arena, &parts, (ansi_result0));
                 VEC_PUSH(g_arena, &chars, (ansi_result1));
@@ -5234,10 +5240,10 @@ static Word * Lexer__read_word_internal(Lexer *self, int64_t ctx, bool at_comman
             continue;
         }
         if (((((ctx != WORD_CTX_REGEX) && (strcmp(ch, "$") == 0)) && ((self->pos + 1) < self->length)) && (strcmp((const char *)(_char_at_str(g_arena, self->source, (self->pos + 1))), "\"") == 0))) {
-            Tuple_NodePtr_constcharPtr_Vec_Node _tup40 = Lexer__read_locale_string(self);
-            Node * locale_result0 = _tup40.F0;
-            const char * locale_result1 = _tup40.F1;
-            Vec_Node locale_result2 = _tup40.F2;
+            Tuple_NodePtr_constcharPtr_Vec_Node _tup41 = Lexer__read_locale_string(self);
+            Node * locale_result0 = _tup41.F0;
+            const char * locale_result1 = _tup41.F1;
+            Vec_Node locale_result2 = _tup41.F2;
             if ((locale_result0 != NULL)) {
                 VEC_PUSH(g_arena, &parts, (locale_result0));
                 do { Vec_Node _src = locale_result2; for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &parts, _src.data[_i]); } } while(0);
@@ -5265,9 +5271,9 @@ static Word * Lexer__read_word_internal(Lexer *self, int64_t ctx, bool at_comman
         }
         if (((ctx != WORD_CTX_REGEX) && (strcmp(ch, "`") == 0))) {
             Lexer__sync_to_parser(self);
-            Tuple_NodePtr_constcharPtr _tup41 = Parser__parse_backtick_substitution(self->_parser);
-            cmdsub_result0 = _tup41.F0;
-            cmdsub_result1 = _tup41.F1;
+            Tuple_NodePtr_constcharPtr _tup42 = Parser__parse_backtick_substitution(self->_parser);
+            cmdsub_result0 = _tup42.F0;
+            cmdsub_result1 = _tup42.F1;
             Lexer__sync_from_parser(self);
             if ((cmdsub_result0 != NULL)) {
                 VEC_PUSH(g_arena, &parts, (cmdsub_result0));
@@ -5279,9 +5285,9 @@ static Word * Lexer__read_word_internal(Lexer *self, int64_t ctx, bool at_comman
         }
         if (((((ctx != WORD_CTX_REGEX) && _is_redirect_char(ch)) && ((self->pos + 1) < self->length)) && (strcmp((const char *)(_char_at_str(g_arena, self->source, (self->pos + 1))), "(") == 0))) {
             Lexer__sync_to_parser(self);
-            Tuple_NodePtr_constcharPtr _tup42 = Parser__parse_process_substitution(self->_parser);
-            Node * procsub_result0 = _tup42.F0;
-            const char * procsub_result1 = _tup42.F1;
+            Tuple_NodePtr_constcharPtr _tup43 = Parser__parse_process_substitution(self->_parser);
+            Node * procsub_result0 = _tup43.F0;
+            const char * procsub_result1 = _tup43.F1;
             Lexer__sync_from_parser(self);
             if ((procsub_result0 != NULL)) {
                 VEC_PUSH(g_arena, &parts, (procsub_result0));
@@ -5305,9 +5311,9 @@ static Word * Lexer__read_word_internal(Lexer *self, int64_t ctx, bool at_comman
             }
             if ((is_array_assign && (at_command_start || in_assign_builtin))) {
                 Lexer__sync_to_parser(self);
-                Tuple_NodePtr_constcharPtr _tup43 = Parser__parse_array_literal(self->_parser);
-                Node * array_result0 = _tup43.F0;
-                const char * array_result1 = _tup43.F1;
+                Tuple_NodePtr_constcharPtr _tup44 = Parser__parse_array_literal(self->_parser);
+                Node * array_result0 = _tup44.F0;
+                const char * array_result1 = _tup44.F1;
                 Lexer__sync_from_parser(self);
                 if ((array_result0 != NULL)) {
                     VEC_PUSH(g_arena, &parts, (array_result0));
@@ -5510,18 +5516,18 @@ static Tuple_NodePtr_constcharPtr_Vec_Node Lexer__read_locale_string(Lexer *self
             }
         } else if (((((strcmp(ch, "$") == 0) && ((self->pos + 2) < self->length)) && (strcmp((const char *)(_char_at_str(g_arena, self->source, (self->pos + 1))), "(") == 0)) && (strcmp((const char *)(_char_at_str(g_arena, self->source, (self->pos + 2))), "(") == 0))) {
             Lexer__sync_to_parser(self);
-            Tuple_NodePtr_constcharPtr _tup44 = Parser__parse_arithmetic_expansion(self->_parser);
-            Node * arith_node = _tup44.F0;
-            const char * arith_text = _tup44.F1;
+            Tuple_NodePtr_constcharPtr _tup45 = Parser__parse_arithmetic_expansion(self->_parser);
+            Node * arith_node = _tup45.F0;
+            const char * arith_text = _tup45.F1;
             Lexer__sync_from_parser(self);
             if ((arith_node != NULL)) {
                 VEC_PUSH(g_arena, &inner_parts, (arith_node));
                 VEC_PUSH(g_arena, &content_chars, (arith_text));
             } else {
                 Lexer__sync_to_parser(self);
-                Tuple_NodePtr_constcharPtr _tup45 = Parser__parse_command_substitution(self->_parser);
-                cmdsub_node = _tup45.F0;
-                cmdsub_text = _tup45.F1;
+                Tuple_NodePtr_constcharPtr _tup46 = Parser__parse_command_substitution(self->_parser);
+                cmdsub_node = _tup46.F0;
+                cmdsub_text = _tup46.F1;
                 Lexer__sync_from_parser(self);
                 if ((cmdsub_node != NULL)) {
                     VEC_PUSH(g_arena, &inner_parts, (cmdsub_node));
@@ -5532,9 +5538,9 @@ static Tuple_NodePtr_constcharPtr_Vec_Node Lexer__read_locale_string(Lexer *self
             }
         } else if (_is_expansion_start(self->source, self->pos, "$(")) {
             Lexer__sync_to_parser(self);
-            Tuple_NodePtr_constcharPtr _tup46 = Parser__parse_command_substitution(self->_parser);
-            cmdsub_node = _tup46.F0;
-            cmdsub_text = _tup46.F1;
+            Tuple_NodePtr_constcharPtr _tup47 = Parser__parse_command_substitution(self->_parser);
+            cmdsub_node = _tup47.F0;
+            cmdsub_text = _tup47.F1;
             Lexer__sync_from_parser(self);
             if ((cmdsub_node != NULL)) {
                 VEC_PUSH(g_arena, &inner_parts, (cmdsub_node));
@@ -5544,9 +5550,9 @@ static Tuple_NodePtr_constcharPtr_Vec_Node Lexer__read_locale_string(Lexer *self
             }
         } else if ((strcmp(ch, "$") == 0)) {
             Lexer__sync_to_parser(self);
-            Tuple_NodePtr_constcharPtr _tup47 = Parser__parse_param_expansion(self->_parser, false);
-            Node * param_node = _tup47.F0;
-            const char * param_text = _tup47.F1;
+            Tuple_NodePtr_constcharPtr _tup48 = Parser__parse_param_expansion(self->_parser, false);
+            Node * param_node = _tup48.F0;
+            const char * param_text = _tup48.F1;
             Lexer__sync_from_parser(self);
             if ((param_node != NULL)) {
                 VEC_PUSH(g_arena, &inner_parts, (param_node));
@@ -5556,9 +5562,9 @@ static Tuple_NodePtr_constcharPtr_Vec_Node Lexer__read_locale_string(Lexer *self
             }
         } else if ((strcmp(ch, "`") == 0)) {
             Lexer__sync_to_parser(self);
-            Tuple_NodePtr_constcharPtr _tup48 = Parser__parse_backtick_substitution(self->_parser);
-            cmdsub_node = _tup48.F0;
-            cmdsub_text = _tup48.F1;
+            Tuple_NodePtr_constcharPtr _tup49 = Parser__parse_backtick_substitution(self->_parser);
+            cmdsub_node = _tup49.F0;
+            cmdsub_text = _tup49.F1;
             Lexer__sync_from_parser(self);
             if ((cmdsub_node != NULL)) {
                 VEC_PUSH(g_arena, &inner_parts, (cmdsub_node));
@@ -6862,60 +6868,60 @@ static const char * Word__strip_arith_line_continuations(Word *self, const char 
 
 static Vec_Node Word__collect_cmdsubs(Word *self, Node * node) {
     Vec_Node result = (Vec_Node){NULL, 0, 0};
-    void *_tsexpr49 = node;
-    if (strcmp(((CommandSubstitution *)_tsexpr49)->kind, "cmdsub") == 0) {
-        CommandSubstitution *node = (CommandSubstitution *)_tsexpr49;
+    void *_tsexpr50 = node;
+    if (strcmp(((CommandSubstitution *)_tsexpr50)->kind, "cmdsub") == 0) {
+        CommandSubstitution *node = (CommandSubstitution *)_tsexpr50;
         VEC_PUSH(g_arena, &result, (node));
-    } else if (strcmp(((Array *)_tsexpr49)->kind, "array") == 0) {
-        Array *node = (Array *)_tsexpr49;
+    } else if (strcmp(((Array *)_tsexpr50)->kind, "array") == 0) {
+        Array *node = (Array *)_tsexpr50;
         for (size_t _idx = 0; _idx < node->elements.len; _idx++) {
             Word * elem = node->elements.data[_idx];
             for (size_t _idx = 0; _idx < elem->parts.len; _idx++) {
                 Node * p = elem->parts.data[_idx];
-                void *_tsexpr50 = p;
-                if (strcmp(((CommandSubstitution *)_tsexpr50)->kind, "cmdsub") == 0) {
-                    CommandSubstitution *p = (CommandSubstitution *)_tsexpr50;
+                void *_tsexpr51 = p;
+                if (strcmp(((CommandSubstitution *)_tsexpr51)->kind, "cmdsub") == 0) {
+                    CommandSubstitution *p = (CommandSubstitution *)_tsexpr51;
                     VEC_PUSH(g_arena, &result, (p));
                 } else {
                     do { Vec_Node _src = Word__collect_cmdsubs(self, p); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
                 }
             }
         }
-    } else if (strcmp(((ArithmeticExpansion *)_tsexpr49)->kind, "arith") == 0) {
-        ArithmeticExpansion *node = (ArithmeticExpansion *)_tsexpr49;
+    } else if (strcmp(((ArithmeticExpansion *)_tsexpr50)->kind, "arith") == 0) {
+        ArithmeticExpansion *node = (ArithmeticExpansion *)_tsexpr50;
         if ((node->expression != NULL)) {
             do { Vec_Node _src = Word__collect_cmdsubs(self, node->expression); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
         }
-    } else if (strcmp(((ArithBinaryOp *)_tsexpr49)->kind, "binary-op") == 0) {
-        ArithBinaryOp *node = (ArithBinaryOp *)_tsexpr49;
+    } else if (strcmp(((ArithBinaryOp *)_tsexpr50)->kind, "binary-op") == 0) {
+        ArithBinaryOp *node = (ArithBinaryOp *)_tsexpr50;
         do { Vec_Node _src = Word__collect_cmdsubs(self, node->left); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
         do { Vec_Node _src = Word__collect_cmdsubs(self, node->right); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
-    } else if (strcmp(((ArithComma *)_tsexpr49)->kind, "comma") == 0) {
-        ArithComma *node = (ArithComma *)_tsexpr49;
+    } else if (strcmp(((ArithComma *)_tsexpr50)->kind, "comma") == 0) {
+        ArithComma *node = (ArithComma *)_tsexpr50;
         do { Vec_Node _src = Word__collect_cmdsubs(self, node->left); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
         do { Vec_Node _src = Word__collect_cmdsubs(self, node->right); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
-    } else if (strcmp(((ArithUnaryOp *)_tsexpr49)->kind, "unary-op") == 0) {
-        ArithUnaryOp *node = (ArithUnaryOp *)_tsexpr49;
+    } else if (strcmp(((ArithUnaryOp *)_tsexpr50)->kind, "unary-op") == 0) {
+        ArithUnaryOp *node = (ArithUnaryOp *)_tsexpr50;
         do { Vec_Node _src = Word__collect_cmdsubs(self, node->operand); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
-    } else if (strcmp(((ArithPreIncr *)_tsexpr49)->kind, "pre-incr") == 0) {
-        ArithPreIncr *node = (ArithPreIncr *)_tsexpr49;
+    } else if (strcmp(((ArithPreIncr *)_tsexpr50)->kind, "pre-incr") == 0) {
+        ArithPreIncr *node = (ArithPreIncr *)_tsexpr50;
         do { Vec_Node _src = Word__collect_cmdsubs(self, node->operand); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
-    } else if (strcmp(((ArithPostIncr *)_tsexpr49)->kind, "post-incr") == 0) {
-        ArithPostIncr *node = (ArithPostIncr *)_tsexpr49;
+    } else if (strcmp(((ArithPostIncr *)_tsexpr50)->kind, "post-incr") == 0) {
+        ArithPostIncr *node = (ArithPostIncr *)_tsexpr50;
         do { Vec_Node _src = Word__collect_cmdsubs(self, node->operand); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
-    } else if (strcmp(((ArithPreDecr *)_tsexpr49)->kind, "pre-decr") == 0) {
-        ArithPreDecr *node = (ArithPreDecr *)_tsexpr49;
+    } else if (strcmp(((ArithPreDecr *)_tsexpr50)->kind, "pre-decr") == 0) {
+        ArithPreDecr *node = (ArithPreDecr *)_tsexpr50;
         do { Vec_Node _src = Word__collect_cmdsubs(self, node->operand); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
-    } else if (strcmp(((ArithPostDecr *)_tsexpr49)->kind, "post-decr") == 0) {
-        ArithPostDecr *node = (ArithPostDecr *)_tsexpr49;
+    } else if (strcmp(((ArithPostDecr *)_tsexpr50)->kind, "post-decr") == 0) {
+        ArithPostDecr *node = (ArithPostDecr *)_tsexpr50;
         do { Vec_Node _src = Word__collect_cmdsubs(self, node->operand); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
-    } else if (strcmp(((ArithTernary *)_tsexpr49)->kind, "ternary") == 0) {
-        ArithTernary *node = (ArithTernary *)_tsexpr49;
+    } else if (strcmp(((ArithTernary *)_tsexpr50)->kind, "ternary") == 0) {
+        ArithTernary *node = (ArithTernary *)_tsexpr50;
         do { Vec_Node _src = Word__collect_cmdsubs(self, node->condition); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
         do { Vec_Node _src = Word__collect_cmdsubs(self, node->if_true); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
         do { Vec_Node _src = Word__collect_cmdsubs(self, node->if_false); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
-    } else if (strcmp(((ArithAssign *)_tsexpr49)->kind, "assign") == 0) {
-        ArithAssign *node = (ArithAssign *)_tsexpr49;
+    } else if (strcmp(((ArithAssign *)_tsexpr50)->kind, "assign") == 0) {
+        ArithAssign *node = (ArithAssign *)_tsexpr50;
         do { Vec_Node _src = Word__collect_cmdsubs(self, node->target); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
         do { Vec_Node _src = Word__collect_cmdsubs(self, node->value); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
     }
@@ -6924,19 +6930,19 @@ static Vec_Node Word__collect_cmdsubs(Word *self, Node * node) {
 
 static Vec_Node Word__collect_procsubs(Word *self, Node * node) {
     Vec_Node result = (Vec_Node){NULL, 0, 0};
-    void *_tsexpr51 = node;
-    if (strcmp(((ProcessSubstitution *)_tsexpr51)->kind, "procsub") == 0) {
-        ProcessSubstitution *node = (ProcessSubstitution *)_tsexpr51;
+    void *_tsexpr52 = node;
+    if (strcmp(((ProcessSubstitution *)_tsexpr52)->kind, "procsub") == 0) {
+        ProcessSubstitution *node = (ProcessSubstitution *)_tsexpr52;
         VEC_PUSH(g_arena, &result, (node));
-    } else if (strcmp(((Array *)_tsexpr51)->kind, "array") == 0) {
-        Array *node = (Array *)_tsexpr51;
+    } else if (strcmp(((Array *)_tsexpr52)->kind, "array") == 0) {
+        Array *node = (Array *)_tsexpr52;
         for (size_t _idx = 0; _idx < node->elements.len; _idx++) {
             Word * elem = node->elements.data[_idx];
             for (size_t _idx = 0; _idx < elem->parts.len; _idx++) {
                 Node * p = elem->parts.data[_idx];
-                void *_tsexpr52 = p;
-                if (strcmp(((ProcessSubstitution *)_tsexpr52)->kind, "procsub") == 0) {
-                    ProcessSubstitution *p = (ProcessSubstitution *)_tsexpr52;
+                void *_tsexpr53 = p;
+                if (strcmp(((ProcessSubstitution *)_tsexpr53)->kind, "procsub") == 0) {
+                    ProcessSubstitution *p = (ProcessSubstitution *)_tsexpr53;
                     VEC_PUSH(g_arena, &result, (p));
                 } else {
                     do { Vec_Node _src = Word__collect_procsubs(self, p); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
@@ -6953,15 +6959,15 @@ static const char * Word__format_command_substitutions(Word *self, const char * 
     bool has_arith = false;
     for (size_t _idx = 0; _idx < self->parts.len; _idx++) {
         Node * p = self->parts.data[_idx];
-        void *_tsexpr53 = p;
-        if (strcmp(((CommandSubstitution *)_tsexpr53)->kind, "cmdsub") == 0) {
-            CommandSubstitution *p = (CommandSubstitution *)_tsexpr53;
+        void *_tsexpr54 = p;
+        if (strcmp(((CommandSubstitution *)_tsexpr54)->kind, "cmdsub") == 0) {
+            CommandSubstitution *p = (CommandSubstitution *)_tsexpr54;
             VEC_PUSH(g_arena, &cmdsub_parts, (p));
-        } else if (strcmp(((ProcessSubstitution *)_tsexpr53)->kind, "procsub") == 0) {
-            ProcessSubstitution *p = (ProcessSubstitution *)_tsexpr53;
+        } else if (strcmp(((ProcessSubstitution *)_tsexpr54)->kind, "procsub") == 0) {
+            ProcessSubstitution *p = (ProcessSubstitution *)_tsexpr54;
             VEC_PUSH(g_arena, &procsub_parts, (p));
-        } else if (strcmp(((ArithmeticExpansion *)_tsexpr53)->kind, "arith") == 0) {
-            ArithmeticExpansion *p = (ArithmeticExpansion *)_tsexpr53;
+        } else if (strcmp(((ArithmeticExpansion *)_tsexpr54)->kind, "arith") == 0) {
+            ArithmeticExpansion *p = (ArithmeticExpansion *)_tsexpr54;
             has_arith = true;
         } else {
             do { Vec_Node _src = Word__collect_cmdsubs(self, p); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &cmdsub_parts, _src.data[_i]); } } while(0);
@@ -7495,9 +7501,9 @@ static const char * Pipeline_to_sexp(Pipeline *self) {
     Node * cmd;
     while (!g_parse_error && ((i < self->commands.len))) {
         cmd = (Node *)self->commands.data[i];
-        void *_tsexpr54 = cmd;
-        if (strcmp(((PipeBoth *)_tsexpr54)->kind, "pipe-both") == 0) {
-            PipeBoth *cmd = (PipeBoth *)_tsexpr54;
+        void *_tsexpr55 = cmd;
+        if (strcmp(((PipeBoth *)_tsexpr55)->kind, "pipe-both") == 0) {
+            PipeBoth *cmd = (PipeBoth *)_tsexpr55;
             i += 1;
             continue;
         }
@@ -7537,9 +7543,9 @@ static const char * Pipeline__cmd_sexp(Pipeline *self, Node * cmd, bool needs_re
         return Node_to_sexp(cmd);
     }
     Vec_Str parts;
-    void *_tsexpr55 = cmd;
-    if (strcmp(((Command *)_tsexpr55)->kind, "command") == 0) {
-        Command *cmd = (Command *)_tsexpr55;
+    void *_tsexpr56 = cmd;
+    if (strcmp(((Command *)_tsexpr56)->kind, "command") == 0) {
+        Command *cmd = (Command *)_tsexpr56;
         parts = (Vec_Str){NULL, 0, 0};
         for (size_t _idx = 0; _idx < cmd->words.len; _idx++) {
             Word * w = cmd->words.data[_idx];
@@ -7561,7 +7567,7 @@ static const char * Pipeline_get_kind(Pipeline *self) {
 
 static const char * List_to_sexp(List *self) {
     Vec_Node parts = self->parts /* copy */;
-    StrMap * op_names = ({ StrMap *_map56 = _strmap_new(g_arena, 5, false); _strmap_set_str(_map56, "&&", "and"); _strmap_set_str(_map56, "||", "or"); _strmap_set_str(_map56, ";", "semi"); _strmap_set_str(_map56, "\n", "semi"); _strmap_set_str(_map56, "&", "background"); _map56; });
+    StrMap * op_names = ({ StrMap *_map57 = _strmap_new(g_arena, 5, false); _strmap_set_str(_map57, "&&", "and"); _strmap_set_str(_map57, "||", "or"); _strmap_set_str(_map57, ";", "semi"); _strmap_set_str(_map57, "\n", "semi"); _strmap_set_str(_map57, "&", "background"); _map57; });
     while (!g_parse_error && ((((parts.len > 1) && (strcmp(parts.data[(parts.len - 1)]->kind, "operator") == 0)) && ((strcmp(((Operator *)(parts.data[(parts.len - 1)]))->op, ";") == 0) || (strcmp(((Operator *)(parts.data[(parts.len - 1)]))->op, "\n") == 0))))) {
         parts = ((Vec_Node){(parts).data + (0), ((parts.len - 1)) - (0), ((parts.len - 1)) - (0)});
     }
@@ -7680,7 +7686,7 @@ static const char * List_get_kind(List *self) {
 }
 
 static const char * Operator_to_sexp(Operator *self) {
-    StrMap * names = ({ StrMap *_map57 = _strmap_new(g_arena, 5, false); _strmap_set_str(_map57, "&&", "and"); _strmap_set_str(_map57, "||", "or"); _strmap_set_str(_map57, ";", "semi"); _strmap_set_str(_map57, "&", "bg"); _strmap_set_str(_map57, "|", "pipe"); _map57; });
+    StrMap * names = ({ StrMap *_map58 = _strmap_new(g_arena, 5, false); _strmap_set_str(_map58, "&&", "and"); _strmap_set_str(_map58, "||", "or"); _strmap_set_str(_map58, ";", "semi"); _strmap_set_str(_map58, "&", "bg"); _strmap_set_str(_map58, "|", "pipe"); _map58; });
     return _str_concat(g_arena, _str_concat(g_arena, "(", _strmap_get_str(names, self->op, self->op)), ")");
 }
 
@@ -7863,7 +7869,7 @@ static const char * For_to_sexp(For *self) {
     const char * var_escaped = _str_replace(g_arena, _str_replace(g_arena, var_formatted, "\\", "\\\\"), "\"", "\\\"");
     if ((self->words == NULL)) {
         return _str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, "(for (word \"", var_escaped), "\") (in (word \"\\\"$@\\\"\")) "), Node_to_sexp(self->body)), ")"), suffix);
-    } else if ((strlen(self->words) == 0)) {
+    } else if ((self->words->len == 0)) {
         return _str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, "(for (word \"", var_escaped), "\") (in) "), Node_to_sexp(self->body)), ")"), suffix);
     } else {
         Vec_Str word_parts = (Vec_Str){NULL, 0, 0};
@@ -7988,22 +7994,22 @@ static const char * CasePattern_to_sexp(CasePattern *self) {
             depth -= 1;
             i += 1;
         } else if ((strcmp(ch, "[") == 0)) {
-            Tuple_int64_t_Vec_Str_bool _tup58 = _consume_bracket_class(self->pattern, i, depth);
-            result0 = _tup58.F0;
-            result1 = _tup58.F1;
-            bool result2 = _tup58.F2;
+            Tuple_int64_t_Vec_Str_bool _tup59 = _consume_bracket_class(self->pattern, i, depth);
+            result0 = _tup59.F0;
+            result1 = _tup59.F1;
+            bool result2 = _tup59.F2;
             i = result0;
             do { Vec_Str _src = result1; for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &current, _src.data[_i]); } } while(0);
         } else if (((strcmp(ch, "'") == 0) && (depth == 0))) {
-            Tuple_int64_t_Vec_Str _tup59 = _consume_single_quote(self->pattern, i);
-            result0 = _tup59.F0;
-            result1 = _tup59.F1;
+            Tuple_int64_t_Vec_Str _tup60 = _consume_single_quote(self->pattern, i);
+            result0 = _tup60.F0;
+            result1 = _tup60.F1;
             i = result0;
             do { Vec_Str _src = result1; for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &current, _src.data[_i]); } } while(0);
         } else if (((strcmp(ch, "\"") == 0) && (depth == 0))) {
-            Tuple_int64_t_Vec_Str _tup60 = _consume_double_quote(self->pattern, i);
-            result0 = _tup60.F0;
-            result1 = _tup60.F1;
+            Tuple_int64_t_Vec_Str _tup61 = _consume_double_quote(self->pattern, i);
+            result0 = _tup61.F0;
+            result1 = _tup61.F1;
             i = result0;
             do { Vec_Str _src = result1; for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &current, _src.data[_i]); } } while(0);
         } else if (((strcmp(ch, "|") == 0) && (depth == 0))) {
@@ -8328,9 +8334,9 @@ static const char * ConditionalExpr_to_sexp(ConditionalExpr *self) {
     Any * body = self->body;
     const char * result;
     const char * escaped;
-    void *_tsexpr61 = body;
-    if (strcmp(((Node *)_tsexpr61)->kind, "string") == 0) {
-        const char *body = (const char *)_tsexpr61;
+    void *_tsexpr62 = body;
+    if (strcmp(((Node *)_tsexpr62)->kind, "string") == 0) {
+        const char *body = (const char *)_tsexpr62;
         escaped = _str_replace(g_arena, _str_replace(g_arena, _str_replace(g_arena, body, "\\", "\\\\"), "\"", "\\\""), "\n", "\\n");
         result = _str_concat(g_arena, _str_concat(g_arena, "(cond \"", escaped), "\")");
     } else {
@@ -8885,15 +8891,7 @@ static bool Parser__parse_dollar_expansion(Parser *self, Vec_Str * chars, Vec_No
     Node * result0;
     const char * result1;
     if (((((self->pos + 2) < self->length) && (strcmp((const char *)(_char_at_str(g_arena, self->source, (self->pos + 1))), "(") == 0)) && (strcmp((const char *)(_char_at_str(g_arena, self->source, (self->pos + 2))), "(") == 0))) {
-        Tuple_NodePtr_constcharPtr _tup62 = Parser__parse_arithmetic_expansion(self);
-        result0 = _tup62.F0;
-        result1 = _tup62.F1;
-        if ((result0 != NULL)) {
-            VEC_PUSH(g_arena, parts, (result0));
-            VEC_PUSH(g_arena, chars, (result1));
-            return true;
-        }
-        Tuple_NodePtr_constcharPtr _tup63 = Parser__parse_command_substitution(self);
+        Tuple_NodePtr_constcharPtr _tup63 = Parser__parse_arithmetic_expansion(self);
         result0 = _tup63.F0;
         result1 = _tup63.F1;
         if ((result0 != NULL)) {
@@ -8901,10 +8899,7 @@ static bool Parser__parse_dollar_expansion(Parser *self, Vec_Str * chars, Vec_No
             VEC_PUSH(g_arena, chars, (result1));
             return true;
         }
-        return false;
-    }
-    if ((((self->pos + 1) < self->length) && (strcmp((const char *)(_char_at_str(g_arena, self->source, (self->pos + 1))), "[") == 0))) {
-        Tuple_NodePtr_constcharPtr _tup64 = Parser__parse_deprecated_arithmetic(self);
+        Tuple_NodePtr_constcharPtr _tup64 = Parser__parse_command_substitution(self);
         result0 = _tup64.F0;
         result1 = _tup64.F1;
         if ((result0 != NULL)) {
@@ -8914,8 +8909,8 @@ static bool Parser__parse_dollar_expansion(Parser *self, Vec_Str * chars, Vec_No
         }
         return false;
     }
-    if ((((self->pos + 1) < self->length) && (strcmp((const char *)(_char_at_str(g_arena, self->source, (self->pos + 1))), "(") == 0))) {
-        Tuple_NodePtr_constcharPtr _tup65 = Parser__parse_command_substitution(self);
+    if ((((self->pos + 1) < self->length) && (strcmp((const char *)(_char_at_str(g_arena, self->source, (self->pos + 1))), "[") == 0))) {
+        Tuple_NodePtr_constcharPtr _tup65 = Parser__parse_deprecated_arithmetic(self);
         result0 = _tup65.F0;
         result1 = _tup65.F1;
         if ((result0 != NULL)) {
@@ -8925,9 +8920,20 @@ static bool Parser__parse_dollar_expansion(Parser *self, Vec_Str * chars, Vec_No
         }
         return false;
     }
-    Tuple_NodePtr_constcharPtr _tup66 = Parser__parse_param_expansion(self, in_dquote);
-    result0 = _tup66.F0;
-    result1 = _tup66.F1;
+    if ((((self->pos + 1) < self->length) && (strcmp((const char *)(_char_at_str(g_arena, self->source, (self->pos + 1))), "(") == 0))) {
+        Tuple_NodePtr_constcharPtr _tup66 = Parser__parse_command_substitution(self);
+        result0 = _tup66.F0;
+        result1 = _tup66.F1;
+        if ((result0 != NULL)) {
+            VEC_PUSH(g_arena, parts, (result0));
+            VEC_PUSH(g_arena, chars, (result1));
+            return true;
+        }
+        return false;
+    }
+    Tuple_NodePtr_constcharPtr _tup67 = Parser__parse_param_expansion(self, in_dquote);
+    result0 = _tup67.F0;
+    result1 = _tup67.F1;
     if ((result0 != NULL)) {
         VEC_PUSH(g_arena, parts, (result0));
         VEC_PUSH(g_arena, chars, (result1));
@@ -9060,9 +9066,9 @@ static Tuple_NodePtr_constcharPtr Parser__parse_backtick_substitution(Parser *se
                 }
                 in_heredoc_body = false;
                 if ((pending_heredocs.len > 0)) {
-                    __auto_type _tup67 = ({ Tuple_constcharPtr_bool _pop0 = pending_heredocs.data[0]; memmove(pending_heredocs.data, pending_heredocs.data + 1, --pending_heredocs.len * sizeof(pending_heredocs.data[0])); _pop0; });
-                    current_heredoc_delim = ((void **)&(_tup67))[0];
-                    current_heredoc_strip = ((void **)&(_tup67))[1];
+                    __auto_type _tup68 = ({ Tuple_constcharPtr_bool _pop0 = pending_heredocs.data[0]; memmove(pending_heredocs.data, pending_heredocs.data + 1, --pending_heredocs.len * sizeof(pending_heredocs.data[0])); _pop0; });
+                    current_heredoc_delim = ((void **)&(_tup68))[0];
+                    current_heredoc_strip = ((void **)&(_tup68))[1];
                     in_heredoc_body = true;
                 }
             } else if ((_str_startswith(check_line, current_heredoc_delim) && (_rune_len(check_line) > _rune_len(current_heredoc_delim)))) {
@@ -9075,9 +9081,9 @@ static Tuple_NodePtr_constcharPtr Parser__parse_backtick_substitution(Parser *se
                 self->pos = (line_start + end_pos);
                 in_heredoc_body = false;
                 if ((pending_heredocs.len > 0)) {
-                    __auto_type _tup68 = ({ Tuple_constcharPtr_bool _pop0 = pending_heredocs.data[0]; memmove(pending_heredocs.data, pending_heredocs.data + 1, --pending_heredocs.len * sizeof(pending_heredocs.data[0])); _pop0; });
-                    current_heredoc_delim = ((void **)&(_tup68))[0];
-                    current_heredoc_strip = ((void **)&(_tup68))[1];
+                    __auto_type _tup69 = ({ Tuple_constcharPtr_bool _pop0 = pending_heredocs.data[0]; memmove(pending_heredocs.data, pending_heredocs.data + 1, --pending_heredocs.len * sizeof(pending_heredocs.data[0])); _pop0; });
+                    current_heredoc_delim = ((void **)&(_tup69))[0];
+                    current_heredoc_strip = ((void **)&(_tup69))[1];
                     in_heredoc_body = true;
                 }
             } else {
@@ -9264,9 +9270,9 @@ static Tuple_NodePtr_constcharPtr Parser__parse_backtick_substitution(Parser *se
             VEC_PUSH(g_arena, &content_chars, (ch));
             VEC_PUSH(g_arena, &text_chars, (ch));
             if ((pending_heredocs.len > 0)) {
-                __auto_type _tup69 = ({ Tuple_constcharPtr_bool _pop0 = pending_heredocs.data[0]; memmove(pending_heredocs.data, pending_heredocs.data + 1, --pending_heredocs.len * sizeof(pending_heredocs.data[0])); _pop0; });
-                current_heredoc_delim = ((void **)&(_tup69))[0];
-                current_heredoc_strip = ((void **)&(_tup69))[1];
+                __auto_type _tup70 = ({ Tuple_constcharPtr_bool _pop0 = pending_heredocs.data[0]; memmove(pending_heredocs.data, pending_heredocs.data + 1, --pending_heredocs.len * sizeof(pending_heredocs.data[0])); _pop0; });
+                current_heredoc_delim = ((void **)&(_tup70))[0];
+                current_heredoc_strip = ((void **)&(_tup70))[1];
                 in_heredoc_body = true;
             }
             continue;
@@ -9285,9 +9291,9 @@ static Tuple_NodePtr_constcharPtr Parser__parse_backtick_substitution(Parser *se
     const char * text = _str_join(g_arena, "", text_chars);
     const char * content = _str_join(g_arena, "", content_chars);
     if ((pending_heredocs.len > 0)) {
-        Tuple_int64_t_int64_t _tup70 = _find_heredoc_content_end(self->source, self->pos, pending_heredocs);
-        int64_t heredoc_start = _tup70.F0;
-        int64_t heredoc_end = _tup70.F1;
+        Tuple_int64_t_int64_t _tup71 = _find_heredoc_content_end(self->source, self->pos, pending_heredocs);
+        int64_t heredoc_start = _tup71.F0;
+        int64_t heredoc_end = _tup71.F1;
         if ((heredoc_end > heredoc_start)) {
             content = _str_concat(g_arena, content, _substring(self->source, heredoc_start, heredoc_end));
             if ((self->_cmdsub_heredoc_end == -(1))) {
@@ -9887,9 +9893,9 @@ static Node * Parser__arith_parse_postfix(Parser *self) {
             left = (Node *)ArithPostDecr_new(left, "post-decr");
         } else if ((strcmp(Parser__arith_peek(self, 0), "[") == 0)) {
             Node * index;
-            void *_tsexpr71 = left;
-            if (strcmp(((ArithVar *)_tsexpr71)->kind, "var") == 0) {
-                ArithVar *left = (ArithVar *)_tsexpr71;
+            void *_tsexpr72 = left;
+            if (strcmp(((ArithVar *)_tsexpr72)->kind, "var") == 0) {
+                ArithVar *left = (ArithVar *)_tsexpr72;
                 Parser__arith_advance(self);
                 Parser__arith_skip_ws(self);
                 index = (Node *)Parser__arith_parse_comma(self);
@@ -10250,9 +10256,9 @@ static Tuple_NodePtr_constcharPtr Parser__parse_deprecated_arithmetic(Parser *se
 
 static Tuple_NodePtr_constcharPtr Parser__parse_param_expansion(Parser *self, bool in_dquote) {
     Parser__sync_lexer(self);
-    Tuple_NodePtr_constcharPtr _tup72 = Lexer__read_param_expansion(self->_lexer, in_dquote);
-    Node * result0 = _tup72.F0;
-    const char * result1 = _tup72.F1;
+    Tuple_NodePtr_constcharPtr _tup73 = Lexer__read_param_expansion(self->_lexer, in_dquote);
+    Node * result0 = _tup73.F0;
+    const char * result1 = _tup73.F1;
     Parser__sync_parser(self);
     return (Tuple_NodePtr_constcharPtr){(Node *)result0, result1};
 }
@@ -10729,12 +10735,12 @@ static void Parser__gather_heredoc_bodies(Parser *self) {
         int64_t line_start = self->pos;
         while (!g_parse_error && ((self->pos < self->length))) {
             line_start = self->pos;
-            Tuple_constcharPtr_int64_t _tup73 = Parser__read_heredoc_line(self, heredoc->quoted);
-            const char * line = _tup73.F0;
-            int64_t line_end = _tup73.F1;
-            Tuple_bool_constcharPtr _tup74 = Parser__line_matches_delimiter(self, line, heredoc->delimiter, heredoc->strip_tabs);
-            bool matches = _tup74.F0;
-            const char * check_line = _tup74.F1;
+            Tuple_constcharPtr_int64_t _tup74 = Parser__read_heredoc_line(self, heredoc->quoted);
+            const char * line = _tup74.F0;
+            int64_t line_end = _tup74.F1;
+            Tuple_bool_constcharPtr _tup75 = Parser__line_matches_delimiter(self, line, heredoc->delimiter, heredoc->strip_tabs);
+            bool matches = _tup75.F0;
+            const char * check_line = _tup75.F1;
             if (matches) {
                 self->pos = ((line_end < self->length) ? (line_end + 1) : line_end);
                 break;
@@ -10775,9 +10781,9 @@ static void Parser__gather_heredoc_bodies(Parser *self) {
 static HereDoc * Parser__parse_heredoc(Parser *self, int64_t fd, bool strip_tabs) {
     int64_t start_pos = self->pos;
     Parser__set_state(self, PARSERSTATEFLAGS_PST_HEREDOC);
-    Tuple_constcharPtr_bool _tup75 = Parser__parse_heredoc_delimiter(self);
-    const char * delimiter = _tup75.F0;
-    bool quoted = _tup75.F1;
+    Tuple_constcharPtr_bool _tup76 = Parser__parse_heredoc_delimiter(self);
+    const char * delimiter = _tup76.F0;
+    bool quoted = _tup76.F1;
     for (size_t _idx = 0; _idx < self->_pending_heredocs.len; _idx++) {
         HereDoc * existing = self->_pending_heredocs.data[_idx];
         if (((existing->_start_pos == start_pos) && (strcmp(existing->delimiter, delimiter) == 0))) {
@@ -10855,9 +10861,9 @@ static Subshell * Parser_parse_subshell(Parser *self) {
     }
     Parser_advance(self);
     Parser__clear_state(self, PARSERSTATEFLAGS_PST_SUBSHELL);
-    Vec_Node *_tmp_slice76 = (Vec_Node *)arena_alloc(g_arena, sizeof(Vec_Node));
-    *_tmp_slice76 = Parser__collect_redirects(self);
-    return Subshell_new(body, _tmp_slice76, "subshell");
+    Vec_Node *_tmp_slice77 = (Vec_Node *)arena_alloc(g_arena, sizeof(Vec_Node));
+    *_tmp_slice77 = Parser__collect_redirects(self);
+    return Subshell_new(body, _tmp_slice77, "subshell");
 }
 
 static ArithmeticCommand * Parser_parse_arithmetic_command(Parser *self) {
@@ -11132,9 +11138,9 @@ static BraceGroup * Parser_parse_brace_group(Parser *self) {
         snprintf(g_error_msg, sizeof(g_error_msg), "%s", "Expected } to close brace group");
         return NULL;
     }
-    Vec_Node *_tmp_slice77 = (Vec_Node *)arena_alloc(g_arena, sizeof(Vec_Node));
-    *_tmp_slice77 = Parser__collect_redirects(self);
-    return BraceGroup_new(body, _tmp_slice77, "brace-group");
+    Vec_Node *_tmp_slice78 = (Vec_Node *)arena_alloc(g_arena, sizeof(Vec_Node));
+    *_tmp_slice78 = Parser__collect_redirects(self);
+    return BraceGroup_new(body, _tmp_slice78, "brace-group");
 }
 
 static If * Parser_parse_if(Parser *self) {
@@ -11391,9 +11397,9 @@ static Node * Parser_parse_for(Parser *self) {
             snprintf(g_error_msg, sizeof(g_error_msg), "%s", "Expected brace group in for loop");
             return NULL;
         }
-        Vec_Word *_tmp_slice78 = (Vec_Word *)arena_alloc(g_arena, sizeof(Vec_Word));
-        *_tmp_slice78 = words;
-        return For_new(var_name, _tmp_slice78, brace_group->body, Parser__collect_redirects(self), "for");
+        Vec_Word *_tmp_slice79 = (Vec_Word *)arena_alloc(g_arena, sizeof(Vec_Word));
+        *_tmp_slice79 = words;
+        return For_new(var_name, _tmp_slice79, brace_group->body, Parser__collect_redirects(self), "for");
     }
     if (!(Parser__lex_consume_word(self, "do"))) {
         g_parse_error = 1;
@@ -11412,9 +11418,9 @@ static Node * Parser_parse_for(Parser *self) {
         snprintf(g_error_msg, sizeof(g_error_msg), "%s", "Expected 'done' to close for loop");
         return NULL;
     }
-    Vec_Word *_tmp_slice79 = (Vec_Word *)arena_alloc(g_arena, sizeof(Vec_Word));
-    *_tmp_slice79 = words;
-    return For_new(var_name, _tmp_slice79, body, Parser__collect_redirects(self), "for");
+    Vec_Word *_tmp_slice80 = (Vec_Word *)arena_alloc(g_arena, sizeof(Vec_Word));
+    *_tmp_slice80 = words;
+    return For_new(var_name, _tmp_slice80, body, Parser__collect_redirects(self), "for");
 }
 
 static ForArith * Parser__parse_for_arith(Parser *self) {
@@ -11511,9 +11517,9 @@ static Select * Parser_parse_select(Parser *self) {
     }
     Parser_skip_whitespace_and_newlines(self);
     Node * body = (Node *)Parser__parse_loop_body(self, "select");
-    Vec_Word *_tmp_slice80 = (Vec_Word *)arena_alloc(g_arena, sizeof(Vec_Word));
-    *_tmp_slice80 = words;
-    return Select_new(var_name, _tmp_slice80, body, Parser__collect_redirects(self), "select");
+    Vec_Word *_tmp_slice81 = (Vec_Word *)arena_alloc(g_arena, sizeof(Vec_Word));
+    *_tmp_slice81 = words;
+    return Select_new(var_name, _tmp_slice81, body, Parser__collect_redirects(self), "select");
 }
 
 static const char * Parser__consume_case_terminator(Parser *self) {
@@ -12232,9 +12238,9 @@ static Node * Parser__parse_simple_pipeline(Parser *self) {
     Vec_Node commands = ({ Node * *_slc = (Node * *)arena_alloc(g_arena, 1 * sizeof(Node *)); _slc[0] = cmd; (Vec_Node){_slc, 1, 1}; });
     while (!g_parse_error && (true)) {
         Parser_skip_whitespace(self);
-        Tuple_int64_t_constcharPtr _tup81 = Parser__lex_peek_operator(self);
-        int64_t token_type = _tup81.F0;
-        const char * value = _tup81.F1;
+        Tuple_int64_t_constcharPtr _tup82 = Parser__lex_peek_operator(self);
+        int64_t token_type = _tup82.F0;
+        const char * value = _tup82.F1;
         if ((token_type == 0)) {
             break;
         }
@@ -12263,8 +12269,8 @@ static Node * Parser__parse_simple_pipeline(Parser *self) {
 
 static const char * Parser_parse_list_operator(Parser *self) {
     Parser_skip_whitespace(self);
-    Tuple_int64_t_constcharPtr _tup82 = Parser__lex_peek_operator(self);
-    int64_t token_type = _tup82.F0;
+    Tuple_int64_t_constcharPtr _tup83 = Parser__lex_peek_operator(self);
+    int64_t token_type = _tup83.F0;
     if ((token_type == 0)) {
         return "";
     }
@@ -12473,16 +12479,16 @@ static void Parser__strip_trailing_backslash_from_last_word(Parser *self, Vec_No
 }
 
 static Word * Parser__find_last_word(Parser *self, Node * node) {
-    void *_tsexpr83 = node;
-    if (strcmp(((Word *)_tsexpr83)->kind, "word") == 0) {
-        Word *node = (Word *)_tsexpr83;
+    void *_tsexpr84 = node;
+    if (strcmp(((Word *)_tsexpr84)->kind, "word") == 0) {
+        Word *node = (Word *)_tsexpr84;
         return node;
     }
     Word * last_word;
     Node * last_redirect;
-    void *_tsexpr84 = node;
-    if (strcmp(((Command *)_tsexpr84)->kind, "command") == 0) {
-        Command *node = (Command *)_tsexpr84;
+    void *_tsexpr85 = node;
+    if (strcmp(((Command *)_tsexpr85)->kind, "command") == 0) {
+        Command *node = (Command *)_tsexpr85;
         if ((node->words.len > 0)) {
             last_word = node->words.data[(node->words.len - 1)];
             if (_str_endswith(last_word->value, "\\")) {
@@ -12491,9 +12497,9 @@ static Word * Parser__find_last_word(Parser *self, Node * node) {
         }
         if ((node->redirects.len > 0)) {
             last_redirect = (Node *)node->redirects.data[(node->redirects.len - 1)];
-            void *_tsexpr85 = last_redirect;
-            if (strcmp(((Redirect *)_tsexpr85)->kind, "redirect") == 0) {
-                Redirect *last_redirect = (Redirect *)_tsexpr85;
+            void *_tsexpr86 = last_redirect;
+            if (strcmp(((Redirect *)_tsexpr86)->kind, "redirect") == 0) {
+                Redirect *last_redirect = (Redirect *)_tsexpr86;
                 return last_redirect->target;
             }
         }
@@ -12501,16 +12507,16 @@ static Word * Parser__find_last_word(Parser *self, Node * node) {
             return node->words.data[(node->words.len - 1)];
         }
     }
-    void *_tsexpr86 = node;
-    if (strcmp(((Pipeline *)_tsexpr86)->kind, "pipeline") == 0) {
-        Pipeline *node = (Pipeline *)_tsexpr86;
+    void *_tsexpr87 = node;
+    if (strcmp(((Pipeline *)_tsexpr87)->kind, "pipeline") == 0) {
+        Pipeline *node = (Pipeline *)_tsexpr87;
         if ((node->commands.len > 0)) {
             return Parser__find_last_word(self, node->commands.data[(node->commands.len - 1)]);
         }
     }
-    void *_tsexpr87 = node;
-    if (strcmp(((List *)_tsexpr87)->kind, "list") == 0) {
-        List *node = (List *)_tsexpr87;
+    void *_tsexpr88 = node;
+    if (strcmp(((List *)_tsexpr88)->kind, "list") == 0) {
+        List *node = (List *)_tsexpr88;
         if ((node->parts.len > 0)) {
             return Parser__find_last_word(self, node->parts.data[(node->parts.len - 1)]);
         }

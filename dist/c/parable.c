@@ -5971,13 +5971,17 @@ static Tuple_NodePtr_constcharPtr Lexer__read_braced_param(Lexer *self, int64_t 
     int64_t flags = (in_dquote ? MATCHEDPAIRFLAGS_DQUOTE : MATCHEDPAIRFLAGS_NONE);
     bool param_ends_with_dollar = ((strcmp(param, "") != 0) && _str_endswith(param, "$"));
     arg = Lexer__collect_param_argument(self, flags, param_ends_with_dollar);
+    goto _catch_0_end;
+    _catch_0:;
     if (g_parse_error) {
         g_parse_error = 0;
         g_error_msg[0] = '\0';
         self->_dolbrace_state = saved_dolbrace;
         // re-raise
+        g_parse_error = 1;
         return (Tuple_NodePtr_constcharPtr){NULL, NULL};
     }
+    _catch_0_end:;
     // } catch
     if (((((strcmp(op, "<") == 0) || (strcmp(op, ">") == 0)) && _str_startswith(arg, "(")) && _str_endswith(arg, ")"))) {
         const char * inner = __c_substring(g_arena, arg, 1, (_rune_len(arg) - 1));
@@ -5988,10 +5992,13 @@ static Tuple_NodePtr_constcharPtr Lexer__read_braced_param(Lexer *self, int64_t 
             const char * formatted = _format_cmdsub_node((Node *)parsed, 0, true, false, true);
             arg = _str_concat(g_arena, _str_concat(g_arena, "(", formatted), ")");
         }
+        goto _catch_1_end;
+        _catch_1:;
         if (g_parse_error) {
             g_parse_error = 0;
             g_error_msg[0] = '\0';
         }
+        _catch_1_end:;
         // } catch
     }
     text = _str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, "${", param), op), arg), "}");
@@ -7110,11 +7117,14 @@ static const char * Word__format_command_substitutions(Word *self, const char * 
                 parser = new_parser(inner, false, false);
                 parsed = (Node *)Parser_parse_list(parser, true);
                 formatted = ((parsed != NULL) ? _format_cmdsub_node((Node *)parsed, 0, false, false, false) : "");
+                goto _catch_2_end;
+                _catch_2:;
                 if (g_parse_error) {
                     g_parse_error = 0;
                     g_error_msg[0] = '\0';
                     formatted = inner;
                 }
+                _catch_2_end:;
                 // } catch
             }
             if (_str_startswith(formatted, "(")) {
@@ -7231,11 +7241,14 @@ static const char * Word__format_command_substitutions(Word *self, const char * 
                 } else {
                     formatted = inner;
                 }
+                goto _catch_3_end;
+                _catch_3:;
                 if (g_parse_error) {
                     g_parse_error = 0;
                     g_error_msg[0] = '\0';
                     formatted = inner;
                 }
+                _catch_3_end:;
                 // } catch
                 VEC_PUSH(g_arena, &result, (_str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, direction, "("), formatted), ")")));
                 i = j;
@@ -7295,11 +7308,14 @@ static const char * Word__format_command_substitutions(Word *self, const char * 
                 } else {
                     VEC_PUSH(g_arena, &result, ("${ }"));
                 }
+                goto _catch_4_end;
+                _catch_4:;
                 if (g_parse_error) {
                     g_parse_error = 0;
                     g_error_msg[0] = '\0';
                     VEC_PUSH(g_arena, &result, (_substring(value, i, j)));
                 }
+                _catch_4_end:;
                 // } catch
             }
             i = j;
@@ -9336,7 +9352,7 @@ static Tuple_NodePtr_constcharPtr Parser__parse_process_substitution(Parser *sel
     if ((Parser_at_end(self) || (strcmp(Parser_peek(self), ")") != 0))) {
         g_parse_error = 1;
         snprintf(g_error_msg, sizeof(g_error_msg), "%s", "Invalid process substitution");
-        return (Tuple_NodePtr_constcharPtr){NULL, NULL};
+        goto _catch_5;
     }
     Parser_advance(self);
     int64_t text_end = self->pos;
@@ -9345,6 +9361,8 @@ static Tuple_NodePtr_constcharPtr Parser__parse_process_substitution(Parser *sel
     Parser__restore_parser_state(self, saved);
     self->_in_process_sub = old_in_process_sub;
     return (Tuple_NodePtr_constcharPtr){(Node *)ProcessSubstitution_new(direction, cmd, "procsub"), text};
+    goto _catch_5_end;
+    _catch_5:;
     if (g_parse_error) {
         g_parse_error = 0;
         g_error_msg[0] = '\0';
@@ -9353,6 +9371,7 @@ static Tuple_NodePtr_constcharPtr Parser__parse_process_substitution(Parser *sel
         const char * content_start_char = (((start + 2) < self->length) ? (const char *)(_char_at_str(g_arena, self->source, (start + 2))) : "");
         if (_str_contains(" \t\n", content_start_char)) {
             // re-raise
+            g_parse_error = 1;
             return (Tuple_NodePtr_constcharPtr){NULL, NULL};
         }
         self->pos = (start + 2);
@@ -9363,6 +9382,7 @@ static Tuple_NodePtr_constcharPtr Parser__parse_process_substitution(Parser *sel
         text = _strip_line_continuations_comment_aware(text);
         return (Tuple_NodePtr_constcharPtr){(Node *)NULL, text};
     }
+    _catch_5_end:;
     // } catch
 }
 
@@ -9488,12 +9508,15 @@ static Tuple_NodePtr_constcharPtr Parser__parse_arithmetic_expansion(Parser *sel
     // try {
     Node * expr;
     expr = (Node *)Parser__parse_arith_expr(self, content);
+    goto _catch_6_end;
+    _catch_6:;
     if (g_parse_error) {
         g_parse_error = 0;
         g_error_msg[0] = '\0';
         self->pos = start;
         return (Tuple_NodePtr_constcharPtr){(Node *)NULL, ""};
     }
+    _catch_6_end:;
     // } catch
     return (Tuple_NodePtr_constcharPtr){(Node *)ArithmeticExpansion_new(expr, "arith"), text};
 }

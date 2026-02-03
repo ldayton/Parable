@@ -233,6 +233,8 @@ class CBackend:
             tuple[str, str, str]
         ] = []  # List of (struct_name, field_name, temp_name)
         self._deferred_constants: list[Constant] = []  # Constants needing runtime init
+        self._try_catch_labels: list[str] = []  # Stack of goto labels for try-with-catch
+        self._try_label_counter: int = 0
 
     def emit(self, module: Module) -> str:
         """Emit C code from IR Module."""
@@ -2244,10 +2246,16 @@ static bool _map_contains(void *map, const char *key) {
             c_name = _safe_name(name)
             self._line(f"{c_type} {c_name};")
             self._hoisted_vars[name] = c_type
+        if stmt.catch_body:
+            label = f"_catch_{self._try_label_counter}"
+            self._try_label_counter += 1
+            self._try_catch_labels.append(label)
         for s in stmt.body:
             self._emit_stmt(s)
-        # Check if an exception was raised during the try body
         if stmt.catch_body:
+            self._try_catch_labels.pop()
+            self._line(f"goto {label}_end;")
+            self._line(f"{label}:;")
             self._line("if (g_parse_error) {")
             self.indent += 1
             self._line("g_parse_error = 0;")
@@ -2256,6 +2264,7 @@ static bool _map_contains(void *map, const char *key) {
                 self._emit_stmt(s)
             self.indent -= 1
             self._line("}")
+            self._line(f"{label}_end:;")
         elif stmt.reraise:
             self._line("if (g_parse_error) {")
             self.indent += 1
@@ -2270,9 +2279,13 @@ static bool _map_contains(void *map, const char *key) {
 
     def _emit_stmt_Raise(self, stmt: Raise) -> None:
         err_val = self._error_return_value()
+        in_try_catch = bool(self._try_catch_labels)
         if stmt.reraise_var:
             self._line("// re-raise")
-            if err_val:
+            self._line("g_parse_error = 1;")
+            if in_try_catch:
+                self._line(f"goto {self._try_catch_labels[-1]};")
+            elif err_val:
                 self._line(f"return {err_val};")
             else:
                 self._line("return;")
@@ -2280,7 +2293,9 @@ static bool _map_contains(void *map, const char *key) {
         msg = self._emit_expr(stmt.message)
         self._line("g_parse_error = 1;")
         self._line(f'snprintf(g_error_msg, sizeof(g_error_msg), "%s", {msg});')
-        if err_val:
+        if in_try_catch:
+            self._line(f"goto {self._try_catch_labels[-1]};")
+        elif err_val:
             self._line(f"return {err_val};")
         else:
             self._line("return;")

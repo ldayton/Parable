@@ -5971,6 +5971,7 @@ static Tuple_NodePtr_constcharPtr Lexer__read_braced_param(Lexer *self, int64_t 
     int64_t flags = (in_dquote ? MATCHEDPAIRFLAGS_DQUOTE : MATCHEDPAIRFLAGS_NONE);
     bool param_ends_with_dollar = ((strcmp(param, "") != 0) && _str_endswith(param, "$"));
     arg = Lexer__collect_param_argument(self, flags, param_ends_with_dollar);
+    if (g_parse_error) goto _catch_0;
     goto _catch_0_end;
     _catch_0:;
     if (g_parse_error) {
@@ -5992,6 +5993,7 @@ static Tuple_NodePtr_constcharPtr Lexer__read_braced_param(Lexer *self, int64_t 
             const char * formatted = _format_cmdsub_node((Node *)parsed, 0, true, false, true);
             arg = _str_concat(g_arena, _str_concat(g_arena, "(", formatted), ")");
         }
+        if (g_parse_error) goto _catch_1;
         goto _catch_1_end;
         _catch_1:;
         if (g_parse_error) {
@@ -7117,6 +7119,7 @@ static const char * Word__format_command_substitutions(Word *self, const char * 
                 parser = new_parser(inner, false, false);
                 parsed = (Node *)Parser_parse_list(parser, true);
                 formatted = ((parsed != NULL) ? _format_cmdsub_node((Node *)parsed, 0, false, false, false) : "");
+                if (g_parse_error) goto _catch_2;
                 goto _catch_2_end;
                 _catch_2:;
                 if (g_parse_error) {
@@ -7241,6 +7244,7 @@ static const char * Word__format_command_substitutions(Word *self, const char * 
                 } else {
                     formatted = inner;
                 }
+                if (g_parse_error) goto _catch_3;
                 goto _catch_3_end;
                 _catch_3:;
                 if (g_parse_error) {
@@ -7308,6 +7312,7 @@ static const char * Word__format_command_substitutions(Word *self, const char * 
                 } else {
                     VEC_PUSH(g_arena, &result, ("${ }"));
                 }
+                if (g_parse_error) goto _catch_4;
                 goto _catch_4_end;
                 _catch_4:;
                 if (g_parse_error) {
@@ -9361,6 +9366,7 @@ static Tuple_NodePtr_constcharPtr Parser__parse_process_substitution(Parser *sel
     Parser__restore_parser_state(self, saved);
     self->_in_process_sub = old_in_process_sub;
     return (Tuple_NodePtr_constcharPtr){(Node *)ProcessSubstitution_new(direction, cmd, "procsub"), text};
+    if (g_parse_error) goto _catch_5;
     goto _catch_5_end;
     _catch_5:;
     if (g_parse_error) {
@@ -9508,6 +9514,7 @@ static Tuple_NodePtr_constcharPtr Parser__parse_arithmetic_expansion(Parser *sel
     // try {
     Node * expr;
     expr = (Node *)Parser__parse_arith_expr(self, content);
+    if (g_parse_error) goto _catch_6;
     goto _catch_6_end;
     _catch_6:;
     if (g_parse_error) {

@@ -2254,6 +2254,7 @@ static bool _map_contains(void *map, const char *key) {
             self._emit_stmt(s)
         if stmt.catch_body:
             self._try_catch_labels.pop()
+            self._line(f"if (g_parse_error) goto {label};")
             self._line(f"goto {label}_end;")
             self._line(f"{label}:;")
             self._line("if (g_parse_error) {")

@@ -190,6 +190,7 @@ class SwiftBackend:
         self.struct_fields: dict[str, list[tuple[str, Type]]] = {}
         self._hoisted_vars: set[str] = set()
         self._declared_vars: set[str] = set()
+        self._optional_hoisted: set[str] = set()
         self._interface_names: set[str] = set()
         self.temp_counter = 0
         self._type_switch_binding_rename: dict[str, str] = {}
@@ -204,6 +205,7 @@ class SwiftBackend:
         self.lines = []
         self.struct_fields = {}
         self._hoisted_vars = set()
+        self._optional_hoisted = set()
         self._interface_names = {iface.name for iface in module.interfaces}
         self._throwing_funcs = set()
         self._collect_struct_fields(module)
@@ -477,6 +479,7 @@ class SwiftBackend:
 
     def _emit_function(self, func: Function) -> None:
         self._hoisted_vars = set()
+        self._optional_hoisted = set()
         self._declared_vars = {p.name for p in func.params}
         self._func_params = {p.name for p in func.params if isinstance(p.typ, FuncType)}
         self._current_return_type = func.ret
@@ -499,6 +502,7 @@ class SwiftBackend:
 
     def _emit_method(self, func: Function) -> None:
         self._hoisted_vars = set()
+        self._optional_hoisted = set()
         self._declared_vars = {p.name for p in func.params}
         self._func_params = {p.name for p in func.params if isinstance(p.typ, FuncType)}
         self._current_return_type = func.ret
@@ -539,9 +543,14 @@ class SwiftBackend:
             if typ:
                 swift_type = self._type(typ)
                 default = self._default_value(typ)
+                if default == "nil" and not swift_type.endswith("?"):
+                    swift_type += "?"
+                if default == "nil":
+                    self._optional_hoisted.add(name)
                 self._line(f"var {var_name}: {swift_type} = {default}")
             else:
                 self._line(f"var {var_name}: Any?")
+                self._optional_hoisted.add(name)
             self._hoisted_vars.add(name)
             self._declared_vars.add(name)
 
@@ -732,10 +741,12 @@ class SwiftBackend:
             self._type_switch_binding_rename[stmt.binding] = binding
             saved_decl = set(self._declared_vars)
             saved_hoist = set(self._hoisted_vars)
+            saved_opt = set(self._optional_hoisted)
             for s in case.body:
                 self._emit_stmt(s)
             self._declared_vars = saved_decl
             self._hoisted_vars = saved_hoist
+            self._optional_hoisted = saved_opt
             self._type_switch_binding_rename.pop(stmt.binding, None)
             self.indent -= 1
         if default:
@@ -743,10 +754,12 @@ class SwiftBackend:
             self.indent += 1
             saved_decl = set(self._declared_vars)
             saved_hoist = set(self._hoisted_vars)
+            saved_opt = set(self._optional_hoisted)
             for s in default:
                 self._emit_stmt(s)
             self._declared_vars = saved_decl
             self._hoisted_vars = saved_hoist
+            self._optional_hoisted = saved_opt
             self.indent -= 1
         else:
             self._line("default:")
@@ -765,20 +778,24 @@ class SwiftBackend:
             self.indent += 1
             saved_decl = set(self._declared_vars)
             saved_hoist = set(self._hoisted_vars)
+            saved_opt = set(self._optional_hoisted)
             for s in case.body:
                 self._emit_stmt(s)
             self._declared_vars = saved_decl
             self._hoisted_vars = saved_hoist
+            self._optional_hoisted = saved_opt
             self.indent -= 1
         if stmt.default:
             self._line("default:")
             self.indent += 1
             saved_decl = set(self._declared_vars)
             saved_hoist = set(self._hoisted_vars)
+            saved_opt = set(self._optional_hoisted)
             for s in stmt.default:
                 self._emit_stmt(s)
             self._declared_vars = saved_decl
             self._hoisted_vars = saved_hoist
+            self._optional_hoisted = saved_opt
             self.indent -= 1
         else:
             self._line("default:")
@@ -920,7 +937,10 @@ class SwiftBackend:
                     return self._type_switch_binding_rename[name]
                 if name == self.receiver_name:
                     return "self"
-                return _safe_name(name)
+                result = _safe_name(name)
+                if name in self._optional_hoisted:
+                    result += "!"
+                return result
             case FieldAccess(obj=obj, field=field):
                 obj_str = self._expr(obj)
                 obj_type = obj.typ
@@ -1034,15 +1054,18 @@ class SwiftBackend:
                 type_name = self._type(asserted)
                 inner_str = self._expr(inner)
                 if expr.safe:
-                    return f"({inner_str} as? {type_name})"
+                    return f"({inner_str} as! {type_name})"
                 return f"({inner_str} as! {type_name})"
             case IsType(expr=inner, tested_type=tested_type):
                 type_name = self._type_name_for_check(tested_type)
                 return f"({self._expr(inner)} is {type_name})"
             case IsNil(expr=inner, negated=negated):
+                inner_str = self._expr(inner)
+                if inner_str.endswith("!"):
+                    inner_str = inner_str[:-1]
                 if negated:
-                    return f"{self._expr(inner)} != nil"
-                return f"{self._expr(inner)} == nil"
+                    return f"{inner_str} != nil"
+                return f"{inner_str} == nil"
             case Len(expr=inner):
                 inner_str = self._expr(inner)
                 inner_type = inner.typ

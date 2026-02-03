@@ -1124,7 +1124,7 @@ class Lexer {
                                     cmdsubResult1 = _tuple9.1
                                     self._syncFromParser()
                                     if cmdsubResult0 != nil {
-                                        parts.append(cmdsubResult0)
+                                        parts.append(cmdsubResult0!)
                                         chars.append(cmdsubResult1)
                                     } else {
                                         chars.append(self.advance())
@@ -1207,7 +1207,7 @@ class Lexer {
                 cmdsubResult1 = _tuple12.1
                 self._syncFromParser()
                 if cmdsubResult0 != nil {
-                    parts.append(cmdsubResult0)
+                    parts.append(cmdsubResult0!)
                     chars.append(cmdsubResult1)
                 } else {
                     chars.append(self.advance())
@@ -1316,46 +1316,46 @@ class Lexer {
         if self._tokenCache != nil {
             tok = self._tokenCache
             self._tokenCache = nil
-            self._lastReadToken = tok
-            return tok
+            self._lastReadToken = tok!
+            return tok!
         }
         self.skipBlanks()
         if self.atEnd() {
             tok = Token(type: tokentypeEof, value: "", pos: self.pos, parts: [], word: nil)
-            self._lastReadToken = tok
-            return tok
+            self._lastReadToken = tok!
+            return tok!
         }
         if self._eofToken != "" && self.peek() == self._eofToken && !(self._parserState & parserstateflagsPstCasepat != 0) && !(self._parserState & parserstateflagsPstEoftoken != 0) {
             tok = Token(type: tokentypeEof, value: "", pos: self.pos, parts: [], word: nil)
-            self._lastReadToken = tok
-            return tok
+            self._lastReadToken = tok!
+            return tok!
         }
         while self._skipComment() {
             self.skipBlanks()
             if self.atEnd() {
                 tok = Token(type: tokentypeEof, value: "", pos: self.pos, parts: [], word: nil)
-                self._lastReadToken = tok
-                return tok
+                self._lastReadToken = tok!
+                return tok!
             }
             if self._eofToken != "" && self.peek() == self._eofToken && !(self._parserState & parserstateflagsPstCasepat != 0) && !(self._parserState & parserstateflagsPstEoftoken != 0) {
                 tok = Token(type: tokentypeEof, value: "", pos: self.pos, parts: [], word: nil)
-                self._lastReadToken = tok
-                return tok
+                self._lastReadToken = tok!
+                return tok!
             }
         }
         tok = self._readOperator()
         if tok != nil {
-            self._lastReadToken = tok
-            return tok
+            self._lastReadToken = tok!
+            return tok!
         }
         tok = try self._readWord()
         if tok != nil {
-            self._lastReadToken = tok
-            return tok
+            self._lastReadToken = tok!
+            return tok!
         }
         tok = Token(type: tokentypeEof, value: "", pos: self.pos, parts: [], word: nil)
-        self._lastReadToken = tok
-        return tok
+        self._lastReadToken = tok!
+        return tok!
     }
 
     func peekToken() throws -> Token {
@@ -1465,7 +1465,7 @@ class Lexer {
                             cmdsubText = _tuple16.1
                             self._syncFromParser()
                             if cmdsubNode != nil {
-                                innerParts.append(cmdsubNode)
+                                innerParts.append(cmdsubNode!)
                                 contentChars.append(cmdsubText)
                             } else {
                                 contentChars.append(self.advance())
@@ -1479,7 +1479,7 @@ class Lexer {
                             cmdsubText = _tuple17.1
                             self._syncFromParser()
                             if cmdsubNode != nil {
-                                innerParts.append(cmdsubNode)
+                                innerParts.append(cmdsubNode!)
                                 contentChars.append(cmdsubText)
                             } else {
                                 contentChars.append(self.advance())
@@ -1505,7 +1505,7 @@ class Lexer {
                                     cmdsubText = _tuple19.1
                                     self._syncFromParser()
                                     if cmdsubNode != nil {
-                                        innerParts.append(cmdsubNode)
+                                        innerParts.append(cmdsubNode!)
                                         contentChars.append(cmdsubText)
                                     } else {
                                         contentChars.append(self.advance())
@@ -3137,10 +3137,10 @@ class Word: Node {
                 continue
             }
             var inner: String = ""
-            var node: Node = nil
+            var node: Node? = nil
             var formatted: String = ""
-            var parser: Parser = nil
-            var parsed: Node = nil
+            var parser: Parser? = nil
+            var parsed: Node? = nil
             if _startsWithAt(value, i, "$(") && !_startsWithAt(value, i, "$((") && !_isBackslashEscaped(value, i) && !_isDollarDollarParen(value, i) {
                 j = _findCmdsubEnd(value, i + 2)
                 if extglobDepth > 0 {
@@ -3154,13 +3154,13 @@ class Word: Node {
                 inner = _substring(value, i + 2, j - 1)
                 if cmdsubIdx < cmdsubParts.count {
                     node = cmdsubParts[cmdsubIdx]
-                    formatted = _formatCmdsubNode((node as? CommandSubstitution).command, 0, false, false, false)
+                    formatted = _formatCmdsubNode((node! as! CommandSubstitution).command, 0, false, false, false)
                     cmdsubIdx += 1
                 } else {
                     do {
                         parser = newParser(inner, false, false)
-                        parsed = try parser.parseList(true)
-                        formatted = (parsed != nil ? _formatCmdsubNode(parsed, 0, false, false, false) : "")
+                        parsed = try parser!.parseList(true)
+                        formatted = (parsed != nil ? _formatCmdsubNode(parsed!, 0, false, false, false) : "")
                     } catch is Exception {
                         formatted = inner
                     }
@@ -3193,9 +3193,9 @@ class Word: Node {
                     if _isExpansionStart(value, i, "${") && i + 2 < value.count && _isFunsubChar(String(_charAt(value, i + 2))) && !_isBackslashEscaped(value, i) {
                         j = _findFunsubEnd(value, i + 2)
                         var cmdsubNode: Node = (cmdsubIdx < cmdsubParts.count ? cmdsubParts[cmdsubIdx] : nil)
-                        if (cmdsubNode is CommandSubstitution) && (cmdsubNode as? CommandSubstitution).brace {
+                        if (cmdsubNode is CommandSubstitution) && (cmdsubNode as! CommandSubstitution).brace {
                             node = cmdsubNode
-                            formatted = _formatCmdsubNode((node as? CommandSubstitution).command, 0, false, false, false)
+                            formatted = _formatCmdsubNode((node! as! CommandSubstitution).command, 0, false, false, false)
                             var hasPipe: Bool = String(_charAt(value, i + 2)) == "|"
                             `prefix` = (hasPipe ? "${|" : "${ ")
                             var origInner: String = _substring(value, i + 2, j - 1)
@@ -3239,10 +3239,10 @@ class Word: Node {
                                 direction = String(_charAt(value, i))
                                 j = _findCmdsubEnd(value, i + 2)
                                 node = procsubParts[procsubIdx]
-                                compact = _startsWithSubshell((node as? ProcessSubstitution).command)
-                                formatted = _formatCmdsubNode((node as? ProcessSubstitution).command, 0, true, compact, true)
+                                compact = _startsWithSubshell((node! as! ProcessSubstitution).command)
+                                formatted = _formatCmdsubNode((node! as! ProcessSubstitution).command, 0, true, compact, true)
                                 var rawContent: String = _substring(value, i + 2, j - 1)
-                                if (node as? ProcessSubstitution).command.kind == "subshell" {
+                                if (node! as! ProcessSubstitution).command.kind == "subshell" {
                                     var leadingWsEnd: Int = 0
                                     while leadingWsEnd < rawContent.count && " \t\n".contains(String(_charAt(rawContent, leadingWsEnd))) {
                                         leadingWsEnd += 1
@@ -3252,7 +3252,7 @@ class Word: Node {
                                     if stripped.hasPrefix("(") {
                                         if (!leadingWs.isEmpty) {
                                             var normalizedWs: String = leadingWs.replacingOccurrences(of: "\n", with: " ").replacingOccurrences(of: "\t", with: " ")
-                                            var spaced: String = _formatCmdsubNode((node as? ProcessSubstitution).command, 0, false, false, false)
+                                            var spaced: String = _formatCmdsubNode((node! as! ProcessSubstitution).command, 0, false, false, false)
                                             result.append(direction + "(" + normalizedWs + spaced + ")")
                                         } else {
                                             rawContent = rawContent.replacingOccurrences(of: "\\\n", with: "")
@@ -3265,7 +3265,7 @@ class Word: Node {
                                 }
                                 rawContent = _substring(value, i + 2, j - 1)
                                 var rawStripped: String = rawContent.replacingOccurrences(of: "\\\n", with: "")
-                                if _startsWithSubshell((node as? ProcessSubstitution).command) && formatted != rawStripped {
+                                if _startsWithSubshell((node! as! ProcessSubstitution).command) && formatted != rawStripped {
                                     result.append(direction + "(" + rawStripped + ")")
                                 } else {
                                     var finalOutput: String = direction + "(" + formatted + ")"
@@ -3285,10 +3285,10 @@ class Word: Node {
                                     inner = _substring(value, i + 2, j - 1)
                                     do {
                                         parser = newParser(inner, false, false)
-                                        parsed = try parser.parseList(true)
-                                        if parsed != nil && parser.pos == inner.count && !inner.contains("\n") {
-                                            compact = _startsWithSubshell(parsed)
-                                            formatted = _formatCmdsubNode(parsed, 0, true, compact, true)
+                                        parsed = try parser!.parseList(true)
+                                        if parsed != nil && parser!.pos == inner.count && !inner.contains("\n") {
+                                            compact = _startsWithSubshell(parsed!)
+                                            formatted = _formatCmdsubNode(parsed!, 0, true, compact, true)
                                         } else {
                                             formatted = inner
                                         }
@@ -3346,9 +3346,9 @@ class Word: Node {
                                 } else {
                                     do {
                                         parser = newParser(inner.trimmingCharacters(in: CharacterSet(charactersIn: " \t\n|")), false, false)
-                                        parsed = try parser.parseList(true)
+                                        parsed = try parser!.parseList(true)
                                         if parsed != nil {
-                                            formatted = _formatCmdsubNode(parsed, 0, false, false, false)
+                                            formatted = _formatCmdsubNode(parsed!, 0, false, false, false)
                                             formatted = formatted.trimmingCharacters(in: CharacterSet(charactersIn: ";"))
                                             var terminator: String = ""
                                             if inner.trimmingCharacters(in: CharacterSet(charactersIn: " \t")).hasSuffix("\n") {
@@ -3608,10 +3608,10 @@ class Pipeline: Node {
         }
         var cmds: [(Node, Bool)] = []
         var i: Int = 0
-        var cmd: Node = nil
+        var cmd: Node? = nil
         while i < self.commands.count {
             cmd = self.commands[i]
-            switch cmd {
+            switch cmd! {
             case let cmd as PipeBoth:
                 i += 1
                 continue
@@ -3619,7 +3619,7 @@ class Pipeline: Node {
                 break
             }
             var needsRedirect: Bool = i + 1 < self.commands.count && self.commands[i + 1].kind == "pipe-both"
-            cmds.append((cmd, needsRedirect))
+            cmds.append((cmd!, needsRedirect))
             i += 1
         }
         var pair: (Node, Bool) = (nil, false)
@@ -3628,7 +3628,7 @@ class Pipeline: Node {
             pair = cmds[0]
             cmd = pair.0
             needs = pair.1
-            return self._cmdSexp(cmd, needs)
+            return self._cmdSexp(cmd!, needs)
         }
         var lastPair: (Node, Bool) = cmds[cmds.count - 1]
         var lastCmd: Node = lastPair.0
@@ -3639,10 +3639,10 @@ class Pipeline: Node {
             pair = cmds[j]
             cmd = pair.0
             needs = pair.1
-            if needs && cmd.kind != "command" {
-                result = "(pipe " + cmd.toSexp() + " (redirect \">&\" 1) " + result + ")"
+            if needs && cmd!.kind != "command" {
+                result = "(pipe " + cmd!.toSexp() + " (redirect \">&\" 1) " + result + ")"
             } else {
-                result = "(pipe " + self._cmdSexp(cmd, needs) + " " + result + ")"
+                result = "(pipe " + self._cmdSexp(cmd!, needs) + " " + result + ")"
             }
             j -= 1
         }
@@ -3687,16 +3687,16 @@ class List: Node {
     func toSexp() -> String {
         var parts: [Node] = Swift.Array(self.parts)
         var opNames: [String: String] = ["&&": "and", "||": "or", ";": "semi", "\n": "semi", "&": "background"]
-        while parts.count > 1 && parts[parts.count - 1].kind == "operator" && (parts[parts.count - 1] as? Operator).op == ";" || (parts[parts.count - 1] as? Operator).op == "\n" {
+        while parts.count > 1 && parts[parts.count - 1].kind == "operator" && (parts[parts.count - 1] as! Operator).op == ";" || (parts[parts.count - 1] as! Operator).op == "\n" {
             parts = _sublist(parts, 0, parts.count - 1)
         }
         if parts.count == 1 {
             return parts[0].toSexp()
         }
-        if parts[parts.count - 1].kind == "operator" && (parts[parts.count - 1] as? Operator).op == "&" {
+        if parts[parts.count - 1].kind == "operator" && (parts[parts.count - 1] as! Operator).op == "&" {
             var i: Int = parts.count - 3
             while i > 0 {
-                if parts[i].kind == "operator" && (parts[i] as? Operator).op == ";" || (parts[i] as? Operator).op == "\n" {
+                if parts[i].kind == "operator" && (parts[i] as! Operator).op == ";" || (parts[i] as! Operator).op == "\n" {
                     var `left`: [Node] = _sublist(parts, 0, i)
                     var `right`: [Node] = _sublist(parts, i + 1, parts.count - 1)
                     var leftSexp: String = ""
@@ -3729,7 +3729,7 @@ class List: Node {
         var semiPositions: [Int] = []
         var i: Int = 0
         while i < parts.count {
-            if parts[i].kind == "operator" && (parts[i] as? Operator).op == ";" || (parts[i] as? Operator).op == "\n" {
+            if parts[i].kind == "operator" && (parts[i] as! Operator).op == ";" || (parts[i] as! Operator).op == "\n" {
                 semiPositions.append(i)
             }
             i += 1
@@ -3770,7 +3770,7 @@ class List: Node {
         var ampPositions: [Int] = []
         var i: Int = 1
         while i < parts.count - 1 {
-            if parts[i].kind == "operator" && (parts[i] as? Operator).op == "&" {
+            if parts[i].kind == "operator" && (parts[i] as! Operator).op == "&" {
                 ampPositions.append(i)
             }
             i += 2
@@ -3803,7 +3803,7 @@ class List: Node {
         while i < parts.count - 1 {
             var op: Node = parts[i]
             var cmd: Node = parts[i + 1]
-            var opName: String = (opNames[(op as? Operator).op] ?? (op as? Operator).op)
+            var opName: String = (opNames[(op as! Operator).op] ?? (op as! Operator).op)
             result = "(" + opName + " " + result + " " + cmd.toSexp() + ")"
             i += 2
         }
@@ -5348,7 +5348,7 @@ class Parser {
     }
 
     func _lexNextToken() throws -> Token {
-        var tok: Token = nil
+        var tok: Token? = nil
         if self._lexer._tokenCache != nil && self._lexer._tokenCache!.pos == self.pos && self._lexer._cachedWordContext == self._wordContext && self._lexer._cachedAtCommandStart == self._atCommandStart && self._lexer._cachedInArrayLiteral == self._inArrayLiteral && self._lexer._cachedInAssignBuiltin == self._inAssignBuiltin {
             tok = try self._lexer.nextToken()
             self.pos = self._lexer._postReadPos
@@ -5362,8 +5362,8 @@ class Parser {
             self._lexer._cachedInAssignBuiltin = self._inAssignBuiltin
             self._syncParser()
         }
-        self._recordToken(tok)
-        return tok
+        self._recordToken(tok!)
+        return tok!
     }
 
     func _lexSkipBlanks() {
@@ -5710,7 +5710,7 @@ class Parser {
             result0 = _tuple25.0
             result1 = _tuple25.1
             if result0 != nil {
-                parts.append(result0)
+                parts.append(result0!)
                 chars.append(result1)
                 return true
             }
@@ -5718,7 +5718,7 @@ class Parser {
             result0 = _tuple26.0
             result1 = _tuple26.1
             if result0 != nil {
-                parts.append(result0)
+                parts.append(result0!)
                 chars.append(result1)
                 return true
             }
@@ -5729,7 +5729,7 @@ class Parser {
             result0 = _tuple27.0
             result1 = _tuple27.1
             if result0 != nil {
-                parts.append(result0)
+                parts.append(result0!)
                 chars.append(result1)
                 return true
             }
@@ -5740,7 +5740,7 @@ class Parser {
             result0 = _tuple28.0
             result1 = _tuple28.1
             if result0 != nil {
-                parts.append(result0)
+                parts.append(result0!)
                 chars.append(result1)
                 return true
             }
@@ -5750,7 +5750,7 @@ class Parser {
         result0 = _tuple29.0
         result1 = _tuple29.1
         if result0 != nil {
-            parts.append(result0)
+            parts.append(result0!)
             chars.append(result1)
             return true
         }
@@ -6304,14 +6304,14 @@ class Parser {
         }
         self.advance()
         var text: String = _substring(self.source, start, self.pos)
-        var expr: Node = nil
+        var expr: Node? = nil
         do {
             expr = self._parseArithExpr(content)
         } catch is ParseError {
             self.pos = start
             return (nil, "")
         }
-        return (ArithmeticExpansion(expression: expr, kind: "arith"), text)
+        return (ArithmeticExpansion(expression: expr!, kind: "arith"), text)
     }
 
     func _parseArithExpr(_ content: String) -> Node {
@@ -6324,7 +6324,7 @@ class Parser {
         self._arithPos = 0
         self._arithLen = content.count
         self._arithSkipWs()
-        var result: Node = nil
+        var result: Node? = nil
         if self._arithAtEnd() {
             result = nil
         } else {
@@ -6336,7 +6336,7 @@ class Parser {
             self._arithPos = savedArithPos
             self._arithLen = savedArithLen
         }
-        return result
+        return result!
     }
 
     func _arithAtEnd() -> Bool {
@@ -6425,14 +6425,14 @@ class Parser {
         self._arithSkipWs()
         if self._arithConsume("?") {
             self._arithSkipWs()
-            var ifTrue: Node = nil
+            var ifTrue: Node? = nil
             if self._arithMatch(":") {
                 ifTrue = nil
             } else {
                 ifTrue = self._arithParseAssign()
             }
             self._arithSkipWs()
-            var ifFalse: Node = nil
+            var ifFalse: Node? = nil
             if self._arithConsume(":") {
                 self._arithSkipWs()
                 if self._arithAtEnd() || self._arithPeek(0) == ")" {
@@ -6443,7 +6443,7 @@ class Parser {
             } else {
                 ifFalse = nil
             }
-            return ArithTernary(condition: cond, ifTrue: ifTrue, ifFalse: ifFalse, kind: "ternary")
+            return ArithTernary(condition: cond, ifTrue: ifTrue!, ifFalse: ifFalse!, kind: "ternary")
         }
         return cond
     }
@@ -6533,30 +6533,30 @@ class Parser {
         var `left`: Node = try self._arithParseShift()
         while true {
             self._arithSkipWs()
-            var `right`: Node = nil
+            var `right`: Node? = nil
             if self._arithMatch("<=") {
                 self._arithConsume("<=")
                 self._arithSkipWs()
                 `right` = try self._arithParseShift()
-                `left` = ArithBinaryOp(op: "<=", `left`: `left`, `right`: `right`, kind: "binary-op")
+                `left` = ArithBinaryOp(op: "<=", `left`: `left`, `right`: `right`!, kind: "binary-op")
             } else {
                 if self._arithMatch(">=") {
                     self._arithConsume(">=")
                     self._arithSkipWs()
                     `right` = try self._arithParseShift()
-                    `left` = ArithBinaryOp(op: ">=", `left`: `left`, `right`: `right`, kind: "binary-op")
+                    `left` = ArithBinaryOp(op: ">=", `left`: `left`, `right`: `right`!, kind: "binary-op")
                 } else {
                     if self._arithPeek(0) == "<" && self._arithPeek(1) != "<" && self._arithPeek(1) != "=" {
                         self._arithAdvance()
                         self._arithSkipWs()
                         `right` = try self._arithParseShift()
-                        `left` = ArithBinaryOp(op: "<", `left`: `left`, `right`: `right`, kind: "binary-op")
+                        `left` = ArithBinaryOp(op: "<", `left`: `left`, `right`: `right`!, kind: "binary-op")
                     } else {
                         if self._arithPeek(0) == ">" && self._arithPeek(1) != ">" && self._arithPeek(1) != "=" {
                             self._arithAdvance()
                             self._arithSkipWs()
                             `right` = try self._arithParseShift()
-                            `left` = ArithBinaryOp(op: ">", `left`: `left`, `right`: `right`, kind: "binary-op")
+                            `left` = ArithBinaryOp(op: ">", `left`: `left`, `right`: `right`!, kind: "binary-op")
                         } else {
                             break
                         }
@@ -6577,18 +6577,18 @@ class Parser {
             if self._arithMatch(">>=") {
                 break
             }
-            var `right`: Node = nil
+            var `right`: Node? = nil
             if self._arithMatch("<<") {
                 self._arithConsume("<<")
                 self._arithSkipWs()
                 `right` = try self._arithParseAdditive()
-                `left` = ArithBinaryOp(op: "<<", `left`: `left`, `right`: `right`, kind: "binary-op")
+                `left` = ArithBinaryOp(op: "<<", `left`: `left`, `right`: `right`!, kind: "binary-op")
             } else {
                 if self._arithMatch(">>") {
                     self._arithConsume(">>")
                     self._arithSkipWs()
                     `right` = try self._arithParseAdditive()
-                    `left` = ArithBinaryOp(op: ">>", `left`: `left`, `right`: `right`, kind: "binary-op")
+                    `left` = ArithBinaryOp(op: ">>", `left`: `left`, `right`: `right`!, kind: "binary-op")
                 } else {
                     break
                 }
@@ -6603,18 +6603,18 @@ class Parser {
             self._arithSkipWs()
             var c: String = self._arithPeek(0)
             var c2: String = self._arithPeek(1)
-            var `right`: Node = nil
+            var `right`: Node? = nil
             if c == "+" && c2 != "+" && c2 != "=" {
                 self._arithAdvance()
                 self._arithSkipWs()
                 `right` = try self._arithParseMultiplicative()
-                `left` = ArithBinaryOp(op: "+", `left`: `left`, `right`: `right`, kind: "binary-op")
+                `left` = ArithBinaryOp(op: "+", `left`: `left`, `right`: `right`!, kind: "binary-op")
             } else {
                 if c == "-" && c2 != "-" && c2 != "=" {
                     self._arithAdvance()
                     self._arithSkipWs()
                     `right` = try self._arithParseMultiplicative()
-                    `left` = ArithBinaryOp(op: "-", `left`: `left`, `right`: `right`, kind: "binary-op")
+                    `left` = ArithBinaryOp(op: "-", `left`: `left`, `right`: `right`!, kind: "binary-op")
                 } else {
                     break
                 }
@@ -6629,24 +6629,24 @@ class Parser {
             self._arithSkipWs()
             var c: String = self._arithPeek(0)
             var c2: String = self._arithPeek(1)
-            var `right`: Node = nil
+            var `right`: Node? = nil
             if c == "*" && c2 != "*" && c2 != "=" {
                 self._arithAdvance()
                 self._arithSkipWs()
                 `right` = try self._arithParseExponentiation()
-                `left` = ArithBinaryOp(op: "*", `left`: `left`, `right`: `right`, kind: "binary-op")
+                `left` = ArithBinaryOp(op: "*", `left`: `left`, `right`: `right`!, kind: "binary-op")
             } else {
                 if c == "/" && c2 != "=" {
                     self._arithAdvance()
                     self._arithSkipWs()
                     `right` = try self._arithParseExponentiation()
-                    `left` = ArithBinaryOp(op: "/", `left`: `left`, `right`: `right`, kind: "binary-op")
+                    `left` = ArithBinaryOp(op: "/", `left`: `left`, `right`: `right`!, kind: "binary-op")
                 } else {
                     if c == "%" && c2 != "=" {
                         self._arithAdvance()
                         self._arithSkipWs()
                         `right` = try self._arithParseExponentiation()
-                        `left` = ArithBinaryOp(op: "%", `left`: `left`, `right`: `right`, kind: "binary-op")
+                        `left` = ArithBinaryOp(op: "%", `left`: `left`, `right`: `right`!, kind: "binary-op")
                     } else {
                         break
                     }
@@ -6670,43 +6670,43 @@ class Parser {
 
     func _arithParseUnary() throws -> Node {
         self._arithSkipWs()
-        var operand: Node = nil
+        var operand: Node? = nil
         if self._arithMatch("++") {
             self._arithConsume("++")
             self._arithSkipWs()
             operand = try self._arithParseUnary()
-            return ArithPreIncr(operand: operand, kind: "pre-incr")
+            return ArithPreIncr(operand: operand!, kind: "pre-incr")
         }
         if self._arithMatch("--") {
             self._arithConsume("--")
             self._arithSkipWs()
             operand = try self._arithParseUnary()
-            return ArithPreDecr(operand: operand, kind: "pre-decr")
+            return ArithPreDecr(operand: operand!, kind: "pre-decr")
         }
         var c: String = self._arithPeek(0)
         if c == "!" {
             self._arithAdvance()
             self._arithSkipWs()
             operand = try self._arithParseUnary()
-            return ArithUnaryOp(op: "!", operand: operand, kind: "unary-op")
+            return ArithUnaryOp(op: "!", operand: operand!, kind: "unary-op")
         }
         if c == "~" {
             self._arithAdvance()
             self._arithSkipWs()
             operand = try self._arithParseUnary()
-            return ArithUnaryOp(op: "~", operand: operand, kind: "unary-op")
+            return ArithUnaryOp(op: "~", operand: operand!, kind: "unary-op")
         }
         if c == "+" && self._arithPeek(1) != "+" {
             self._arithAdvance()
             self._arithSkipWs()
             operand = try self._arithParseUnary()
-            return ArithUnaryOp(op: "+", operand: operand, kind: "unary-op")
+            return ArithUnaryOp(op: "+", operand: operand!, kind: "unary-op")
         }
         if c == "-" && self._arithPeek(1) != "-" {
             self._arithAdvance()
             self._arithSkipWs()
             operand = try self._arithParseUnary()
-            return ArithUnaryOp(op: "-", operand: operand, kind: "unary-op")
+            return ArithUnaryOp(op: "-", operand: operand!, kind: "unary-op")
         }
         return try self._arithParsePostfix()
     }
@@ -7174,7 +7174,7 @@ class Parser {
         }
         ch = self.peek()
         var op: String = ""
-        var target: Word = nil
+        var target: Word? = nil
         if ch == "&" && self.pos + 1 < self.length && String(_charAt(self.source, self.pos + 1)) == ">" {
             if fd != -1 || varfd != "" {
                 self.pos = start
@@ -7193,7 +7193,7 @@ class Parser {
             if target == nil {
                 throw ParseError(message: "Expected target for redirect " + op, pos: self.pos)
             }
-            return Redirect(op: op, target: target, fd: 0, kind: "redirect")
+            return Redirect(op: op, target: target!, fd: 0, kind: "redirect")
         }
         if ch == "" || !_isRedirectChar(ch) {
             self.pos = start
@@ -7276,7 +7276,7 @@ class Parser {
                 target = nil
             }
             if target == nil {
-                var innerWord: Word = nil
+                var innerWord: Word? = nil
                 if !self.atEnd() && (self.peek().first?.isNumber ?? false) || self.peek() == "-" {
                     var wordStart: Int = self.pos
                     fdChars = []
@@ -7296,8 +7296,8 @@ class Parser {
                         self.pos = wordStart
                         innerWord = try self.parseWord(false, false, false)
                         if innerWord != nil {
-                            target = Word(value: "&" + innerWord.value, parts: [], kind: "word")
-                            target!.parts = innerWord.parts
+                            target = Word(value: "&" + innerWord!.value, parts: [], kind: "word")
+                            target!!.parts = innerWord!.parts
                         } else {
                             throw ParseError(message: "Expected target for redirect " + op, pos: self.pos)
                         }
@@ -7307,8 +7307,8 @@ class Parser {
                 } else {
                     innerWord = try self.parseWord(false, false, false)
                     if innerWord != nil {
-                        target = Word(value: "&" + innerWord.value, parts: [], kind: "word")
-                        target!.parts = innerWord.parts
+                        target = Word(value: "&" + innerWord!.value, parts: [], kind: "word")
+                        target!!.parts = innerWord!.parts
                     } else {
                         throw ParseError(message: "Expected target for redirect " + op, pos: self.pos)
                     }
@@ -7330,7 +7330,7 @@ class Parser {
         if target == nil {
             throw ParseError(message: "Expected target for redirect " + op, pos: self.pos)
         }
-        return Redirect(op: op, target: target, fd: 0, kind: "redirect")
+        return Redirect(op: op, target: target!, fd: 0, kind: "redirect")
     }
 
     func _parseHeredocDelimiter() -> (String, Bool) {
@@ -7913,7 +7913,7 @@ class Parser {
             return UnaryTest(op: word1.value, operand: unaryOperand, kind: "unary-test")
         }
         if !self._condAtEnd() && self.peek() != "&" && self.peek() != "|" && self.peek() != ")" {
-            var word2: Word = nil
+            var word2: Word? = nil
             if _isRedirectChar(self.peek()) && !(self.pos + 1 < self.length && String(_charAt(self.source, self.pos + 1)) == "(") {
                 var op: String = self.advance()
                 self._condSkipWhitespace()
@@ -7921,7 +7921,7 @@ class Parser {
                 if word2 == nil {
                     throw ParseError(message: "Expected operand after " + op, pos: self.pos)
                 }
-                return BinaryTest(op: op, `left`: word1, `right`: word2, kind: "binary-test")
+                return BinaryTest(op: op, `left`: word1, `right`: word2!, kind: "binary-test")
             }
             var savedPos: Int = self.pos
             var opWord: Word = try self._parseCondWord()
@@ -7935,7 +7935,7 @@ class Parser {
                 if word2 == nil {
                     throw ParseError(message: "Expected operand after " + opWord.value, pos: self.pos)
                 }
-                return BinaryTest(op: opWord.value, `left`: word1, `right`: word2, kind: "binary-test")
+                return BinaryTest(op: opWord.value, `left`: word1, `right`: word2!, kind: "binary-test")
             } else {
                 self.pos = savedPos
             }
@@ -8566,30 +8566,30 @@ class Parser {
         if !self.atEnd() {
             ch = self.peek()
         }
-        var body: Node = nil
+        var body: Node? = nil
         if ch == "{" {
             body = try self.parseBraceGroup()
             if body != nil {
-                return Coproc(command: body, name: name, kind: "coproc")
+                return Coproc(command: body!, name: name, kind: "coproc")
             }
         }
         if ch == "(" {
             if self.pos + 1 < self.length && String(_charAt(self.source, self.pos + 1)) == "(" {
                 body = try self.parseArithmeticCommand()
                 if body != nil {
-                    return Coproc(command: body, name: name, kind: "coproc")
+                    return Coproc(command: body!, name: name, kind: "coproc")
                 }
             }
             body = try self.parseSubshell()
             if body != nil {
-                return Coproc(command: body, name: name, kind: "coproc")
+                return Coproc(command: body!, name: name, kind: "coproc")
             }
         }
         var nextWord: String = try self._lexPeekReservedWord()
         if nextWord != "" && compoundKeywords.contains(nextWord) {
             body = try self.parseCompoundCommand()
             if body != nil {
-                return Coproc(command: body, name: name, kind: "coproc")
+                return Coproc(command: body!, name: name, kind: "coproc")
             }
         }
         var wordStart: Int = self.pos
@@ -8609,7 +8609,7 @@ class Parser {
                     name = potentialName
                     body = try self.parseBraceGroup()
                     if body != nil {
-                        return Coproc(command: body, name: name, kind: "coproc")
+                        return Coproc(command: body!, name: name, kind: "coproc")
                     }
                 } else {
                     if ch == "(" {
@@ -8620,14 +8620,14 @@ class Parser {
                             body = try self.parseSubshell()
                         }
                         if body != nil {
-                            return Coproc(command: body, name: name, kind: "coproc")
+                            return Coproc(command: body!, name: name, kind: "coproc")
                         }
                     } else {
                         if nextWord != "" && compoundKeywords.contains(nextWord) {
                             name = potentialName
                             body = try self.parseCompoundCommand()
                             if body != nil {
-                                return Coproc(command: body, name: name, kind: "coproc")
+                                return Coproc(command: body!, name: name, kind: "coproc")
                             }
                         }
                     }
@@ -8637,7 +8637,7 @@ class Parser {
         }
         body = try self.parseCommand()
         if body != nil {
-            return Coproc(command: body, name: name, kind: "coproc")
+            return Coproc(command: body!, name: name, kind: "coproc")
         }
         throw ParseError(message: "Expected command after coproc", pos: self.pos)
     }
@@ -8649,7 +8649,7 @@ class Parser {
         }
         var savedPos: Int = self.pos
         var name: String = ""
-        var body: Node = nil
+        var body: Node? = nil
         if try self._lexIsAtReservedWord("function") {
             try self._lexConsumeWord("function")
             self.skipWhitespace()
@@ -8671,7 +8671,7 @@ class Parser {
             if body == nil {
                 throw ParseError(message: "Expected function body", pos: self.pos)
             }
-            return Function(name: name, body: body, kind: "function")
+            return Function(name: name, body: body!, kind: "function")
         }
         name = self.peekWord()
         if name == "" || reservedWords.contains(name) {
@@ -8730,7 +8730,7 @@ class Parser {
         if body == nil {
             throw ParseError(message: "Expected function body", pos: self.pos)
         }
-        return Function(name: name, body: body, kind: "function")
+        return Function(name: name, body: body!, kind: "function")
     }
 
     func _parseCompoundCommand() throws -> Node {
@@ -8883,11 +8883,11 @@ class Parser {
             return nil
         }
         var ch: String = self.peek()
-        var result: Node = nil
+        var result: Node? = nil
         if ch == "(" && self.pos + 1 < self.length && String(_charAt(self.source, self.pos + 1)) == "(" {
             result = try self.parseArithmeticCommand()
             if result != nil {
-                return result
+                return result!
             }
         }
         if ch == "(" {
@@ -8896,13 +8896,13 @@ class Parser {
         if ch == "{" {
             result = try self.parseBraceGroup()
             if result != nil {
-                return result
+                return result!
             }
         }
         if ch == "[" && self.pos + 1 < self.length && String(_charAt(self.source, self.pos + 1)) == "[" {
             result = try self.parseConditionalExpr()
             if result != nil {
-                return result
+                return result!
             }
         }
         var reserved: String = try self._lexPeekReservedWord()
@@ -9014,8 +9014,8 @@ class Parser {
                     self.skipWhitespace()
                     var inner: Node = try self.parsePipeline()
                     if inner != nil && inner.kind == "negation" {
-                        if (inner as? Negation).pipeline != nil {
-                            return (inner as? Negation).pipeline
+                        if (inner as! Negation).pipeline != nil {
+                            return (inner as! Negation).pipeline
                         } else {
                             return Command(words: [], redirects: [], kind: "command")
                         }
@@ -9290,8 +9290,8 @@ class Parser {
         var lastWord: Word = self._findLastWord(lastNode)
         if lastWord != nil && lastWord.value.hasSuffix("\\") {
             lastWord.value = _substring(lastWord.value, 0, lastWord.value.count - 1)
-            if !(!lastWord.value.isEmpty) && (lastNode is Command) && (!(lastNode as? Command).words.isEmpty) {
-                (lastNode as? Command).words.removeLast()
+            if !(!lastWord.value.isEmpty) && (lastNode is Command) && (!(lastNode as! Command).words.isEmpty) {
+                (lastNode as! Command).words.removeLast()
             }
         }
     }
@@ -9584,25 +9584,25 @@ func _consumeBracketClass(_ s: String, _ start: Int, _ depth: Int) -> (Int, [Str
 func _formatCondBody(_ node: Node) -> String {
     var kind: String = node.kind
     if kind == "unary-test" {
-        var operandVal: String = (node as? UnaryTest).operand.getCondFormattedValue()
-        return (node as? UnaryTest).op + " " + operandVal
+        var operandVal: String = (node as! UnaryTest).operand.getCondFormattedValue()
+        return (node as! UnaryTest).op + " " + operandVal
     }
     if kind == "binary-test" {
-        var leftVal: String = (node as? BinaryTest).`left`.getCondFormattedValue()
-        var rightVal: String = (node as? BinaryTest).`right`.getCondFormattedValue()
-        return leftVal + " " + (node as? BinaryTest).op + " " + rightVal
+        var leftVal: String = (node as! BinaryTest).`left`.getCondFormattedValue()
+        var rightVal: String = (node as! BinaryTest).`right`.getCondFormattedValue()
+        return leftVal + " " + (node as! BinaryTest).op + " " + rightVal
     }
     if kind == "cond-and" {
-        return _formatCondBody((node as? CondAnd).`left`) + " && " + _formatCondBody((node as? CondAnd).`right`)
+        return _formatCondBody((node as! CondAnd).`left`) + " && " + _formatCondBody((node as! CondAnd).`right`)
     }
     if kind == "cond-or" {
-        return _formatCondBody((node as? CondOr).`left`) + " || " + _formatCondBody((node as? CondOr).`right`)
+        return _formatCondBody((node as! CondOr).`left`) + " || " + _formatCondBody((node as! CondOr).`right`)
     }
     if kind == "cond-not" {
-        return "! " + _formatCondBody((node as? CondNot).operand)
+        return "! " + _formatCondBody((node as! CondNot).operand)
     }
     if kind == "cond-paren" {
-        return "( " + _formatCondBody((node as? CondParen).inner) + " )"
+        return "( " + _formatCondBody((node as! CondParen).inner) + " )"
     }
     return ""
 }
@@ -9690,11 +9690,11 @@ func _formatCmdsubNode(_ node: Node, _ indent: Int, _ inProcsub: Bool, _ compact
     case let node as Pipeline:
         var cmds: [(Node, Bool)] = []
         var i: Int = 0
-        var cmd: Node = nil
+        var cmd: Node? = nil
         var needsRedirect: Bool = false
         while i < node.commands.count {
             cmd = node.commands[i]
-            switch cmd {
+            switch cmd! {
             case let cmd as PipeBoth:
                 i += 1
                 continue
@@ -9702,7 +9702,7 @@ func _formatCmdsubNode(_ node: Node, _ indent: Int, _ inProcsub: Bool, _ compact
                 break
             }
             needsRedirect = i + 1 < node.commands.count && node.commands[i + 1].kind == "pipe-both"
-            cmds.append((cmd, needsRedirect))
+            cmds.append((cmd!, needsRedirect))
             i += 1
         }
         var resultParts: [String] = []
@@ -9713,11 +9713,11 @@ func _formatCmdsubNode(_ node: Node, _ indent: Int, _ inProcsub: Bool, _ compact
                 cmd = _entry.0
                 needsRedirect = _entry.1
             }
-            var formatted: String = _formatCmdsubNode(cmd, indent, inProcsub, false, procsubFirst && idx == 0)
+            var formatted: String = _formatCmdsubNode(cmd!, indent, inProcsub, false, procsubFirst && idx == 0)
             var isLast: Bool = idx == cmds.count - 1
             var hasHeredoc: Bool = false
-            if cmd.kind == "command" && (!(cmd as? Command).redirects.isEmpty) {
-                for r in (cmd as? Command).redirects {
+            if cmd!.kind == "command" && (!(cmd! as! Command).redirects.isEmpty) {
+                for r in (cmd! as! Command).redirects {
                     switch r {
                     case let r as HereDoc:
                         hasHeredoc = true
@@ -9779,8 +9779,8 @@ func _formatCmdsubNode(_ node: Node, _ indent: Int, _ inProcsub: Bool, _ compact
     case let node as List:
         var hasHeredoc: Bool = false
         for p in node.parts {
-            if p.kind == "command" && (!(p as? Command).redirects.isEmpty) {
-                for r in (p as? Command).redirects {
+            if p.kind == "command" && (!(p as! Command).redirects.isEmpty) {
+                for r in (p as! Command).redirects {
                     switch r {
                     case let r as HereDoc:
                         hasHeredoc = true
@@ -9793,8 +9793,8 @@ func _formatCmdsubNode(_ node: Node, _ indent: Int, _ inProcsub: Bool, _ compact
                 switch p {
                 case let p as Pipeline:
                     for cmd in p.commands {
-                        if cmd.kind == "command" && (!(cmd as? Command).redirects.isEmpty) {
-                            for r in (cmd as? Command).redirects {
+                        if cmd.kind == "command" && (!(cmd as! Command).redirects.isEmpty) {
+                            for r in (cmd as! Command).redirects {
                                 switch r {
                                 case let r as HereDoc:
                                     hasHeredoc = true
@@ -10028,7 +10028,7 @@ func _formatCmdsubNode(_ node: Node, _ indent: Int, _ inProcsub: Bool, _ compact
     switch node {
     case let node as Function:
         var name: String = node.name
-        var innerBody: Node = (node.body.kind == "brace-group" ? (node.body as? BraceGroup).body : node.body)
+        var innerBody: Node = (node.body.kind == "brace-group" ? (node.body as! BraceGroup).body : node.body)
         var body: String = _formatCmdsubNode(innerBody, indent + 4, false, false, false).trimmingCharacters(in: CharacterSet(charactersIn: ";"))
         return "function \\(name) () \n{ \n\\(innerSp)\\(body)\n}"
     default:
@@ -10086,7 +10086,7 @@ func _formatCmdsubNode(_ node: Node, _ indent: Int, _ inProcsub: Bool, _ compact
     }
     switch node {
     case let node as ConditionalExpr:
-        var body: String = _formatCondBody((node.body as? Node))
+        var body: String = _formatCondBody((node.body as! Node))
         return "[[ " + body + " ]]"
     default:
         break
@@ -10138,7 +10138,7 @@ func _formatRedirect(_ r: Node, _ compact: Bool, _ heredocOpOnly: Bool) -> Strin
     default:
         break
     }
-    op = (r as? Redirect).op
+    op = (r as! Redirect).op
     if op == "1>" {
         op = ">"
     } else {
@@ -10146,10 +10146,10 @@ func _formatRedirect(_ r: Node, _ compact: Bool, _ heredocOpOnly: Bool) -> Strin
             op = "<"
         }
     }
-    var target: String = (r as? Redirect).target.value
-    target = (r as? Redirect).target._expandAllAnsiCQuotes(target)
-    target = (r as? Redirect).target._stripLocaleStringDollars(target)
-    target = (r as? Redirect).target._formatCommandSubstitutions(target, false)
+    var target: String = (r as! Redirect).target.value
+    target = (r as! Redirect).target._expandAllAnsiCQuotes(target)
+    target = (r as! Redirect).target._stripLocaleStringDollars(target)
+    target = (r as! Redirect).target._formatCommandSubstitutions(target, false)
     if target.hasPrefix("&") {
         var wasInputClose: Bool = false
         if target == "&-" && op.hasSuffix("<") {

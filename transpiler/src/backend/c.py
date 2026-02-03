@@ -1264,7 +1264,70 @@ static void _vec_extend(Arena *a, void *dest_ptr, void *src_ptr) {
 }
 
 // === Map helpers ===
-// Simple linear-probe hash map for small maps
+// Simple linear-scan map for small maps (arena-allocated)
+typedef struct StrMap {
+    const char **keys;
+    const char **vals;
+    int64_t *ivals;
+    size_t len;
+    size_t cap;
+    bool is_int_val;
+} StrMap;
+
+static StrMap *_strmap_new(Arena *a, size_t cap, bool is_int_val) {
+    StrMap *m = (StrMap *)arena_alloc(a, sizeof(StrMap));
+    m->keys = (const char **)arena_alloc(a, cap * sizeof(const char *));
+    if (is_int_val) {
+        m->ivals = (int64_t *)arena_alloc(a, cap * sizeof(int64_t));
+        m->vals = NULL;
+    } else {
+        m->vals = (const char **)arena_alloc(a, cap * sizeof(const char *));
+        m->ivals = NULL;
+    }
+    m->len = 0;
+    m->cap = cap;
+    m->is_int_val = is_int_val;
+    return m;
+}
+
+static void _strmap_set_str(StrMap *m, const char *key, const char *val) {
+    for (size_t i = 0; i < m->len; i++) {
+        if (strcmp(m->keys[i], key) == 0) { m->vals[i] = val; return; }
+    }
+    if (m->len < m->cap) { m->keys[m->len] = key; m->vals[m->len] = val; m->len++; }
+}
+
+static void _strmap_set_int(StrMap *m, const char *key, int64_t val) {
+    for (size_t i = 0; i < m->len; i++) {
+        if (strcmp(m->keys[i], key) == 0) { m->ivals[i] = val; return; }
+    }
+    if (m->len < m->cap) { m->keys[m->len] = key; m->ivals[m->len] = val; m->len++; }
+}
+
+static const char *_strmap_get_str(StrMap *m, const char *key, const char *def) {
+    if (!m) return def;
+    for (size_t i = 0; i < m->len; i++) {
+        if (strcmp(m->keys[i], key) == 0) return m->vals[i];
+    }
+    return def;
+}
+
+static int64_t _strmap_get_int(StrMap *m, const char *key, int64_t def) {
+    if (!m) return def;
+    for (size_t i = 0; i < m->len; i++) {
+        if (strcmp(m->keys[i], key) == 0) return m->ivals[i];
+    }
+    return def;
+}
+
+static bool _strmap_contains(StrMap *m, const char *key) {
+    if (!m) return false;
+    for (size_t i = 0; i < m->len; i++) {
+        if (strcmp(m->keys[i], key) == 0) return true;
+    }
+    return false;
+}
+
 static uint64_t _hash_str(const char *s) {
     uint64_t h = 5381;
     while (*s) h = ((h << 5) + h) ^ (unsigned char)*s++;
@@ -1327,10 +1390,8 @@ static bool _set_contains(void *set, const char *key) {
     return false;
 }
 
-// Generic map membership (placeholder - maps aren't fully implemented)
 static bool _map_contains(void *map, const char *key) {
-    (void)map; (void)key;
-    return false;
+    return _strmap_contains((StrMap *)map, key);
 }
 
 """
@@ -1718,6 +1779,17 @@ static bool _map_contains(void *map, const char *key) {
                 self._line(f"{c_type} {name} = {{0}};{ownership_comment}")
 
     def _emit_stmt_Assign(self, stmt: Assign) -> None:
+        # Map index assignment: map[key] = value -> _strmap_set_*(map, key, value)
+        if isinstance(stmt.target, IndexLV) and isinstance(stmt.target.obj.typ, Map):
+            obj = self._emit_expr(stmt.target.obj)
+            idx = self._emit_expr(stmt.target.index)
+            value = self._emit_expr(stmt.value)
+            val_type = stmt.target.obj.typ.value
+            if isinstance(val_type, Primitive) and val_type.kind == "int":
+                self._line(f"_strmap_set_int({obj}, {idx}, {value});")
+            else:
+                self._line(f"_strmap_set_str({obj}, {idx}, {value});")
+            return
         target = self._emit_lvalue(stmt.target)
         value = self._emit_expr(stmt.value)
         # Check escape analysis: if borrowed string value escapes (stored in field), copy it
@@ -2604,7 +2676,10 @@ static bool _map_contains(void *map, const char *key) {
         if isinstance(obj_type, Slice):
             return f"{obj}.data[{idx}]"
         if isinstance(obj_type, Map):
-            return f"/* map index */ {obj}[{idx}]"
+            val_type = obj_type.value
+            if isinstance(val_type, Primitive) and val_type.kind == "int":
+                return f"_strmap_get_int({obj}, {idx}, 0)"
+            return f'_strmap_get_str({obj}, {idx}, "")'
         if isinstance(obj_type, Tuple):
             # Tuple indexing - use field name F0, F1, etc.
             if isinstance(expr.index, IntLit):
@@ -2774,15 +2849,13 @@ static bool _map_contains(void *map, const char *key) {
         # Dict methods
         if isinstance(obj_type, Map):
             if method == "get" and expr.args:
-                # Map.get returns default value for missing keys
+                key_expr = args_expr[0]
                 val_type = obj_type.value
-                if val_type == INT:
-                    return f"0 /* map_get({obj}, {args_expr[0]}) */"
-                if val_type == BOOL:
-                    return f"false /* map_get({obj}, {args_expr[0]}) */"
-                if val_type == STRING:
-                    return f'"" /* map_get({obj}, {args_expr[0]}) */'
-                return f"NULL /* map_get({obj}, {args_expr[0]}) */"
+                if isinstance(val_type, Primitive) and val_type.kind == "int":
+                    default = args_expr[1] if len(args_expr) > 1 else "0"
+                    return f"_strmap_get_int({obj}, {key_expr}, {default})"
+                default = args_expr[1] if len(args_expr) > 1 else '""'
+                return f"_strmap_get_str({obj}, {key_expr}, {default})"
         # Regular method call - handle struct, interface, and pointer types
         # Unwrap Optional if present
         actual_type = obj_type
@@ -2995,6 +3068,14 @@ static bool _map_contains(void *map, const char *key) {
             and expr.to_type.kind == "string"
         ):
             return f"((const char *)({inner}.data))"
+        # int/rune to string: chr() — convert codepoint to UTF-8 string
+        if (
+            isinstance(expr.to_type, Primitive)
+            and expr.to_type.kind == "string"
+            and isinstance(expr.expr.typ, Primitive)
+            and expr.expr.typ.kind in ("int", "rune", "byte")
+        ):
+            return f"_rune_to_str(g_arena, {inner})"
         return f"({to_type})({inner})"
 
     def _emit_expr_TypeAssert(self, expr: TypeAssert) -> str:
@@ -3033,8 +3114,8 @@ static bool _map_contains(void *map, const char *key) {
         return f"((Vec_{sig}){{NULL, 0, 0}})"
 
     def _emit_expr_MakeMap(self, expr: MakeMap) -> str:
-        # Maps are void* for now - return NULL
-        return "NULL"
+        is_int = isinstance(expr.value_type, Primitive) and expr.value_type.kind == "int"
+        return f"_strmap_new(g_arena, 16, {'true' if is_int else 'false'})"
 
     def _emit_expr_SliceLit(self, expr: SliceLit) -> str:
         vec_type = self._type_to_c(Slice(expr.element_type))
@@ -3049,8 +3130,17 @@ static bool _map_contains(void *map, const char *key) {
         return f"({{ {elem_type} *_slc = ({elem_type} *)arena_alloc(g_arena, {n} * sizeof({elem_type})); {assigns}; ({vec_type}){{_slc, {n}, {n}}}; }})"
 
     def _emit_expr_MapLit(self, expr: MapLit) -> str:
-        # Maps are void* for now - return NULL
-        return "NULL"
+        is_int = isinstance(expr.value_type, Primitive) and expr.value_type.kind == "int"
+        n = len(expr.entries)
+        cap = max(n, 4)
+        alloc = f"_strmap_new(g_arena, {cap}, {'true' if is_int else 'false'})"
+        setter = "_strmap_set_int" if is_int else "_strmap_set_str"
+        tmp = self._temp_name("_map")
+        sets = "; ".join(
+            f"{setter}({tmp}, {self._emit_expr(k)}, {self._emit_expr(v)})"
+            for k, v in expr.entries
+        )
+        return f"({{ StrMap *{tmp} = {alloc}; {sets}; {tmp}; }})"
 
     def _emit_expr_SetLit(self, expr: SetLit) -> str:
         if isinstance(expr.element_type, Primitive) and expr.element_type.kind == "string":
@@ -3391,7 +3481,7 @@ static bool _map_contains(void *map, const char *key) {
             elem = self._type_to_c(typ.element)
             return f"{elem}[{typ.size}]"
         if isinstance(typ, Map):
-            return "void *"  # Simplified - would need proper map struct
+            return "StrMap *"
         if isinstance(typ, Set):
             return "void *"  # Simplified - would need proper set struct
         if isinstance(typ, Tuple):

@@ -190,36 +190,36 @@ static const char *_kind_to_str(int kind) {
     case KIND_FORARITH: return "for-arith";
     case KIND_SELECT: return "select";
     case KIND_CASE: return "case";
-    case KIND_CASEPATTERN: return "case-pattern";
+    case KIND_CASEPATTERN: return "pattern";
     case KIND_FUNCTION: return "function";
-    case KIND_PARAMEXPANSION: return "param-expansion";
-    case KIND_PARAMLENGTH: return "param-length";
+    case KIND_PARAMEXPANSION: return "param";
+    case KIND_PARAMLENGTH: return "param-len";
     case KIND_PARAMINDIRECT: return "param-indirect";
-    case KIND_COMMANDSUBSTITUTION: return "command-substitution";
-    case KIND_ARITHMETICEXPANSION: return "arithmetic-expansion";
-    case KIND_ARITHMETICCOMMAND: return "arithmetic-command";
-    case KIND_ARITHNUMBER: return "arith-number";
-    case KIND_ARITHEMPTY: return "arith-empty";
-    case KIND_ARITHVAR: return "arith-var";
-    case KIND_ARITHBINARYOP: return "arith-binary-op";
-    case KIND_ARITHUNARYOP: return "arith-unary-op";
-    case KIND_ARITHPREINCR: return "arith-pre-incr";
-    case KIND_ARITHPOSTINCR: return "arith-post-incr";
-    case KIND_ARITHPREDECR: return "arith-pre-decr";
-    case KIND_ARITHPOSTDECR: return "arith-post-decr";
-    case KIND_ARITHASSIGN: return "arith-assign";
-    case KIND_ARITHTERNARY: return "arith-ternary";
-    case KIND_ARITHCOMMA: return "arith-comma";
-    case KIND_ARITHSUBSCRIPT: return "arith-subscript";
-    case KIND_ARITHESCAPE: return "arith-escape";
+    case KIND_COMMANDSUBSTITUTION: return "cmdsub";
+    case KIND_ARITHMETICEXPANSION: return "arith";
+    case KIND_ARITHMETICCOMMAND: return "arith-cmd";
+    case KIND_ARITHNUMBER: return "number";
+    case KIND_ARITHEMPTY: return "empty";
+    case KIND_ARITHVAR: return "var";
+    case KIND_ARITHBINARYOP: return "binary-op";
+    case KIND_ARITHUNARYOP: return "unary-op";
+    case KIND_ARITHPREINCR: return "pre-incr";
+    case KIND_ARITHPOSTINCR: return "post-incr";
+    case KIND_ARITHPREDECR: return "pre-decr";
+    case KIND_ARITHPOSTDECR: return "post-decr";
+    case KIND_ARITHASSIGN: return "assign";
+    case KIND_ARITHTERNARY: return "ternary";
+    case KIND_ARITHCOMMA: return "comma";
+    case KIND_ARITHSUBSCRIPT: return "subscript";
+    case KIND_ARITHESCAPE: return "escape";
     case KIND_ARITHDEPRECATED: return "arith-deprecated";
     case KIND_ARITHCONCAT: return "arith-concat";
-    case KIND_ANSICQUOTE: return "ansi-c-quote";
-    case KIND_LOCALESTRING: return "locale-string";
-    case KIND_PROCESSSUBSTITUTION: return "process-substitution";
+    case KIND_ANSICQUOTE: return "ansi-c";
+    case KIND_LOCALESTRING: return "locale";
+    case KIND_PROCESSSUBSTITUTION: return "procsub";
     case KIND_NEGATION: return "negation";
     case KIND_TIME: return "time";
-    case KIND_CONDITIONALEXPR: return "conditional-expr";
+    case KIND_CONDITIONALEXPR: return "cond-expr";
     case KIND_UNARYTEST: return "unary-test";
     case KIND_BINARYTEST: return "binary-test";
     case KIND_CONDAND: return "cond-and";
@@ -409,6 +409,15 @@ static bool _str_startswith(const char *s, const char *prefix) {
     if (!s || !prefix) return false;
     size_t plen = strlen(prefix);
     return strncmp(s, prefix, plen) == 0;
+}
+
+static bool _str_startswith_at(const char *s, int64_t pos, const char *prefix) {
+    if (!s || !prefix || pos < 0) return false;
+    size_t slen = strlen(s);
+    if ((size_t)pos >= slen) return false;
+    size_t plen = strlen(prefix);
+    if (slen - (size_t)pos < plen) return false;
+    return strncmp(s + pos, prefix, plen) == 0;
 }
 
 static bool _str_endswith(const char *s, const char *suffix) {
@@ -751,17 +760,24 @@ static char *_str_join(Arena *a, const char *sep, Vec_Str vec) {
     if (vec.len == 0) return arena_strdup(a, "");
     size_t sep_len = strlen(sep);
     size_t total = 0;
+    int first = 1;
     for (size_t i = 0; i < vec.len; i++) {
+        if (!vec.data[i]) continue;
+        if (!first) total += sep_len;
         total += strlen(vec.data[i]);
-        if (i > 0) total += sep_len;
+        first = 0;
     }
+    if (first) return arena_strdup(a, "");
     char *result = (char *)arena_alloc(a, total + 1);
     char *p = result;
+    first = 1;
     for (size_t i = 0; i < vec.len; i++) {
-        if (i > 0) { memcpy(p, sep, sep_len); p += sep_len; }
+        if (!vec.data[i]) continue;
+        if (!first) { memcpy(p, sep, sep_len); p += sep_len; }
         size_t len = strlen(vec.data[i]);
         memcpy(p, vec.data[i], len);
         p += len;
+        first = 0;
     }
     *p = '\0';
     return result;
@@ -2378,16 +2394,16 @@ static const char * _substring(const char * s, int64_t start, int64_t end) {
 }
 
 static bool _starts_with_at(const char * s, int64_t pos, const char * prefix) {
-    return _str_startswith(s, prefix);
+    return _str_startswith_at(s, pos, prefix);
 }
 
 static int64_t _count_consecutive_dollars_before(const char * s, int64_t pos) {
     int64_t count = 0;
     int64_t k = (pos - 1);
-    while (((k >= 0) && (strcmp((const char *)(_char_at_str(g_arena, s, k)), "$") == 0))) {
+    while (!g_parse_error && (((k >= 0) && (strcmp((const char *)(_char_at_str(g_arena, s, k)), "$") == 0)))) {
         int64_t bs_count = 0;
         int64_t j = (k - 1);
-        while (((j >= 0) && (strcmp((const char *)(_char_at_str(g_arena, s, j)), "\\") == 0))) {
+        while (!g_parse_error && (((j >= 0) && (strcmp((const char *)(_char_at_str(g_arena, s, j)), "\\") == 0)))) {
             bs_count += 1;
             j -= 1;
         }
@@ -2414,7 +2430,7 @@ static Vec_Node _sublist(Vec_Node lst, int64_t start, int64_t end) {
 static const char * _repeat_str(const char * s, int64_t n) {
     Vec_Str result = (Vec_Str){NULL, 0, 0};
     int64_t i = 0;
-    while ((i < n)) {
+    while (!g_parse_error && ((i < n))) {
         VEC_PUSH(g_arena, &result, (s));
         i += 1;
     }
@@ -2426,12 +2442,12 @@ static const char * _strip_line_continuations_comment_aware(const char * text) {
     int64_t i = 0;
     bool in_comment = false;
     QuoteState * quote = new_quote_state();
-    while ((i < _rune_len(text))) {
+    while (!g_parse_error && ((i < _rune_len(text)))) {
         const char * c = (const char *)(_char_at_str(g_arena, text, i));
         if ((((strcmp(c, "\\") == 0) && ((i + 1) < _rune_len(text))) && (strcmp((const char *)(_char_at_str(g_arena, text, (i + 1))), "\n") == 0))) {
             int64_t num_preceding_backslashes = 0;
             int64_t j = (i - 1);
-            while (((j >= 0) && (strcmp((const char *)(_char_at_str(g_arena, text, j)), "\\") == 0))) {
+            while (!g_parse_error && (((j >= 0) && (strcmp((const char *)(_char_at_str(g_arena, text, j)), "\\") == 0)))) {
                 num_preceding_backslashes += 1;
                 j -= 1;
             }
@@ -2490,7 +2506,7 @@ static const char * _format_arith_val(const char * s) {
 static Tuple_int64_t_Vec_Str _consume_single_quote(const char * s, int64_t start) {
     Vec_Str chars = ({ const char * *_slc = (const char * *)arena_alloc(g_arena, 1 * sizeof(const char *)); _slc[0] = "'"; (Vec_Str){_slc, 1, 1}; });
     int64_t i = (start + 1);
-    while (((i < _rune_len(s)) && (strcmp((const char *)(_char_at_str(g_arena, s, i)), "'") != 0))) {
+    while (!g_parse_error && (((i < _rune_len(s)) && (strcmp((const char *)(_char_at_str(g_arena, s, i)), "'") != 0)))) {
         VEC_PUSH(g_arena, &chars, ((const char *)(_char_at_str(g_arena, s, i))));
         i += 1;
     }
@@ -2504,7 +2520,7 @@ static Tuple_int64_t_Vec_Str _consume_single_quote(const char * s, int64_t start
 static Tuple_int64_t_Vec_Str _consume_double_quote(const char * s, int64_t start) {
     Vec_Str chars = ({ const char * *_slc = (const char * *)arena_alloc(g_arena, 1 * sizeof(const char *)); _slc[0] = "\""; (Vec_Str){_slc, 1, 1}; });
     int64_t i = (start + 1);
-    while (((i < _rune_len(s)) && (strcmp((const char *)(_char_at_str(g_arena, s, i)), "\"") != 0))) {
+    while (!g_parse_error && (((i < _rune_len(s)) && (strcmp((const char *)(_char_at_str(g_arena, s, i)), "\"") != 0)))) {
         if (((strcmp((const char *)(_char_at_str(g_arena, s, i)), "\\") == 0) && ((i + 1) < _rune_len(s)))) {
             VEC_PUSH(g_arena, &chars, ((const char *)(_char_at_str(g_arena, s, i))));
             i += 1;
@@ -2521,7 +2537,7 @@ static Tuple_int64_t_Vec_Str _consume_double_quote(const char * s, int64_t start
 
 static bool _has_bracket_close(const char * s, int64_t start, int64_t depth) {
     int64_t i = start;
-    while ((i < _rune_len(s))) {
+    while (!g_parse_error && ((i < _rune_len(s)))) {
         if ((strcmp((const char *)(_char_at_str(g_arena, s, i)), "]") == 0)) {
             return true;
         }
@@ -2544,7 +2560,7 @@ static Tuple_int64_t_Vec_Str_bool _consume_bracket_class(const char * s, int64_t
         }
     }
     bool is_bracket = false;
-    while ((scan_pos < _rune_len(s))) {
+    while (!g_parse_error && ((scan_pos < _rune_len(s)))) {
         if ((strcmp((const char *)(_char_at_str(g_arena, s, scan_pos)), "]") == 0)) {
             is_bracket = true;
             break;
@@ -2572,7 +2588,7 @@ static Tuple_int64_t_Vec_Str_bool _consume_bracket_class(const char * s, int64_t
             i += 1;
         }
     }
-    while (((i < _rune_len(s)) && (strcmp((const char *)(_char_at_str(g_arena, s, i)), "]") != 0))) {
+    while (!g_parse_error && (((i < _rune_len(s)) && (strcmp((const char *)(_char_at_str(g_arena, s, i)), "]") != 0)))) {
         VEC_PUSH(g_arena, &chars, ((const char *)(_char_at_str(g_arena, s, i))));
         i += 1;
     }
@@ -2644,7 +2660,7 @@ static const char * _format_cmdsub_node(Node * node, int64_t indent, bool in_pro
     const char * sp = _str_repeat(g_arena, " ", indent);
     const char * inner_sp = _str_repeat(g_arena, " ", (indent + 4));
     void *_tsexpr4 = node;
-    if (strcmp(((ArithEmpty *)_tsexpr4)->kind, "arith-empty") == 0) {
+    if (strcmp(((ArithEmpty *)_tsexpr4)->kind, "empty") == 0) {
         ArithEmpty *node = (ArithEmpty *)_tsexpr4;
         return "";
     }
@@ -2709,7 +2725,7 @@ static const char * _format_cmdsub_node(Node * node, int64_t indent, bool in_pro
         Pipeline *node = (Pipeline *)_tsexpr7;
         cmds = (Vec_Tuple_NodePtr_bool){NULL, 0, 0};
         i = 0;
-        while ((i < node->commands.len)) {
+        while (!g_parse_error && ((i < node->commands.len))) {
             cmd = (Node *)node->commands.data[i];
             void *_tsexpr8 = cmd;
             if (strcmp(((PipeBoth *)_tsexpr8)->kind, "pipe-both") == 0) {
@@ -2723,7 +2739,7 @@ static const char * _format_cmdsub_node(Node * node, int64_t indent, bool in_pro
         }
         result_parts = (Vec_Str){NULL, 0, 0};
         idx = 0;
-        while ((idx < cmds.len)) {
+        while (!g_parse_error && ((idx < cmds.len))) {
             {
                 Tuple_NodePtr_bool _entry = cmds.data[idx];  // borrowed
                 cmd = (Node *)_entry.F0;
@@ -2769,7 +2785,7 @@ static const char * _format_cmdsub_node(Node * node, int64_t indent, bool in_pro
         compact_pipe = ((in_procsub && (cmds.len > 0)) && (strcmp(cmds.data[0].F0->kind, "subshell") == 0));
         result = "";
         idx = 0;
-        while ((idx < result_parts.len)) {
+        while (!g_parse_error && ((idx < result_parts.len))) {
             part = result_parts.data[idx];
             if ((idx > 0)) {
                 if (_str_endswith(result, "\n")) {
@@ -2904,11 +2920,11 @@ static const char * _format_cmdsub_node(Node * node, int64_t indent, bool in_pro
         if ((_str_contains(s, " &\n") && _str_endswith(s, "\n"))) {
             return _str_concat(g_arena, s, " ");
         }
-        while (_str_endswith(s, ";")) {
+        while (!g_parse_error && (_str_endswith(s, ";"))) {
             s = _substring(s, 0, (_rune_len(s) - 1));
         }
         if (!(has_heredoc)) {
-            while (_str_endswith(s, "\n")) {
+            while (!g_parse_error && (_str_endswith(s, "\n"))) {
                 s = _substring(s, 0, (_rune_len(s) - 1));
             }
         }
@@ -3021,7 +3037,7 @@ static const char * _format_cmdsub_node(Node * node, int64_t indent, bool in_pro
         word = node->word->value;
         patterns = (Vec_Str){NULL, 0, 0};
         i = 0;
-        while ((i < node->patterns.len)) {
+        while (!g_parse_error && ((i < node->patterns.len))) {
             p = node->patterns.data[i];
             pat = _str_replace(g_arena, p->pattern, "|", " | ");
             if ((p->body != NULL)) {
@@ -3112,12 +3128,12 @@ static const char * _format_cmdsub_node(Node * node, int64_t indent, bool in_pro
         return _str_concat(g_arena, _str_concat(g_arena, "{ ", body), terminator);
     }
     void *_tsexpr24 = node;
-    if (strcmp(((ArithmeticCommand *)_tsexpr24)->kind, "arithmetic-command") == 0) {
+    if (strcmp(((ArithmeticCommand *)_tsexpr24)->kind, "arith-cmd") == 0) {
         ArithmeticCommand *node = (ArithmeticCommand *)_tsexpr24;
         return _str_concat(g_arena, _str_concat(g_arena, "((", node->raw_content), "))");
     }
     void *_tsexpr25 = node;
-    if (strcmp(((ConditionalExpr *)_tsexpr25)->kind, "conditional-expr") == 0) {
+    if (strcmp(((ConditionalExpr *)_tsexpr25)->kind, "cond-expr") == 0) {
         ConditionalExpr *node = (ConditionalExpr *)_tsexpr25;
         body = _format_cond_body((Node *)((Node *)(node->body)));
         return _str_concat(g_arena, _str_concat(g_arena, "[[ ", body), " ]]");
@@ -3215,7 +3231,7 @@ static bool _lookahead_for_esac(const char * value, int64_t start, int64_t case_
     int64_t i = start;
     int64_t depth = case_depth;
     QuoteState * quote = new_quote_state();
-    while ((i < _rune_len(value))) {
+    while (!g_parse_error && ((i < _rune_len(value)))) {
         const char * c = (const char *)(_char_at_str(g_arena, value, i));
         if ((((strcmp(c, "\\") == 0) && ((i + 1) < _rune_len(value))) && quote->double_)) {
             i += 2;
@@ -3261,7 +3277,7 @@ static bool _lookahead_for_esac(const char * value, int64_t start, int64_t case_
 
 static int64_t _skip_backtick(const char * value, int64_t start) {
     int64_t i = (start + 1);
-    while (((i < _rune_len(value)) && (strcmp((const char *)(_char_at_str(g_arena, value, i)), "`") != 0))) {
+    while (!g_parse_error && (((i < _rune_len(value)) && (strcmp((const char *)(_char_at_str(g_arena, value, i)), "`") != 0)))) {
         if (((strcmp((const char *)(_char_at_str(g_arena, value, i)), "\\") == 0) && ((i + 1) < _rune_len(value)))) {
             i += 2;
         } else {
@@ -3276,7 +3292,7 @@ static int64_t _skip_backtick(const char * value, int64_t start) {
 
 static int64_t _skip_single_quoted(const char * s, int64_t start) {
     int64_t i = start;
-    while (((i < _rune_len(s)) && (strcmp((const char *)(_char_at_str(g_arena, s, i)), "'") != 0))) {
+    while (!g_parse_error && (((i < _rune_len(s)) && (strcmp((const char *)(_char_at_str(g_arena, s, i)), "'") != 0)))) {
         i += 1;
     }
     return ((i < _rune_len(s)) ? (i + 1) : i);
@@ -3287,7 +3303,7 @@ static int64_t _skip_double_quoted(const char * s, int64_t start) {
     int64_t n = _rune_len(s);
     bool pass_next = false;
     bool backq = false;
-    while ((i < n)) {
+    while (!g_parse_error && ((i < n))) {
         const char * c = (const char *)(_char_at_str(g_arena, s, i));
         if (pass_next) {
             pass_next = false;
@@ -3332,7 +3348,7 @@ static int64_t _skip_double_quoted(const char * s, int64_t start) {
 static bool _is_valid_arithmetic_start(const char * value, int64_t start) {
     int64_t scan_paren = 0;
     int64_t scan_i = (start + 3);
-    while ((scan_i < _rune_len(value))) {
+    while (!g_parse_error && ((scan_i < _rune_len(value)))) {
         const char * scan_c = (const char *)(_char_at_str(g_arena, value, scan_i));
         if (_is_expansion_start(value, scan_i, "$(")) {
             scan_i = _find_cmdsub_end(value, (scan_i + 2));
@@ -3358,7 +3374,7 @@ static int64_t _find_funsub_end(const char * value, int64_t start) {
     int64_t depth = 1;
     int64_t i = start;
     QuoteState * quote = new_quote_state();
-    while (((i < _rune_len(value)) && (depth > 0))) {
+    while (!g_parse_error && (((i < _rune_len(value)) && (depth > 0)))) {
         const char * c = (const char *)(_char_at_str(g_arena, value, i));
         if ((((strcmp(c, "\\") == 0) && ((i + 1) < _rune_len(value))) && !(quote->single))) {
             i += 2;
@@ -3398,7 +3414,7 @@ static int64_t _find_cmdsub_end(const char * value, int64_t start) {
     bool in_case_patterns = false;
     int64_t arith_depth = 0;
     int64_t arith_paren_depth = 0;
-    while (((i < _rune_len(value)) && (depth > 0))) {
+    while (!g_parse_error && (((i < _rune_len(value)) && (depth > 0)))) {
         const char * c = (const char *)(_char_at_str(g_arena, value, i));
         if (((strcmp(c, "\\") == 0) && ((i + 1) < _rune_len(value)))) {
             i += 2;
@@ -3413,19 +3429,19 @@ static int64_t _find_cmdsub_end(const char * value, int64_t start) {
             continue;
         }
         if ((((strcmp(c, "#") == 0) && (arith_depth == 0)) && (((((((((i == start) || (strcmp((const char *)(_char_at_str(g_arena, value, (i - 1))), " ") == 0)) || (strcmp((const char *)(_char_at_str(g_arena, value, (i - 1))), "\t") == 0)) || (strcmp((const char *)(_char_at_str(g_arena, value, (i - 1))), "\n") == 0)) || (strcmp((const char *)(_char_at_str(g_arena, value, (i - 1))), ";") == 0)) || (strcmp((const char *)(_char_at_str(g_arena, value, (i - 1))), "|") == 0)) || (strcmp((const char *)(_char_at_str(g_arena, value, (i - 1))), "&") == 0)) || (strcmp((const char *)(_char_at_str(g_arena, value, (i - 1))), "(") == 0)) || (strcmp((const char *)(_char_at_str(g_arena, value, (i - 1))), ")") == 0)))) {
-            while (((i < _rune_len(value)) && (strcmp((const char *)(_char_at_str(g_arena, value, i)), "\n") != 0))) {
+            while (!g_parse_error && (((i < _rune_len(value)) && (strcmp((const char *)(_char_at_str(g_arena, value, i)), "\n") != 0)))) {
                 i += 1;
             }
             continue;
         }
         if (_starts_with_at(value, i, "<<<")) {
             i += 3;
-            while (((i < _rune_len(value)) && ((strcmp((const char *)(_char_at_str(g_arena, value, i)), " ") == 0) || (strcmp((const char *)(_char_at_str(g_arena, value, i)), "\t") == 0)))) {
+            while (!g_parse_error && (((i < _rune_len(value)) && ((strcmp((const char *)(_char_at_str(g_arena, value, i)), " ") == 0) || (strcmp((const char *)(_char_at_str(g_arena, value, i)), "\t") == 0))))) {
                 i += 1;
             }
             if (((i < _rune_len(value)) && (strcmp((const char *)(_char_at_str(g_arena, value, i)), "\"") == 0))) {
                 i += 1;
-                while (((i < _rune_len(value)) && (strcmp((const char *)(_char_at_str(g_arena, value, i)), "\"") != 0))) {
+                while (!g_parse_error && (((i < _rune_len(value)) && (strcmp((const char *)(_char_at_str(g_arena, value, i)), "\"") != 0)))) {
                     if (((strcmp((const char *)(_char_at_str(g_arena, value, i)), "\\") == 0) && ((i + 1) < _rune_len(value)))) {
                         i += 2;
                     } else {
@@ -3437,14 +3453,14 @@ static int64_t _find_cmdsub_end(const char * value, int64_t start) {
                 }
             } else if (((i < _rune_len(value)) && (strcmp((const char *)(_char_at_str(g_arena, value, i)), "'") == 0))) {
                 i += 1;
-                while (((i < _rune_len(value)) && (strcmp((const char *)(_char_at_str(g_arena, value, i)), "'") != 0))) {
+                while (!g_parse_error && (((i < _rune_len(value)) && (strcmp((const char *)(_char_at_str(g_arena, value, i)), "'") != 0)))) {
                     i += 1;
                 }
                 if ((i < _rune_len(value))) {
                     i += 1;
                 }
             } else {
-                while (((i < _rune_len(value)) && !_str_contains(" \t\n;|&<>()", (const char *)(_char_at_str(g_arena, value, i))))) {
+                while (!g_parse_error && (((i < _rune_len(value)) && !_str_contains(" \t\n;|&<>()", (const char *)(_char_at_str(g_arena, value, i)))))) {
                     i += 1;
                 }
             }
@@ -3527,7 +3543,7 @@ static int64_t _find_braced_param_end(const char * value, int64_t start) {
     int64_t i = start;
     bool in_double = false;
     int64_t dolbrace_state = DOLBRACESTATE_PARAM;
-    while (((i < _rune_len(value)) && (depth > 0))) {
+    while (!g_parse_error && (((i < _rune_len(value)) && (depth > 0)))) {
         const char * c = (const char *)(_char_at_str(g_arena, value, i));
         if (((strcmp(c, "\\") == 0) && ((i + 1) < _rune_len(value)))) {
             i += 2;
@@ -3588,7 +3604,7 @@ static int64_t _skip_heredoc(const char * value, int64_t start) {
     if (((i < _rune_len(value)) && (strcmp((const char *)(_char_at_str(g_arena, value, i)), "-") == 0))) {
         i += 1;
     }
-    while (((i < _rune_len(value)) && _is_whitespace_no_newline((const char *)(_char_at_str(g_arena, value, i))))) {
+    while (!g_parse_error && (((i < _rune_len(value)) && _is_whitespace_no_newline((const char *)(_char_at_str(g_arena, value, i)))))) {
         i += 1;
     }
     int64_t delim_start = i;
@@ -3598,7 +3614,7 @@ static int64_t _skip_heredoc(const char * value, int64_t start) {
         quote_char = (const char *)(_char_at_str(g_arena, value, i));
         i += 1;
         delim_start = i;
-        while (((i < _rune_len(value)) && (strcmp((const char *)(_char_at_str(g_arena, value, i)), quote_char) != 0))) {
+        while (!g_parse_error && (((i < _rune_len(value)) && (strcmp((const char *)(_char_at_str(g_arena, value, i)), quote_char) != 0)))) {
             i += 1;
         }
         delimiter = _substring(value, delim_start, i);
@@ -3611,12 +3627,12 @@ static int64_t _skip_heredoc(const char * value, int64_t start) {
         if ((i < _rune_len(value))) {
             i += 1;
         }
-        while (((i < _rune_len(value)) && !(_is_metachar((const char *)(_char_at_str(g_arena, value, i)))))) {
+        while (!g_parse_error && (((i < _rune_len(value)) && !(_is_metachar((const char *)(_char_at_str(g_arena, value, i))))))) {
             i += 1;
         }
         delimiter = _substring(value, delim_start, i);
     } else {
-        while (((i < _rune_len(value)) && !(_is_metachar((const char *)(_char_at_str(g_arena, value, i)))))) {
+        while (!g_parse_error && (((i < _rune_len(value)) && !(_is_metachar((const char *)(_char_at_str(g_arena, value, i))))))) {
             i += 1;
         }
         delimiter = _substring(value, delim_start, i);
@@ -3624,7 +3640,7 @@ static int64_t _skip_heredoc(const char * value, int64_t start) {
     int64_t paren_depth = 0;
     QuoteState * quote = new_quote_state();
     bool in_backtick = false;
-    while (((i < _rune_len(value)) && (strcmp((const char *)(_char_at_str(g_arena, value, i)), "\n") != 0))) {
+    while (!g_parse_error && (((i < _rune_len(value)) && (strcmp((const char *)(_char_at_str(g_arena, value, i)), "\n") != 0)))) {
         const char * c = (const char *)(_char_at_str(g_arena, value, i));
         if ((((strcmp(c, "\\") == 0) && ((i + 1) < _rune_len(value))) && (quote->double_ || in_backtick))) {
             i += 2;
@@ -3665,14 +3681,14 @@ static int64_t _skip_heredoc(const char * value, int64_t start) {
     if (((i < _rune_len(value)) && (strcmp((const char *)(_char_at_str(g_arena, value, i)), "\n") == 0))) {
         i += 1;
     }
-    while ((i < _rune_len(value))) {
+    while (!g_parse_error && ((i < _rune_len(value)))) {
         int64_t line_start = i;
         int64_t line_end = i;
-        while (((line_end < _rune_len(value)) && (strcmp((const char *)(_char_at_str(g_arena, value, line_end)), "\n") != 0))) {
+        while (!g_parse_error && (((line_end < _rune_len(value)) && (strcmp((const char *)(_char_at_str(g_arena, value, line_end)), "\n") != 0)))) {
             line_end += 1;
         }
         const char * line = _substring(value, line_start, line_end);
-        while ((line_end < _rune_len(value))) {
+        while (!g_parse_error && ((line_end < _rune_len(value)))) {
             int64_t trailing_bs = 0;
             for (int64_t j = (_rune_len(line) - 1); (j > -(1)); j += -(1)) {
                 if ((strcmp((const char *)(_char_at_str(g_arena, line, j)), "\\") == 0)) {
@@ -3687,7 +3703,7 @@ static int64_t _skip_heredoc(const char * value, int64_t start) {
             line = __c_substring(g_arena, line, 0, (_rune_len(line) - 1));
             line_end += 1;
             int64_t next_line_start = line_end;
-            while (((line_end < _rune_len(value)) && (strcmp((const char *)(_char_at_str(g_arena, value, line_end)), "\n") != 0))) {
+            while (!g_parse_error && (((line_end < _rune_len(value)) && (strcmp((const char *)(_char_at_str(g_arena, value, line_end)), "\n") != 0)))) {
                 line_end += 1;
             }
             line = _str_concat(g_arena, line, _substring(value, next_line_start, line_end));
@@ -3723,7 +3739,7 @@ static Tuple_int64_t_int64_t _find_heredoc_content_end(const char * source, int6
         return (Tuple_int64_t_int64_t){start, start};
     }
     int64_t pos = start;
-    while (((pos < _rune_len(source)) && (strcmp((const char *)(_char_at_str(g_arena, source, pos)), "\n") != 0))) {
+    while (!g_parse_error && (((pos < _rune_len(source)) && (strcmp((const char *)(_char_at_str(g_arena, source, pos)), "\n") != 0)))) {
         pos += 1;
     }
     if ((pos >= _rune_len(source))) {
@@ -3735,14 +3751,14 @@ static Tuple_int64_t_int64_t _find_heredoc_content_end(const char * source, int6
         Tuple_constcharPtr_bool _item = delimiters.data[_idx];
         const char * delimiter = _item.F0;
         bool strip_tabs = _item.F1;
-        while ((pos < _rune_len(source))) {
+        while (!g_parse_error && ((pos < _rune_len(source)))) {
             int64_t line_start = pos;
             int64_t line_end = pos;
-            while (((line_end < _rune_len(source)) && (strcmp((const char *)(_char_at_str(g_arena, source, line_end)), "\n") != 0))) {
+            while (!g_parse_error && (((line_end < _rune_len(source)) && (strcmp((const char *)(_char_at_str(g_arena, source, line_end)), "\n") != 0)))) {
                 line_end += 1;
             }
             const char * line = _substring(source, line_start, line_end);
-            while ((line_end < _rune_len(source))) {
+            while (!g_parse_error && ((line_end < _rune_len(source)))) {
                 int64_t trailing_bs = 0;
                 for (int64_t j = (_rune_len(line) - 1); (j > -(1)); j += -(1)) {
                     if ((strcmp((const char *)(_char_at_str(g_arena, line, j)), "\\") == 0)) {
@@ -3757,7 +3773,7 @@ static Tuple_int64_t_int64_t _find_heredoc_content_end(const char * source, int6
                 line = __c_substring(g_arena, line, 0, (_rune_len(line) - 1));
                 line_end += 1;
                 int64_t next_line_start = line_end;
-                while (((line_end < _rune_len(source)) && (strcmp((const char *)(_char_at_str(g_arena, source, line_end)), "\n") != 0))) {
+                while (!g_parse_error && (((line_end < _rune_len(source)) && (strcmp((const char *)(_char_at_str(g_arena, source, line_end)), "\n") != 0)))) {
                     line_end += 1;
                 }
                 line = _str_concat(g_arena, line, _substring(source, next_line_start, line_end));
@@ -3838,7 +3854,7 @@ static int64_t _count_trailing_backslashes(const char * s) {
 static const char * _normalize_heredoc_delimiter(const char * delimiter) {
     Vec_Str result = (Vec_Str){NULL, 0, 0};
     int64_t i = 0;
-    while ((i < _rune_len(delimiter))) {
+    while (!g_parse_error && ((i < _rune_len(delimiter)))) {
         int64_t depth;
         Vec_Str inner;
         const char * inner_str;
@@ -3847,7 +3863,7 @@ static const char * _normalize_heredoc_delimiter(const char * delimiter) {
             i += 2;
             depth = 1;
             inner = (Vec_Str){NULL, 0, 0};
-            while (((i < _rune_len(delimiter)) && (depth > 0))) {
+            while (!g_parse_error && (((i < _rune_len(delimiter)) && (depth > 0)))) {
                 if ((strcmp((const char *)(_char_at_str(g_arena, delimiter, i)), "(") == 0)) {
                     depth += 1;
                     VEC_PUSH(g_arena, &inner, ((const char *)(_char_at_str(g_arena, delimiter, i))));
@@ -3871,7 +3887,7 @@ static const char * _normalize_heredoc_delimiter(const char * delimiter) {
             i += 2;
             depth = 1;
             inner = (Vec_Str){NULL, 0, 0};
-            while (((i < _rune_len(delimiter)) && (depth > 0))) {
+            while (!g_parse_error && (((i < _rune_len(delimiter)) && (depth > 0)))) {
                 if ((strcmp((const char *)(_char_at_str(g_arena, delimiter, i)), "{") == 0)) {
                     depth += 1;
                     VEC_PUSH(g_arena, &inner, ((const char *)(_char_at_str(g_arena, delimiter, i))));
@@ -3896,7 +3912,7 @@ static const char * _normalize_heredoc_delimiter(const char * delimiter) {
             i += 2;
             depth = 1;
             inner = (Vec_Str){NULL, 0, 0};
-            while (((i < _rune_len(delimiter)) && (depth > 0))) {
+            while (!g_parse_error && (((i < _rune_len(delimiter)) && (depth > 0)))) {
                 if ((strcmp((const char *)(_char_at_str(g_arena, delimiter, i)), "(") == 0)) {
                     depth += 1;
                     VEC_PUSH(g_arena, &inner, ((const char *)(_char_at_str(g_arena, delimiter, i))));
@@ -3973,7 +3989,7 @@ static int64_t _skip_matched_pair(const char * s, int64_t start, const char * op
     int64_t depth = 1;
     bool pass_next = false;
     bool backq = false;
-    while (((i < n) && (depth > 0))) {
+    while (!g_parse_error && (((i < n) && (depth > 0)))) {
         const char * c = (const char *)(_char_at_str(g_arena, s, i));
         if (pass_next) {
             pass_next = false;
@@ -4036,7 +4052,7 @@ static int64_t _assignment(const char * s, int64_t flags) {
         return -(1);
     }
     int64_t i = 1;
-    while ((i < _rune_len(s))) {
+    while (!g_parse_error && ((i < _rune_len(s)))) {
         const char * c = (const char *)(_char_at_str(g_arena, s, i));
         if ((strcmp(c, "=") == 0)) {
             return i;
@@ -4079,10 +4095,10 @@ static bool _is_array_assignment_prefix(Vec_Str chars) {
     }
     const char * s = _str_join(g_arena, "", chars);
     int64_t i = 1;
-    while (((i < _rune_len(s)) && (_str_is_alnum((const char *)(_char_at_str(g_arena, s, i))) || (strcmp((const char *)(_char_at_str(g_arena, s, i)), "_") == 0)))) {
+    while (!g_parse_error && (((i < _rune_len(s)) && (_str_is_alnum((const char *)(_char_at_str(g_arena, s, i))) || (strcmp((const char *)(_char_at_str(g_arena, s, i)), "_") == 0))))) {
         i += 1;
     }
-    while ((i < _rune_len(s))) {
+    while (!g_parse_error && ((i < _rune_len(s)))) {
         if ((strcmp((const char *)(_char_at_str(g_arena, s, i)), "[") != 0)) {
             return false;
         }
@@ -4118,7 +4134,7 @@ static bool _is_negation_boundary(const char * c) {
 static bool _is_backslash_escaped(const char * value, int64_t idx) {
     int64_t bs_count = 0;
     int64_t j = (idx - 1);
-    while (((j >= 0) && (strcmp((const char *)(_char_at_str(g_arena, value, j)), "\\") == 0))) {
+    while (!g_parse_error && (((j >= 0) && (strcmp((const char *)(_char_at_str(g_arena, value, j)), "\\") == 0)))) {
         bs_count += 1;
         j -= 1;
     }
@@ -4128,7 +4144,7 @@ static bool _is_backslash_escaped(const char * value, int64_t idx) {
 static bool _is_dollar_dollar_paren(const char * value, int64_t idx) {
     int64_t dollar_count = 0;
     int64_t j = (idx - 1);
-    while (((j >= 0) && (strcmp((const char *)(_char_at_str(g_arena, value, j)), "$") == 0))) {
+    while (!g_parse_error && (((j >= 0) && (strcmp((const char *)(_char_at_str(g_arena, value, j)), "$") == 0)))) {
         dollar_count += 1;
         j -= 1;
     }
@@ -4520,7 +4536,7 @@ static Token * Lexer__read_operator(Lexer *self) {
 }
 
 static void Lexer_skip_blanks(Lexer *self) {
-    while ((self->pos < self->length)) {
+    while (!g_parse_error && ((self->pos < self->length))) {
         const char * c = (const char *)(_char_at_str(g_arena, self->source, self->pos));
         if (((strcmp(c, " ") != 0) && (strcmp(c, "\t") != 0))) {
             break;
@@ -4545,7 +4561,7 @@ static bool Lexer__skip_comment(Lexer *self) {
             return false;
         }
     }
-    while (((self->pos < self->length) && (strcmp((const char *)(_char_at_str(g_arena, self->source, self->pos)), "\n") != 0))) {
+    while (!g_parse_error && (((self->pos < self->length) && (strcmp((const char *)(_char_at_str(g_arena, self->source, self->pos)), "\n") != 0)))) {
         self->pos += 1;
     }
     return true;
@@ -4554,7 +4570,7 @@ static bool Lexer__skip_comment(Lexer *self) {
 static Tuple_constcharPtr_bool Lexer__read_single_quote(Lexer *self, int64_t start) {
     Vec_Str chars = ({ const char * *_slc = (const char * *)arena_alloc(g_arena, 1 * sizeof(const char *)); _slc[0] = "'"; (Vec_Str){_slc, 1, 1}; });
     bool saw_newline = false;
-    while ((self->pos < self->length)) {
+    while (!g_parse_error && ((self->pos < self->length))) {
         const char * c = (const char *)(_char_at_str(g_arena, self->source, self->pos));
         if ((strcmp(c, "\n") == 0)) {
             saw_newline = true;
@@ -4623,7 +4639,7 @@ static bool Lexer__read_bracket_expression(Lexer *self, Vec_Str * chars, Vec_Nod
             scan += 1;
         }
         bool bracket_will_close = false;
-        while ((scan < self->length)) {
+        while (!g_parse_error && ((scan < self->length))) {
             const char * sc = (const char *)(_char_at_str(g_arena, self->source, scan));
             if ((((strcmp(sc, "]") == 0) && ((scan + 1) < self->length)) && (strcmp((const char *)(_char_at_str(g_arena, self->source, (scan + 1))), "]") == 0))) {
                 break;
@@ -4640,7 +4656,7 @@ static bool Lexer__read_bracket_expression(Lexer *self, Vec_Str * chars, Vec_Nod
             }
             if ((((strcmp(sc, "[") == 0) && ((scan + 1) < self->length)) && (strcmp((const char *)(_char_at_str(g_arena, self->source, (scan + 1))), ":") == 0))) {
                 scan += 2;
-                while (((scan < self->length) && !((((strcmp((const char *)(_char_at_str(g_arena, self->source, scan)), ":") == 0) && ((scan + 1) < self->length)) && (strcmp((const char *)(_char_at_str(g_arena, self->source, (scan + 1))), "]") == 0))))) {
+                while (!g_parse_error && (((scan < self->length) && !((((strcmp((const char *)(_char_at_str(g_arena, self->source, scan)), ":") == 0) && ((scan + 1) < self->length)) && (strcmp((const char *)(_char_at_str(g_arena, self->source, (scan + 1))), "]") == 0)))))) {
                     scan += 1;
                 }
                 if ((scan < self->length)) {
@@ -4669,7 +4685,7 @@ static bool Lexer__read_bracket_expression(Lexer *self, Vec_Str * chars, Vec_Nod
     if ((!(Lexer_at_end(self)) && (strcmp(Lexer_peek(self), "]") == 0))) {
         VEC_PUSH(g_arena, chars, (Lexer_advance(self)));
     }
-    while (!(Lexer_at_end(self))) {
+    while (!g_parse_error && (!(Lexer_at_end(self)))) {
         const char * c = Lexer_peek(self);
         if ((strcmp(c, "]") == 0)) {
             VEC_PUSH(g_arena, chars, (Lexer_advance(self)));
@@ -4678,7 +4694,7 @@ static bool Lexer__read_bracket_expression(Lexer *self, Vec_Str * chars, Vec_Nod
         if ((((strcmp(c, "[") == 0) && ((self->pos + 1) < self->length)) && (strcmp((const char *)(_char_at_str(g_arena, self->source, (self->pos + 1))), ":") == 0))) {
             VEC_PUSH(g_arena, chars, (Lexer_advance(self)));
             VEC_PUSH(g_arena, chars, (Lexer_advance(self)));
-            while ((!(Lexer_at_end(self)) && !((((strcmp(Lexer_peek(self), ":") == 0) && ((self->pos + 1) < self->length)) && (strcmp((const char *)(_char_at_str(g_arena, self->source, (self->pos + 1))), "]") == 0))))) {
+            while (!g_parse_error && ((!(Lexer_at_end(self)) && !((((strcmp(Lexer_peek(self), ":") == 0) && ((self->pos + 1) < self->length)) && (strcmp((const char *)(_char_at_str(g_arena, self->source, (self->pos + 1))), "]") == 0)))))) {
                 VEC_PUSH(g_arena, chars, (Lexer_advance(self)));
             }
             if (!(Lexer_at_end(self))) {
@@ -4688,7 +4704,7 @@ static bool Lexer__read_bracket_expression(Lexer *self, Vec_Str * chars, Vec_Nod
         } else if ((((!(for_regex) && (strcmp(c, "[") == 0)) && ((self->pos + 1) < self->length)) && (strcmp((const char *)(_char_at_str(g_arena, self->source, (self->pos + 1))), "=") == 0))) {
             VEC_PUSH(g_arena, chars, (Lexer_advance(self)));
             VEC_PUSH(g_arena, chars, (Lexer_advance(self)));
-            while ((!(Lexer_at_end(self)) && !((((strcmp(Lexer_peek(self), "=") == 0) && ((self->pos + 1) < self->length)) && (strcmp((const char *)(_char_at_str(g_arena, self->source, (self->pos + 1))), "]") == 0))))) {
+            while (!g_parse_error && ((!(Lexer_at_end(self)) && !((((strcmp(Lexer_peek(self), "=") == 0) && ((self->pos + 1) < self->length)) && (strcmp((const char *)(_char_at_str(g_arena, self->source, (self->pos + 1))), "]") == 0)))))) {
                 VEC_PUSH(g_arena, chars, (Lexer_advance(self)));
             }
             if (!(Lexer_at_end(self))) {
@@ -4698,7 +4714,7 @@ static bool Lexer__read_bracket_expression(Lexer *self, Vec_Str * chars, Vec_Nod
         } else if ((((!(for_regex) && (strcmp(c, "[") == 0)) && ((self->pos + 1) < self->length)) && (strcmp((const char *)(_char_at_str(g_arena, self->source, (self->pos + 1))), ".") == 0))) {
             VEC_PUSH(g_arena, chars, (Lexer_advance(self)));
             VEC_PUSH(g_arena, chars, (Lexer_advance(self)));
-            while ((!(Lexer_at_end(self)) && !((((strcmp(Lexer_peek(self), ".") == 0) && ((self->pos + 1) < self->length)) && (strcmp((const char *)(_char_at_str(g_arena, self->source, (self->pos + 1))), "]") == 0))))) {
+            while (!g_parse_error && ((!(Lexer_at_end(self)) && !((((strcmp(Lexer_peek(self), ".") == 0) && ((self->pos + 1) < self->length)) && (strcmp((const char *)(_char_at_str(g_arena, self->source, (self->pos + 1))), "]") == 0)))))) {
                 VEC_PUSH(g_arena, chars, (Lexer_advance(self)));
             }
             if (!(Lexer_at_end(self))) {
@@ -4727,7 +4743,7 @@ static const char * Lexer__parse_matched_pair(Lexer *self, const char * open_cha
     bool pass_next = false;
     bool was_dollar = initial_was_dollar;
     bool was_gtlt = false;
-    while ((count > 0)) {
+    while (!g_parse_error && ((count > 0))) {
         if (Lexer_at_end(self)) {
             g_parse_error = 1;
             snprintf(g_error_msg, sizeof(g_error_msg), "%s", _str_format(g_arena, "unexpected EOF while looking for matching `%v'", close_char));
@@ -4966,7 +4982,7 @@ static Word * Lexer__read_word_internal(Lexer *self, int64_t ctx, bool at_comman
     int64_t bracket_start_pos = -(1);
     bool seen_equals = false;
     int64_t paren_depth = 0;
-    while (!(Lexer_at_end(self))) {
+    while (!g_parse_error && (!(Lexer_at_end(self)))) {
         const char * ch = Lexer_peek(self);
         if ((ctx == WORD_CTX_REGEX)) {
             if ((((strcmp(ch, "\\") == 0) && ((self->pos + 1) < self->length)) && (strcmp((const char *)(_char_at_str(g_arena, self->source, (self->pos + 1))), "\n") == 0))) {
@@ -5064,7 +5080,7 @@ static Word * Lexer__read_word_internal(Lexer *self, int64_t ctx, bool at_comman
             if ((ctx == WORD_CTX_NORMAL)) {
                 VEC_PUSH(g_arena, &chars, ("\""));
                 bool in_single_in_dquote = false;
-                while ((!(Lexer_at_end(self)) && (in_single_in_dquote || (strcmp(Lexer_peek(self), "\"") != 0)))) {
+                while (!g_parse_error && ((!(Lexer_at_end(self)) && (in_single_in_dquote || (strcmp(Lexer_peek(self), "\"") != 0))))) {
                     const char * c = Lexer_peek(self);
                     if (in_single_in_dquote) {
                         VEC_PUSH(g_arena, &chars, (Lexer_advance(self)));
@@ -5301,7 +5317,7 @@ static Token * Lexer_next_token(Lexer *self) {
         self->_last_read_token = tok;
         return tok;
     }
-    while (Lexer__skip_comment(self)) {
+    while (!g_parse_error && (Lexer__skip_comment(self))) {
         Lexer_skip_blanks(self);
         if (Lexer_at_end(self)) {
             tok = Token_new(TOKENTYPE_EOF, "", self->pos, (Vec_Node){NULL, 0, 0}, NULL);
@@ -5350,7 +5366,7 @@ static Tuple_NodePtr_constcharPtr Lexer__read_ansi_c_quote(Lexer *self) {
     Lexer_advance(self);
     Vec_Str content_chars = (Vec_Str){NULL, 0, 0};
     bool found_close = false;
-    while (!(Lexer_at_end(self))) {
+    while (!g_parse_error && (!(Lexer_at_end(self)))) {
         const char * ch = Lexer_peek(self);
         if ((strcmp(ch, "'") == 0)) {
             Lexer_advance(self);
@@ -5401,7 +5417,7 @@ static Tuple_NodePtr_constcharPtr_Vec_Node Lexer__read_locale_string(Lexer *self
     Vec_Str content_chars = (Vec_Str){NULL, 0, 0};
     Vec_Node inner_parts = (Vec_Node){NULL, 0, 0};
     bool found_close = false;
-    while (!(Lexer_at_end(self))) {
+    while (!g_parse_error && (!(Lexer_at_end(self)))) {
         const char * ch = Lexer_peek(self);
         Node * cmdsub_node;
         const char * cmdsub_text;
@@ -5596,7 +5612,7 @@ static bool Lexer__param_subscript_has_close(Lexer *self, int64_t start_pos) {
     int64_t depth = 1;
     int64_t i = (start_pos + 1);
     QuoteState * quote = new_quote_state();
-    while ((i < self->length)) {
+    while (!g_parse_error && ((i < self->length))) {
         const char * c = (const char *)(_char_at_str(g_arena, self->source, i));
         if (quote->single) {
             if ((strcmp(c, "'") == 0)) {
@@ -5660,14 +5676,14 @@ static const char * Lexer__consume_param_name(Lexer *self) {
     }
     if (_str_is_digit(ch)) {
         Vec_Str name_chars = (Vec_Str){NULL, 0, 0};
-        while ((!(Lexer_at_end(self)) && _str_is_digit(Lexer_peek(self)))) {
+        while (!g_parse_error && ((!(Lexer_at_end(self)) && _str_is_digit(Lexer_peek(self))))) {
             VEC_PUSH(g_arena, &name_chars, (Lexer_advance(self)));
         }
         return _str_join(g_arena, "", name_chars);
     }
     if ((_str_is_alpha(ch) || (strcmp(ch, "_") == 0))) {
         Vec_Str name_chars = (Vec_Str){NULL, 0, 0};
-        while (!(Lexer_at_end(self))) {
+        while (!g_parse_error && (!(Lexer_at_end(self)))) {
             const char * c = Lexer_peek(self);
             if ((_str_is_alnum(c) || (strcmp(c, "_") == 0))) {
                 VEC_PUSH(g_arena, &name_chars, (Lexer_advance(self)));
@@ -5716,7 +5732,7 @@ static Tuple_NodePtr_constcharPtr Lexer__read_param_expansion(Lexer *self, bool 
     }
     if ((_str_is_alpha(ch) || (strcmp(ch, "_") == 0))) {
         int64_t name_start = self->pos;
-        while (!(Lexer_at_end(self))) {
+        while (!g_parse_error && (!(Lexer_at_end(self)))) {
             const char * c = Lexer_peek(self);
             if ((_str_is_alnum(c) || (strcmp(c, "_") == 0))) {
                 Lexer_advance(self);
@@ -5762,12 +5778,12 @@ static Tuple_NodePtr_constcharPtr Lexer__read_braced_param(Lexer *self, int64_t 
     const char * arg;
     if ((strcmp(ch, "!") == 0)) {
         Lexer_advance(self);
-        while ((!(Lexer_at_end(self)) && _is_whitespace_no_newline(Lexer_peek(self)))) {
+        while (!g_parse_error && ((!(Lexer_at_end(self)) && _is_whitespace_no_newline(Lexer_peek(self))))) {
             Lexer_advance(self);
         }
         param = Lexer__consume_param_name(self);
         if ((param != NULL && param[0] != '\0')) {
-            while ((!(Lexer_at_end(self)) && _is_whitespace_no_newline(Lexer_peek(self)))) {
+            while (!g_parse_error && ((!(Lexer_at_end(self)) && _is_whitespace_no_newline(Lexer_peek(self))))) {
                 Lexer_advance(self);
             }
             if ((!(Lexer_at_end(self)) && (strcmp(Lexer_peek(self), "}") == 0))) {
@@ -5839,7 +5855,7 @@ static Tuple_NodePtr_constcharPtr Lexer__read_braced_param(Lexer *self, int64_t 
         } else if ((!(Lexer_at_end(self)) && (strcmp(Lexer_peek(self), "`") == 0))) {
             int64_t backtick_pos = self->pos;
             Lexer_advance(self);
-            while ((!(Lexer_at_end(self)) && (strcmp(Lexer_peek(self), "`") != 0))) {
+            while (!g_parse_error && ((!(Lexer_at_end(self)) && (strcmp(Lexer_peek(self), "`") != 0)))) {
                 const char * bc = Lexer_peek(self);
                 if (((strcmp(bc, "\\") == 0) && ((self->pos + 1) < self->length))) {
                     const char * next_c = (const char *)(_char_at_str(g_arena, self->source, (self->pos + 1)));
@@ -5875,7 +5891,14 @@ static Tuple_NodePtr_constcharPtr Lexer__read_braced_param(Lexer *self, int64_t 
     int64_t flags = (in_dquote ? MATCHEDPAIRFLAGS_DQUOTE : MATCHEDPAIRFLAGS_NONE);
     bool param_ends_with_dollar = ((strcmp(param, "") != 0) && _str_endswith(param, "$"));
     arg = Lexer__collect_param_argument(self, flags, param_ends_with_dollar);
-    // } catch handled via error returns
+    if (g_parse_error) {
+        g_parse_error = 0;
+        g_error_msg[0] = '\0';
+        self->_dolbrace_state = saved_dolbrace;
+        // re-raise
+        return (Tuple_NodePtr_constcharPtr){NULL, NULL};
+    }
+    // } catch
     if (((((strcmp(op, "<") == 0) || (strcmp(op, ">") == 0)) && _str_startswith(arg, "(")) && _str_endswith(arg, ")"))) {
         const char * inner = __c_substring(g_arena, arg, 1, (_rune_len(arg) - 1));
         // try {
@@ -5885,7 +5908,11 @@ static Tuple_NodePtr_constcharPtr Lexer__read_braced_param(Lexer *self, int64_t 
             const char * formatted = _format_cmdsub_node((Node *)parsed, 0, true, false, true);
             arg = _str_concat(g_arena, _str_concat(g_arena, "(", formatted), ")");
         }
-        // } catch handled via error returns
+        if (g_parse_error) {
+            g_parse_error = 0;
+            g_error_msg[0] = '\0';
+        }
+        // } catch
     }
     text = _str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, "${", param), op), arg), "}");
     self->_dolbrace_state = saved_dolbrace;
@@ -5954,7 +5981,7 @@ static const char * Word__normalize_param_expansion_newlines(Word *self, const c
     Vec_Str result = (Vec_Str){NULL, 0, 0};
     int64_t i = 0;
     QuoteState * quote = new_quote_state();
-    while ((i < _rune_len(value))) {
+    while (!g_parse_error && ((i < _rune_len(value)))) {
         const char * c = (const char *)(_char_at_str(g_arena, value, i));
         if (((strcmp(c, "'") == 0) && !(quote->double_))) {
             quote->single = !(quote->single);
@@ -5974,7 +6001,7 @@ static const char * Word__normalize_param_expansion_newlines(Word *self, const c
                 i += 1;
             }
             int64_t depth = 1;
-            while (((i < _rune_len(value)) && (depth > 0))) {
+            while (!g_parse_error && (((i < _rune_len(value)) && (depth > 0)))) {
                 const char * ch = (const char *)(_char_at_str(g_arena, value, i));
                 if ((((strcmp(ch, "\\") == 0) && ((i + 1) < _rune_len(value))) && !(quote->single))) {
                     if ((strcmp((const char *)(_char_at_str(g_arena, value, (i + 1))), "\n") == 0)) {
@@ -6039,7 +6066,7 @@ static const char * Word__sh_single_quote(Word *self, const char * s) {
 static Vec_Byte Word__ansi_c_to_bytes(Word *self, const char * inner) {
     Vec_Byte result = ((Vec_Byte){NULL, 0, 0});
     int64_t i = 0;
-    while ((i < _rune_len(inner))) {
+    while (!g_parse_error && ((i < _rune_len(inner)))) {
         int64_t j;
         int64_t byte_val;
         int64_t codepoint;
@@ -6055,7 +6082,7 @@ static Vec_Byte Word__ansi_c_to_bytes(Word *self, const char * inner) {
             } else if ((strcmp(c, "x") == 0)) {
                 if ((((i + 2) < _rune_len(inner)) && (strcmp((const char *)(_char_at_str(g_arena, inner, (i + 2))), "{") == 0))) {
                     j = (i + 3);
-                    while (((j < _rune_len(inner)) && _is_hex_digit((const char *)(_char_at_str(g_arena, inner, j))))) {
+                    while (!g_parse_error && (((j < _rune_len(inner)) && _is_hex_digit((const char *)(_char_at_str(g_arena, inner, j)))))) {
                         j += 1;
                     }
                     const char * hex_str = _substring(inner, (i + 3), j);
@@ -6073,7 +6100,7 @@ static Vec_Byte Word__ansi_c_to_bytes(Word *self, const char * inner) {
                     i = j;
                 } else {
                     j = (i + 2);
-                    while ((((j < _rune_len(inner)) && (j < (i + 4))) && _is_hex_digit((const char *)(_char_at_str(g_arena, inner, j))))) {
+                    while (!g_parse_error && ((((j < _rune_len(inner)) && (j < (i + 4))) && _is_hex_digit((const char *)(_char_at_str(g_arena, inner, j)))))) {
                         j += 1;
                     }
                     if ((j > (i + 2))) {
@@ -6090,7 +6117,7 @@ static Vec_Byte Word__ansi_c_to_bytes(Word *self, const char * inner) {
                 }
             } else if ((strcmp(c, "u") == 0)) {
                 j = (i + 2);
-                while ((((j < _rune_len(inner)) && (j < (i + 6))) && _is_hex_digit((const char *)(_char_at_str(g_arena, inner, j))))) {
+                while (!g_parse_error && ((((j < _rune_len(inner)) && (j < (i + 6))) && _is_hex_digit((const char *)(_char_at_str(g_arena, inner, j)))))) {
                     j += 1;
                 }
                 if ((j > (i + 2))) {
@@ -6106,7 +6133,7 @@ static Vec_Byte Word__ansi_c_to_bytes(Word *self, const char * inner) {
                 }
             } else if ((strcmp(c, "U") == 0)) {
                 j = (i + 2);
-                while ((((j < _rune_len(inner)) && (j < (i + 10))) && _is_hex_digit((const char *)(_char_at_str(g_arena, inner, j))))) {
+                while (!g_parse_error && ((((j < _rune_len(inner)) && (j < (i + 10))) && _is_hex_digit((const char *)(_char_at_str(g_arena, inner, j)))))) {
                     j += 1;
                 }
                 if ((j > (i + 2))) {
@@ -6139,7 +6166,7 @@ static Vec_Byte Word__ansi_c_to_bytes(Word *self, const char * inner) {
                 }
             } else if ((strcmp(c, "0") == 0)) {
                 j = (i + 2);
-                while ((((j < _rune_len(inner)) && (j < (i + 4))) && _is_octal_digit((const char *)(_char_at_str(g_arena, inner, j))))) {
+                while (!g_parse_error && ((((j < _rune_len(inner)) && (j < (i + 4))) && _is_octal_digit((const char *)(_char_at_str(g_arena, inner, j)))))) {
                     j += 1;
                 }
                 if ((j > (i + 2))) {
@@ -6154,7 +6181,7 @@ static Vec_Byte Word__ansi_c_to_bytes(Word *self, const char * inner) {
                 }
             } else if (((c[0] >= '1') && (c[0] <= '7'))) {
                 j = (i + 1);
-                while ((((j < _rune_len(inner)) && (j < (i + 4))) && _is_octal_digit((const char *)(_char_at_str(g_arena, inner, j))))) {
+                while (!g_parse_error && ((((j < _rune_len(inner)) && (j < (i + 4))) && _is_octal_digit((const char *)(_char_at_str(g_arena, inner, j)))))) {
                     j += 1;
                 }
                 byte_val = (_parse_int(_substring(inner, (i + 1), j), 8) & 255);
@@ -6192,7 +6219,7 @@ static const char * Word__expand_all_ansi_c_quotes(Word *self, const char * valu
     QuoteState * quote = new_quote_state();
     bool in_backtick = false;
     int64_t brace_depth = 0;
-    while ((i < _rune_len(value))) {
+    while (!g_parse_error && ((i < _rune_len(value)))) {
         const char * ch = (const char *)(_char_at_str(g_arena, value, i));
         if (((strcmp(ch, "`") == 0) && !(quote->single))) {
             in_backtick = !(in_backtick);
@@ -6244,7 +6271,7 @@ static const char * Word__expand_all_ansi_c_quotes(Word *self, const char * valu
             i += 2;
         } else if ((((_starts_with_at(value, i, "$'") && !(quote->single)) && !(effective_in_dquote)) && ((_count_consecutive_dollars_before(value, i) % 2) == 0))) {
             int64_t j = (i + 2);
-            while ((j < _rune_len(value))) {
+            while (!g_parse_error && ((j < _rune_len(value)))) {
                 if (((strcmp((const char *)(_char_at_str(g_arena, value, j)), "\\") == 0) && ((j + 1) < _rune_len(value)))) {
                     j += 2;
                 } else if ((strcmp((const char *)(_char_at_str(g_arena, value, j)), "'") == 0)) {
@@ -6270,7 +6297,7 @@ static const char * Word__expand_all_ansi_c_quotes(Word *self, const char * valu
                             if (_str_contains("@*#?-$!0123456789_", (const char *)(_char_at_str(g_arena, after_brace, 0)))) {
                                 var_name_len = 1;
                             } else if ((_str_is_alpha((const char *)(_char_at_str(g_arena, after_brace, 0))) || (strcmp((const char *)(_char_at_str(g_arena, after_brace, 0)), "_") == 0))) {
-                                while ((var_name_len < _rune_len(after_brace))) {
+                                while (!g_parse_error && ((var_name_len < _rune_len(after_brace)))) {
                                     const char * c = (const char *)(_char_at_str(g_arena, after_brace, var_name_len));
                                     if (!((_str_is_alnum(c) || (strcmp(c, "_") == 0)))) {
                                         break;
@@ -6337,7 +6364,7 @@ static const char * Word__strip_locale_string_dollars(Word *self, const char * v
     QuoteState * quote = new_quote_state();
     QuoteState * brace_quote = new_quote_state();
     bool bracket_in_double_quote = false;
-    while ((i < _rune_len(value))) {
+    while (!g_parse_error && ((i < _rune_len(value)))) {
         const char * ch = (const char *)(_char_at_str(g_arena, value, i));
         if (((((strcmp(ch, "\\") == 0) && ((i + 1) < _rune_len(value))) && !(quote->single)) && !(brace_quote->single))) {
             VEC_PUSH(g_arena, &result, (ch));
@@ -6413,13 +6440,13 @@ static const char * Word__normalize_array_whitespace(Word *self, const char * va
         return value;
     }
     i += 1;
-    while (((i < _rune_len(value)) && (_str_is_alnum((const char *)(_char_at_str(g_arena, value, i))) || (strcmp((const char *)(_char_at_str(g_arena, value, i)), "_") == 0)))) {
+    while (!g_parse_error && (((i < _rune_len(value)) && (_str_is_alnum((const char *)(_char_at_str(g_arena, value, i))) || (strcmp((const char *)(_char_at_str(g_arena, value, i)), "_") == 0))))) {
         i += 1;
     }
-    while (((i < _rune_len(value)) && (strcmp((const char *)(_char_at_str(g_arena, value, i)), "[") == 0))) {
+    while (!g_parse_error && (((i < _rune_len(value)) && (strcmp((const char *)(_char_at_str(g_arena, value, i)), "[") == 0)))) {
         int64_t depth = 1;
         i += 1;
-        while (((i < _rune_len(value)) && (depth > 0))) {
+        while (!g_parse_error && (((i < _rune_len(value)) && (depth > 0)))) {
             if ((strcmp((const char *)(_char_at_str(g_arena, value, i)), "[") == 0)) {
                 depth += 1;
             } else if ((strcmp((const char *)(_char_at_str(g_arena, value, i)), "]") == 0)) {
@@ -6461,7 +6488,7 @@ static int64_t Word__find_matching_paren(Word *self, const char * value, int64_t
     int64_t i = (open_pos + 1);
     int64_t depth = 1;
     QuoteState * quote = new_quote_state();
-    while (((i < _rune_len(value)) && (depth > 0))) {
+    while (!g_parse_error && (((i < _rune_len(value)) && (depth > 0)))) {
         const char * ch = (const char *)(_char_at_str(g_arena, value, i));
         if ((((strcmp(ch, "\\") == 0) && ((i + 1) < _rune_len(value))) && !(quote->single))) {
             i += 2;
@@ -6482,7 +6509,7 @@ static int64_t Word__find_matching_paren(Word *self, const char * value, int64_t
             continue;
         }
         if ((strcmp(ch, "#") == 0)) {
-            while (((i < _rune_len(value)) && (strcmp((const char *)(_char_at_str(g_arena, value, i)), "\n") != 0))) {
+            while (!g_parse_error && (((i < _rune_len(value)) && (strcmp((const char *)(_char_at_str(g_arena, value, i)), "\n") != 0)))) {
                 i += 1;
             }
             continue;
@@ -6506,7 +6533,7 @@ static const char * Word__normalize_array_inner(Word *self, const char * inner) 
     bool in_whitespace = true;
     int64_t brace_depth = 0;
     int64_t bracket_depth = 0;
-    while ((i < _rune_len(inner))) {
+    while (!g_parse_error && ((i < _rune_len(inner)))) {
         const char * ch = (const char *)(_char_at_str(g_arena, inner, i));
         int64_t j;
         int64_t depth;
@@ -6522,7 +6549,7 @@ static const char * Word__normalize_array_inner(Word *self, const char * inner) 
         } else if ((strcmp(ch, "'") == 0)) {
             in_whitespace = false;
             j = (i + 1);
-            while (((j < _rune_len(inner)) && (strcmp((const char *)(_char_at_str(g_arena, inner, j)), "'") != 0))) {
+            while (!g_parse_error && (((j < _rune_len(inner)) && (strcmp((const char *)(_char_at_str(g_arena, inner, j)), "'") != 0)))) {
                 j += 1;
             }
             VEC_PUSH(g_arena, &normalized, (_substring(inner, i, (j + 1))));
@@ -6532,7 +6559,7 @@ static const char * Word__normalize_array_inner(Word *self, const char * inner) 
             j = (i + 1);
             Vec_Str dq_content = ({ const char * *_slc = (const char * *)arena_alloc(g_arena, 1 * sizeof(const char *)); _slc[0] = "\""; (Vec_Str){_slc, 1, 1}; });
             int64_t dq_brace_depth = 0;
-            while ((j < _rune_len(inner))) {
+            while (!g_parse_error && ((j < _rune_len(inner)))) {
                 if (((strcmp((const char *)(_char_at_str(g_arena, inner, j)), "\\") == 0) && ((j + 1) < _rune_len(inner)))) {
                     if ((strcmp((const char *)(_char_at_str(g_arena, inner, (j + 1))), "\n") == 0)) {
                         j += 2;
@@ -6572,7 +6599,7 @@ static const char * Word__normalize_array_inner(Word *self, const char * inner) 
             in_whitespace = false;
             j = (i + 3);
             depth = 1;
-            while (((j < _rune_len(inner)) && (depth > 0))) {
+            while (!g_parse_error && (((j < _rune_len(inner)) && (depth > 0)))) {
                 if (((((j + 1) < _rune_len(inner)) && (strcmp((const char *)(_char_at_str(g_arena, inner, j)), "(") == 0)) && (strcmp((const char *)(_char_at_str(g_arena, inner, (j + 1))), "(") == 0))) {
                     depth += 1;
                     j += 2;
@@ -6589,19 +6616,19 @@ static const char * Word__normalize_array_inner(Word *self, const char * inner) 
             in_whitespace = false;
             j = (i + 2);
             depth = 1;
-            while (((j < _rune_len(inner)) && (depth > 0))) {
+            while (!g_parse_error && (((j < _rune_len(inner)) && (depth > 0)))) {
                 if ((((strcmp((const char *)(_char_at_str(g_arena, inner, j)), "(") == 0) && (j > 0)) && (strcmp((const char *)(_char_at_str(g_arena, inner, (j - 1))), "$") == 0))) {
                     depth += 1;
                 } else if ((strcmp((const char *)(_char_at_str(g_arena, inner, j)), ")") == 0)) {
                     depth -= 1;
                 } else if ((strcmp((const char *)(_char_at_str(g_arena, inner, j)), "'") == 0)) {
                     j += 1;
-                    while (((j < _rune_len(inner)) && (strcmp((const char *)(_char_at_str(g_arena, inner, j)), "'") != 0))) {
+                    while (!g_parse_error && (((j < _rune_len(inner)) && (strcmp((const char *)(_char_at_str(g_arena, inner, j)), "'") != 0)))) {
                         j += 1;
                     }
                 } else if ((strcmp((const char *)(_char_at_str(g_arena, inner, j)), "\"") == 0)) {
                     j += 1;
-                    while ((j < _rune_len(inner))) {
+                    while (!g_parse_error && ((j < _rune_len(inner)))) {
                         if (((strcmp((const char *)(_char_at_str(g_arena, inner, j)), "\\") == 0) && ((j + 1) < _rune_len(inner)))) {
                             j += 2;
                             continue;
@@ -6620,19 +6647,19 @@ static const char * Word__normalize_array_inner(Word *self, const char * inner) 
             in_whitespace = false;
             j = (i + 2);
             depth = 1;
-            while (((j < _rune_len(inner)) && (depth > 0))) {
+            while (!g_parse_error && (((j < _rune_len(inner)) && (depth > 0)))) {
                 if ((strcmp((const char *)(_char_at_str(g_arena, inner, j)), "(") == 0)) {
                     depth += 1;
                 } else if ((strcmp((const char *)(_char_at_str(g_arena, inner, j)), ")") == 0)) {
                     depth -= 1;
                 } else if ((strcmp((const char *)(_char_at_str(g_arena, inner, j)), "'") == 0)) {
                     j += 1;
-                    while (((j < _rune_len(inner)) && (strcmp((const char *)(_char_at_str(g_arena, inner, j)), "'") != 0))) {
+                    while (!g_parse_error && (((j < _rune_len(inner)) && (strcmp((const char *)(_char_at_str(g_arena, inner, j)), "'") != 0)))) {
                         j += 1;
                     }
                 } else if ((strcmp((const char *)(_char_at_str(g_arena, inner, j)), "\"") == 0)) {
                     j += 1;
-                    while ((j < _rune_len(inner))) {
+                    while (!g_parse_error && ((j < _rune_len(inner)))) {
                         if (((strcmp((const char *)(_char_at_str(g_arena, inner, j)), "\\") == 0) && ((j + 1) < _rune_len(inner)))) {
                             j += 2;
                             continue;
@@ -6661,7 +6688,7 @@ static const char * Word__normalize_array_inner(Word *self, const char * inner) 
             brace_depth -= 1;
             i += 1;
         } else if ((((strcmp(ch, "#") == 0) && (brace_depth == 0)) && in_whitespace)) {
-            while (((i < _rune_len(inner)) && (strcmp((const char *)(_char_at_str(g_arena, inner, i)), "\n") != 0))) {
+            while (!g_parse_error && (((i < _rune_len(inner)) && (strcmp((const char *)(_char_at_str(g_arena, inner, i)), "\n") != 0)))) {
                 i += 1;
             }
         } else if ((strcmp(ch, "[") == 0)) {
@@ -6687,14 +6714,14 @@ static const char * Word__normalize_array_inner(Word *self, const char * inner) 
 static const char * Word__strip_arith_line_continuations(Word *self, const char * value) {
     Vec_Str result = (Vec_Str){NULL, 0, 0};
     int64_t i = 0;
-    while ((i < _rune_len(value))) {
+    while (!g_parse_error && ((i < _rune_len(value)))) {
         if (_is_expansion_start(value, i, "$((")) {
             int64_t start = i;
             i += 3;
             int64_t depth = 2;
             Vec_Str arith_content = (Vec_Str){NULL, 0, 0};
             int64_t first_close_idx = -(1);
-            while (((i < _rune_len(value)) && (depth > 0))) {
+            while (!g_parse_error && (((i < _rune_len(value)) && (depth > 0)))) {
                 if ((strcmp((const char *)(_char_at_str(g_arena, value, i)), "(") == 0)) {
                     VEC_PUSH(g_arena, &arith_content, ("("));
                     depth += 1;
@@ -6714,10 +6741,10 @@ static const char * Word__strip_arith_line_continuations(Word *self, const char 
                 } else if ((((strcmp((const char *)(_char_at_str(g_arena, value, i)), "\\") == 0) && ((i + 1) < _rune_len(value))) && (strcmp((const char *)(_char_at_str(g_arena, value, (i + 1))), "\n") == 0))) {
                     int64_t num_backslashes = 0;
                     int64_t j = (arith_content.len - 1);
-                    while (((j >= 0) && (strcmp(arith_content.data[j], "\n") == 0))) {
+                    while (!g_parse_error && (((j >= 0) && (strcmp(arith_content.data[j], "\n") == 0)))) {
                         j -= 1;
                     }
-                    while (((j >= 0) && (strcmp(arith_content.data[j], "\\") == 0))) {
+                    while (!g_parse_error && (((j >= 0) && (strcmp(arith_content.data[j], "\\") == 0)))) {
                         num_backslashes += 1;
                         j -= 1;
                     }
@@ -6762,7 +6789,7 @@ static const char * Word__strip_arith_line_continuations(Word *self, const char 
 static Vec_Node Word__collect_cmdsubs(Word *self, Node * node) {
     Vec_Node result = (Vec_Node){NULL, 0, 0};
     void *_tsexpr48 = node;
-    if (strcmp(((CommandSubstitution *)_tsexpr48)->kind, "command-substitution") == 0) {
+    if (strcmp(((CommandSubstitution *)_tsexpr48)->kind, "cmdsub") == 0) {
         CommandSubstitution *node = (CommandSubstitution *)_tsexpr48;
         VEC_PUSH(g_arena, &result, (node));
     } else if (strcmp(((Array *)_tsexpr48)->kind, "array") == 0) {
@@ -6772,7 +6799,7 @@ static Vec_Node Word__collect_cmdsubs(Word *self, Node * node) {
             for (size_t _idx = 0; _idx < elem->parts.len; _idx++) {
                 Node * p = elem->parts.data[_idx];
                 void *_tsexpr49 = p;
-                if (strcmp(((CommandSubstitution *)_tsexpr49)->kind, "command-substitution") == 0) {
+                if (strcmp(((CommandSubstitution *)_tsexpr49)->kind, "cmdsub") == 0) {
                     CommandSubstitution *p = (CommandSubstitution *)_tsexpr49;
                     VEC_PUSH(g_arena, &result, (p));
                 } else {
@@ -6780,40 +6807,40 @@ static Vec_Node Word__collect_cmdsubs(Word *self, Node * node) {
                 }
             }
         }
-    } else if (strcmp(((ArithmeticExpansion *)_tsexpr48)->kind, "arithmetic-expansion") == 0) {
+    } else if (strcmp(((ArithmeticExpansion *)_tsexpr48)->kind, "arith") == 0) {
         ArithmeticExpansion *node = (ArithmeticExpansion *)_tsexpr48;
         if ((node->expression != NULL)) {
             do { Vec_Node _src = Word__collect_cmdsubs(self, node->expression); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
         }
-    } else if (strcmp(((ArithBinaryOp *)_tsexpr48)->kind, "arith-binary-op") == 0) {
+    } else if (strcmp(((ArithBinaryOp *)_tsexpr48)->kind, "binary-op") == 0) {
         ArithBinaryOp *node = (ArithBinaryOp *)_tsexpr48;
         do { Vec_Node _src = Word__collect_cmdsubs(self, node->left); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
         do { Vec_Node _src = Word__collect_cmdsubs(self, node->right); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
-    } else if (strcmp(((ArithComma *)_tsexpr48)->kind, "arith-comma") == 0) {
+    } else if (strcmp(((ArithComma *)_tsexpr48)->kind, "comma") == 0) {
         ArithComma *node = (ArithComma *)_tsexpr48;
         do { Vec_Node _src = Word__collect_cmdsubs(self, node->left); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
         do { Vec_Node _src = Word__collect_cmdsubs(self, node->right); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
-    } else if (strcmp(((ArithUnaryOp *)_tsexpr48)->kind, "arith-unary-op") == 0) {
+    } else if (strcmp(((ArithUnaryOp *)_tsexpr48)->kind, "unary-op") == 0) {
         ArithUnaryOp *node = (ArithUnaryOp *)_tsexpr48;
         do { Vec_Node _src = Word__collect_cmdsubs(self, node->operand); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
-    } else if (strcmp(((ArithPreIncr *)_tsexpr48)->kind, "arith-pre-incr") == 0) {
+    } else if (strcmp(((ArithPreIncr *)_tsexpr48)->kind, "pre-incr") == 0) {
         ArithPreIncr *node = (ArithPreIncr *)_tsexpr48;
         do { Vec_Node _src = Word__collect_cmdsubs(self, node->operand); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
-    } else if (strcmp(((ArithPostIncr *)_tsexpr48)->kind, "arith-post-incr") == 0) {
+    } else if (strcmp(((ArithPostIncr *)_tsexpr48)->kind, "post-incr") == 0) {
         ArithPostIncr *node = (ArithPostIncr *)_tsexpr48;
         do { Vec_Node _src = Word__collect_cmdsubs(self, node->operand); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
-    } else if (strcmp(((ArithPreDecr *)_tsexpr48)->kind, "arith-pre-decr") == 0) {
+    } else if (strcmp(((ArithPreDecr *)_tsexpr48)->kind, "pre-decr") == 0) {
         ArithPreDecr *node = (ArithPreDecr *)_tsexpr48;
         do { Vec_Node _src = Word__collect_cmdsubs(self, node->operand); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
-    } else if (strcmp(((ArithPostDecr *)_tsexpr48)->kind, "arith-post-decr") == 0) {
+    } else if (strcmp(((ArithPostDecr *)_tsexpr48)->kind, "post-decr") == 0) {
         ArithPostDecr *node = (ArithPostDecr *)_tsexpr48;
         do { Vec_Node _src = Word__collect_cmdsubs(self, node->operand); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
-    } else if (strcmp(((ArithTernary *)_tsexpr48)->kind, "arith-ternary") == 0) {
+    } else if (strcmp(((ArithTernary *)_tsexpr48)->kind, "ternary") == 0) {
         ArithTernary *node = (ArithTernary *)_tsexpr48;
         do { Vec_Node _src = Word__collect_cmdsubs(self, node->condition); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
         do { Vec_Node _src = Word__collect_cmdsubs(self, node->if_true); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
         do { Vec_Node _src = Word__collect_cmdsubs(self, node->if_false); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
-    } else if (strcmp(((ArithAssign *)_tsexpr48)->kind, "arith-assign") == 0) {
+    } else if (strcmp(((ArithAssign *)_tsexpr48)->kind, "assign") == 0) {
         ArithAssign *node = (ArithAssign *)_tsexpr48;
         do { Vec_Node _src = Word__collect_cmdsubs(self, node->target); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
         do { Vec_Node _src = Word__collect_cmdsubs(self, node->value); for (size_t _i = 0; _i < _src.len; _i++) { VEC_PUSH(g_arena, &result, _src.data[_i]); } } while(0);
@@ -6824,7 +6851,7 @@ static Vec_Node Word__collect_cmdsubs(Word *self, Node * node) {
 static Vec_Node Word__collect_procsubs(Word *self, Node * node) {
     Vec_Node result = (Vec_Node){NULL, 0, 0};
     void *_tsexpr50 = node;
-    if (strcmp(((ProcessSubstitution *)_tsexpr50)->kind, "process-substitution") == 0) {
+    if (strcmp(((ProcessSubstitution *)_tsexpr50)->kind, "procsub") == 0) {
         ProcessSubstitution *node = (ProcessSubstitution *)_tsexpr50;
         VEC_PUSH(g_arena, &result, (node));
     } else if (strcmp(((Array *)_tsexpr50)->kind, "array") == 0) {
@@ -6834,7 +6861,7 @@ static Vec_Node Word__collect_procsubs(Word *self, Node * node) {
             for (size_t _idx = 0; _idx < elem->parts.len; _idx++) {
                 Node * p = elem->parts.data[_idx];
                 void *_tsexpr51 = p;
-                if (strcmp(((ProcessSubstitution *)_tsexpr51)->kind, "process-substitution") == 0) {
+                if (strcmp(((ProcessSubstitution *)_tsexpr51)->kind, "procsub") == 0) {
                     ProcessSubstitution *p = (ProcessSubstitution *)_tsexpr51;
                     VEC_PUSH(g_arena, &result, (p));
                 } else {
@@ -6853,13 +6880,13 @@ static const char * Word__format_command_substitutions(Word *self, const char * 
     for (size_t _idx = 0; _idx < self->parts.len; _idx++) {
         Node * p = self->parts.data[_idx];
         void *_tsexpr52 = p;
-        if (strcmp(((CommandSubstitution *)_tsexpr52)->kind, "command-substitution") == 0) {
+        if (strcmp(((CommandSubstitution *)_tsexpr52)->kind, "cmdsub") == 0) {
             CommandSubstitution *p = (CommandSubstitution *)_tsexpr52;
             VEC_PUSH(g_arena, &cmdsub_parts, (p));
-        } else if (strcmp(((ProcessSubstitution *)_tsexpr52)->kind, "process-substitution") == 0) {
+        } else if (strcmp(((ProcessSubstitution *)_tsexpr52)->kind, "procsub") == 0) {
             ProcessSubstitution *p = (ProcessSubstitution *)_tsexpr52;
             VEC_PUSH(g_arena, &procsub_parts, (p));
-        } else if (strcmp(((ArithmeticExpansion *)_tsexpr52)->kind, "arithmetic-expansion") == 0) {
+        } else if (strcmp(((ArithmeticExpansion *)_tsexpr52)->kind, "arith") == 0) {
             ArithmeticExpansion *p = (ArithmeticExpansion *)_tsexpr52;
             has_arith = true;
         } else {
@@ -6872,13 +6899,13 @@ static const char * Word__format_command_substitutions(Word *self, const char * 
     bool has_untracked_procsub = false;
     int64_t idx = 0;
     QuoteState * scan_quote = new_quote_state();
-    while ((idx < _rune_len(value))) {
+    while (!g_parse_error && ((idx < _rune_len(value)))) {
         if ((strcmp((const char *)(_char_at_str(g_arena, value, idx)), "\"") == 0)) {
             scan_quote->double_ = !(scan_quote->double_);
             idx += 1;
         } else if (((strcmp((const char *)(_char_at_str(g_arena, value, idx)), "'") == 0) && !(scan_quote->double_))) {
             idx += 1;
-            while (((idx < _rune_len(value)) && (strcmp((const char *)(_char_at_str(g_arena, value, idx)), "'") != 0))) {
+            while (!g_parse_error && (((idx < _rune_len(value)) && (strcmp((const char *)(_char_at_str(g_arena, value, idx)), "'") != 0)))) {
                 idx += 1;
             }
             if ((idx < _rune_len(value))) {
@@ -6910,7 +6937,7 @@ static const char * Word__format_command_substitutions(Word *self, const char * 
     int64_t deprecated_arith_depth = 0;
     int64_t arith_depth = 0;
     int64_t arith_paren_depth = 0;
-    while ((i < _rune_len(value))) {
+    while (!g_parse_error && ((i < _rune_len(value)))) {
         if (((((i > 0) && _is_extglob_prefix((const char *)(_char_at_str(g_arena, value, (i - 1))))) && (strcmp((const char *)(_char_at_str(g_arena, value, i)), "(") == 0)) && !(_is_backslash_escaped(value, (i - 1))))) {
             extglob_depth += 1;
             VEC_PUSH(g_arena, &result, ((const char *)(_char_at_str(g_arena, value, i))));
@@ -7003,7 +7030,12 @@ static const char * Word__format_command_substitutions(Word *self, const char * 
                 parser = new_parser(inner, false, false);
                 parsed = (Node *)Parser_parse_list(parser, true);
                 formatted = ((parsed != NULL) ? _format_cmdsub_node((Node *)parsed, 0, false, false, false) : "");
-                // } catch handled via error returns
+                if (g_parse_error) {
+                    g_parse_error = 0;
+                    g_error_msg[0] = '\0';
+                    formatted = inner;
+                }
+                // } catch
             }
             if (_str_startswith(formatted, "(")) {
                 VEC_PUSH(g_arena, &result, (_str_concat(g_arena, _str_concat(g_arena, "$( ", formatted), ")")));
@@ -7013,7 +7045,7 @@ static const char * Word__format_command_substitutions(Word *self, const char * 
             i = j;
         } else if (((strcmp((const char *)(_char_at_str(g_arena, value, i)), "`") == 0) && (cmdsub_idx < cmdsub_parts.len))) {
             j = (i + 1);
-            while ((j < _rune_len(value))) {
+            while (!g_parse_error && ((j < _rune_len(value)))) {
                 if (((strcmp((const char *)(_char_at_str(g_arena, value, j)), "\\") == 0) && ((j + 1) < _rune_len(value)))) {
                     j += 2;
                     continue;
@@ -7030,7 +7062,7 @@ static const char * Word__format_command_substitutions(Word *self, const char * 
         } else if ((((_is_expansion_start(value, i, "${") && ((i + 2) < _rune_len(value))) && _is_funsub_char((const char *)(_char_at_str(g_arena, value, (i + 2))))) && !(_is_backslash_escaped(value, i)))) {
             j = _find_funsub_end(value, (i + 2));
             Node * cmdsub_node = (Node *)((cmdsub_idx < cmdsub_parts.len) ? cmdsub_parts.data[cmdsub_idx] : NULL);
-            if (((strcmp(cmdsub_node->kind, "command-substitution") == 0) && ((CommandSubstitution *)(cmdsub_node))->brace)) {
+            if (((cmdsub_node != NULL && strcmp(cmdsub_node->kind, "cmdsub") == 0) && ((CommandSubstitution *)(cmdsub_node))->brace)) {
                 CommandSubstitution * node = (CommandSubstitution *)cmdsub_node;
                 formatted = _format_cmdsub_node((Node *)((CommandSubstitution *)(node))->command, 0, false, false, false);
                 bool has_pipe = (strcmp((const char *)(_char_at_str(g_arena, value, (i + 2))), "|") == 0);
@@ -7072,7 +7104,7 @@ static const char * Word__format_command_substitutions(Word *self, const char * 
                 const char * raw_content = _substring(value, (i + 2), (j - 1));
                 if ((strcmp(((ProcessSubstitution *)(node))->command->kind, "subshell") == 0)) {
                     int64_t leading_ws_end = 0;
-                    while (((leading_ws_end < _rune_len(raw_content)) && _str_contains(" \t\n", (const char *)(_char_at_str(g_arena, raw_content, leading_ws_end))))) {
+                    while (!g_parse_error && (((leading_ws_end < _rune_len(raw_content)) && _str_contains(" \t\n", (const char *)(_char_at_str(g_arena, raw_content, leading_ws_end)))))) {
                         leading_ws_end += 1;
                     }
                     const char * leading_ws = __c_substring(g_arena, raw_content, 0, leading_ws_end);
@@ -7119,7 +7151,12 @@ static const char * Word__format_command_substitutions(Word *self, const char * 
                 } else {
                     formatted = inner;
                 }
-                // } catch handled via error returns
+                if (g_parse_error) {
+                    g_parse_error = 0;
+                    g_error_msg[0] = '\0';
+                    formatted = inner;
+                }
+                // } catch
                 VEC_PUSH(g_arena, &result, (_str_concat(g_arena, _str_concat(g_arena, _str_concat(g_arena, direction, "("), formatted), ")")));
                 i = j;
             } else if (is_procsub) {
@@ -7148,7 +7185,7 @@ static const char * Word__format_command_substitutions(Word *self, const char * 
             prefix = _str_replace(g_arena, _str_replace(g_arena, _substring(value, i, (i + 3)), "\t", " "), "\n", " ");
             j = (i + 3);
             depth = 1;
-            while (((j < _rune_len(value)) && (depth > 0))) {
+            while (!g_parse_error && (((j < _rune_len(value)) && (depth > 0)))) {
                 if ((strcmp((const char *)(_char_at_str(g_arena, value, j)), "{") == 0)) {
                     depth += 1;
                 } else if ((strcmp((const char *)(_char_at_str(g_arena, value, j)), "}") == 0)) {
@@ -7178,14 +7215,19 @@ static const char * Word__format_command_substitutions(Word *self, const char * 
                 } else {
                     VEC_PUSH(g_arena, &result, ("${ }"));
                 }
-                // } catch handled via error returns
+                if (g_parse_error) {
+                    g_parse_error = 0;
+                    g_error_msg[0] = '\0';
+                    VEC_PUSH(g_arena, &result, (_substring(value, i, j)));
+                }
+                // } catch
             }
             i = j;
         } else if ((_is_expansion_start(value, i, "${") && !(_is_backslash_escaped(value, i)))) {
             j = (i + 2);
             depth = 1;
             QuoteState * brace_quote = new_quote_state();
-            while (((j < _rune_len(value)) && (depth > 0))) {
+            while (!g_parse_error && (((j < _rune_len(value)) && (depth > 0)))) {
                 const char * c = (const char *)(_char_at_str(g_arena, value, j));
                 if ((((strcmp(c, "\\") == 0) && ((j + 1) < _rune_len(value))) && !(brace_quote->single))) {
                     j += 2;
@@ -7227,7 +7269,7 @@ static const char * Word__format_command_substitutions(Word *self, const char * 
             i += 1;
         } else if (((strcmp((const char *)(_char_at_str(g_arena, value, i)), "'") == 0) && !(main_quote->double_))) {
             j = (i + 1);
-            while (((j < _rune_len(value)) && (strcmp((const char *)(_char_at_str(g_arena, value, j)), "'") != 0))) {
+            while (!g_parse_error && (((j < _rune_len(value)) && (strcmp((const char *)(_char_at_str(g_arena, value, j)), "'") != 0)))) {
                 j += 1;
             }
             if ((j < _rune_len(value))) {
@@ -7248,7 +7290,7 @@ static const char * Word__normalize_extglob_whitespace(Word *self, const char * 
     int64_t i = 0;
     QuoteState * extglob_quote = new_quote_state();
     int64_t deprecated_arith_depth = 0;
-    while ((i < _rune_len(value))) {
+    while (!g_parse_error && ((i < _rune_len(value)))) {
         if ((strcmp((const char *)(_char_at_str(g_arena, value, i)), "\"") == 0)) {
             extglob_quote->double_ = !(extglob_quote->double_);
             VEC_PUSH(g_arena, &result, ((const char *)(_char_at_str(g_arena, value, i))));
@@ -7277,7 +7319,7 @@ static const char * Word__normalize_extglob_whitespace(Word *self, const char * 
                 Vec_Str pattern_parts = (Vec_Str){NULL, 0, 0};
                 Vec_Str current_part = (Vec_Str){NULL, 0, 0};
                 bool has_pipe = false;
-                while (((i < _rune_len(value)) && (depth > 0))) {
+                while (!g_parse_error && (((i < _rune_len(value)) && (depth > 0)))) {
                     const char * part_content;
                     if (((strcmp((const char *)(_char_at_str(g_arena, value, i)), "\\") == 0) && ((i + 1) < _rune_len(value)))) {
                         VEC_PUSH(g_arena, &current_part, (__c_substring(g_arena, value, i, (i + 2))));
@@ -7377,7 +7419,7 @@ static const char * Pipeline_to_sexp(Pipeline *self) {
     Vec_Tuple_NodePtr_bool cmds = (Vec_Tuple_NodePtr_bool){NULL, 0, 0};
     int64_t i = 0;
     Node * cmd;
-    while ((i < self->commands.len)) {
+    while (!g_parse_error && ((i < self->commands.len))) {
         cmd = (Node *)self->commands.data[i];
         void *_tsexpr53 = cmd;
         if (strcmp(((PipeBoth *)_tsexpr53)->kind, "pipe-both") == 0) {
@@ -7402,7 +7444,7 @@ static const char * Pipeline_to_sexp(Pipeline *self) {
     bool last_needs = last_pair.F1;
     const char * result = Pipeline__cmd_sexp(self, last_cmd, last_needs);
     int64_t j = (cmds.len - 2);
-    while ((j >= 0)) {
+    while (!g_parse_error && ((j >= 0))) {
         pair = cmds.data[j];
         cmd = (Node *)pair.F0;
         needs = pair.F1;
@@ -7446,7 +7488,7 @@ static const char * Pipeline_get_kind(Pipeline *self) {
 static const char * List_to_sexp(List *self) {
     Vec_Node parts = self->parts /* copy */;
     void * op_names = NULL;
-    while ((((parts.len > 1) && (strcmp(parts.data[(parts.len - 1)]->kind, "operator") == 0)) && ((strcmp(((Operator *)(parts.data[(parts.len - 1)]))->op, ";") == 0) || (strcmp(((Operator *)(parts.data[(parts.len - 1)]))->op, "\n") == 0)))) {
+    while (!g_parse_error && ((((parts.len > 1) && (strcmp(parts.data[(parts.len - 1)]->kind, "operator") == 0)) && ((strcmp(((Operator *)(parts.data[(parts.len - 1)]))->op, ";") == 0) || (strcmp(((Operator *)(parts.data[(parts.len - 1)]))->op, "\n") == 0))))) {
         parts = ((Vec_Node){(parts).data + (0), ((parts.len - 1)) - (0), ((parts.len - 1)) - (0)});
     }
     if ((parts.len == 1)) {
@@ -7602,12 +7644,12 @@ static const char * Redirect_to_sexp(Redirect *self) {
         int64_t j = 1;
         if (((j < _rune_len(op)) && (_str_is_alpha((const char *)(_char_at_str(g_arena, op, j))) || (strcmp((const char *)(_char_at_str(g_arena, op, j)), "_") == 0)))) {
             j += 1;
-            while (((j < _rune_len(op)) && (_str_is_alnum((const char *)(_char_at_str(g_arena, op, j))) || (strcmp((const char *)(_char_at_str(g_arena, op, j)), "_") == 0)))) {
+            while (!g_parse_error && (((j < _rune_len(op)) && (_str_is_alnum((const char *)(_char_at_str(g_arena, op, j))) || (strcmp((const char *)(_char_at_str(g_arena, op, j)), "_") == 0))))) {
                 j += 1;
             }
             if (((j < _rune_len(op)) && (strcmp((const char *)(_char_at_str(g_arena, op, j)), "[") == 0))) {
                 j += 1;
-                while (((j < _rune_len(op)) && (strcmp((const char *)(_char_at_str(g_arena, op, j)), "]") != 0))) {
+                while (!g_parse_error && (((j < _rune_len(op)) && (strcmp((const char *)(_char_at_str(g_arena, op, j)), "]") != 0)))) {
                     j += 1;
                 }
                 if (((j < _rune_len(op)) && (strcmp((const char *)(_char_at_str(g_arena, op, j)), "]") == 0))) {
@@ -7846,7 +7888,7 @@ static const char * CasePattern_to_sexp(CasePattern *self) {
     Vec_Str current = (Vec_Str){NULL, 0, 0};
     int64_t i = 0;
     int64_t depth = 0;
-    while ((i < _rune_len(self->pattern))) {
+    while (!g_parse_error && ((i < _rune_len(self->pattern)))) {
         const char * ch = (const char *)(_char_at_str(g_arena, self->pattern, i));
         int64_t result0;
         Vec_Str result1;
@@ -8550,7 +8592,7 @@ static bool Parser__is_bang_followed_by_procsub(Parser *self) {
 }
 
 static void Parser_skip_whitespace(Parser *self) {
-    while (!(Parser_at_end(self))) {
+    while (!g_parse_error && (!(Parser_at_end(self)))) {
         Parser__lex_skip_blanks(self);
         if (Parser_at_end(self)) {
             break;
@@ -8568,7 +8610,7 @@ static void Parser_skip_whitespace(Parser *self) {
 }
 
 static void Parser_skip_whitespace_and_newlines(Parser *self) {
-    while (!(Parser_at_end(self))) {
+    while (!g_parse_error && (!(Parser_at_end(self)))) {
         const char * ch = Parser_peek(self);
         if (_is_whitespace(ch)) {
             Parser_advance(self);
@@ -8580,7 +8622,7 @@ static void Parser_skip_whitespace_and_newlines(Parser *self) {
                 }
             }
         } else if ((strcmp(ch, "#") == 0)) {
-            while ((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), "\n") != 0))) {
+            while (!g_parse_error && ((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), "\n") != 0)))) {
                 Parser_advance(self);
             }
         } else if (((strcmp(ch, "\\") == 0) && (strcmp(Parser_peek_at(self, 1), "\n") == 0))) {
@@ -8629,7 +8671,7 @@ static bool Parser__at_eof_token(Parser *self) {
 
 static Vec_Node Parser__collect_redirects(Parser *self) {
     Vec_Node redirects = (Vec_Node){NULL, 0, 0};
-    while (true) {
+    while (!g_parse_error && (true)) {
         Parser_skip_whitespace(self);
         Node * redirect = Parser_parse_redirect(self);
         if ((redirect == NULL)) {
@@ -8678,7 +8720,7 @@ static const char * Parser_peek_word(Parser *self) {
         return "";
     }
     Vec_Str chars = (Vec_Str){NULL, 0, 0};
-    while ((!(Parser_at_end(self)) && !(_is_metachar(Parser_peek(self))))) {
+    while (!g_parse_error && ((!(Parser_at_end(self)) && !(_is_metachar(Parser_peek(self)))))) {
         const char * ch = Parser_peek(self);
         if (_is_quote(ch)) {
             break;
@@ -8724,7 +8766,7 @@ static bool Parser_consume_word(Parser *self, const char * expected) {
     for (int _idx = 0; _idx < _rune_len(expected); _idx++) {
         Parser_advance(self);
     }
-    while ((((strcmp(Parser_peek(self), "\\") == 0) && ((self->pos + 1) < self->length)) && (strcmp((const char *)(_char_at_str(g_arena, self->source, (self->pos + 1))), "\n") == 0))) {
+    while (!g_parse_error && ((((strcmp(Parser_peek(self), "\\") == 0) && ((self->pos + 1) < self->length)) && (strcmp((const char *)(_char_at_str(g_arena, self->source, (self->pos + 1))), "\n") == 0)))) {
         Parser_advance(self);
         Parser_advance(self);
     }
@@ -8738,7 +8780,7 @@ static bool Parser__is_word_terminator(Parser *self, int64_t ctx, const char * c
 
 static void Parser__scan_double_quote(Parser *self, Vec_Str * chars, Vec_Node parts, int64_t start, bool handle_line_continuation) {
     VEC_PUSH(g_arena, chars, ("\""));
-    while ((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), "\"") != 0))) {
+    while (!g_parse_error && ((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), "\"") != 0)))) {
         const char * c = Parser_peek(self);
         if (((strcmp(c, "\\") == 0) && ((self->pos + 1) < self->length))) {
             const char * next_c = (const char *)(_char_at_str(g_arena, self->source, (self->pos + 1)));
@@ -8921,11 +8963,11 @@ static Tuple_NodePtr_constcharPtr Parser__parse_backtick_substitution(Parser *se
     const char * current_heredoc_delim = "";
     bool current_heredoc_strip = false;
     const char * ch;
-    while ((!(Parser_at_end(self)) && (in_heredoc_body || (strcmp(Parser_peek(self), "`") != 0)))) {
+    while (!g_parse_error && ((!(Parser_at_end(self)) && (in_heredoc_body || (strcmp(Parser_peek(self), "`") != 0))))) {
         if (in_heredoc_body) {
             int64_t line_start = self->pos;
             int64_t line_end = line_start;
-            while (((line_end < self->length) && (strcmp((const char *)(_char_at_str(g_arena, self->source, line_end)), "\n") != 0))) {
+            while (!g_parse_error && (((line_end < self->length) && (strcmp((const char *)(_char_at_str(g_arena, self->source, line_end)), "\n") != 0)))) {
                 line_end += 1;
             }
             const char * line = _substring(self->source, line_start, line_end);
@@ -8944,8 +8986,9 @@ static Tuple_NodePtr_constcharPtr Parser__parse_backtick_substitution(Parser *se
                 }
                 in_heredoc_body = false;
                 if ((pending_heredocs.len > 0)) {
-                    current_heredoc_delim = ((void **)&(pending_heredocs.data[--pending_heredocs.len]))[0];
-                    current_heredoc_strip = ((void **)&(pending_heredocs.data[--pending_heredocs.len]))[1];
+                    __auto_type _tup64 = ({ Tuple_constcharPtr_bool _pop0 = pending_heredocs.data[0]; memmove(pending_heredocs.data, pending_heredocs.data + 1, --pending_heredocs.len * sizeof(pending_heredocs.data[0])); _pop0; });
+                    current_heredoc_delim = ((void **)&(_tup64))[0];
+                    current_heredoc_strip = ((void **)&(_tup64))[1];
                     in_heredoc_body = true;
                 }
             } else if ((_str_startswith(check_line, current_heredoc_delim) && (_rune_len(check_line) > _rune_len(current_heredoc_delim)))) {
@@ -8958,8 +9001,9 @@ static Tuple_NodePtr_constcharPtr Parser__parse_backtick_substitution(Parser *se
                 self->pos = (line_start + end_pos);
                 in_heredoc_body = false;
                 if ((pending_heredocs.len > 0)) {
-                    current_heredoc_delim = ((void **)&(pending_heredocs.data[--pending_heredocs.len]))[0];
-                    current_heredoc_strip = ((void **)&(pending_heredocs.data[--pending_heredocs.len]))[1];
+                    __auto_type _tup65 = ({ Tuple_constcharPtr_bool _pop0 = pending_heredocs.data[0]; memmove(pending_heredocs.data, pending_heredocs.data + 1, --pending_heredocs.len * sizeof(pending_heredocs.data[0])); _pop0; });
+                    current_heredoc_delim = ((void **)&(_tup65))[0];
+                    current_heredoc_strip = ((void **)&(_tup65))[1];
                     in_heredoc_body = true;
                 }
             } else {
@@ -9008,12 +9052,12 @@ static Tuple_NodePtr_constcharPtr Parser__parse_backtick_substitution(Parser *se
                 VEC_PUSH(g_arena, &text_chars, ("<"));
                 VEC_PUSH(g_arena, &content_chars, (Parser_advance(self)));
                 VEC_PUSH(g_arena, &text_chars, ("<"));
-                while ((!(Parser_at_end(self)) && _is_whitespace_no_newline(Parser_peek(self)))) {
+                while (!g_parse_error && ((!(Parser_at_end(self)) && _is_whitespace_no_newline(Parser_peek(self))))) {
                     ch = Parser_advance(self);
                     VEC_PUSH(g_arena, &content_chars, (ch));
                     VEC_PUSH(g_arena, &text_chars, (ch));
                 }
-                while (((!(Parser_at_end(self)) && !(_is_whitespace(Parser_peek(self)))) && !_str_contains("()", Parser_peek(self)))) {
+                while (!g_parse_error && (((!(Parser_at_end(self)) && !(_is_whitespace(Parser_peek(self)))) && !_str_contains("()", Parser_peek(self))))) {
                     if (((strcmp(Parser_peek(self), "\\") == 0) && ((self->pos + 1) < self->length))) {
                         ch = Parser_advance(self);
                         VEC_PUSH(g_arena, &content_chars, (ch));
@@ -9026,7 +9070,7 @@ static Tuple_NodePtr_constcharPtr Parser__parse_backtick_substitution(Parser *se
                         ch = Parser_advance(self);
                         VEC_PUSH(g_arena, &content_chars, (ch));
                         VEC_PUSH(g_arena, &text_chars, (ch));
-                        while ((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), quote) != 0))) {
+                        while (!g_parse_error && ((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), quote) != 0)))) {
                             if (((strcmp(quote, "\"") == 0) && (strcmp(Parser_peek(self), "\\") == 0))) {
                                 ch = Parser_advance(self);
                                 VEC_PUSH(g_arena, &content_chars, (ch));
@@ -9059,7 +9103,7 @@ static Tuple_NodePtr_constcharPtr Parser__parse_backtick_substitution(Parser *se
                 VEC_PUSH(g_arena, &content_chars, (Parser_advance(self)));
                 VEC_PUSH(g_arena, &text_chars, ("-"));
             }
-            while ((!(Parser_at_end(self)) && _is_whitespace_no_newline(Parser_peek(self)))) {
+            while (!g_parse_error && ((!(Parser_at_end(self)) && _is_whitespace_no_newline(Parser_peek(self))))) {
                 ch = Parser_advance(self);
                 VEC_PUSH(g_arena, &content_chars, (ch));
                 VEC_PUSH(g_arena, &text_chars, (ch));
@@ -9071,7 +9115,7 @@ static Tuple_NodePtr_constcharPtr Parser__parse_backtick_substitution(Parser *se
                     quote = Parser_advance(self);
                     VEC_PUSH(g_arena, &content_chars, (quote));
                     VEC_PUSH(g_arena, &text_chars, (quote));
-                    while ((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), quote) != 0))) {
+                    while (!g_parse_error && ((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), quote) != 0)))) {
                         dch = Parser_advance(self);
                         VEC_PUSH(g_arena, &content_chars, (dch));
                         VEC_PUSH(g_arena, &text_chars, (dch));
@@ -9092,20 +9136,20 @@ static Tuple_NodePtr_constcharPtr Parser__parse_backtick_substitution(Parser *se
                         VEC_PUSH(g_arena, &text_chars, (dch));
                         VEC_PUSH(g_arena, &delimiter_chars, (dch));
                     }
-                    while ((!(Parser_at_end(self)) && !(_is_metachar(Parser_peek(self))))) {
+                    while (!g_parse_error && ((!(Parser_at_end(self)) && !(_is_metachar(Parser_peek(self)))))) {
                         dch = Parser_advance(self);
                         VEC_PUSH(g_arena, &content_chars, (dch));
                         VEC_PUSH(g_arena, &text_chars, (dch));
                         VEC_PUSH(g_arena, &delimiter_chars, (dch));
                     }
                 } else {
-                    while (((!(Parser_at_end(self)) && !(_is_metachar(Parser_peek(self)))) && (strcmp(Parser_peek(self), "`") != 0))) {
+                    while (!g_parse_error && (((!(Parser_at_end(self)) && !(_is_metachar(Parser_peek(self)))) && (strcmp(Parser_peek(self), "`") != 0)))) {
                         ch = Parser_peek(self);
                         if (_is_quote(ch)) {
                             quote = Parser_advance(self);
                             VEC_PUSH(g_arena, &content_chars, (quote));
                             VEC_PUSH(g_arena, &text_chars, (quote));
-                            while ((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), quote) != 0))) {
+                            while (!g_parse_error && ((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), quote) != 0)))) {
                                 dch = Parser_advance(self);
                                 VEC_PUSH(g_arena, &content_chars, (dch));
                                 VEC_PUSH(g_arena, &text_chars, (dch));
@@ -9146,8 +9190,9 @@ static Tuple_NodePtr_constcharPtr Parser__parse_backtick_substitution(Parser *se
             VEC_PUSH(g_arena, &content_chars, (ch));
             VEC_PUSH(g_arena, &text_chars, (ch));
             if ((pending_heredocs.len > 0)) {
-                current_heredoc_delim = ((void **)&(pending_heredocs.data[--pending_heredocs.len]))[0];
-                current_heredoc_strip = ((void **)&(pending_heredocs.data[--pending_heredocs.len]))[1];
+                __auto_type _tup66 = ({ Tuple_constcharPtr_bool _pop0 = pending_heredocs.data[0]; memmove(pending_heredocs.data, pending_heredocs.data + 1, --pending_heredocs.len * sizeof(pending_heredocs.data[0])); _pop0; });
+                current_heredoc_delim = ((void **)&(_tup66))[0];
+                current_heredoc_strip = ((void **)&(_tup66))[1];
                 in_heredoc_body = true;
             }
             continue;
@@ -9166,9 +9211,9 @@ static Tuple_NodePtr_constcharPtr Parser__parse_backtick_substitution(Parser *se
     const char * text = _str_join(g_arena, "", text_chars);
     const char * content = _str_join(g_arena, "", content_chars);
     if ((pending_heredocs.len > 0)) {
-        Tuple_int64_t_int64_t _tup64 = _find_heredoc_content_end(self->source, self->pos, pending_heredocs);
-        int64_t heredoc_start = _tup64.F0;
-        int64_t heredoc_end = _tup64.F1;
+        Tuple_int64_t_int64_t _tup67 = _find_heredoc_content_end(self->source, self->pos, pending_heredocs);
+        int64_t heredoc_start = _tup67.F0;
+        int64_t heredoc_end = _tup67.F1;
         if ((heredoc_end > heredoc_start)) {
             content = _str_concat(g_arena, content, _substring(self->source, heredoc_start, heredoc_end));
             if ((self->_cmdsub_heredoc_end == -(1))) {
@@ -9220,7 +9265,25 @@ static Tuple_NodePtr_constcharPtr Parser__parse_process_substitution(Parser *sel
     Parser__restore_parser_state(self, saved);
     self->_in_process_sub = old_in_process_sub;
     return (Tuple_NodePtr_constcharPtr){(Node *)ProcessSubstitution_new(direction, cmd, "procsub"), text};
-    // } catch handled via error returns
+    if (g_parse_error) {
+        g_parse_error = 0;
+        g_error_msg[0] = '\0';
+        Parser__restore_parser_state(self, saved);
+        self->_in_process_sub = old_in_process_sub;
+        const char * content_start_char = (((start + 2) < self->length) ? (const char *)(_char_at_str(g_arena, self->source, (start + 2))) : "");
+        if (_str_contains(" \t\n", content_start_char)) {
+            // re-raise
+            return (Tuple_NodePtr_constcharPtr){NULL, NULL};
+        }
+        self->pos = (start + 2);
+        self->_lexer->pos = self->pos;
+        Lexer__parse_matched_pair(self->_lexer, "(", ")", 0, false);
+        self->pos = self->_lexer->pos;
+        text = _substring(self->source, start, self->pos);
+        text = _strip_line_continuations_comment_aware(text);
+        return (Tuple_NodePtr_constcharPtr){(Node *)NULL, text};
+    }
+    // } catch
 }
 
 static Tuple_NodePtr_constcharPtr Parser__parse_array_literal(Parser *self) {
@@ -9231,7 +9294,7 @@ static Tuple_NodePtr_constcharPtr Parser__parse_array_literal(Parser *self) {
     Parser_advance(self);
     Parser__set_state(self, PARSERSTATEFLAGS_PST_COMPASSIGN);
     Vec_Word elements = (Vec_Word){NULL, 0, 0};
-    while (true) {
+    while (!g_parse_error && (true)) {
         Parser_skip_whitespace_and_newlines(self);
         if (Parser_at_end(self)) {
             Parser__clear_state(self, PARSERSTATEFLAGS_PST_COMPASSIGN);
@@ -9280,11 +9343,11 @@ static Tuple_NodePtr_constcharPtr Parser__parse_arithmetic_expansion(Parser *sel
     int64_t content_start = self->pos;
     int64_t depth = 2;
     int64_t first_close_pos = -(1);
-    while ((!(Parser_at_end(self)) && (depth > 0))) {
+    while (!g_parse_error && ((!(Parser_at_end(self)) && (depth > 0)))) {
         const char * c = Parser_peek(self);
         if ((strcmp(c, "'") == 0)) {
             Parser_advance(self);
-            while ((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), "'") != 0))) {
+            while (!g_parse_error && ((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), "'") != 0)))) {
                 Parser_advance(self);
             }
             if (!(Parser_at_end(self))) {
@@ -9292,7 +9355,7 @@ static Tuple_NodePtr_constcharPtr Parser__parse_arithmetic_expansion(Parser *sel
             }
         } else if ((strcmp(c, "\"") == 0)) {
             Parser_advance(self);
-            while (!(Parser_at_end(self))) {
+            while (!g_parse_error && (!(Parser_at_end(self)))) {
                 if (((strcmp(Parser_peek(self), "\\") == 0) && ((self->pos + 1) < self->length))) {
                     Parser_advance(self);
                     Parser_advance(self);
@@ -9345,7 +9408,13 @@ static Tuple_NodePtr_constcharPtr Parser__parse_arithmetic_expansion(Parser *sel
     // try {
     Node * expr;
     expr = (Node *)Parser__parse_arith_expr(self, content);
-    // } catch handled via error returns
+    if (g_parse_error) {
+        g_parse_error = 0;
+        g_error_msg[0] = '\0';
+        self->pos = start;
+        return (Tuple_NodePtr_constcharPtr){(Node *)NULL, ""};
+    }
+    // } catch
     return (Tuple_NodePtr_constcharPtr){(Node *)ArithmeticExpansion_new(expr, "arith"), text};
 }
 
@@ -9396,7 +9465,7 @@ static const char * Parser__arith_advance(Parser *self) {
 }
 
 static void Parser__arith_skip_ws(Parser *self) {
-    while (!(Parser__arith_at_end(self))) {
+    while (!g_parse_error && (!(Parser__arith_at_end(self)))) {
         const char * c = (const char *)(_char_at_str(g_arena, self->_arith_src, self->_arith_pos));
         if (_is_whitespace(c)) {
             self->_arith_pos += 1;
@@ -9422,7 +9491,7 @@ static bool Parser__arith_consume(Parser *self, const char * s) {
 
 static Node * Parser__arith_parse_comma(Parser *self) {
     Node * left = (Node *)Parser__arith_parse_assign(self);
-    while (true) {
+    while (!g_parse_error && (true)) {
         Parser__arith_skip_ws(self);
         if (Parser__arith_consume(self, ",")) {
             Parser__arith_skip_ws(self);
@@ -9484,7 +9553,7 @@ static Node * Parser__arith_parse_ternary(Parser *self) {
 
 static Node * Parser__arith_parse_left_assoc(Parser *self, Vec_Str ops, Node * (*parsefn)(Parser *)) {
     Node * left = parsefn(self);
-    while (true) {
+    while (!g_parse_error && (true)) {
         Parser__arith_skip_ws(self);
         bool matched = false;
         for (size_t _idx = 0; _idx < ops.len; _idx++) {
@@ -9514,7 +9583,7 @@ static Node * Parser__arith_parse_logical_and(Parser *self) {
 
 static Node * Parser__arith_parse_bitwise_or(Parser *self) {
     Node * left = (Node *)Parser__arith_parse_bitwise_xor(self);
-    while (true) {
+    while (!g_parse_error && (true)) {
         Parser__arith_skip_ws(self);
         if (((strcmp(Parser__arith_peek(self, 0), "|") == 0) && ((strcmp(Parser__arith_peek(self, 1), "|") != 0) && (strcmp(Parser__arith_peek(self, 1), "=") != 0)))) {
             Parser__arith_advance(self);
@@ -9530,7 +9599,7 @@ static Node * Parser__arith_parse_bitwise_or(Parser *self) {
 
 static Node * Parser__arith_parse_bitwise_xor(Parser *self) {
     Node * left = (Node *)Parser__arith_parse_bitwise_and(self);
-    while (true) {
+    while (!g_parse_error && (true)) {
         Parser__arith_skip_ws(self);
         if (((strcmp(Parser__arith_peek(self, 0), "^") == 0) && (strcmp(Parser__arith_peek(self, 1), "=") != 0))) {
             Parser__arith_advance(self);
@@ -9546,7 +9615,7 @@ static Node * Parser__arith_parse_bitwise_xor(Parser *self) {
 
 static Node * Parser__arith_parse_bitwise_and(Parser *self) {
     Node * left = (Node *)Parser__arith_parse_equality(self);
-    while (true) {
+    while (!g_parse_error && (true)) {
         Parser__arith_skip_ws(self);
         if (((strcmp(Parser__arith_peek(self, 0), "&") == 0) && ((strcmp(Parser__arith_peek(self, 1), "&") != 0) && (strcmp(Parser__arith_peek(self, 1), "=") != 0)))) {
             Parser__arith_advance(self);
@@ -9566,7 +9635,7 @@ static Node * Parser__arith_parse_equality(Parser *self) {
 
 static Node * Parser__arith_parse_comparison(Parser *self) {
     Node * left = (Node *)Parser__arith_parse_shift(self);
-    while (true) {
+    while (!g_parse_error && (true)) {
         Parser__arith_skip_ws(self);
         Node * right;
         if (Parser__arith_match(self, "<=")) {
@@ -9598,7 +9667,7 @@ static Node * Parser__arith_parse_comparison(Parser *self) {
 
 static Node * Parser__arith_parse_shift(Parser *self) {
     Node * left = (Node *)Parser__arith_parse_additive(self);
-    while (true) {
+    while (!g_parse_error && (true)) {
         Parser__arith_skip_ws(self);
         if (Parser__arith_match(self, "<<=")) {
             break;
@@ -9626,7 +9695,7 @@ static Node * Parser__arith_parse_shift(Parser *self) {
 
 static Node * Parser__arith_parse_additive(Parser *self) {
     Node * left = (Node *)Parser__arith_parse_multiplicative(self);
-    while (true) {
+    while (!g_parse_error && (true)) {
         Parser__arith_skip_ws(self);
         const char * c = Parser__arith_peek(self, 0);
         const char * c2 = Parser__arith_peek(self, 1);
@@ -9650,7 +9719,7 @@ static Node * Parser__arith_parse_additive(Parser *self) {
 
 static Node * Parser__arith_parse_multiplicative(Parser *self) {
     Node * left = (Node *)Parser__arith_parse_exponentiation(self);
-    while (true) {
+    while (!g_parse_error && (true)) {
         Parser__arith_skip_ws(self);
         const char * c = Parser__arith_peek(self, 0);
         const char * c2 = Parser__arith_peek(self, 1);
@@ -9734,7 +9803,7 @@ static Node * Parser__arith_parse_unary(Parser *self) {
 
 static Node * Parser__arith_parse_postfix(Parser *self) {
     Node * left = (Node *)Parser__arith_parse_primary(self);
-    while (true) {
+    while (!g_parse_error && (true)) {
         Parser__arith_skip_ws(self);
         if (Parser__arith_match(self, "++")) {
             Parser__arith_consume(self, "++");
@@ -9744,9 +9813,9 @@ static Node * Parser__arith_parse_postfix(Parser *self) {
             left = (Node *)ArithPostDecr_new(left, "post-decr");
         } else if ((strcmp(Parser__arith_peek(self, 0), "[") == 0)) {
             Node * index;
-            void *_tsexpr65 = left;
-            if (strcmp(((ArithVar *)_tsexpr65)->kind, "arith-var") == 0) {
-                ArithVar *left = (ArithVar *)_tsexpr65;
+            void *_tsexpr68 = left;
+            if (strcmp(((ArithVar *)_tsexpr68)->kind, "var") == 0) {
+                ArithVar *left = (ArithVar *)_tsexpr68;
                 Parser__arith_advance(self);
                 Parser__arith_skip_ws(self);
                 index = (Node *)Parser__arith_parse_comma(self);
@@ -9828,7 +9897,7 @@ static Node * Parser__arith_parse_expansion(Parser *self) {
         return (Node *)Parser__arith_parse_braced_param(self);
     }
     Vec_Str name_chars = (Vec_Str){NULL, 0, 0};
-    while (!(Parser__arith_at_end(self))) {
+    while (!g_parse_error && (!(Parser__arith_at_end(self)))) {
         const char * ch = Parser__arith_peek(self, 0);
         if ((_str_is_alnum(ch) || (strcmp(ch, "_") == 0))) {
             VEC_PUSH(g_arena, &name_chars, (Parser__arith_advance(self)));
@@ -9857,7 +9926,7 @@ static Node * Parser__arith_parse_cmdsub(Parser *self) {
         Parser__arith_advance(self);
         depth = 1;
         content_start = self->_arith_pos;
-        while ((!(Parser__arith_at_end(self)) && (depth > 0))) {
+        while (!g_parse_error && ((!(Parser__arith_at_end(self)) && (depth > 0)))) {
             ch = Parser__arith_peek(self, 0);
             if ((strcmp(ch, "(") == 0)) {
                 depth += 1;
@@ -9880,7 +9949,7 @@ static Node * Parser__arith_parse_cmdsub(Parser *self) {
     }
     depth = 1;
     content_start = self->_arith_pos;
-    while ((!(Parser__arith_at_end(self)) && (depth > 0))) {
+    while (!g_parse_error && ((!(Parser__arith_at_end(self)) && (depth > 0)))) {
         ch = Parser__arith_peek(self, 0);
         if ((strcmp(ch, "(") == 0)) {
             depth += 1;
@@ -9908,7 +9977,7 @@ static Node * Parser__arith_parse_braced_param(Parser *self) {
     if ((strcmp(Parser__arith_peek(self, 0), "!") == 0)) {
         Parser__arith_advance(self);
         name_chars = (Vec_Str){NULL, 0, 0};
-        while ((!(Parser__arith_at_end(self)) && (strcmp(Parser__arith_peek(self, 0), "}") != 0))) {
+        while (!g_parse_error && ((!(Parser__arith_at_end(self)) && (strcmp(Parser__arith_peek(self, 0), "}") != 0)))) {
             VEC_PUSH(g_arena, &name_chars, (Parser__arith_advance(self)));
         }
         Parser__arith_consume(self, "}");
@@ -9917,7 +9986,7 @@ static Node * Parser__arith_parse_braced_param(Parser *self) {
     if ((strcmp(Parser__arith_peek(self, 0), "#") == 0)) {
         Parser__arith_advance(self);
         name_chars = (Vec_Str){NULL, 0, 0};
-        while ((!(Parser__arith_at_end(self)) && (strcmp(Parser__arith_peek(self, 0), "}") != 0))) {
+        while (!g_parse_error && ((!(Parser__arith_at_end(self)) && (strcmp(Parser__arith_peek(self, 0), "}") != 0)))) {
             VEC_PUSH(g_arena, &name_chars, (Parser__arith_advance(self)));
         }
         Parser__arith_consume(self, "}");
@@ -9925,7 +9994,7 @@ static Node * Parser__arith_parse_braced_param(Parser *self) {
     }
     name_chars = (Vec_Str){NULL, 0, 0};
     const char * ch;
-    while (!(Parser__arith_at_end(self))) {
+    while (!g_parse_error && (!(Parser__arith_at_end(self)))) {
         ch = Parser__arith_peek(self, 0);
         if ((strcmp(ch, "}") == 0)) {
             Parser__arith_advance(self);
@@ -9939,7 +10008,7 @@ static Node * Parser__arith_parse_braced_param(Parser *self) {
     const char * name = _str_join(g_arena, "", name_chars);
     Vec_Str op_chars = (Vec_Str){NULL, 0, 0};
     int64_t depth = 1;
-    while ((!(Parser__arith_at_end(self)) && (depth > 0))) {
+    while (!g_parse_error && ((!(Parser__arith_at_end(self)) && (depth > 0)))) {
         ch = Parser__arith_peek(self, 0);
         if ((strcmp(ch, "{") == 0)) {
             depth += 1;
@@ -9995,7 +10064,7 @@ static Node * Parser__arith_parse_braced_param(Parser *self) {
 static Node * Parser__arith_parse_single_quote(Parser *self) {
     Parser__arith_advance(self);
     int64_t content_start = self->_arith_pos;
-    while ((!(Parser__arith_at_end(self)) && (strcmp(Parser__arith_peek(self, 0), "'") != 0))) {
+    while (!g_parse_error && ((!(Parser__arith_at_end(self)) && (strcmp(Parser__arith_peek(self, 0), "'") != 0)))) {
         Parser__arith_advance(self);
     }
     const char * content = _substring(self->_arith_src, content_start, self->_arith_pos);
@@ -10010,7 +10079,7 @@ static Node * Parser__arith_parse_single_quote(Parser *self) {
 static Node * Parser__arith_parse_double_quote(Parser *self) {
     Parser__arith_advance(self);
     int64_t content_start = self->_arith_pos;
-    while ((!(Parser__arith_at_end(self)) && (strcmp(Parser__arith_peek(self, 0), "\"") != 0))) {
+    while (!g_parse_error && ((!(Parser__arith_at_end(self)) && (strcmp(Parser__arith_peek(self, 0), "\"") != 0)))) {
         const char * c = Parser__arith_peek(self, 0);
         if (((strcmp(c, "\\") == 0) && !(Parser__arith_at_end(self)))) {
             Parser__arith_advance(self);
@@ -10031,7 +10100,7 @@ static Node * Parser__arith_parse_double_quote(Parser *self) {
 static Node * Parser__arith_parse_backtick(Parser *self) {
     Parser__arith_advance(self);
     int64_t content_start = self->_arith_pos;
-    while ((!(Parser__arith_at_end(self)) && (strcmp(Parser__arith_peek(self, 0), "`") != 0))) {
+    while (!g_parse_error && ((!(Parser__arith_at_end(self)) && (strcmp(Parser__arith_peek(self, 0), "`") != 0)))) {
         const char * c = Parser__arith_peek(self, 0);
         if (((strcmp(c, "\\") == 0) && !(Parser__arith_at_end(self)))) {
             Parser__arith_advance(self);
@@ -10057,7 +10126,7 @@ static Node * Parser__arith_parse_number_or_var(Parser *self) {
     const char * c = Parser__arith_peek(self, 0);
     const char * ch;
     if (_str_is_digit(c)) {
-        while (!(Parser__arith_at_end(self))) {
+        while (!g_parse_error && (!(Parser__arith_at_end(self)))) {
             ch = Parser__arith_peek(self, 0);
             if ((_str_is_alnum(ch) || ((strcmp(ch, "#") == 0) || (strcmp(ch, "_") == 0)))) {
                 VEC_PUSH(g_arena, &chars, (Parser__arith_advance(self)));
@@ -10073,7 +10142,7 @@ static Node * Parser__arith_parse_number_or_var(Parser *self) {
         return ArithNumber_new(prefix, "number");
     }
     if ((_str_is_alpha(c) || (strcmp(c, "_") == 0))) {
-        while (!(Parser__arith_at_end(self))) {
+        while (!g_parse_error && (!(Parser__arith_at_end(self)))) {
             ch = Parser__arith_peek(self, 0);
             if ((_str_is_alnum(ch) || (strcmp(ch, "_") == 0))) {
                 VEC_PUSH(g_arena, &chars, (Parser__arith_advance(self)));
@@ -10107,9 +10176,9 @@ static Tuple_NodePtr_constcharPtr Parser__parse_deprecated_arithmetic(Parser *se
 
 static Tuple_NodePtr_constcharPtr Parser__parse_param_expansion(Parser *self, bool in_dquote) {
     Parser__sync_lexer(self);
-    Tuple_NodePtr_constcharPtr _tup66 = Lexer__read_param_expansion(self->_lexer, in_dquote);
-    Node * result0 = _tup66.F0;
-    const char * result1 = _tup66.F1;
+    Tuple_NodePtr_constcharPtr _tup69 = Lexer__read_param_expansion(self->_lexer, in_dquote);
+    Node * result0 = _tup69.F0;
+    const char * result1 = _tup69.F1;
     Parser__sync_parser(self);
     return (Tuple_NodePtr_constcharPtr){(Node *)result0, result1};
 }
@@ -10128,7 +10197,7 @@ static Node * Parser_parse_redirect(Parser *self) {
         Parser_advance(self);
         Vec_Str varname_chars = (Vec_Str){NULL, 0, 0};
         bool in_bracket = false;
-        while ((!(Parser_at_end(self)) && !(_is_redirect_char(Parser_peek(self))))) {
+        while (!g_parse_error && ((!(Parser_at_end(self)) && !(_is_redirect_char(Parser_peek(self)))))) {
             ch = Parser_peek(self);
             if (((strcmp(ch, "}") == 0) && !(in_bracket))) {
                 break;
@@ -10188,7 +10257,7 @@ static Node * Parser_parse_redirect(Parser *self) {
     Vec_Str fd_chars;
     if ((((strcmp(varfd, "") == 0) && (Parser_peek(self) != NULL && Parser_peek(self)[0] != '\0')) && _str_is_digit(Parser_peek(self)))) {
         fd_chars = (Vec_Str){NULL, 0, 0};
-        while ((!(Parser_at_end(self)) && _str_is_digit(Parser_peek(self)))) {
+        while (!g_parse_error && ((!(Parser_at_end(self)) && _str_is_digit(Parser_peek(self))))) {
             VEC_PUSH(g_arena, &fd_chars, (Parser_advance(self)));
         }
         fd = _parse_int(_str_join(g_arena, "", fd_chars), 10);
@@ -10290,7 +10359,7 @@ static Node * Parser_parse_redirect(Parser *self) {
             if ((!(Parser_at_end(self)) && (_str_is_digit(Parser_peek(self)) || (strcmp(Parser_peek(self), "-") == 0)))) {
                 int64_t word_start = self->pos;
                 fd_chars = (Vec_Str){NULL, 0, 0};
-                while ((!(Parser_at_end(self)) && _str_is_digit(Parser_peek(self)))) {
+                while (!g_parse_error && ((!(Parser_at_end(self)) && _str_is_digit(Parser_peek(self))))) {
                     VEC_PUSH(g_arena, &fd_chars, (Parser_advance(self)));
                 }
                 if ((fd_chars.len > 0)) {
@@ -10352,17 +10421,17 @@ static Tuple_constcharPtr_bool Parser__parse_heredoc_delimiter(Parser *self) {
     Parser_skip_whitespace(self);
     bool quoted = false;
     Vec_Str delimiter_chars = (Vec_Str){NULL, 0, 0};
-    while (true) {
+    while (!g_parse_error && (true)) {
         const char * c;
         int64_t depth;
-        while ((!(Parser_at_end(self)) && !(_is_metachar(Parser_peek(self))))) {
+        while (!g_parse_error && ((!(Parser_at_end(self)) && !(_is_metachar(Parser_peek(self)))))) {
             const char * ch = Parser_peek(self);
             int64_t dollar_count;
             int64_t j;
             if ((strcmp(ch, "\"") == 0)) {
                 quoted = true;
                 Parser_advance(self);
-                while ((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), "\"") != 0))) {
+                while (!g_parse_error && ((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), "\"") != 0)))) {
                     VEC_PUSH(g_arena, &delimiter_chars, (Parser_advance(self)));
                 }
                 if (!(Parser_at_end(self))) {
@@ -10371,7 +10440,7 @@ static Tuple_constcharPtr_bool Parser__parse_heredoc_delimiter(Parser *self) {
             } else if ((strcmp(ch, "'") == 0)) {
                 quoted = true;
                 Parser_advance(self);
-                while ((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), "'") != 0))) {
+                while (!g_parse_error && ((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), "'") != 0)))) {
                     c = Parser_advance(self);
                     if ((strcmp(c, "\n") == 0)) {
                         self->_saw_newline_in_single_quote = true;
@@ -10396,7 +10465,7 @@ static Tuple_constcharPtr_bool Parser__parse_heredoc_delimiter(Parser *self) {
                 quoted = true;
                 Parser_advance(self);
                 Parser_advance(self);
-                while ((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), "'") != 0))) {
+                while (!g_parse_error && ((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), "'") != 0)))) {
                     c = Parser_peek(self);
                     if (((strcmp(c, "\\") == 0) && ((self->pos + 1) < self->length))) {
                         Parser_advance(self);
@@ -10421,7 +10490,7 @@ static Tuple_constcharPtr_bool Parser__parse_heredoc_delimiter(Parser *self) {
                 VEC_PUSH(g_arena, &delimiter_chars, (Parser_advance(self)));
                 VEC_PUSH(g_arena, &delimiter_chars, (Parser_advance(self)));
                 depth = 1;
-                while ((!(Parser_at_end(self)) && (depth > 0))) {
+                while (!g_parse_error && ((!(Parser_at_end(self)) && (depth > 0)))) {
                     c = Parser_peek(self);
                     if ((strcmp(c, "(") == 0)) {
                         depth += 1;
@@ -10433,7 +10502,7 @@ static Tuple_constcharPtr_bool Parser__parse_heredoc_delimiter(Parser *self) {
             } else if ((((strcmp(ch, "$") == 0) && ((self->pos + 1) < self->length)) && (strcmp((const char *)(_char_at_str(g_arena, self->source, (self->pos + 1))), "{") == 0))) {
                 dollar_count = 0;
                 j = (self->pos - 1);
-                while (((j >= 0) && (strcmp((const char *)(_char_at_str(g_arena, self->source, j)), "$") == 0))) {
+                while (!g_parse_error && (((j >= 0) && (strcmp((const char *)(_char_at_str(g_arena, self->source, j)), "$") == 0)))) {
                     dollar_count += 1;
                     j -= 1;
                 }
@@ -10446,7 +10515,7 @@ static Tuple_constcharPtr_bool Parser__parse_heredoc_delimiter(Parser *self) {
                     VEC_PUSH(g_arena, &delimiter_chars, (Parser_advance(self)));
                     VEC_PUSH(g_arena, &delimiter_chars, (Parser_advance(self)));
                     depth = 0;
-                    while (!(Parser_at_end(self))) {
+                    while (!g_parse_error && (!(Parser_at_end(self)))) {
                         c = Parser_peek(self);
                         if ((strcmp(c, "{") == 0)) {
                             depth += 1;
@@ -10467,7 +10536,7 @@ static Tuple_constcharPtr_bool Parser__parse_heredoc_delimiter(Parser *self) {
             } else if ((((strcmp(ch, "$") == 0) && ((self->pos + 1) < self->length)) && (strcmp((const char *)(_char_at_str(g_arena, self->source, (self->pos + 1))), "[") == 0))) {
                 dollar_count = 0;
                 j = (self->pos - 1);
-                while (((j >= 0) && (strcmp((const char *)(_char_at_str(g_arena, self->source, j)), "$") == 0))) {
+                while (!g_parse_error && (((j >= 0) && (strcmp((const char *)(_char_at_str(g_arena, self->source, j)), "$") == 0)))) {
                     dollar_count += 1;
                     j -= 1;
                 }
@@ -10480,7 +10549,7 @@ static Tuple_constcharPtr_bool Parser__parse_heredoc_delimiter(Parser *self) {
                     VEC_PUSH(g_arena, &delimiter_chars, (Parser_advance(self)));
                     VEC_PUSH(g_arena, &delimiter_chars, (Parser_advance(self)));
                     depth = 1;
-                    while ((!(Parser_at_end(self)) && (depth > 0))) {
+                    while (!g_parse_error && ((!(Parser_at_end(self)) && (depth > 0)))) {
                         c = Parser_peek(self);
                         if ((strcmp(c, "[") == 0)) {
                             depth += 1;
@@ -10492,11 +10561,11 @@ static Tuple_constcharPtr_bool Parser__parse_heredoc_delimiter(Parser *self) {
                 }
             } else if ((strcmp(ch, "`") == 0)) {
                 VEC_PUSH(g_arena, &delimiter_chars, (Parser_advance(self)));
-                while ((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), "`") != 0))) {
+                while (!g_parse_error && ((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), "`") != 0)))) {
                     c = Parser_peek(self);
                     if ((strcmp(c, "'") == 0)) {
                         VEC_PUSH(g_arena, &delimiter_chars, (Parser_advance(self)));
-                        while (((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), "'") != 0)) && (strcmp(Parser_peek(self), "`") != 0))) {
+                        while (!g_parse_error && (((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), "'") != 0)) && (strcmp(Parser_peek(self), "`") != 0)))) {
                             VEC_PUSH(g_arena, &delimiter_chars, (Parser_advance(self)));
                         }
                         if ((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), "'") == 0))) {
@@ -10504,7 +10573,7 @@ static Tuple_constcharPtr_bool Parser__parse_heredoc_delimiter(Parser *self) {
                         }
                     } else if ((strcmp(c, "\"") == 0)) {
                         VEC_PUSH(g_arena, &delimiter_chars, (Parser_advance(self)));
-                        while (((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), "\"") != 0)) && (strcmp(Parser_peek(self), "`") != 0))) {
+                        while (!g_parse_error && (((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), "\"") != 0)) && (strcmp(Parser_peek(self), "`") != 0)))) {
                             if (((strcmp(Parser_peek(self), "\\") == 0) && ((self->pos + 1) < self->length))) {
                                 VEC_PUSH(g_arena, &delimiter_chars, (Parser_advance(self)));
                             }
@@ -10531,7 +10600,7 @@ static Tuple_constcharPtr_bool Parser__parse_heredoc_delimiter(Parser *self) {
             VEC_PUSH(g_arena, &delimiter_chars, (Parser_advance(self)));
             VEC_PUSH(g_arena, &delimiter_chars, (Parser_advance(self)));
             depth = 1;
-            while ((!(Parser_at_end(self)) && (depth > 0))) {
+            while (!g_parse_error && ((!(Parser_at_end(self)) && (depth > 0)))) {
                 c = Parser_peek(self);
                 if ((strcmp(c, "(") == 0)) {
                     depth += 1;
@@ -10550,12 +10619,12 @@ static Tuple_constcharPtr_bool Parser__parse_heredoc_delimiter(Parser *self) {
 static Tuple_constcharPtr_int64_t Parser__read_heredoc_line(Parser *self, bool quoted) {
     int64_t line_start = self->pos;
     int64_t line_end = self->pos;
-    while (((line_end < self->length) && (strcmp((const char *)(_char_at_str(g_arena, self->source, line_end)), "\n") != 0))) {
+    while (!g_parse_error && (((line_end < self->length) && (strcmp((const char *)(_char_at_str(g_arena, self->source, line_end)), "\n") != 0)))) {
         line_end += 1;
     }
     const char * line = _substring(self->source, line_start, line_end);
     if (!(quoted)) {
-        while ((line_end < self->length)) {
+        while (!g_parse_error && ((line_end < self->length))) {
             int64_t trailing_bs = _count_trailing_backslashes(line);
             if (((trailing_bs % 2) == 0)) {
                 break;
@@ -10563,7 +10632,7 @@ static Tuple_constcharPtr_int64_t Parser__read_heredoc_line(Parser *self, bool q
             line = _substring(line, 0, (_rune_len(line) - 1));
             line_end += 1;
             int64_t next_line_start = line_end;
-            while (((line_end < self->length) && (strcmp((const char *)(_char_at_str(g_arena, self->source, line_end)), "\n") != 0))) {
+            while (!g_parse_error && (((line_end < self->length) && (strcmp((const char *)(_char_at_str(g_arena, self->source, line_end)), "\n") != 0)))) {
                 line_end += 1;
             }
             line = _str_concat(g_arena, line, _substring(self->source, next_line_start, line_end));
@@ -10584,14 +10653,14 @@ static void Parser__gather_heredoc_bodies(Parser *self) {
         HereDoc * heredoc = self->_pending_heredocs.data[_idx];
         Vec_Str content_lines = (Vec_Str){NULL, 0, 0};
         int64_t line_start = self->pos;
-        while ((self->pos < self->length)) {
+        while (!g_parse_error && ((self->pos < self->length))) {
             line_start = self->pos;
-            Tuple_constcharPtr_int64_t _tup67 = Parser__read_heredoc_line(self, heredoc->quoted);
-            const char * line = _tup67.F0;
-            int64_t line_end = _tup67.F1;
-            Tuple_bool_constcharPtr _tup68 = Parser__line_matches_delimiter(self, line, heredoc->delimiter, heredoc->strip_tabs);
-            bool matches = _tup68.F0;
-            const char * check_line = _tup68.F1;
+            Tuple_constcharPtr_int64_t _tup70 = Parser__read_heredoc_line(self, heredoc->quoted);
+            const char * line = _tup70.F0;
+            int64_t line_end = _tup70.F1;
+            Tuple_bool_constcharPtr _tup71 = Parser__line_matches_delimiter(self, line, heredoc->delimiter, heredoc->strip_tabs);
+            bool matches = _tup71.F0;
+            const char * check_line = _tup71.F1;
             if (matches) {
                 self->pos = ((line_end < self->length) ? (line_end + 1) : line_end);
                 break;
@@ -10632,9 +10701,9 @@ static void Parser__gather_heredoc_bodies(Parser *self) {
 static HereDoc * Parser__parse_heredoc(Parser *self, int64_t fd, bool strip_tabs) {
     int64_t start_pos = self->pos;
     Parser__set_state(self, PARSERSTATEFLAGS_PST_HEREDOC);
-    Tuple_constcharPtr_bool _tup69 = Parser__parse_heredoc_delimiter(self);
-    const char * delimiter = _tup69.F0;
-    bool quoted = _tup69.F1;
+    Tuple_constcharPtr_bool _tup72 = Parser__parse_heredoc_delimiter(self);
+    const char * delimiter = _tup72.F0;
+    bool quoted = _tup72.F1;
     for (size_t _idx = 0; _idx < self->_pending_heredocs.len; _idx++) {
         HereDoc * existing = self->_pending_heredocs.data[_idx];
         if (((existing->_start_pos == start_pos) && (strcmp(existing->delimiter, delimiter) == 0))) {
@@ -10652,7 +10721,7 @@ static HereDoc * Parser__parse_heredoc(Parser *self, int64_t fd, bool strip_tabs
 static Command * Parser_parse_command(Parser *self) {
     Vec_Word words = (Vec_Word){NULL, 0, 0};
     Vec_Node redirects = (Vec_Node){NULL, 0, 0};
-    while (true) {
+    while (!g_parse_error && (true)) {
         Parser_skip_whitespace(self);
         if (Parser__lex_is_command_terminator(self)) {
             break;
@@ -10712,9 +10781,9 @@ static Subshell * Parser_parse_subshell(Parser *self) {
     }
     Parser_advance(self);
     Parser__clear_state(self, PARSERSTATEFLAGS_PST_SUBSHELL);
-    Vec_Node *_tmp_slice70 = (Vec_Node *)arena_alloc(g_arena, sizeof(Vec_Node));
-    *_tmp_slice70 = Parser__collect_redirects(self);
-    return Subshell_new(body, _tmp_slice70, "subshell");
+    Vec_Node *_tmp_slice73 = (Vec_Node *)arena_alloc(g_arena, sizeof(Vec_Node));
+    *_tmp_slice73 = Parser__collect_redirects(self);
+    return Subshell_new(body, _tmp_slice73, "subshell");
 }
 
 static ArithmeticCommand * Parser_parse_arithmetic_command(Parser *self) {
@@ -10727,11 +10796,11 @@ static ArithmeticCommand * Parser_parse_arithmetic_command(Parser *self) {
     Parser_advance(self);
     int64_t content_start = self->pos;
     int64_t depth = 1;
-    while ((!(Parser_at_end(self)) && (depth > 0))) {
+    while (!g_parse_error && ((!(Parser_at_end(self)) && (depth > 0)))) {
         const char * c = Parser_peek(self);
         if ((strcmp(c, "'") == 0)) {
             Parser_advance(self);
-            while ((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), "'") != 0))) {
+            while (!g_parse_error && ((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), "'") != 0)))) {
                 Parser_advance(self);
             }
             if (!(Parser_at_end(self))) {
@@ -10739,7 +10808,7 @@ static ArithmeticCommand * Parser_parse_arithmetic_command(Parser *self) {
             }
         } else if ((strcmp(c, "\"") == 0)) {
             Parser_advance(self);
-            while (!(Parser_at_end(self))) {
+            while (!g_parse_error && (!(Parser_at_end(self)))) {
                 if (((strcmp(Parser_peek(self), "\\") == 0) && ((self->pos + 1) < self->length))) {
                     Parser_advance(self);
                     Parser_advance(self);
@@ -10801,7 +10870,7 @@ static ConditionalExpr * Parser_parse_conditional_expr(Parser *self) {
     Parser__set_state(self, PARSERSTATEFLAGS_PST_CONDEXPR);
     self->_word_context = WORD_CTX_COND;
     Node * body = (Node *)Parser__parse_cond_or(self);
-    while ((!(Parser_at_end(self)) && _is_whitespace_no_newline(Parser_peek(self)))) {
+    while (!g_parse_error && ((!(Parser_at_end(self)) && _is_whitespace_no_newline(Parser_peek(self))))) {
         Parser_advance(self);
     }
     if ((((Parser_at_end(self) || (strcmp(Parser_peek(self), "]") != 0)) || ((self->pos + 1) >= self->length)) || (strcmp((const char *)(_char_at_str(g_arena, self->source, (self->pos + 1))), "]") != 0))) {
@@ -10819,7 +10888,7 @@ static ConditionalExpr * Parser_parse_conditional_expr(Parser *self) {
 }
 
 static void Parser__cond_skip_whitespace(Parser *self) {
-    while (!(Parser_at_end(self))) {
+    while (!g_parse_error && (!(Parser_at_end(self)))) {
         if (_is_whitespace_no_newline(Parser_peek(self))) {
             Parser_advance(self);
         } else if ((((strcmp(Parser_peek(self), "\\") == 0) && ((self->pos + 1) < self->length)) && (strcmp((const char *)(_char_at_str(g_arena, self->source, (self->pos + 1))), "\n") == 0))) {
@@ -10989,9 +11058,9 @@ static BraceGroup * Parser_parse_brace_group(Parser *self) {
         snprintf(g_error_msg, sizeof(g_error_msg), "%s", "Expected } to close brace group");
         return NULL;
     }
-    Vec_Node *_tmp_slice71 = (Vec_Node *)arena_alloc(g_arena, sizeof(Vec_Node));
-    *_tmp_slice71 = Parser__collect_redirects(self);
-    return BraceGroup_new(body, _tmp_slice71, "brace-group");
+    Vec_Node *_tmp_slice74 = (Vec_Node *)arena_alloc(g_arena, sizeof(Vec_Node));
+    *_tmp_slice74 = Parser__collect_redirects(self);
+    return BraceGroup_new(body, _tmp_slice74, "brace-group");
 }
 
 static If * Parser_parse_if(Parser *self) {
@@ -11213,7 +11282,7 @@ static Node * Parser_parse_for(Parser *self) {
         }
         Parser_skip_whitespace_and_newlines(self);
         words = (Vec_Word){NULL, 0, 0};
-        while (true) {
+        while (!g_parse_error && (true)) {
             Parser_skip_whitespace(self);
             if (Parser_at_end(self)) {
                 break;
@@ -11248,9 +11317,9 @@ static Node * Parser_parse_for(Parser *self) {
             snprintf(g_error_msg, sizeof(g_error_msg), "%s", "Expected brace group in for loop");
             return NULL;
         }
-        Vec_Word *_tmp_slice72 = (Vec_Word *)arena_alloc(g_arena, sizeof(Vec_Word));
-        *_tmp_slice72 = words;
-        return For_new(var_name, _tmp_slice72, brace_group->body, Parser__collect_redirects(self), "for");
+        Vec_Word *_tmp_slice75 = (Vec_Word *)arena_alloc(g_arena, sizeof(Vec_Word));
+        *_tmp_slice75 = words;
+        return For_new(var_name, _tmp_slice75, brace_group->body, Parser__collect_redirects(self), "for");
     }
     if (!(Parser__lex_consume_word(self, "do"))) {
         g_parse_error = 1;
@@ -11269,9 +11338,9 @@ static Node * Parser_parse_for(Parser *self) {
         snprintf(g_error_msg, sizeof(g_error_msg), "%s", "Expected 'done' to close for loop");
         return NULL;
     }
-    Vec_Word *_tmp_slice73 = (Vec_Word *)arena_alloc(g_arena, sizeof(Vec_Word));
-    *_tmp_slice73 = words;
-    return For_new(var_name, _tmp_slice73, body, Parser__collect_redirects(self), "for");
+    Vec_Word *_tmp_slice76 = (Vec_Word *)arena_alloc(g_arena, sizeof(Vec_Word));
+    *_tmp_slice76 = words;
+    return For_new(var_name, _tmp_slice76, body, Parser__collect_redirects(self), "for");
 }
 
 static ForArith * Parser__parse_for_arith(Parser *self) {
@@ -11280,7 +11349,7 @@ static ForArith * Parser__parse_for_arith(Parser *self) {
     Vec_Str parts = (Vec_Str){NULL, 0, 0};
     Vec_Str current = (Vec_Str){NULL, 0, 0};
     int64_t paren_depth = 0;
-    while (!(Parser_at_end(self))) {
+    while (!g_parse_error && (!(Parser_at_end(self)))) {
         const char * ch = Parser_peek(self);
         if ((strcmp(ch, "(") == 0)) {
             paren_depth += 1;
@@ -11345,7 +11414,7 @@ static Select * Parser_parse_select(Parser *self) {
         Parser__lex_consume_word(self, "in");
         Parser_skip_whitespace_and_newlines(self);
         words = (Vec_Word){NULL, 0, 0};
-        while (true) {
+        while (!g_parse_error && (true)) {
             Parser_skip_whitespace(self);
             if (Parser_at_end(self)) {
                 break;
@@ -11368,9 +11437,9 @@ static Select * Parser_parse_select(Parser *self) {
     }
     Parser_skip_whitespace_and_newlines(self);
     Node * body = (Node *)Parser__parse_loop_body(self, "select");
-    Vec_Word *_tmp_slice74 = (Vec_Word *)arena_alloc(g_arena, sizeof(Vec_Word));
-    *_tmp_slice74 = words;
-    return Select_new(var_name, _tmp_slice74, body, Parser__collect_redirects(self), "select");
+    Vec_Word *_tmp_slice77 = (Vec_Word *)arena_alloc(g_arena, sizeof(Vec_Word));
+    *_tmp_slice77 = words;
+    return Select_new(var_name, _tmp_slice77, body, Parser__collect_redirects(self), "select");
 }
 
 static const char * Parser__consume_case_terminator(Parser *self) {
@@ -11403,12 +11472,12 @@ static Case * Parser_parse_case(Parser *self) {
     Parser_skip_whitespace_and_newlines(self);
     Vec_CasePattern patterns = (Vec_CasePattern){NULL, 0, 0};
     Parser__set_state(self, PARSERSTATEFLAGS_PST_CASEPAT);
-    while (true) {
+    while (!g_parse_error && (true)) {
         Parser_skip_whitespace_and_newlines(self);
         if (Parser__lex_is_at_reserved_word(self, "esac")) {
             int64_t saved = self->pos;
             Parser_skip_whitespace(self);
-            while (((!(Parser_at_end(self)) && !(_is_metachar(Parser_peek(self)))) && !(_is_quote(Parser_peek(self))))) {
+            while (!g_parse_error && (((!(Parser_at_end(self)) && !(_is_metachar(Parser_peek(self)))) && !(_is_quote(Parser_peek(self)))))) {
                 Parser_advance(self);
             }
             Parser_skip_whitespace(self);
@@ -11441,7 +11510,7 @@ static Case * Parser_parse_case(Parser *self) {
         }
         Vec_Str pattern_chars = (Vec_Str){NULL, 0, 0};
         int64_t extglob_depth = 0;
-        while (!(Parser_at_end(self))) {
+        while (!g_parse_error && (!(Parser_at_end(self)))) {
             const char * ch = Parser_peek(self);
             if ((strcmp(ch, ")") == 0)) {
                 if ((extglob_depth > 0)) {
@@ -11467,7 +11536,7 @@ static Case * Parser_parse_case(Parser *self) {
                 if ((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), "(") == 0))) {
                     VEC_PUSH(g_arena, &pattern_chars, (Parser_advance(self)));
                     int64_t paren_depth = 2;
-                    while ((!(Parser_at_end(self)) && (paren_depth > 0))) {
+                    while (!g_parse_error && ((!(Parser_at_end(self)) && (paren_depth > 0)))) {
                         const char * c = Parser_peek(self);
                         if ((strcmp(c, "(") == 0)) {
                             paren_depth += 1;
@@ -11500,7 +11569,7 @@ static Case * Parser_parse_case(Parser *self) {
                         has_first_bracket_literal = true;
                     }
                 }
-                while ((scan_pos < self->length)) {
+                while (!g_parse_error && ((scan_pos < self->length))) {
                     const char * sc = (const char *)(_char_at_str(g_arena, self->source, scan_pos));
                     if (((strcmp(sc, "]") == 0) && (scan_depth == 0))) {
                         is_char_class = true;
@@ -11522,7 +11591,7 @@ static Case * Parser_parse_case(Parser *self) {
                     if (((has_first_bracket_literal && !(Parser_at_end(self))) && (strcmp(Parser_peek(self), "]") == 0))) {
                         VEC_PUSH(g_arena, &pattern_chars, (Parser_advance(self)));
                     }
-                    while ((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), "]") != 0))) {
+                    while (!g_parse_error && ((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), "]") != 0)))) {
                         VEC_PUSH(g_arena, &pattern_chars, (Parser_advance(self)));
                     }
                     if (!(Parser_at_end(self))) {
@@ -11533,7 +11602,7 @@ static Case * Parser_parse_case(Parser *self) {
                 }
             } else if ((strcmp(ch, "'") == 0)) {
                 VEC_PUSH(g_arena, &pattern_chars, (Parser_advance(self)));
-                while ((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), "'") != 0))) {
+                while (!g_parse_error && ((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), "'") != 0)))) {
                     VEC_PUSH(g_arena, &pattern_chars, (Parser_advance(self)));
                 }
                 if (!(Parser_at_end(self))) {
@@ -11541,7 +11610,7 @@ static Case * Parser_parse_case(Parser *self) {
                 }
             } else if ((strcmp(ch, "\"") == 0)) {
                 VEC_PUSH(g_arena, &pattern_chars, (Parser_advance(self)));
-                while ((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), "\"") != 0))) {
+                while (!g_parse_error && ((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), "\"") != 0)))) {
                     if (((strcmp(Parser_peek(self), "\\") == 0) && ((self->pos + 1) < self->length))) {
                         VEC_PUSH(g_arena, &pattern_chars, (Parser_advance(self)));
                     }
@@ -11635,7 +11704,7 @@ static Coproc * Parser_parse_coproc(Parser *self) {
     int64_t word_start = self->pos;
     const char * potential_name = Parser_peek_word(self);
     if ((potential_name != NULL && potential_name[0] != '\0')) {
-        while (((!(Parser_at_end(self)) && !(_is_metachar(Parser_peek(self)))) && !(_is_quote(Parser_peek(self))))) {
+        while (!g_parse_error && (((!(Parser_at_end(self)) && !(_is_metachar(Parser_peek(self)))) && !(_is_quote(Parser_peek(self)))))) {
             Parser_advance(self);
         }
         Parser_skip_whitespace(self);
@@ -11722,7 +11791,7 @@ static Function * Parser_parse_function(Parser *self) {
     }
     Parser_skip_whitespace(self);
     int64_t name_start = self->pos;
-    while ((((!(Parser_at_end(self)) && !(_is_metachar(Parser_peek(self)))) && !(_is_quote(Parser_peek(self)))) && !(_is_paren(Parser_peek(self))))) {
+    while (!g_parse_error && ((((!(Parser_at_end(self)) && !(_is_metachar(Parser_peek(self)))) && !(_is_quote(Parser_peek(self)))) && !(_is_paren(Parser_peek(self)))))) {
         Parser_advance(self);
     }
     name = _substring(self->source, name_start, self->pos);
@@ -11732,7 +11801,7 @@ static Function * Parser_parse_function(Parser *self) {
     }
     int64_t brace_depth = 0;
     int64_t i = 0;
-    while ((i < _rune_len(name))) {
+    while (!g_parse_error && ((i < _rune_len(name)))) {
         if (_is_expansion_start(name, i, "${")) {
             brace_depth += 1;
             i += 2;
@@ -11855,7 +11924,7 @@ static Node * Parser_parse_list_until(Parser *self, void * stop_words) {
         return (Node *)NULL;
     }
     Vec_Node parts = ({ Node * *_slc = (Node * *)arena_alloc(g_arena, 1 * sizeof(Node *)); _slc[0] = pipeline; (Vec_Node){_slc, 1, 1}; });
-    while (true) {
+    while (!g_parse_error && (true)) {
         Parser_skip_whitespace(self);
         const char * op = Parser_parse_list_operator(self);
         if ((strcmp(op, "") == 0)) {
@@ -12023,7 +12092,7 @@ static Node * Parser_parse_pipeline(Parser *self) {
                 Parser_skip_whitespace(self);
             }
         }
-        while (Parser__lex_is_at_reserved_word(self, "time")) {
+        while (!g_parse_error && (Parser__lex_is_at_reserved_word(self, "time"))) {
             Parser__lex_consume_word(self, "time");
             Parser_skip_whitespace(self);
             if ((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), "-") == 0))) {
@@ -12087,11 +12156,11 @@ static Node * Parser__parse_simple_pipeline(Parser *self) {
         return (Node *)NULL;
     }
     Vec_Node commands = ({ Node * *_slc = (Node * *)arena_alloc(g_arena, 1 * sizeof(Node *)); _slc[0] = cmd; (Vec_Node){_slc, 1, 1}; });
-    while (true) {
+    while (!g_parse_error && (true)) {
         Parser_skip_whitespace(self);
-        Tuple_int64_t_constcharPtr _tup75 = Parser__lex_peek_operator(self);
-        int64_t token_type = _tup75.F0;
-        const char * value = _tup75.F1;
+        Tuple_int64_t_constcharPtr _tup78 = Parser__lex_peek_operator(self);
+        int64_t token_type = _tup78.F0;
+        const char * value = _tup78.F1;
         if ((token_type == 0)) {
             break;
         }
@@ -12120,8 +12189,8 @@ static Node * Parser__parse_simple_pipeline(Parser *self) {
 
 static const char * Parser_parse_list_operator(Parser *self) {
     Parser_skip_whitespace(self);
-    Tuple_int64_t_constcharPtr _tup76 = Parser__lex_peek_operator(self);
-    int64_t token_type = _tup76.F0;
+    Tuple_int64_t_constcharPtr _tup79 = Parser__lex_peek_operator(self);
+    int64_t token_type = _tup79.F0;
     if ((token_type == 0)) {
         return "";
     }
@@ -12165,7 +12234,7 @@ static Node * Parser_parse_list(Parser *self, bool newline_as_separator) {
     if ((Parser__in_state(self, PARSERSTATEFLAGS_PST_EOFTOKEN) && Parser__at_eof_token(self))) {
         return (Node *)((parts.len == 1) ? parts.data[0] : List_new(parts, "list"));
     }
-    while (true) {
+    while (!g_parse_error && (true)) {
         Parser_skip_whitespace(self);
         const char * op = Parser_parse_list_operator(self);
         if ((strcmp(op, "") == 0)) {
@@ -12251,7 +12320,7 @@ static Node * Parser_parse_comment(Parser *self) {
         return (Node *)NULL;
     }
     int64_t start = self->pos;
-    while ((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), "\n") != 0))) {
+    while (!g_parse_error && ((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), "\n") != 0)))) {
         Parser_advance(self);
     }
     const char * text = _substring(self->source, start, self->pos);
@@ -12264,9 +12333,9 @@ static Vec_Node Parser_parse(Parser *self) {
         return ({ Node * *_slc = (Node * *)arena_alloc(g_arena, 1 * sizeof(Node *)); _slc[0] = Empty_new("empty"); (Vec_Node){_slc, 1, 1}; });
     }
     Vec_Node results = (Vec_Node){NULL, 0, 0};
-    while (true) {
+    while (!g_parse_error && (true)) {
         Parser_skip_whitespace(self);
-        while ((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), "\n") == 0))) {
+        while (!g_parse_error && ((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), "\n") == 0)))) {
             Parser_advance(self);
         }
         if (Parser_at_end(self)) {
@@ -12277,14 +12346,14 @@ static Vec_Node Parser_parse(Parser *self) {
             break;
         }
     }
-    while (!(Parser_at_end(self))) {
+    while (!g_parse_error && (!(Parser_at_end(self)))) {
         Node * result = (Node *)Parser_parse_list(self, false);
         if ((result != NULL)) {
             VEC_PUSH(g_arena, &results, (result));
         }
         Parser_skip_whitespace(self);
         bool found_newline = false;
-        while ((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), "\n") == 0))) {
+        while (!g_parse_error && ((!(Parser_at_end(self)) && (strcmp(Parser_peek(self), "\n") == 0)))) {
             found_newline = true;
             Parser_advance(self);
             Parser__gather_heredoc_bodies(self);
@@ -12323,23 +12392,23 @@ static void Parser__strip_trailing_backslash_from_last_word(Parser *self, Vec_No
     Word * last_word = Parser__find_last_word(self, last_node);
     if (((last_word != NULL) && _str_endswith(last_word->value, "\\"))) {
         last_word->value = _substring(last_word->value, 0, (_rune_len(last_word->value) - 1));
-        if (((!((last_word->value != NULL && last_word->value[0] != '\0')) && (strcmp(last_node->kind, "command") == 0)) && (((Command *)(last_node))->words.len > 0))) {
+        if (((!((last_word->value != NULL && last_word->value[0] != '\0')) && (last_node != NULL && strcmp(last_node->kind, "command") == 0)) && (((Command *)(last_node))->words.len > 0))) {
             ((Command *)(last_node))->words.data[--((Command *)(last_node))->words.len];
         }
     }
 }
 
 static Word * Parser__find_last_word(Parser *self, Node * node) {
-    void *_tsexpr77 = node;
-    if (strcmp(((Word *)_tsexpr77)->kind, "word") == 0) {
-        Word *node = (Word *)_tsexpr77;
+    void *_tsexpr80 = node;
+    if (strcmp(((Word *)_tsexpr80)->kind, "word") == 0) {
+        Word *node = (Word *)_tsexpr80;
         return node;
     }
     Word * last_word;
     Node * last_redirect;
-    void *_tsexpr78 = node;
-    if (strcmp(((Command *)_tsexpr78)->kind, "command") == 0) {
-        Command *node = (Command *)_tsexpr78;
+    void *_tsexpr81 = node;
+    if (strcmp(((Command *)_tsexpr81)->kind, "command") == 0) {
+        Command *node = (Command *)_tsexpr81;
         if ((node->words.len > 0)) {
             last_word = node->words.data[(node->words.len - 1)];
             if (_str_endswith(last_word->value, "\\")) {
@@ -12348,9 +12417,9 @@ static Word * Parser__find_last_word(Parser *self, Node * node) {
         }
         if ((node->redirects.len > 0)) {
             last_redirect = (Node *)node->redirects.data[(node->redirects.len - 1)];
-            void *_tsexpr79 = last_redirect;
-            if (strcmp(((Redirect *)_tsexpr79)->kind, "redirect") == 0) {
-                Redirect *last_redirect = (Redirect *)_tsexpr79;
+            void *_tsexpr82 = last_redirect;
+            if (strcmp(((Redirect *)_tsexpr82)->kind, "redirect") == 0) {
+                Redirect *last_redirect = (Redirect *)_tsexpr82;
                 return last_redirect->target;
             }
         }
@@ -12358,16 +12427,16 @@ static Word * Parser__find_last_word(Parser *self, Node * node) {
             return node->words.data[(node->words.len - 1)];
         }
     }
-    void *_tsexpr80 = node;
-    if (strcmp(((Pipeline *)_tsexpr80)->kind, "pipeline") == 0) {
-        Pipeline *node = (Pipeline *)_tsexpr80;
+    void *_tsexpr83 = node;
+    if (strcmp(((Pipeline *)_tsexpr83)->kind, "pipeline") == 0) {
+        Pipeline *node = (Pipeline *)_tsexpr83;
         if ((node->commands.len > 0)) {
             return Parser__find_last_word(self, node->commands.data[(node->commands.len - 1)]);
         }
     }
-    void *_tsexpr81 = node;
-    if (strcmp(((List *)_tsexpr81)->kind, "list") == 0) {
-        List *node = (List *)_tsexpr81;
+    void *_tsexpr84 = node;
+    if (strcmp(((List *)_tsexpr84)->kind, "list") == 0) {
+        List *node = (List *)_tsexpr84;
         if ((node->parts.len > 0)) {
             return Parser__find_last_word(self, node->parts.data[(node->parts.len - 1)]);
         }
@@ -12414,65 +12483,65 @@ static const char * Node_get_kind(Node *self) {
         return Select_get_kind((Select *)self);
     } else if (strcmp(self->kind, "case") == 0) {
         return Case_get_kind((Case *)self);
-    } else if (strcmp(self->kind, "case-pattern") == 0) {
+    } else if (strcmp(self->kind, "pattern") == 0) {
         return CasePattern_get_kind((CasePattern *)self);
     } else if (strcmp(self->kind, "function") == 0) {
         return Function_get_kind((Function *)self);
-    } else if (strcmp(self->kind, "param-expansion") == 0) {
+    } else if (strcmp(self->kind, "param") == 0) {
         return ParamExpansion_get_kind((ParamExpansion *)self);
-    } else if (strcmp(self->kind, "param-length") == 0) {
+    } else if (strcmp(self->kind, "param-len") == 0) {
         return ParamLength_get_kind((ParamLength *)self);
     } else if (strcmp(self->kind, "param-indirect") == 0) {
         return ParamIndirect_get_kind((ParamIndirect *)self);
-    } else if (strcmp(self->kind, "command-substitution") == 0) {
+    } else if (strcmp(self->kind, "cmdsub") == 0) {
         return CommandSubstitution_get_kind((CommandSubstitution *)self);
-    } else if (strcmp(self->kind, "arithmetic-expansion") == 0) {
+    } else if (strcmp(self->kind, "arith") == 0) {
         return ArithmeticExpansion_get_kind((ArithmeticExpansion *)self);
-    } else if (strcmp(self->kind, "arithmetic-command") == 0) {
+    } else if (strcmp(self->kind, "arith-cmd") == 0) {
         return ArithmeticCommand_get_kind((ArithmeticCommand *)self);
-    } else if (strcmp(self->kind, "arith-number") == 0) {
+    } else if (strcmp(self->kind, "number") == 0) {
         return ArithNumber_get_kind((ArithNumber *)self);
-    } else if (strcmp(self->kind, "arith-empty") == 0) {
+    } else if (strcmp(self->kind, "empty") == 0) {
         return ArithEmpty_get_kind((ArithEmpty *)self);
-    } else if (strcmp(self->kind, "arith-var") == 0) {
+    } else if (strcmp(self->kind, "var") == 0) {
         return ArithVar_get_kind((ArithVar *)self);
-    } else if (strcmp(self->kind, "arith-binary-op") == 0) {
+    } else if (strcmp(self->kind, "binary-op") == 0) {
         return ArithBinaryOp_get_kind((ArithBinaryOp *)self);
-    } else if (strcmp(self->kind, "arith-unary-op") == 0) {
+    } else if (strcmp(self->kind, "unary-op") == 0) {
         return ArithUnaryOp_get_kind((ArithUnaryOp *)self);
-    } else if (strcmp(self->kind, "arith-pre-incr") == 0) {
+    } else if (strcmp(self->kind, "pre-incr") == 0) {
         return ArithPreIncr_get_kind((ArithPreIncr *)self);
-    } else if (strcmp(self->kind, "arith-post-incr") == 0) {
+    } else if (strcmp(self->kind, "post-incr") == 0) {
         return ArithPostIncr_get_kind((ArithPostIncr *)self);
-    } else if (strcmp(self->kind, "arith-pre-decr") == 0) {
+    } else if (strcmp(self->kind, "pre-decr") == 0) {
         return ArithPreDecr_get_kind((ArithPreDecr *)self);
-    } else if (strcmp(self->kind, "arith-post-decr") == 0) {
+    } else if (strcmp(self->kind, "post-decr") == 0) {
         return ArithPostDecr_get_kind((ArithPostDecr *)self);
-    } else if (strcmp(self->kind, "arith-assign") == 0) {
+    } else if (strcmp(self->kind, "assign") == 0) {
         return ArithAssign_get_kind((ArithAssign *)self);
-    } else if (strcmp(self->kind, "arith-ternary") == 0) {
+    } else if (strcmp(self->kind, "ternary") == 0) {
         return ArithTernary_get_kind((ArithTernary *)self);
-    } else if (strcmp(self->kind, "arith-comma") == 0) {
+    } else if (strcmp(self->kind, "comma") == 0) {
         return ArithComma_get_kind((ArithComma *)self);
-    } else if (strcmp(self->kind, "arith-subscript") == 0) {
+    } else if (strcmp(self->kind, "subscript") == 0) {
         return ArithSubscript_get_kind((ArithSubscript *)self);
-    } else if (strcmp(self->kind, "arith-escape") == 0) {
+    } else if (strcmp(self->kind, "escape") == 0) {
         return ArithEscape_get_kind((ArithEscape *)self);
     } else if (strcmp(self->kind, "arith-deprecated") == 0) {
         return ArithDeprecated_get_kind((ArithDeprecated *)self);
     } else if (strcmp(self->kind, "arith-concat") == 0) {
         return ArithConcat_get_kind((ArithConcat *)self);
-    } else if (strcmp(self->kind, "ansi-c-quote") == 0) {
+    } else if (strcmp(self->kind, "ansi-c") == 0) {
         return AnsiCQuote_get_kind((AnsiCQuote *)self);
-    } else if (strcmp(self->kind, "locale-string") == 0) {
+    } else if (strcmp(self->kind, "locale") == 0) {
         return LocaleString_get_kind((LocaleString *)self);
-    } else if (strcmp(self->kind, "process-substitution") == 0) {
+    } else if (strcmp(self->kind, "procsub") == 0) {
         return ProcessSubstitution_get_kind((ProcessSubstitution *)self);
     } else if (strcmp(self->kind, "negation") == 0) {
         return Negation_get_kind((Negation *)self);
     } else if (strcmp(self->kind, "time") == 0) {
         return Time_get_kind((Time *)self);
-    } else if (strcmp(self->kind, "conditional-expr") == 0) {
+    } else if (strcmp(self->kind, "cond-expr") == 0) {
         return ConditionalExpr_get_kind((ConditionalExpr *)self);
     } else if (strcmp(self->kind, "unary-test") == 0) {
         return UnaryTest_get_kind((UnaryTest *)self);
@@ -12533,65 +12602,65 @@ static const char * Node_to_sexp(Node *self) {
         return Select_to_sexp((Select *)self);
     } else if (strcmp(self->kind, "case") == 0) {
         return Case_to_sexp((Case *)self);
-    } else if (strcmp(self->kind, "case-pattern") == 0) {
+    } else if (strcmp(self->kind, "pattern") == 0) {
         return CasePattern_to_sexp((CasePattern *)self);
     } else if (strcmp(self->kind, "function") == 0) {
         return Function_to_sexp((Function *)self);
-    } else if (strcmp(self->kind, "param-expansion") == 0) {
+    } else if (strcmp(self->kind, "param") == 0) {
         return ParamExpansion_to_sexp((ParamExpansion *)self);
-    } else if (strcmp(self->kind, "param-length") == 0) {
+    } else if (strcmp(self->kind, "param-len") == 0) {
         return ParamLength_to_sexp((ParamLength *)self);
     } else if (strcmp(self->kind, "param-indirect") == 0) {
         return ParamIndirect_to_sexp((ParamIndirect *)self);
-    } else if (strcmp(self->kind, "command-substitution") == 0) {
+    } else if (strcmp(self->kind, "cmdsub") == 0) {
         return CommandSubstitution_to_sexp((CommandSubstitution *)self);
-    } else if (strcmp(self->kind, "arithmetic-expansion") == 0) {
+    } else if (strcmp(self->kind, "arith") == 0) {
         return ArithmeticExpansion_to_sexp((ArithmeticExpansion *)self);
-    } else if (strcmp(self->kind, "arithmetic-command") == 0) {
+    } else if (strcmp(self->kind, "arith-cmd") == 0) {
         return ArithmeticCommand_to_sexp((ArithmeticCommand *)self);
-    } else if (strcmp(self->kind, "arith-number") == 0) {
+    } else if (strcmp(self->kind, "number") == 0) {
         return ArithNumber_to_sexp((ArithNumber *)self);
-    } else if (strcmp(self->kind, "arith-empty") == 0) {
+    } else if (strcmp(self->kind, "empty") == 0) {
         return ArithEmpty_to_sexp((ArithEmpty *)self);
-    } else if (strcmp(self->kind, "arith-var") == 0) {
+    } else if (strcmp(self->kind, "var") == 0) {
         return ArithVar_to_sexp((ArithVar *)self);
-    } else if (strcmp(self->kind, "arith-binary-op") == 0) {
+    } else if (strcmp(self->kind, "binary-op") == 0) {
         return ArithBinaryOp_to_sexp((ArithBinaryOp *)self);
-    } else if (strcmp(self->kind, "arith-unary-op") == 0) {
+    } else if (strcmp(self->kind, "unary-op") == 0) {
         return ArithUnaryOp_to_sexp((ArithUnaryOp *)self);
-    } else if (strcmp(self->kind, "arith-pre-incr") == 0) {
+    } else if (strcmp(self->kind, "pre-incr") == 0) {
         return ArithPreIncr_to_sexp((ArithPreIncr *)self);
-    } else if (strcmp(self->kind, "arith-post-incr") == 0) {
+    } else if (strcmp(self->kind, "post-incr") == 0) {
         return ArithPostIncr_to_sexp((ArithPostIncr *)self);
-    } else if (strcmp(self->kind, "arith-pre-decr") == 0) {
+    } else if (strcmp(self->kind, "pre-decr") == 0) {
         return ArithPreDecr_to_sexp((ArithPreDecr *)self);
-    } else if (strcmp(self->kind, "arith-post-decr") == 0) {
+    } else if (strcmp(self->kind, "post-decr") == 0) {
         return ArithPostDecr_to_sexp((ArithPostDecr *)self);
-    } else if (strcmp(self->kind, "arith-assign") == 0) {
+    } else if (strcmp(self->kind, "assign") == 0) {
         return ArithAssign_to_sexp((ArithAssign *)self);
-    } else if (strcmp(self->kind, "arith-ternary") == 0) {
+    } else if (strcmp(self->kind, "ternary") == 0) {
         return ArithTernary_to_sexp((ArithTernary *)self);
-    } else if (strcmp(self->kind, "arith-comma") == 0) {
+    } else if (strcmp(self->kind, "comma") == 0) {
         return ArithComma_to_sexp((ArithComma *)self);
-    } else if (strcmp(self->kind, "arith-subscript") == 0) {
+    } else if (strcmp(self->kind, "subscript") == 0) {
         return ArithSubscript_to_sexp((ArithSubscript *)self);
-    } else if (strcmp(self->kind, "arith-escape") == 0) {
+    } else if (strcmp(self->kind, "escape") == 0) {
         return ArithEscape_to_sexp((ArithEscape *)self);
     } else if (strcmp(self->kind, "arith-deprecated") == 0) {
         return ArithDeprecated_to_sexp((ArithDeprecated *)self);
     } else if (strcmp(self->kind, "arith-concat") == 0) {
         return ArithConcat_to_sexp((ArithConcat *)self);
-    } else if (strcmp(self->kind, "ansi-c-quote") == 0) {
+    } else if (strcmp(self->kind, "ansi-c") == 0) {
         return AnsiCQuote_to_sexp((AnsiCQuote *)self);
-    } else if (strcmp(self->kind, "locale-string") == 0) {
+    } else if (strcmp(self->kind, "locale") == 0) {
         return LocaleString_to_sexp((LocaleString *)self);
-    } else if (strcmp(self->kind, "process-substitution") == 0) {
+    } else if (strcmp(self->kind, "procsub") == 0) {
         return ProcessSubstitution_to_sexp((ProcessSubstitution *)self);
     } else if (strcmp(self->kind, "negation") == 0) {
         return Negation_to_sexp((Negation *)self);
     } else if (strcmp(self->kind, "time") == 0) {
         return Time_to_sexp((Time *)self);
-    } else if (strcmp(self->kind, "conditional-expr") == 0) {
+    } else if (strcmp(self->kind, "cond-expr") == 0) {
         return ConditionalExpr_to_sexp((ConditionalExpr *)self);
     } else if (strcmp(self->kind, "unary-test") == 0) {
         return UnaryTest_to_sexp((UnaryTest *)self);

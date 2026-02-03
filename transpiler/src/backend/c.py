@@ -240,6 +240,11 @@ class CBackend:
         self._module_name = module.name
         self._struct_names = {s.name for s in module.structs}
         self._interface_names = {i.name for i in module.interfaces}
+        self._kind_cache = {
+            s.name: s.const_fields["kind"]
+            for s in module.structs
+            if "kind" in s.const_fields
+        }
         self._tuple_types: dict[str, Tuple] = {}
         self._slice_types = set()
         self._struct_fields = {}
@@ -730,17 +735,24 @@ class CBackend:
             self._line('    if (vec.len == 0) return arena_strdup(a, "");')
             self._line("    size_t sep_len = strlen(sep);")
             self._line("    size_t total = 0;")
+            self._line("    int first = 1;")
             self._line("    for (size_t i = 0; i < vec.len; i++) {")
+            self._line("        if (!vec.data[i]) continue;")
+            self._line("        if (!first) total += sep_len;")
             self._line("        total += strlen(vec.data[i]);")
-            self._line("        if (i > 0) total += sep_len;")
+            self._line("        first = 0;")
             self._line("    }")
+            self._line('    if (first) return arena_strdup(a, "");')
             self._line("    char *result = (char *)arena_alloc(a, total + 1);")
             self._line("    char *p = result;")
+            self._line("    first = 1;")
             self._line("    for (size_t i = 0; i < vec.len; i++) {")
-            self._line("        if (i > 0) { memcpy(p, sep, sep_len); p += sep_len; }")
+            self._line("        if (!vec.data[i]) continue;")
+            self._line("        if (!first) { memcpy(p, sep, sep_len); p += sep_len; }")
             self._line("        size_t len = strlen(vec.data[i]);")
             self._line("        memcpy(p, vec.data[i], len);")
             self._line("        p += len;")
+            self._line("        first = 0;")
             self._line("    }")
             self._line("    *p = '\\0';")
             self._line("    return result;")
@@ -784,6 +796,11 @@ class CBackend:
         """Generate a unique temporary variable name."""
         self._temp_counter += 1
         return f"{prefix}{self._temp_counter}"
+
+    @staticmethod
+    def _is_zero_literal(expr: Expr) -> bool:
+        """Check if an expression is the integer literal 0."""
+        return isinstance(expr, IntLit) and expr.value == 0
 
     # ============================================================
     # HEADER AND HELPERS
@@ -984,6 +1001,15 @@ static bool _str_startswith(const char *s, const char *prefix) {
     if (!s || !prefix) return false;
     size_t plen = strlen(prefix);
     return strncmp(s, prefix, plen) == 0;
+}
+
+static bool _str_startswith_at(const char *s, int64_t pos, const char *prefix) {
+    if (!s || !prefix || pos < 0) return false;
+    size_t slen = strlen(s);
+    if ((size_t)pos >= slen) return false;
+    size_t plen = strlen(prefix);
+    if (slen - (size_t)pos < plen) return false;
+    return strncmp(s + pos, prefix, plen) == 0;
 }
 
 static bool _str_endswith(const char *s, const char *suffix) {
@@ -1343,14 +1369,10 @@ static bool _map_contains(void *map, const char *key) {
         self._line("")
 
     def _struct_name_to_kind(self, name: str) -> str:
-        """Convert a struct name to its kind string."""
-        # Special cases where Python source uses different kind strings
-        special_cases = {
-            "HereDoc": "heredoc",
-        }
-        if name in special_cases:
-            return special_cases[name]
-        # Convert PascalCase to kebab-case (e.g., UnaryTest -> unary-test)
+        """Get the kind string for a struct, using const_fields from the IR."""
+        if name in self._kind_cache:
+            return self._kind_cache[name]
+        # Fallback: convert PascalCase to kebab-case (e.g., UnaryTest -> unary-test)
         result = ""
         for i, c in enumerate(name):
             if c.isupper():
@@ -1816,13 +1838,27 @@ static bool _map_contains(void *map, const char *key) {
                 else:
                     self._line(f"{target} = {tmp_name}.F{i};")
         else:
-            # Fallback for non-tuple types
+            # Fallback for non-tuple types - evaluate value once to avoid
+            # side effects (e.g., --len from .pop()) being repeated
             value = self._emit_expr(stmt.value)
-            for i, t in enumerate(stmt.targets):
+            active_targets = [
+                (i, t) for i, t in enumerate(stmt.targets)
+                if (t.name if isinstance(t, VarLV) else None) not in (None, "_")
+            ]
+            if len(active_targets) > 1:
+                # Multiple targets: capture value in a temp to avoid re-evaluation
+                tmp = self._temp_name("_tup")
+                val_type = stmt.value.typ
+                if isinstance(val_type, Tuple):
+                    sig = self._tuple_sig(val_type)
+                    self._line(f"{sig} {tmp} = {value};")
+                else:
+                    self._line(f"__auto_type {tmp} = {value};")
+                value_expr = tmp
+            else:
+                value_expr = value
+            for i, t in active_targets:
                 var_name = t.name if isinstance(t, VarLV) else None
-                # Skip discard targets (empty name or underscore)
-                if not var_name or var_name == "_":
-                    continue
                 target = self._emit_lvalue(t)
                 already_declared = var_name in self._hoisted_vars if var_name else False
                 is_hoisted = already_declared and self._hoisted_vars.get(var_name) == "void *"
@@ -1830,11 +1866,11 @@ static bool _map_contains(void *map, const char *key) {
                     var_name is not None and not already_declared
                 )
                 if needs_decl:
-                    self._line(f"void *{target} = ((void **)&({value}))[{i}];")
+                    self._line(f"void *{target} = ((void **)&({value_expr}))[{i}];")
                     if var_name is not None:
                         self._hoisted_vars[var_name] = "void *"
                 else:
-                    self._line(f"{target} = ((void **)&({value}))[{i}];")
+                    self._line(f"{target} = ((void **)&({value_expr}))[{i}];")
 
     def _emit_stmt_OpAssign(self, stmt: OpAssign) -> None:
         target = self._emit_lvalue(stmt.target)
@@ -1986,7 +2022,7 @@ static bool _map_contains(void *map, const char *key) {
             self._line(f"{c_type} {c_name};")
             self._hoisted_vars[name] = c_type
         cond = self._emit_expr(stmt.cond)
-        self._line(f"while ({cond}) {{")
+        self._line(f"while (!g_parse_error && ({cond})) {{")
         self.indent += 1
         for s in stmt.body:
             self._emit_stmt(s)
@@ -2106,8 +2142,7 @@ static bool _map_contains(void *map, const char *key) {
             self._line("}")
 
     def _emit_stmt_TryCatch(self, stmt: TryCatch) -> None:
-        # C doesn't have try/catch - use error returns
-        # For simplicity, just emit the try body and ignore errors
+        # C doesn't have try/catch - simulate with g_parse_error checks
         self._line("// try {")
         for name, typ in stmt.hoisted_vars:
             c_type = self._type_to_c(typ) if typ else "void *"
@@ -2120,7 +2155,27 @@ static bool _map_contains(void *map, const char *key) {
             self._hoisted_vars[name] = c_type
         for s in stmt.body:
             self._emit_stmt(s)
-        self._line("// } catch handled via error returns")
+        # Check if an exception was raised during the try body
+        if stmt.catch_body:
+            self._line("if (g_parse_error) {")
+            self.indent += 1
+            self._line("g_parse_error = 0;")
+            self._line('g_error_msg[0] = \'\\0\';')
+            for s in stmt.catch_body:
+                self._emit_stmt(s)
+            self.indent -= 1
+            self._line("}")
+        elif stmt.reraise:
+            self._line("if (g_parse_error) {")
+            self.indent += 1
+            err_val = self._error_return_value()
+            if err_val:
+                self._line(f"return {err_val};")
+            else:
+                self._line("return;")
+            self.indent -= 1
+            self._line("}")
+        self._line("// } catch")
 
     def _emit_stmt_Raise(self, stmt: Raise) -> None:
         err_val = self._error_return_value()
@@ -2666,6 +2721,8 @@ static bool _map_contains(void *map, const char *key) {
                     f"_str_startswith({obj}, {self._emit_expr(e)})" for e in expr.args[0].elements
                 ]
                 return "(" + " || ".join(checks) + ")"
+            if len(expr.args) >= 2:
+                return f"_str_startswith_at({obj}, {args_expr[1]}, {args_expr[0]})"
             return f"_str_startswith({obj}, {args_expr[0]})"
         if method == "endswith" and expr.args:
             # Handle tuple of suffixes: s.endswith(("a", "b")) -> (ends_with || ends_with)
@@ -2698,6 +2755,14 @@ static bool _map_contains(void *map, const char *key) {
                 elem_type = self._type_to_c(obj_type.element)
                 return f"do {{ Vec_{self._slice_elem_sig(obj_type.element)} _src = {src_expr}; for (size_t _i = 0; _i < _src.len; _i++) {{ VEC_PUSH(g_arena, &{obj}, _src.data[_i]); }} }} while(0)"
             if method == "pop":
+                if expr.args and self._is_zero_literal(expr.args[0]):
+                    # pop(0) - pop from front: grab first element, shift rest
+                    elem_sig = self._slice_elem_sig(obj_type.element)
+                    return (
+                        f"({{ {self._type_to_c(obj_type.element)} _pop0 = {obj}.data[0]; "
+                        f"memmove({obj}.data, {obj}.data + 1, --{obj}.len * sizeof({obj}.data[0])); "
+                        f"_pop0; }})"
+                    )
                 return f"{obj}.data[--{obj}.len]"
             if method == "copy":
                 return f"{obj} /* copy */"
@@ -2938,7 +3003,7 @@ static bool _map_contains(void *map, const char *key) {
         inner = self._emit_expr(expr.expr)
         tested = self._type_to_c(expr.tested_type).rstrip(" *")
         kind_str = self._struct_name_to_kind(tested)
-        return f'(strcmp({inner}->kind, "{kind_str}") == 0)'
+        return f'({inner} != NULL && strcmp({inner}->kind, "{kind_str}") == 0)'
 
     def _emit_expr_IsNil(self, expr: IsNil) -> str:
         inner = self._emit_expr(expr.expr)

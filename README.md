@@ -27,6 +27,7 @@ The transpiler supports these target languages:
 | Language   | Min Version  | Status |
 | ---------- | ------------ | ------ |
 | C#         | .NET 8       | Done   |
+| Dart       | Dart 3.2     | Dart   |
 | Go         | Go 1.21      | Done   |
 | Java       | Temurin 21   | Done   |
 | Javascript | Node.js 21   | Done   |
@@ -37,7 +38,6 @@ The transpiler supports these target languages:
 | Ruby       | Ruby 3.2     | Done   |
 | Typescript | tsc 5.3      | Done   |
 | C          | GCC 13       | WIP    |
-| Dart       | Dart 3.2     | WIP    |
 | Swift      | Swift 5.9    | WIP    |
 | Rust       | Rust 1.75    | Future |
 | Zig        | Zig 0.11     | Future |

@@ -208,6 +208,10 @@ def _type_name(name: str) -> str:
     return name
 
 
+def _is_zero_literal(expr: Expr) -> bool:
+    return isinstance(expr, IntLit) and expr.value == 0
+
+
 class CBackend:
     """Emit C11 code from IR Module."""
 
@@ -243,7 +247,7 @@ class CBackend:
         self._module_name = module.name
         self._struct_names = {s.name for s in module.structs}
         self._interface_names = {i.name for i in module.interfaces}
-        self._kind_cache = {
+        self._kind_cache: dict[str, str] = {
             s.name: s.const_fields["kind"]
             for s in module.structs
             if "kind" in s.const_fields
@@ -799,11 +803,6 @@ class CBackend:
         """Generate a unique temporary variable name."""
         self._temp_counter += 1
         return f"{prefix}{self._temp_counter}"
-
-    @staticmethod
-    def _is_zero_literal(expr: Expr) -> bool:
-        """Check if an expression is the integer literal 0."""
-        return isinstance(expr, IntLit) and expr.value == 0
 
     # ============================================================
     # HEADER AND HELPERS
@@ -1383,12 +1382,32 @@ static Vec_Byte _str_to_bytes(Arena *a, const char *s) {
     return (Vec_Byte){data, len, len};
 }
 
-// Bytes to string conversion (null-terminates the result)
+// Bytes to string conversion with UTF-8 validation (replaces invalid sequences with U+FFFD)
 static const char *_bytes_to_str(Arena *a, Vec_Byte v) {
     if (!v.data || v.len == 0) return "";
-    char *s = (char *)arena_alloc(a, v.len + 1);
-    memcpy(s, v.data, v.len);
-    s[v.len] = '\0';
+    // Worst case: every byte is invalid -> 3 bytes (U+FFFD) each
+    char *s = (char *)arena_alloc(a, v.len * 3 + 1);
+    size_t j = 0;
+    for (size_t i = 0; i < v.len; ) {
+        unsigned char b = v.data[i];
+        if (b < 0x80) {
+            s[j++] = b;
+            i++;
+        } else if ((b & 0xE0) == 0xC0 && i + 1 < v.len && (v.data[i+1] & 0xC0) == 0x80) {
+            s[j++] = b; s[j++] = v.data[i+1];
+            i += 2;
+        } else if ((b & 0xF0) == 0xE0 && i + 2 < v.len && (v.data[i+1] & 0xC0) == 0x80 && (v.data[i+2] & 0xC0) == 0x80) {
+            s[j++] = b; s[j++] = v.data[i+1]; s[j++] = v.data[i+2];
+            i += 3;
+        } else if ((b & 0xF8) == 0xF0 && i + 3 < v.len && (v.data[i+1] & 0xC0) == 0x80 && (v.data[i+2] & 0xC0) == 0x80 && (v.data[i+3] & 0xC0) == 0x80) {
+            s[j++] = b; s[j++] = v.data[i+1]; s[j++] = v.data[i+2]; s[j++] = v.data[i+3];
+            i += 4;
+        } else {
+            s[j++] = (char)0xEF; s[j++] = (char)0xBF; s[j++] = (char)0xBD; // U+FFFD
+            i++;
+        }
+    }
+    s[j] = '\0';
     return s;
 }
 
@@ -2867,7 +2886,7 @@ static bool _map_contains(void *map, const char *key) {
                 elem_type = self._type_to_c(obj_type.element)
                 return f"do {{ Vec_{self._slice_elem_sig(obj_type.element)} _src = {src_expr}; for (size_t _i = 0; _i < _src.len; _i++) {{ VEC_PUSH(g_arena, &{obj}, _src.data[_i]); }} }} while(0)"
             if method == "pop":
-                if expr.args and self._is_zero_literal(expr.args[0]):
+                if expr.args and _is_zero_literal(expr.args[0]):
                     # pop(0) - pop from front: grab first element, shift rest
                     elem_sig = self._slice_elem_sig(obj_type.element)
                     return (

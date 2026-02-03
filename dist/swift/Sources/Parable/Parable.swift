@@ -415,7 +415,7 @@ class Lexer {
         return "|&;()<> \t\n".contains(c)
     }
 
-    func _readOperator() -> Token {
+    func _readOperator() -> Token? {
         var start: Int = self.pos
         var c: String = self.peek()
         if c == "" {
@@ -953,7 +953,7 @@ class Lexer {
             }
             if ch == "(" && wasGtlt && (flags & matchedpairflagsDolbrace | matchedpairflagsArraysub != 0) {
                 var direction: String = chars[chars.count - 1]
-                chars = Swift.Array(chars[..<chars.count - 1])
+                chars = Swift.Array(chars[..<(chars.count - 1)])
                 self.pos -= 1
                 self._syncToParser()
                 let _tuple7 = try self._parser!._parseProcessSubstitution()
@@ -983,7 +983,7 @@ class Lexer {
         return try self._parseMatchedPair("{", "}", flags | matchedpairflagsDolbrace, wasDollar)
     }
 
-    func _readWordInternal(_ ctx: Int, _ atCommandStart: Bool, _ inArrayLiteral: Bool, _ inAssignBuiltin: Bool) throws -> Word {
+    func _readWordInternal(_ ctx: Int, _ atCommandStart: Bool, _ inArrayLiteral: Bool, _ inAssignBuiltin: Bool) throws -> Word? {
         var start: Int = self.pos
         var chars: [String] = []
         var parts: [Node] = []
@@ -1238,10 +1238,10 @@ class Lexer {
             if ctx == wordCtxNormal && ch == "(" && (!chars.isEmpty) && bracketDepth == 0 {
                 var isArrayAssign: Bool = false
                 if chars.count >= 3 && chars[chars.count - 2] == "+" && chars[chars.count - 1] == "=" {
-                    isArrayAssign = _isArrayAssignmentPrefix(Swift.Array(chars[..<chars.count - 2]))
+                    isArrayAssign = _isArrayAssignmentPrefix(Swift.Array(chars[..<(chars.count - 2)]))
                 } else {
                     if chars[chars.count - 1] == "=" && chars.count >= 2 {
-                        isArrayAssign = _isArrayAssignmentPrefix(Swift.Array(chars[..<chars.count - 1]))
+                        isArrayAssign = _isArrayAssignmentPrefix(Swift.Array(chars[..<(chars.count - 1)]))
                     }
                 }
                 if isArrayAssign && atCommandStart || inAssignBuiltin {
@@ -1290,7 +1290,7 @@ class Lexer {
         return Word(value: chars.joined(separator: ""), parts: nil, kind: "word")
     }
 
-    func _readWord() throws -> Token {
+    func _readWord() throws -> Token? {
         var start: Int = self.pos
         if self.pos >= self.length {
             return nil
@@ -1304,11 +1304,11 @@ class Lexer {
         if self.isMetachar(c) && !isProcsub && !isRegexParen {
             return nil
         }
-        var word: Word = try self._readWordInternal(self._wordContext, self._atCommandStart, self._inArrayLiteral, self._inAssignBuiltin)
+        var word: Word? = try self._readWordInternal(self._wordContext, self._atCommandStart, self._inArrayLiteral, self._inAssignBuiltin)
         if word == nil {
             return nil
         }
-        return Token(type: tokentypeWord, value: word.value, pos: start, parts: nil, word: word)
+        return Token(type: tokentypeWord, value: word!.value, pos: start, parts: nil, word: word!)
     }
 
     func nextToken() throws -> Token {
@@ -1930,12 +1930,12 @@ class Lexer {
             var inner: String = String(arg[arg.index(arg.startIndex, offsetBy: 1)..<arg.index(arg.startIndex, offsetBy: min(arg.count - 1, arg.count))])
             do {
                 var subParser: Parser = newParser(inner, true, self._parser!._extglob)
-                var parsed: Node = try subParser.parseList(true)
+                var parsed: Node? = try subParser.parseList(true)
                 if parsed != nil && subParser.atEnd() {
-                    var formatted: String = _formatCmdsubNode(parsed, 0, true, false, true)
+                    var formatted: String = _formatCmdsubNode(parsed!, 0, true, false, true)
                     arg = "(" + formatted + ")"
                 }
-            } catch is Exception {
+            } catch {
             }
         }
         text = "${" + param + op + arg + "}"
@@ -1978,7 +1978,7 @@ class Word: Node {
     }
 
     func _appendWithCtlesc(_ result: [UInt8], _ byteVal: Int) {
-        result.append((byteVal as! UInt8))
+        result.append(UInt8(byteVal))
     }
 
     func _doubleCtlescSmart(_ value: String) -> String {
@@ -2121,11 +2121,11 @@ class Word: Node {
                 var c: String = String(_charAt(inner, i + 1))
                 var simple: Int = _getAnsiEscape(c)
                 if simple >= 0 {
-                    result.append((simple as! UInt8))
+                    result.append(UInt8(simple))
                     i += 2
                 } else {
                     if c == "'" {
-                        result.append((39 as! UInt8))
+                        result.append(UInt8(39))
                         i += 2
                     } else {
                         var j: Int = 0
@@ -2162,7 +2162,7 @@ class Word: Node {
                                     self._appendWithCtlesc(result, byteVal)
                                     i = j
                                 } else {
-                                    result.append((_charAt(String(_charAt(inner, i)), 0) as! UInt8))
+                                    result.append(UInt8(_charAt(String(_charAt(inner, i)), 0)))
                                     i += 1
                                 }
                             }
@@ -2181,7 +2181,7 @@ class Word: Node {
                                     result.append(contentsOf: Swift.Array(String(Character(UnicodeScalar(codepoint)!)).utf8))
                                     i = j
                                 } else {
-                                    result.append((_charAt(String(_charAt(inner, i)), 0) as! UInt8))
+                                    result.append(UInt8(_charAt(String(_charAt(inner, i)), 0)))
                                     i += 1
                                 }
                             } else {
@@ -2198,7 +2198,7 @@ class Word: Node {
                                         result.append(contentsOf: Swift.Array(String(Character(UnicodeScalar(codepoint)!)).utf8))
                                         i = j
                                     } else {
-                                        result.append((_charAt(String(_charAt(inner, i)), 0) as! UInt8))
+                                        result.append(UInt8(_charAt(String(_charAt(inner, i)), 0)))
                                         i += 1
                                     }
                                 } else {
@@ -2216,7 +2216,7 @@ class Word: Node {
                                             self._appendWithCtlesc(result, ctrlVal)
                                             i += 3 + skipExtra
                                         } else {
-                                            result.append((_charAt(String(_charAt(inner, i)), 0) as! UInt8))
+                                            result.append(UInt8(_charAt(String(_charAt(inner, i)), 0)))
                                             i += 1
                                         }
                                     } else {
@@ -2248,8 +2248,8 @@ class Word: Node {
                                                 self._appendWithCtlesc(result, byteVal)
                                                 i = j
                                             } else {
-                                                result.append((92 as! UInt8))
-                                                result.append((_charAt(c, 0) as! UInt8))
+                                                result.append(UInt8(92))
+                                                result.append(UInt8(_charAt(c, 0)))
                                                 i += 2
                                             }
                                         }
@@ -3161,7 +3161,7 @@ class Word: Node {
                         parser = newParser(inner, false, false)
                         parsed = try parser!.parseList(true)
                         formatted = (parsed != nil ? _formatCmdsubNode(parsed!, 0, false, false, false) : "")
-                    } catch is Exception {
+                    } catch {
                         formatted = inner
                     }
                 }
@@ -3192,9 +3192,9 @@ class Word: Node {
                     var `prefix`: String = ""
                     if _isExpansionStart(value, i, "${") && i + 2 < value.count && _isFunsubChar(String(_charAt(value, i + 2))) && !_isBackslashEscaped(value, i) {
                         j = _findFunsubEnd(value, i + 2)
-                        var cmdsubNode: Node = (cmdsubIdx < cmdsubParts.count ? cmdsubParts[cmdsubIdx] : nil)
-                        if (cmdsubNode is CommandSubstitution) && (cmdsubNode as! CommandSubstitution).brace {
-                            node = cmdsubNode
+                        var cmdsubNode: Node? = (cmdsubIdx < cmdsubParts.count ? cmdsubParts[cmdsubIdx] : nil)
+                        if (cmdsubNode! is CommandSubstitution) && (cmdsubNode! as! CommandSubstitution).brace {
+                            node = cmdsubNode!
                             formatted = _formatCmdsubNode((node! as! CommandSubstitution).command, 0, false, false, false)
                             var hasPipe: Bool = String(_charAt(value, i + 2)) == "|"
                             `prefix` = (hasPipe ? "${|" : "${ ")
@@ -3292,7 +3292,7 @@ class Word: Node {
                                         } else {
                                             formatted = inner
                                         }
-                                    } catch is Exception {
+                                    } catch {
                                         formatted = inner
                                     }
                                     result.append(direction + "(" + formatted + ")")
@@ -3364,7 +3364,7 @@ class Word: Node {
                                         } else {
                                             result.append("${ }")
                                         }
-                                    } catch is Exception {
+                                    } catch {
                                         result.append(_substring(value, i, j))
                                     }
                                 }
@@ -3794,7 +3794,7 @@ class List: Node {
         return self._toSexpAndOr(parts, opNames)
     }
 
-    func _toSexpAndOr(_ parts: [Node], _ opNames: [String: String]) -> String {
+    func _toSexpAndOr(_ parts: [Node], _ opNames: inout [String: String]) -> String {
         if parts.count == 1 {
             return parts[0].toSexp()
         }
@@ -4006,7 +4006,7 @@ class HereDoc: Node {
 }
 
 class Subshell: Node {
-    var body: (Node)?
+    var body: (Node)!
     var redirects: [Node]?
     var kind: String = ""
 
@@ -4027,7 +4027,7 @@ class Subshell: Node {
 }
 
 class BraceGroup: Node {
-    var body: (Node)?
+    var body: (Node)!
     var redirects: [Node]?
     var kind: String = ""
 
@@ -4048,8 +4048,8 @@ class BraceGroup: Node {
 }
 
 class If: Node {
-    var condition: (Node)?
-    var thenBody: (Node)?
+    var condition: (Node)!
+    var thenBody: (Node)!
     var elseBody: Node?
     var redirects: [Node] = []
     var kind: String = ""
@@ -4080,8 +4080,8 @@ class If: Node {
 }
 
 class While: Node {
-    var condition: (Node)?
-    var body: (Node)?
+    var condition: (Node)!
+    var body: (Node)!
     var redirects: [Node] = []
     var kind: String = ""
 
@@ -4103,8 +4103,8 @@ class While: Node {
 }
 
 class Until: Node {
-    var condition: (Node)?
-    var body: (Node)?
+    var condition: (Node)!
+    var body: (Node)!
     var redirects: [Node] = []
     var kind: String = ""
 
@@ -4128,7 +4128,7 @@ class Until: Node {
 class For: Node {
     var `var`: String = ""
     var words: [Word]?
-    var body: (Node)?
+    var body: (Node)!
     var redirects: [Node] = []
     var kind: String = ""
 
@@ -4177,7 +4177,7 @@ class ForArith: Node {
     var `init`: String = ""
     var cond: String = ""
     var incr: String = ""
-    var body: (Node)?
+    var body: (Node)!
     var redirects: [Node] = []
     var kind: String = ""
 
@@ -4217,7 +4217,7 @@ class ForArith: Node {
 class Select: Node {
     var `var`: String = ""
     var words: [Word]?
-    var body: (Node)?
+    var body: (Node)!
     var redirects: [Node] = []
     var kind: String = ""
 
@@ -4400,7 +4400,7 @@ class CasePattern: Node {
 
 class Function: Node {
     var name: String = ""
-    var body: (Node)?
+    var body: (Node)!
     var kind: String = ""
 
     init(name: String = "", body: (Node)? = nil, kind: String = "") {
@@ -4506,7 +4506,7 @@ class ParamIndirect: Node {
 }
 
 class CommandSubstitution: Node {
-    var command: (Node)?
+    var command: (Node)!
     var brace: Bool = false
     var kind: String = ""
 
@@ -4636,8 +4636,8 @@ class ArithVar: Node {
 
 class ArithBinaryOp: Node {
     var op: String = ""
-    var `left`: (Node)?
-    var `right`: (Node)?
+    var `left`: (Node)!
+    var `right`: (Node)!
     var kind: String = ""
 
     init(op: String = "", `left`: (Node)? = nil, `right`: (Node)? = nil, kind: String = "") {
@@ -4658,7 +4658,7 @@ class ArithBinaryOp: Node {
 
 class ArithUnaryOp: Node {
     var op: String = ""
-    var operand: (Node)?
+    var operand: (Node)!
     var kind: String = ""
 
     init(op: String = "", operand: (Node)? = nil, kind: String = "") {
@@ -4677,7 +4677,7 @@ class ArithUnaryOp: Node {
 }
 
 class ArithPreIncr: Node {
-    var operand: (Node)?
+    var operand: (Node)!
     var kind: String = ""
 
     init(operand: (Node)? = nil, kind: String = "") {
@@ -4695,7 +4695,7 @@ class ArithPreIncr: Node {
 }
 
 class ArithPostIncr: Node {
-    var operand: (Node)?
+    var operand: (Node)!
     var kind: String = ""
 
     init(operand: (Node)? = nil, kind: String = "") {
@@ -4713,7 +4713,7 @@ class ArithPostIncr: Node {
 }
 
 class ArithPreDecr: Node {
-    var operand: (Node)?
+    var operand: (Node)!
     var kind: String = ""
 
     init(operand: (Node)? = nil, kind: String = "") {
@@ -4731,7 +4731,7 @@ class ArithPreDecr: Node {
 }
 
 class ArithPostDecr: Node {
-    var operand: (Node)?
+    var operand: (Node)!
     var kind: String = ""
 
     init(operand: (Node)? = nil, kind: String = "") {
@@ -4750,8 +4750,8 @@ class ArithPostDecr: Node {
 
 class ArithAssign: Node {
     var op: String = ""
-    var target: (Node)?
-    var value: (Node)?
+    var target: (Node)!
+    var value: (Node)!
     var kind: String = ""
 
     init(op: String = "", target: (Node)? = nil, value: (Node)? = nil, kind: String = "") {
@@ -4771,9 +4771,9 @@ class ArithAssign: Node {
 }
 
 class ArithTernary: Node {
-    var condition: (Node)?
-    var ifTrue: (Node)?
-    var ifFalse: (Node)?
+    var condition: (Node)!
+    var ifTrue: (Node)!
+    var ifFalse: (Node)!
     var kind: String = ""
 
     init(condition: (Node)? = nil, ifTrue: (Node)? = nil, ifFalse: (Node)? = nil, kind: String = "") {
@@ -4793,8 +4793,8 @@ class ArithTernary: Node {
 }
 
 class ArithComma: Node {
-    var `left`: (Node)?
-    var `right`: (Node)?
+    var `left`: (Node)!
+    var `right`: (Node)!
     var kind: String = ""
 
     init(`left`: (Node)? = nil, `right`: (Node)? = nil, kind: String = "") {
@@ -4814,7 +4814,7 @@ class ArithComma: Node {
 
 class ArithSubscript: Node {
     var array: String = ""
-    var index: (Node)?
+    var index: (Node)!
     var kind: String = ""
 
     init(array: String = "", index: (Node)? = nil, kind: String = "") {
@@ -4931,7 +4931,7 @@ class LocaleString: Node {
 
 class ProcessSubstitution: Node {
     var direction: String = ""
-    var command: (Node)?
+    var command: (Node)!
     var kind: String = ""
 
     init(direction: String = "", command: (Node)? = nil, kind: String = "") {
@@ -4950,7 +4950,7 @@ class ProcessSubstitution: Node {
 }
 
 class Negation: Node {
-    var pipeline: (Node)?
+    var pipeline: (Node)!
     var kind: String = ""
 
     init(pipeline: (Node)? = nil, kind: String = "") {
@@ -4971,7 +4971,7 @@ class Negation: Node {
 }
 
 class Time: Node {
-    var pipeline: (Node)?
+    var pipeline: (Node)!
     var posix: Bool = false
     var kind: String = ""
 
@@ -5001,7 +5001,7 @@ class Time: Node {
 }
 
 class ConditionalExpr: Node {
-    var body: (Any)?
+    var body: (Any)!
     var redirects: [Node] = []
     var kind: String = ""
 
@@ -5083,8 +5083,8 @@ class BinaryTest: Node {
 }
 
 class CondAnd: Node {
-    var `left`: (Node)?
-    var `right`: (Node)?
+    var `left`: (Node)!
+    var `right`: (Node)!
     var kind: String = ""
 
     init(`left`: (Node)? = nil, `right`: (Node)? = nil, kind: String = "") {
@@ -5103,8 +5103,8 @@ class CondAnd: Node {
 }
 
 class CondOr: Node {
-    var `left`: (Node)?
-    var `right`: (Node)?
+    var `left`: (Node)!
+    var `right`: (Node)!
     var kind: String = ""
 
     init(`left`: (Node)? = nil, `right`: (Node)? = nil, kind: String = "") {
@@ -5123,7 +5123,7 @@ class CondOr: Node {
 }
 
 class CondNot: Node {
-    var operand: (Node)?
+    var operand: (Node)!
     var kind: String = ""
 
     init(operand: (Node)? = nil, kind: String = "") {
@@ -5141,7 +5141,7 @@ class CondNot: Node {
 }
 
 class CondParen: Node {
-    var inner: (Node)?
+    var inner: (Node)!
     var kind: String = ""
 
     init(inner: (Node)? = nil, kind: String = "") {
@@ -5185,7 +5185,7 @@ class `Array`: Node {
 }
 
 class Coproc: Node {
-    var command: (Node)?
+    var command: (Node)!
     var name: String = ""
     var kind: String = ""
 
@@ -5576,25 +5576,25 @@ class Parser {
         var redirects: [Node] = []
         while true {
             self.skipWhitespace()
-            var redirect: Node = try self.parseRedirect()
+            var redirect: Node? = try self.parseRedirect()
             if redirect == nil {
                 break
             }
-            redirects.append(redirect)
+            redirects.append(redirect!)
         }
         return ((!redirects.isEmpty) ? redirects : nil)
     }
 
     func _parseLoopBody(_ context: String) throws -> Node {
         if self.peek() == "{" {
-            var brace: BraceGroup = try self.parseBraceGroup()
+            var brace: BraceGroup? = try self.parseBraceGroup()
             if brace == nil {
                 throw try ParseError(message: "Expected brace group body in \\(context)", pos: self._lexPeekToken().pos)
             }
-            return brace.body
+            return brace!.body
         }
         if try self._lexConsumeWord("do") {
-            var body: Node = try self.parseListUntil(Set(["done"]))
+            var body: Node? = try self.parseListUntil(Set(["done"]))
             if body == nil {
                 throw try ParseError(message: "Expected commands after 'do'", pos: self._lexPeekToken().pos)
             }
@@ -5602,7 +5602,7 @@ class Parser {
             if try !self._lexConsumeWord("done") {
                 throw try ParseError(message: "Expected 'done' to close \\(context)", pos: self._lexPeekToken().pos)
             }
-            return body
+            return body!
         }
         throw try ParseError(message: "Expected 'do' or '{' in \\(context)", pos: self._lexPeekToken().pos)
     }
@@ -5762,7 +5762,7 @@ class Parser {
         return try self.parseWord(atCommandStart, inArrayLiteral, false)
     }
 
-    func parseWord(_ atCommandStart: Bool, _ inArrayLiteral: Bool, _ inAssignBuiltin: Bool) throws -> Word {
+    func parseWord(_ atCommandStart: Bool, _ inArrayLiteral: Bool, _ inAssignBuiltin: Bool) throws -> Word? {
         self.skipWhitespace()
         if self.atEnd() {
             return nil
@@ -5798,7 +5798,7 @@ class Parser {
         var saved: SavedParserState = self._saveParserState()
         self._setState(parserstateflagsPstCmdsubst | parserstateflagsPstEoftoken)
         self._eofToken = ")"
-        var cmd: Node = try self.parseList(true)
+        var cmd: Node? = try self.parseList(true)
         if cmd == nil {
             cmd = Empty(kind: "empty")
         }
@@ -5812,7 +5812,7 @@ class Parser {
         var textEnd: Int = self.pos
         var text: String = _substring(self.source, start, textEnd)
         self._restoreParserState(saved)
-        return (CommandSubstitution(command: cmd, brace: false, kind: "cmdsub"), text)
+        return (CommandSubstitution(command: cmd!, brace: false, kind: "cmdsub"), text)
     }
 
     func _parseFunsub(_ start: Int) throws -> (Node?, String) {
@@ -5823,7 +5823,7 @@ class Parser {
         var saved: SavedParserState = self._saveParserState()
         self._setState(parserstateflagsPstCmdsubst | parserstateflagsPstEoftoken)
         self._eofToken = "}"
-        var cmd: Node = try self.parseList(true)
+        var cmd: Node? = try self.parseList(true)
         if cmd == nil {
             cmd = Empty(kind: "empty")
         }
@@ -5836,7 +5836,7 @@ class Parser {
         var text: String = _substring(self.source, start, self.pos)
         self._restoreParserState(saved)
         self._syncLexer()
-        return (CommandSubstitution(command: cmd, brace: true, kind: "cmdsub"), text)
+        return (CommandSubstitution(command: cmd!, brace: true, kind: "cmdsub"), text)
     }
 
     func _isAssignmentWord(_ word: Word) -> Bool {
@@ -6127,11 +6127,11 @@ class Parser {
             }
         }
         var subParser: Parser = newParser(content, false, self._extglob)
-        var cmd: Node = try subParser.parseList(true)
+        var cmd: Node? = try subParser.parseList(true)
         if cmd == nil {
             cmd = Empty(kind: "empty")
         }
-        return (CommandSubstitution(command: cmd, brace: false, kind: "cmdsub"), text)
+        return (CommandSubstitution(command: cmd!, brace: false, kind: "cmdsub"), text)
     }
 
     func _parseProcessSubstitution() throws -> (Node?, String) {
@@ -6151,7 +6151,7 @@ class Parser {
         self._setState(parserstateflagsPstEoftoken)
         self._eofToken = ")"
         do {
-            var cmd: Node = try self.parseList(true)
+            var cmd: Node? = try self.parseList(true)
             if cmd == nil {
                 cmd = Empty(kind: "empty")
             }
@@ -6165,7 +6165,7 @@ class Parser {
             text = _stripLineContinuationsCommentAware(text)
             self._restoreParserState(saved)
             self._inProcessSub = oldInProcessSub
-            return (ProcessSubstitution(direction: direction, command: cmd, kind: "procsub"), text)
+            return (ProcessSubstitution(direction: direction, command: cmd!, kind: "procsub"), text)
         } catch is ParseError {
             self._restoreParserState(saved)
             self._inProcessSub = oldInProcessSub
@@ -6200,7 +6200,7 @@ class Parser {
             if self.peek() == ")" {
                 break
             }
-            var word: Word = try self.parseWord(false, true, false)
+            var word: Word? = try self.parseWord(false, true, false)
             if word == nil {
                 if self.peek() == ")" {
                     break
@@ -6208,7 +6208,7 @@ class Parser {
                 self._clearState(parserstateflagsPstCompassign)
                 throw ParseError(message: "Expected word in array literal", pos: self.pos)
             }
-            elements.append(word)
+            elements.append(word!)
         }
         if self.atEnd() || self.peek() != ")" {
             self._clearState(parserstateflagsPstCompassign)
@@ -6448,8 +6448,8 @@ class Parser {
         return cond
     }
 
-    func _arithParseLeftAssoc(_ ops: [String], _ parsefn: () -> Node) -> Node {
-        var `left`: Node = parsefn()
+    func _arithParseLeftAssoc(_ ops: [String], _ parsefn: () throws -> Node) -> Node {
+        var `left`: Node = try parsefn()
         while true {
             self._arithSkipWs()
             var matched: Bool = false
@@ -6457,7 +6457,7 @@ class Parser {
                 if self._arithMatch(op) {
                     self._arithConsume(op)
                     self._arithSkipWs()
-                    `left` = ArithBinaryOp(op: op, `left`: `left`, `right`: parsefn(), kind: "binary-op")
+                    `left` = try ArithBinaryOp(op: op, `left`: `left`, `right`: parsefn(), kind: "binary-op")
                     matched = true
                     break
                 }
@@ -6875,8 +6875,8 @@ class Parser {
         content = _substring(self._arithSrc, contentStart, self._arithPos)
         self._arithAdvance()
         var subParser: Parser = newParser(content, false, self._extglob)
-        var cmd: Node = try subParser.parseList(true)
-        return CommandSubstitution(command: cmd, brace: false, kind: "cmdsub")
+        var cmd: Node? = try subParser.parseList(true)
+        return CommandSubstitution(command: cmd!, brace: false, kind: "cmdsub")
     }
 
     func _arithParseBracedParam() -> Node {
@@ -7020,8 +7020,8 @@ class Parser {
             throw ParseError(message: "Unterminated backtick in arithmetic", pos: self._arithPos)
         }
         var subParser: Parser = newParser(content, false, self._extglob)
-        var cmd: Node = try subParser.parseList(true)
-        return CommandSubstitution(command: cmd, brace: false, kind: "cmdsub")
+        var cmd: Node? = try subParser.parseList(true)
+        return CommandSubstitution(command: cmd!, brace: false, kind: "cmdsub")
     }
 
     func _arithParseNumberOrVar() throws -> Node {
@@ -7085,7 +7085,7 @@ class Parser {
         return (result0!, result1)
     }
 
-    func parseRedirect() throws -> Node {
+    func parseRedirect() throws -> Node? {
         self.skipWhitespace()
         if self.atEnd() {
             return nil
@@ -7138,7 +7138,7 @@ class Parser {
                                 isValidVarfd = true
                                 for _c37 in String(base.dropFirst(1)) {
                                     let c = String(_c37)
-                                    if !((c.first?.isLetter ?? false || c.first?.isNumber ?? false) || c == "_") {
+                                    if !((Character(UnicodeScalar(c)!).isLetter || Character(UnicodeScalar(c)!).isNumber) || c == "_") {
                                         isValidVarfd = false
                                         break
                                     }
@@ -7149,7 +7149,7 @@ class Parser {
                         isValidVarfd = true
                         for _c38 in String(varname.dropFirst(1)) {
                             let c = String(_c38)
-                            if !((c.first?.isLetter ?? false || c.first?.isNumber ?? false) || c == "_") {
+                            if !((Character(UnicodeScalar(c)!).isLetter || Character(UnicodeScalar(c)!).isNumber) || c == "_") {
                                 isValidVarfd = false
                                 break
                             }
@@ -7660,7 +7660,7 @@ class Parser {
         return heredoc
     }
 
-    func parseCommand() throws -> Command {
+    func parseCommand() throws -> Command? {
         var words: [Word] = []
         var redirects: [Node] = []
         while true {
@@ -7674,9 +7674,9 @@ class Parser {
                     break
                 }
             }
-            var redirect: Node = try self.parseRedirect()
+            var redirect: Node? = try self.parseRedirect()
             if redirect != nil {
-                redirects.append(redirect)
+                redirects.append(redirect!)
                 continue
             }
             var allAssignments: Bool = true
@@ -7687,11 +7687,11 @@ class Parser {
                 }
             }
             var inAssignBuiltin: Bool = words.count > 0 && assignmentBuiltins.contains(words[0].value)
-            var word: Word = try self.parseWord(!(!words.isEmpty) || allAssignments && redirects.count == 0, false, inAssignBuiltin)
+            var word: Word? = try self.parseWord(!(!words.isEmpty) || allAssignments && redirects.count == 0, false, inAssignBuiltin)
             if word == nil {
                 break
             }
-            words.append(word)
+            words.append(word!)
         }
         if !(!words.isEmpty) && !(!redirects.isEmpty) {
             return nil
@@ -7699,14 +7699,14 @@ class Parser {
         return Command(words: words, redirects: redirects, kind: "command")
     }
 
-    func parseSubshell() throws -> Subshell {
+    func parseSubshell() throws -> Subshell? {
         self.skipWhitespace()
         if self.atEnd() || self.peek() != "(" {
             return nil
         }
         self.advance()
         self._setState(parserstateflagsPstSubshell)
-        var body: Node = try self.parseList(true)
+        var body: Node? = try self.parseList(true)
         if body == nil {
             self._clearState(parserstateflagsPstSubshell)
             throw ParseError(message: "Expected command in subshell", pos: self.pos)
@@ -7718,10 +7718,10 @@ class Parser {
         }
         self.advance()
         self._clearState(parserstateflagsPstSubshell)
-        return try Subshell(body: body, redirects: self._collectRedirects(), kind: "subshell")
+        return try Subshell(body: body!, redirects: self._collectRedirects(), kind: "subshell")
     }
 
-    func parseArithmeticCommand() throws -> ArithmeticCommand {
+    func parseArithmeticCommand() throws -> ArithmeticCommand? {
         self.skipWhitespace()
         if self.atEnd() || self.peek() != "(" || self.pos + 1 >= self.length || String(_charAt(self.source, self.pos + 1)) != "(" {
             return nil
@@ -7799,7 +7799,7 @@ class Parser {
         return try ArithmeticCommand(expression: expr, redirects: self._collectRedirects(), rawContent: content, kind: "arith-cmd")
     }
 
-    func parseConditionalExpr() throws -> ConditionalExpr {
+    func parseConditionalExpr() throws -> ConditionalExpr? {
         self.skipWhitespace()
         if self.atEnd() || self.peek() != "[" || self.pos + 1 >= self.length || String(_charAt(self.source, self.pos + 1)) != "[" {
             return nil
@@ -7900,17 +7900,17 @@ class Parser {
             self.advance()
             return CondParen(inner: inner, kind: "cond-paren")
         }
-        var word1: Word = try self._parseCondWord()
+        var word1: Word? = try self._parseCondWord()
         if word1 == nil {
             throw ParseError(message: "Expected word in conditional expression", pos: self.pos)
         }
         self._condSkipWhitespace()
-        if condUnaryOps.contains(word1.value) {
-            var unaryOperand: Word = try self._parseCondWord()
+        if condUnaryOps.contains(word1!.value) {
+            var unaryOperand: Word? = try self._parseCondWord()
             if unaryOperand == nil {
-                throw ParseError(message: "Expected operand after " + word1.value, pos: self.pos)
+                throw ParseError(message: "Expected operand after " + word1!.value, pos: self.pos)
             }
-            return UnaryTest(op: word1.value, operand: unaryOperand, kind: "unary-test")
+            return UnaryTest(op: word1!.value, operand: unaryOperand!, kind: "unary-test")
         }
         if !self._condAtEnd() && self.peek() != "&" && self.peek() != "|" && self.peek() != ")" {
             var word2: Word? = nil
@@ -7921,29 +7921,29 @@ class Parser {
                 if word2 == nil {
                     throw ParseError(message: "Expected operand after " + op, pos: self.pos)
                 }
-                return BinaryTest(op: op, `left`: word1, `right`: word2!, kind: "binary-test")
+                return BinaryTest(op: op, `left`: word1!, `right`: word2!, kind: "binary-test")
             }
             var savedPos: Int = self.pos
-            var opWord: Word = try self._parseCondWord()
-            if opWord != nil && condBinaryOps.contains(opWord.value) {
+            var opWord: Word? = try self._parseCondWord()
+            if opWord != nil && condBinaryOps.contains(opWord!.value) {
                 self._condSkipWhitespace()
-                if opWord.value == "=~" {
+                if opWord!.value == "=~" {
                     word2 = try self._parseCondRegexWord()
                 } else {
                     word2 = try self._parseCondWord()
                 }
                 if word2 == nil {
-                    throw ParseError(message: "Expected operand after " + opWord.value, pos: self.pos)
+                    throw ParseError(message: "Expected operand after " + opWord!.value, pos: self.pos)
                 }
-                return BinaryTest(op: opWord.value, `left`: word1, `right`: word2!, kind: "binary-test")
+                return BinaryTest(op: opWord!.value, `left`: word1!, `right`: word2!, kind: "binary-test")
             } else {
                 self.pos = savedPos
             }
         }
-        return UnaryTest(op: "-n", operand: word1, kind: "unary-test")
+        return UnaryTest(op: "-n", operand: word1!, kind: "unary-test")
     }
 
-    func _parseCondWord() throws -> Word {
+    func _parseCondWord() throws -> Word? {
         self._condSkipWhitespace()
         if self._condAtEnd() {
             return nil
@@ -7961,7 +7961,7 @@ class Parser {
         return try self._parseWordInternal(wordCtxCond, false, false)
     }
 
-    func _parseCondRegexWord() throws -> Word {
+    func _parseCondRegexWord() throws -> Word? {
         self._condSkipWhitespace()
         if self._condAtEnd() {
             return nil
@@ -7973,13 +7973,13 @@ class Parser {
         return result
     }
 
-    func parseBraceGroup() throws -> BraceGroup {
+    func parseBraceGroup() throws -> BraceGroup? {
         self.skipWhitespace()
         if try !self._lexConsumeWord("{") {
             return nil
         }
         self.skipWhitespaceAndNewlines()
-        var body: Node = try self.parseList(true)
+        var body: Node? = try self.parseList(true)
         if body == nil {
             throw try ParseError(message: "Expected command in brace group", pos: self._lexPeekToken().pos)
         }
@@ -7987,15 +7987,15 @@ class Parser {
         if try !self._lexConsumeWord("}") {
             throw try ParseError(message: "Expected } to close brace group", pos: self._lexPeekToken().pos)
         }
-        return try BraceGroup(body: body, redirects: self._collectRedirects(), kind: "brace-group")
+        return try BraceGroup(body: body!, redirects: self._collectRedirects(), kind: "brace-group")
     }
 
-    func parseIf() throws -> If {
+    func parseIf() throws -> If? {
         self.skipWhitespace()
         if try !self._lexConsumeWord("if") {
             return nil
         }
-        var condition: Node = try self.parseListUntil(Set(["then"]))
+        var condition: Node? = try self.parseListUntil(Set(["then"]))
         if condition == nil {
             throw try ParseError(message: "Expected condition after 'if'", pos: self._lexPeekToken().pos)
         }
@@ -8003,15 +8003,15 @@ class Parser {
         if try !self._lexConsumeWord("then") {
             throw try ParseError(message: "Expected 'then' after if condition", pos: self._lexPeekToken().pos)
         }
-        var thenBody: Node = try self.parseListUntil(Set(["elif", "else", "fi"]))
+        var thenBody: Node? = try self.parseListUntil(Set(["elif", "else", "fi"]))
         if thenBody == nil {
             throw try ParseError(message: "Expected commands after 'then'", pos: self._lexPeekToken().pos)
         }
         self.skipWhitespaceAndNewlines()
-        var elseBody: Node = nil
+        var elseBody: Node? = nil
         if try self._lexIsAtReservedWord("elif") {
             try self._lexConsumeWord("elif")
-            var elifCondition: Node = try self.parseListUntil(Set(["then"]))
+            var elifCondition: Node? = try self.parseListUntil(Set(["then"]))
             if elifCondition == nil {
                 throw try ParseError(message: "Expected condition after 'elif'", pos: self._lexPeekToken().pos)
             }
@@ -8019,12 +8019,12 @@ class Parser {
             if try !self._lexConsumeWord("then") {
                 throw try ParseError(message: "Expected 'then' after elif condition", pos: self._lexPeekToken().pos)
             }
-            var elifThenBody: Node = try self.parseListUntil(Set(["elif", "else", "fi"]))
+            var elifThenBody: Node? = try self.parseListUntil(Set(["elif", "else", "fi"]))
             if elifThenBody == nil {
                 throw try ParseError(message: "Expected commands after 'then'", pos: self._lexPeekToken().pos)
             }
             self.skipWhitespaceAndNewlines()
-            var innerElse: Node = nil
+            var innerElse: Node? = nil
             if try self._lexIsAtReservedWord("elif") {
                 innerElse = try self._parseElifChain()
             } else {
@@ -8036,7 +8036,7 @@ class Parser {
                     }
                 }
             }
-            elseBody = If(condition: elifCondition, thenBody: elifThenBody, elseBody: innerElse, redirects: [], kind: "if")
+            elseBody = If(condition: elifCondition!, thenBody: elifThenBody!, elseBody: innerElse!, redirects: [], kind: "if")
         } else {
             if try self._lexIsAtReservedWord("else") {
                 try self._lexConsumeWord("else")
@@ -8050,12 +8050,12 @@ class Parser {
         if try !self._lexConsumeWord("fi") {
             throw try ParseError(message: "Expected 'fi' to close if statement", pos: self._lexPeekToken().pos)
         }
-        return try If(condition: condition, thenBody: thenBody, elseBody: elseBody, redirects: self._collectRedirects(), kind: "if")
+        return try If(condition: condition!, thenBody: thenBody!, elseBody: elseBody!, redirects: self._collectRedirects(), kind: "if")
     }
 
     func _parseElifChain() throws -> If {
         try self._lexConsumeWord("elif")
-        var condition: Node = try self.parseListUntil(Set(["then"]))
+        var condition: Node? = try self.parseListUntil(Set(["then"]))
         if condition == nil {
             throw try ParseError(message: "Expected condition after 'elif'", pos: self._lexPeekToken().pos)
         }
@@ -8063,12 +8063,12 @@ class Parser {
         if try !self._lexConsumeWord("then") {
             throw try ParseError(message: "Expected 'then' after elif condition", pos: self._lexPeekToken().pos)
         }
-        var thenBody: Node = try self.parseListUntil(Set(["elif", "else", "fi"]))
+        var thenBody: Node? = try self.parseListUntil(Set(["elif", "else", "fi"]))
         if thenBody == nil {
             throw try ParseError(message: "Expected commands after 'then'", pos: self._lexPeekToken().pos)
         }
         self.skipWhitespaceAndNewlines()
-        var elseBody: Node = nil
+        var elseBody: Node? = nil
         if try self._lexIsAtReservedWord("elif") {
             elseBody = try self._parseElifChain()
         } else {
@@ -8080,15 +8080,15 @@ class Parser {
                 }
             }
         }
-        return If(condition: condition, thenBody: thenBody, elseBody: elseBody, redirects: [], kind: "if")
+        return If(condition: condition!, thenBody: thenBody!, elseBody: elseBody!, redirects: [], kind: "if")
     }
 
-    func parseWhile() throws -> While {
+    func parseWhile() throws -> While? {
         self.skipWhitespace()
         if try !self._lexConsumeWord("while") {
             return nil
         }
-        var condition: Node = try self.parseListUntil(Set(["do"]))
+        var condition: Node? = try self.parseListUntil(Set(["do"]))
         if condition == nil {
             throw try ParseError(message: "Expected condition after 'while'", pos: self._lexPeekToken().pos)
         }
@@ -8096,7 +8096,7 @@ class Parser {
         if try !self._lexConsumeWord("do") {
             throw try ParseError(message: "Expected 'do' after while condition", pos: self._lexPeekToken().pos)
         }
-        var body: Node = try self.parseListUntil(Set(["done"]))
+        var body: Node? = try self.parseListUntil(Set(["done"]))
         if body == nil {
             throw try ParseError(message: "Expected commands after 'do'", pos: self._lexPeekToken().pos)
         }
@@ -8104,15 +8104,15 @@ class Parser {
         if try !self._lexConsumeWord("done") {
             throw try ParseError(message: "Expected 'done' to close while loop", pos: self._lexPeekToken().pos)
         }
-        return try While(condition: condition, body: body, redirects: self._collectRedirects(), kind: "while")
+        return try While(condition: condition!, body: body!, redirects: self._collectRedirects(), kind: "while")
     }
 
-    func parseUntil() throws -> Until {
+    func parseUntil() throws -> Until? {
         self.skipWhitespace()
         if try !self._lexConsumeWord("until") {
             return nil
         }
-        var condition: Node = try self.parseListUntil(Set(["do"]))
+        var condition: Node? = try self.parseListUntil(Set(["do"]))
         if condition == nil {
             throw try ParseError(message: "Expected condition after 'until'", pos: self._lexPeekToken().pos)
         }
@@ -8120,7 +8120,7 @@ class Parser {
         if try !self._lexConsumeWord("do") {
             throw try ParseError(message: "Expected 'do' after until condition", pos: self._lexPeekToken().pos)
         }
-        var body: Node = try self.parseListUntil(Set(["done"]))
+        var body: Node? = try self.parseListUntil(Set(["done"]))
         if body == nil {
             throw try ParseError(message: "Expected commands after 'do'", pos: self._lexPeekToken().pos)
         }
@@ -8128,10 +8128,10 @@ class Parser {
         if try !self._lexConsumeWord("done") {
             throw try ParseError(message: "Expected 'done' to close until loop", pos: self._lexPeekToken().pos)
         }
-        return try Until(condition: condition, body: body, redirects: self._collectRedirects(), kind: "until")
+        return try Until(condition: condition!, body: body!, redirects: self._collectRedirects(), kind: "until")
     }
 
-    func parseFor() throws -> Node {
+    func parseFor() throws -> Node? {
         self.skipWhitespace()
         if try !self._lexConsumeWord("for") {
             return nil
@@ -8142,11 +8142,11 @@ class Parser {
         }
         var varName: String = ""
         if self.peek() == "$" {
-            var varWord: Word = try self.parseWord(false, false, false)
+            var varWord: Word? = try self.parseWord(false, false, false)
             if varWord == nil {
                 throw try ParseError(message: "Expected variable name after 'for'", pos: self._lexPeekToken().pos)
             }
-            varName = varWord.value
+            varName = varWord!.value
         } else {
             varName = self.peekWord()
             if varName == "" {
@@ -8159,7 +8159,7 @@ class Parser {
             self.advance()
         }
         self.skipWhitespaceAndNewlines()
-        var words: [Word] = nil
+        var words: [Word]? = nil
         if try self._lexIsAtReservedWord("in") {
             try self._lexConsumeWord("in")
             self.skipWhitespace()
@@ -8187,25 +8187,25 @@ class Parser {
                     }
                     throw try ParseError(message: "Expected ';' or newline before 'do'", pos: self._lexPeekToken().pos)
                 }
-                var word: Word = try self.parseWord(false, false, false)
+                var word: Word? = try self.parseWord(false, false, false)
                 if word == nil {
                     break
                 }
-                words.append(word)
+                words!.append(word!)
             }
         }
         self.skipWhitespaceAndNewlines()
         if self.peek() == "{" {
-            var braceGroup: BraceGroup = try self.parseBraceGroup()
+            var braceGroup: BraceGroup? = try self.parseBraceGroup()
             if braceGroup == nil {
                 throw try ParseError(message: "Expected brace group in for loop", pos: self._lexPeekToken().pos)
             }
-            return try For(`var`: varName, words: words, body: braceGroup.body, redirects: self._collectRedirects(), kind: "for")
+            return try For(`var`: varName, words: words!, body: braceGroup!.body, redirects: self._collectRedirects(), kind: "for")
         }
         if try !self._lexConsumeWord("do") {
             throw try ParseError(message: "Expected 'do' in for loop", pos: self._lexPeekToken().pos)
         }
-        var body: Node = try self.parseListUntil(Set(["done"]))
+        var body: Node? = try self.parseListUntil(Set(["done"]))
         if body == nil {
             throw try ParseError(message: "Expected commands after 'do'", pos: self._lexPeekToken().pos)
         }
@@ -8213,7 +8213,7 @@ class Parser {
         if try !self._lexConsumeWord("done") {
             throw try ParseError(message: "Expected 'done' to close for loop", pos: self._lexPeekToken().pos)
         }
-        return try For(`var`: varName, words: words, body: body, redirects: self._collectRedirects(), kind: "for")
+        return try For(`var`: varName, words: words!, body: body!, redirects: self._collectRedirects(), kind: "for")
     }
 
     func _parseForArith() throws -> ForArith {
@@ -8268,7 +8268,7 @@ class Parser {
         return try ForArith(`init`: `init`, cond: cond, incr: incr, body: body, redirects: self._collectRedirects(), kind: "for-arith")
     }
 
-    func parseSelect() throws -> Select {
+    func parseSelect() throws -> Select? {
         self.skipWhitespace()
         if try !self._lexConsumeWord("select") {
             return nil
@@ -8284,7 +8284,7 @@ class Parser {
             self.advance()
         }
         self.skipWhitespaceAndNewlines()
-        var words: [Word] = nil
+        var words: [Word]? = nil
         if try self._lexIsAtReservedWord("in") {
             try self._lexConsumeWord("in")
             self.skipWhitespaceAndNewlines()
@@ -8303,16 +8303,16 @@ class Parser {
                 if try self._lexIsAtReservedWord("do") {
                     break
                 }
-                var word: Word = try self.parseWord(false, false, false)
+                var word: Word? = try self.parseWord(false, false, false)
                 if word == nil {
                     break
                 }
-                words.append(word)
+                words!.append(word!)
             }
         }
         self.skipWhitespaceAndNewlines()
         var body: Node = try self._parseLoopBody("select")
-        return try Select(`var`: varName, words: words, body: body, redirects: self._collectRedirects(), kind: "select")
+        return try Select(`var`: varName, words: words!, body: body, redirects: self._collectRedirects(), kind: "select")
     }
 
     func _consumeCaseTerminator() throws -> String {
@@ -8324,13 +8324,13 @@ class Parser {
         return ";;"
     }
 
-    func parseCase() throws -> Case {
+    func parseCase() throws -> Case? {
         if !self.consumeWord("case") {
             return nil
         }
         self._setState(parserstateflagsPstCasestmt)
         self.skipWhitespace()
-        var word: Word = try self.parseWord(false, false, false)
+        var word: Word? = try self.parseWord(false, false, false)
         if word == nil {
             throw try ParseError(message: "Expected word after 'case'", pos: self._lexPeekToken().pos)
         }
@@ -8529,7 +8529,7 @@ class Parser {
                 throw try ParseError(message: "Expected pattern in case statement", pos: self._lexPeekToken().pos)
             }
             self.skipWhitespace()
-            var body: Node = nil
+            var body: Node? = nil
             var isEmptyBody: Bool = try self._lexPeekCaseTerminator() != ""
             if !isEmptyBody {
                 self.skipWhitespaceAndNewlines()
@@ -8543,7 +8543,7 @@ class Parser {
             }
             var terminator: String = try self._consumeCaseTerminator()
             self.skipWhitespaceAndNewlines()
-            patterns.append(CasePattern(pattern: pattern, body: body, terminator: terminator, kind: "pattern"))
+            patterns.append(CasePattern(pattern: pattern, body: body!, terminator: terminator, kind: "pattern"))
         }
         self._clearState(parserstateflagsPstCasepat)
         self.skipWhitespaceAndNewlines()
@@ -8552,10 +8552,10 @@ class Parser {
             throw try ParseError(message: "Expected 'esac' to close case statement", pos: self._lexPeekToken().pos)
         }
         self._clearState(parserstateflagsPstCasestmt)
-        return try Case(word: word, patterns: patterns, redirects: self._collectRedirects(), kind: "case")
+        return try Case(word: word!, patterns: patterns, redirects: self._collectRedirects(), kind: "case")
     }
 
-    func parseCoproc() throws -> Coproc {
+    func parseCoproc() throws -> Coproc? {
         self.skipWhitespace()
         if try !self._lexConsumeWord("coproc") {
             return nil
@@ -8642,7 +8642,7 @@ class Parser {
         throw ParseError(message: "Expected command after coproc", pos: self.pos)
     }
 
-    func parseFunction() throws -> Function {
+    func parseFunction() throws -> Function? {
         self.skipWhitespace()
         if self.atEnd() {
             return nil
@@ -8733,48 +8733,48 @@ class Parser {
         return Function(name: name, body: body!, kind: "function")
     }
 
-    func _parseCompoundCommand() throws -> Node {
-        var result: Node = try self.parseBraceGroup()
+    func _parseCompoundCommand() throws -> Node? {
+        var result: Node? = try self.parseBraceGroup()
         if result != nil {
-            return result
+            return result!
         }
         if !self.atEnd() && self.peek() == "(" && self.pos + 1 < self.length && String(_charAt(self.source, self.pos + 1)) == "(" {
             result = try self.parseArithmeticCommand()
             if result != nil {
-                return result
+                return result!
             }
         }
         result = try self.parseSubshell()
         if result != nil {
-            return result
+            return result!
         }
         result = try self.parseConditionalExpr()
         if result != nil {
-            return result
+            return result!
         }
         result = try self.parseIf()
         if result != nil {
-            return result
+            return result!
         }
         result = try self.parseWhile()
         if result != nil {
-            return result
+            return result!
         }
         result = try self.parseUntil()
         if result != nil {
-            return result
+            return result!
         }
         result = try self.parseFor()
         if result != nil {
-            return result
+            return result!
         }
         result = try self.parseCase()
         if result != nil {
-            return result
+            return result!
         }
         result = try self.parseSelect()
         if result != nil {
-            return result
+            return result!
         }
         return nil
     }
@@ -8802,17 +8802,17 @@ class Parser {
         return false
     }
 
-    func parseListUntil(_ stopWords: Set<String>) throws -> Node {
+    func parseListUntil(_ stopWords: Set<String>) throws -> Node? {
         self.skipWhitespaceAndNewlines()
         var reserved: String = try self._lexPeekReservedWord()
         if reserved != "" && stopWords.contains(reserved) {
             return nil
         }
-        var pipeline: Node = try self.parsePipeline()
+        var pipeline: Node? = try self.parsePipeline()
         if pipeline == nil {
             return nil
         }
-        var parts: [Node] = [pipeline]
+        var parts: [Node] = [pipeline!]
         while true {
             self.skipWhitespace()
             var op: String = try self.parseListOperator()
@@ -8869,7 +8869,7 @@ class Parser {
             if pipeline == nil {
                 throw ParseError(message: "Expected command after " + op, pos: self.pos)
             }
-            parts.append(pipeline)
+            parts.append(pipeline!)
         }
         if parts.count == 1 {
             return parts[0]
@@ -8877,7 +8877,7 @@ class Parser {
         return List(parts: parts, kind: "list")
     }
 
-    func parseCompoundCommand() throws -> Node {
+    func parseCompoundCommand() throws -> Node? {
         self.skipWhitespace()
         if self.atEnd() {
             return nil
@@ -8942,14 +8942,14 @@ class Parser {
         if reserved == "coproc" {
             return try self.parseCoproc()
         }
-        var `func`: Function = try self.parseFunction()
+        var `func`: Function? = try self.parseFunction()
         if `func` != nil {
-            return `func`
+            return `func`!
         }
         return try self.parseCommand()
     }
 
-    func parsePipeline() throws -> Node {
+    func parsePipeline() throws -> Node? {
         self.skipWhitespace()
         var prefixOrder: String = ""
         var timePosix: Bool = false
@@ -9012,32 +9012,32 @@ class Parser {
                 if self.pos + 1 >= self.length || _isNegationBoundary(String(_charAt(self.source, self.pos + 1))) && !self._isBangFollowedByProcsub() {
                     self.advance()
                     self.skipWhitespace()
-                    var inner: Node = try self.parsePipeline()
-                    if inner != nil && inner.kind == "negation" {
-                        if (inner as! Negation).pipeline != nil {
-                            return (inner as! Negation).pipeline
+                    var inner: Node? = try self.parsePipeline()
+                    if inner != nil && inner!.kind == "negation" {
+                        if (inner! as! Negation).pipeline != nil {
+                            return (inner! as! Negation).pipeline
                         } else {
                             return Command(words: [], redirects: [], kind: "command")
                         }
                     }
-                    return Negation(pipeline: inner, kind: "negation")
+                    return Negation(pipeline: inner!, kind: "negation")
                 }
             }
         }
-        var result: Node = try self._parseSimplePipeline()
+        var result: Node? = try self._parseSimplePipeline()
         if prefixOrder == "time" {
-            result = Time(pipeline: result, posix: timePosix, kind: "time")
+            result = Time(pipeline: result!, posix: timePosix, kind: "time")
         } else {
             if prefixOrder == "negation" {
-                result = Negation(pipeline: result, kind: "negation")
+                result = Negation(pipeline: result!, kind: "negation")
             } else {
                 if prefixOrder == "time_negation" {
-                    result = Time(pipeline: result, posix: timePosix, kind: "time")
-                    result = Negation(pipeline: result, kind: "negation")
+                    result = Time(pipeline: result!, posix: timePosix, kind: "time")
+                    result = Negation(pipeline: result!, kind: "negation")
                 } else {
                     if prefixOrder == "negation_time" {
-                        result = Time(pipeline: result, posix: timePosix, kind: "time")
-                        result = Negation(pipeline: result, kind: "negation")
+                        result = Time(pipeline: result!, posix: timePosix, kind: "time")
+                        result = Negation(pipeline: result!, kind: "negation")
                     } else {
                         if result == nil {
                             return nil
@@ -9046,15 +9046,15 @@ class Parser {
                 }
             }
         }
-        return result
+        return result!
     }
 
-    func _parseSimplePipeline() throws -> Node {
-        var cmd: Node = try self.parseCompoundCommand()
+    func _parseSimplePipeline() throws -> Node? {
+        var cmd: Node? = try self.parseCompoundCommand()
         if cmd == nil {
             return nil
         }
-        var commands: [Node] = [cmd]
+        var commands: [Node] = [cmd!]
         while true {
             self.skipWhitespace()
             let _tuple42 = try self._lexPeekOperator()
@@ -9076,7 +9076,7 @@ class Parser {
             if cmd == nil {
                 throw ParseError(message: "Expected command after |", pos: self.pos)
             }
-            commands.append(cmd)
+            commands.append(cmd!)
         }
         if commands.count == 1 {
             return commands[0]
@@ -9118,17 +9118,17 @@ class Parser {
         return op
     }
 
-    func parseList(_ newlineAsSeparator: Bool) throws -> Node {
+    func parseList(_ newlineAsSeparator: Bool) throws -> Node? {
         if newlineAsSeparator {
             self.skipWhitespaceAndNewlines()
         } else {
             self.skipWhitespace()
         }
-        var pipeline: Node = try self.parsePipeline()
+        var pipeline: Node? = try self.parsePipeline()
         if pipeline == nil {
             return nil
         }
-        var parts: [Node] = [pipeline]
+        var parts: [Node] = [pipeline!]
         if try self._inState(parserstateflagsPstEoftoken) && self._atEofToken() {
             return (parts.count == 1 ? parts[0] : List(parts: parts, kind: "list"))
         }
@@ -9204,7 +9204,7 @@ class Parser {
             if pipeline == nil {
                 throw ParseError(message: "Expected command after " + op, pos: self.pos)
             }
-            parts.append(pipeline)
+            parts.append(pipeline!)
             if try self._inState(parserstateflagsPstEoftoken) && self._atEofToken() {
                 break
             }
@@ -9215,7 +9215,7 @@ class Parser {
         return List(parts: parts, kind: "list")
     }
 
-    func parseComment() -> Node {
+    func parseComment() -> Node? {
         if self.atEnd() || self.peek() != "#" {
             return nil
         }
@@ -9241,15 +9241,15 @@ class Parser {
             if self.atEnd() {
                 break
             }
-            var comment: Node = self.parseComment()
+            var comment: Node? = self.parseComment()
             if !comment != nil {
                 break
             }
         }
         while !self.atEnd() {
-            var result: Node = try self.parseList(false)
+            var result: Node? = try self.parseList(false)
             if result != nil {
-                results.append(result)
+                results.append(result!)
             }
             self.skipWhitespace()
             var foundNewline: Bool = false
@@ -9287,16 +9287,16 @@ class Parser {
             return
         }
         var lastNode: Node = nodes[nodes.count - 1]
-        var lastWord: Word = self._findLastWord(lastNode)
-        if lastWord != nil && lastWord.value.hasSuffix("\\") {
-            lastWord.value = _substring(lastWord.value, 0, lastWord.value.count - 1)
-            if !(!lastWord.value.isEmpty) && (lastNode is Command) && (!(lastNode as! Command).words.isEmpty) {
+        var lastWord: Word? = self._findLastWord(lastNode)
+        if lastWord != nil && lastWord!.value.hasSuffix("\\") {
+            lastWord!.value = _substring(lastWord!.value, 0, lastWord!.value.count - 1)
+            if !(!lastWord!.value.isEmpty) && (lastNode is Command) && (!(lastNode as! Command).words.isEmpty) {
                 (lastNode as! Command).words.removeLast()
             }
         }
     }
 
-    func _findLastWord(_ node: Node) -> Word {
+    func _findLastWord(_ node: Node) -> Word? {
         switch node {
         case let node as Word:
             return node
@@ -9375,7 +9375,7 @@ func _substring(_ s: String, _ start: Int, _ end: Int) -> String {
 }
 
 func _startsWithAt(_ s: String, _ pos: Int, _ `prefix`: String) -> Bool {
-    return s.hasPrefix(`prefix`, pos)
+    return String(s.dropFirst(pos)).hasPrefix(`prefix`)
 }
 
 func _countConsecutiveDollarsBefore(_ s: String, _ pos: Int) -> Int {
@@ -9405,7 +9405,7 @@ func _isExpansionStart(_ s: String, _ pos: Int, _ delimiter: String) -> Bool {
 }
 
 func _sublist(_ lst: [Node], _ start: Int, _ end: Int) -> [Node] {
-    return Swift.Array(lst[start..<end])
+    return Swift.Array(lst[(start)..<(end)])
 }
 
 func _repeatStr(_ s: String, _ n: Int) -> String {
@@ -9673,8 +9673,8 @@ func _formatCmdsubNode(_ node: Node, _ indent: Int, _ inProcsub: Bool, _ compact
         }
         var result: String = ""
         if compactRedirects && (!node.words.isEmpty) && (!node.redirects.isEmpty) {
-            var wordParts: [String] = Swift.Array(parts[..<node.words.count])
-            var redirectParts: [String] = Swift.Array(parts[node.words.count...])
+            var wordParts: [String] = Swift.Array(parts[..<(node.words.count)])
+            var redirectParts: [String] = Swift.Array(parts[(node.words.count)...])
             result = wordParts.joined(separator: " ") + redirectParts.joined(separator: "")
         } else {
             result = parts.joined(separator: " ")
@@ -9757,7 +9757,7 @@ func _formatCmdsubNode(_ node: Node, _ indent: Int, _ inProcsub: Bool, _ compact
         while idx < resultParts.count {
             var part: String = resultParts[idx]
             if idx > 0 {
-                if result.endswith("\n") {
+                if result.hasSuffix("\n") {
                     result = result + "  " + part
                 } else {
                     if compactPipe {
@@ -10012,7 +10012,7 @@ func _formatCmdsubNode(_ node: Node, _ indent: Int, _ inProcsub: Bool, _ compact
             }
             i += 1
         }
-        var patternStr: Any = "\n" + _repeatStr(" ", indent + 4).join(patterns)
+        var patternStr: Any = patterns.joined(separator: "\n" + _repeatStr(" ", indent + 4))
         var redirects: String = ""
         if (!node.redirects.isEmpty) {
             var redirectParts: [String] = []
@@ -10593,13 +10593,13 @@ func _skipHeredoc(_ value: String, _ start: Int) -> Int {
         i += 1
     }
     var delimStart: Int = i
-    var quoteChar: Any = nil
+    var quoteChar: Any? = nil
     var delimiter: String = ""
     if i < value.count && String(_charAt(value, i)) == "\"" || String(_charAt(value, i)) == "'" {
         quoteChar = String(_charAt(value, i))
         i += 1
         delimStart = i
-        while i < value.count && String(_charAt(value, i)) != quoteChar {
+        while i < value.count && String(_charAt(value, i)) != quoteChar! {
             i += 1
         }
         delimiter = _substring(value, delimStart, i)
@@ -11194,7 +11194,7 @@ func _isValidIdentifier(_ name: String) -> Bool {
     }
     for _c45 in String(name.dropFirst(1)) {
         let c = String(_c45)
-        if !((c.first?.isLetter ?? false || c.first?.isNumber ?? false) || c == "_") {
+        if !((Character(UnicodeScalar(c)!).isLetter || Character(UnicodeScalar(c)!).isNumber) || c == "_") {
             return false
         }
     }

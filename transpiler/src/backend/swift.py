@@ -197,6 +197,7 @@ class SwiftBackend:
         self._func_params: set[str] = set()
         self._current_return_type: Type | None = None
         self._throwing_funcs: set[str] = set()
+        self._nil_returning_funcs: set[str] = set()
         self._expr_has_try: bool = False
 
     def emit(self, module: Module) -> str:
@@ -208,8 +209,10 @@ class SwiftBackend:
         self._optional_hoisted = set()
         self._interface_names = {iface.name for iface in module.interfaces}
         self._throwing_funcs = set()
+        self._nil_returning_funcs = set()
         self._collect_struct_fields(module)
         self._collect_throwing_funcs(module)
+        self._collect_nil_returning_funcs(module)
         self._emit_module(module)
         return "\n".join(self.lines)
 
@@ -236,6 +239,15 @@ class SwiftBackend:
                     if _calls_any(func.body, self._throwing_funcs):
                         self._throwing_funcs.add(func.name)
                         changed = True
+
+    def _collect_nil_returning_funcs(self, module: Module) -> None:
+        """Collect names of functions/methods that can return nil."""
+        all_funcs: list[Function] = list(module.functions)
+        for struct in module.structs:
+            all_funcs.extend(struct.methods)
+        for func in all_funcs:
+            if _returns_nil(func.body):
+                self._nil_returning_funcs.add(func.name)
 
     def _line(self, text: str = "") -> None:
         if text:
@@ -415,8 +427,8 @@ class SwiftBackend:
             # Pointers are to class types, use implicitly unwrapped optional
             self._line(f"var {name}: {typ}!")
         elif isinstance(fld.typ, (InterfaceRef, Union)):
-            # Interface/protocol types can't have default instances, make them optional
-            self._line(f"var {name}: ({typ})?")
+            # Interface/protocol types can't have default instances, use implicitly unwrapped optional
+            self._line(f"var {name}: ({typ})!")
         else:
             # Use default value to satisfy protocol requirements
             default = self._default_value(fld.typ)
@@ -489,6 +501,8 @@ class SwiftBackend:
         ret = self._type(func.ret)
         name = _safe_name(func.name)
         throws = " throws" if func.name in self._throwing_funcs else ""
+        if _returns_nil(func.body) and not ret.endswith("?"):
+            ret += "?"
         if ret == "Void":
             self._line(f"func {name}({params}){throws} {{")
         else:
@@ -514,6 +528,8 @@ class SwiftBackend:
         if func.receiver:
             self.receiver_name = func.receiver.name
         throws = " throws" if func.name in self._throwing_funcs else ""
+        if _returns_nil(func.body) and not ret.endswith("?"):
+            ret += "?"
         if ret == "Void":
             self._line(f"func {name}({params}){throws} {{")
         else:
@@ -531,7 +547,10 @@ class SwiftBackend:
         for p in params:
             typ = self._type(p.typ)
             name = _safe_name(p.name)
-            parts.append(f"_ {name}: {typ}")
+            if p.is_modified and _is_mutable_value_type(p.typ):
+                parts.append(f"_ {name}: inout {typ}")
+            else:
+                parts.append(f"_ {name}: {typ}")
         return ", ".join(parts)
 
     def _emit_hoisted_vars(
@@ -543,9 +562,13 @@ class SwiftBackend:
             if typ:
                 swift_type = self._type(typ)
                 default = self._default_value(typ)
-                if default == "nil" and not swift_type.endswith("?"):
+                # Make optional if default is nil OR if the type is a reference/interface
+                # type that may be assigned from nil-returning functions
+                needs_optional = default == "nil" or isinstance(typ, (InterfaceRef, StructRef, Union, Pointer))
+                if needs_optional and not swift_type.endswith("?"):
                     swift_type += "?"
-                if default == "nil":
+                    default = "nil"
+                if needs_optional:
                     self._optional_hoisted.add(name)
                 self._line(f"var {var_name}: {swift_type} = {default}")
             else:
@@ -572,10 +595,10 @@ class SwiftBackend:
                     self._optional_hoisted.add(name)
                 if value is not None:
                     val = self._try_expr(value)
-                    if isinstance(value, NilLit) and not swift_type.endswith("?"):
+                    if _expr_can_be_nil(value, self._nil_returning_funcs) and not swift_type.endswith("?"):
                         swift_type += "?"
                         self._optional_hoisted.add(name)
-                    keyword = "var" if stmt.is_reassigned else "let"
+                    keyword = "var" if stmt.is_reassigned or _is_mutable_value_type(typ) else "let"
                     self._line(f"{keyword} {var_name}: {swift_type} = {val}")
                 else:
                     self._line(f"var {var_name}: {swift_type}")
@@ -588,6 +611,10 @@ class SwiftBackend:
                 if (stmt.is_declaration and not is_hoisted) or needs_decl:
                     decl_type = stmt.decl_typ if stmt.decl_typ is not None else value.typ
                     swift_type = self._type(decl_type) if decl_type else "Any"
+                    if _expr_can_be_nil(value, self._nil_returning_funcs) and not swift_type.endswith("?"):
+                        swift_type += "?"
+                        if target_name:
+                            self._optional_hoisted.add(target_name)
                     self._line(f"var {lv}: {swift_type} = {val}")
                     if target_name:
                         self._declared_vars.add(target_name)
@@ -904,11 +931,25 @@ class SwiftBackend:
             self._emit_stmt(s)
         self.indent -= 1
         exc_type = stmt.catch_type.name if isinstance(stmt.catch_type, StructRef) else "Error"
-        if stmt.catch_var_unused or not stmt.catch_var:
-            self._line(f"}} catch is {_safe_type_name(exc_type)} {{")
+        is_generic = exc_type in ("Exception", "Error")
+        needs_binding = not stmt.catch_var_unused and stmt.catch_var
+        needs_reraise_binding = stmt.reraise and not stmt.catch_var
+        if is_generic:
+            if needs_binding:
+                var = _safe_name(stmt.catch_var)
+                self._line(f"}} catch let {var} {{")
+            elif needs_reraise_binding:
+                self._line("} catch let _err {")
+            else:
+                self._line("} catch {")
         else:
-            var = _safe_name(stmt.catch_var)
-            self._line(f"}} catch let {var} as {_safe_type_name(exc_type)} {{")
+            if needs_binding:
+                var = _safe_name(stmt.catch_var)
+                self._line(f"}} catch let {var} as {_safe_type_name(exc_type)} {{")
+            elif needs_reraise_binding:
+                self._line(f"}} catch let _err as {_safe_type_name(exc_type)} {{")
+            else:
+                self._line(f"}} catch is {_safe_type_name(exc_type)} {{")
         self.indent += 1
         for s in stmt.catch_body:
             self._emit_stmt(s)
@@ -916,7 +957,7 @@ class SwiftBackend:
             if stmt.catch_var:
                 self._line(f"throw {_safe_name(stmt.catch_var)}")
             else:
-                self._line("throw")
+                self._line("throw _err")
         self.indent -= 1
         self._line("}")
 
@@ -980,8 +1021,7 @@ class SwiftBackend:
                 return f"String({self._expr(v)})"
             case CharClassify(kind=kind, char=char):
                 char_str = self._expr(char)
-                # Always use .first? pattern since the value might be a single-char String
-                # even when IR says rune (e.g., from string iteration converted to String)
+                char_type = char.typ
                 method_map = {
                     "digit": "isNumber",
                     "alpha": "isLetter",
@@ -989,6 +1029,13 @@ class SwiftBackend:
                     "upper": "isUppercase",
                     "lower": "isLowercase",
                 }
+                is_rune = isinstance(char_type, Primitive) and char_type.kind == "rune"
+                if is_rune:
+                    char_access = f"Character(UnicodeScalar({char_str})!)"
+                    if kind == "alnum":
+                        return f"({char_access}.isLetter || {char_access}.isNumber)"
+                    return f"{char_access}.{method_map[kind]}"
+                # String path
                 if kind == "alnum":
                     return f"({char_str}.first?.isLetter ?? false || {char_str}.first?.isNumber ?? false)"
                 return f"({char_str}.first?.{method_map[kind]} ?? false)"
@@ -1108,12 +1155,11 @@ class SwiftBackend:
             case StringFormat(template=template, args=args):
                 return self._format_string(template, args)
             case CharLit(value=value):
-                escaped = escape_string(value)
-                return f'Character("{escaped}")'
+                return str(ord(value))
             case CharAt(string=s, index=index):
                 s_str = self._expr(s)
                 idx_str = self._expr(index)
-                return f"_charAt({s_str}, {idx_str})"
+                return f"Int(_charAt({s_str}, {idx_str}).unicodeScalars.first!.value)"
             case CharLen(string=s):
                 return f"{self._expr(s)}.count"
             case Substring(string=s, low=low, high=high):
@@ -1205,7 +1251,7 @@ class SwiftBackend:
             return f"max({args_str})"
         if func in ("_intPtr", "_int_ptr"):
             return self._expr(args[0])
-        if func in self._throwing_funcs:
+        if func in self._throwing_funcs or func in self._func_params:
             self._expr_has_try = True
         return f"{_safe_name(func)}({args_str})"
 
@@ -1237,6 +1283,10 @@ class SwiftBackend:
                     return f"{obj_str}.insert({val}, at: {idx})"
         if isinstance(receiver_type, Primitive) and receiver_type.kind == "string":
             if method == "startswith":
+                if len(args) == 2:
+                    prefix_str = self._expr(args[0])
+                    pos_str = self._expr(args[1])
+                    return f"String({obj_str}.dropFirst({pos_str})).hasPrefix({prefix_str})"
                 return f"{obj_str}.hasPrefix({args_str})"
             if method == "endswith":
                 if args and isinstance(args[0], TupleLit):
@@ -1285,6 +1335,17 @@ class SwiftBackend:
                 return f"{obj_str}.remove({args_str})"
             if method == "contains":
                 return f"{obj_str}.contains({args_str})"
+        # Fallback translations for Python method names
+        if method == "endswith":
+            return f"{obj_str}.hasSuffix({args_str})"
+        if method == "startswith":
+            if len(args) == 2:
+                prefix_str = self._expr(args[0])
+                pos_str = self._expr(args[1])
+                return f"String({obj_str}.dropFirst({pos_str})).hasPrefix({prefix_str})"
+            return f"{obj_str}.hasPrefix({args_str})"
+        if method == "join":
+            return f"{args_str}.joined(separator: {obj_str})"
         if method in self._throwing_funcs:
             self._expr_has_try = True
         return f"{obj_str}.{_safe_name(method)}({args_str})"
@@ -1306,11 +1367,11 @@ class SwiftBackend:
             return obj_str
         # Array slicing
         if low and high:
-            return f"Swift.Array({obj_str}[{self._expr(low)}..<{self._expr(high)}])"
+            return f"Swift.Array({obj_str}[({self._expr(low)})..<({self._expr(high)})])"
         elif low:
-            return f"Swift.Array({obj_str}[{self._expr(low)}...])"
+            return f"Swift.Array({obj_str}[({self._expr(low)})...])"
         elif high:
-            return f"Swift.Array({obj_str}[..<{self._expr(high)}])"
+            return f"Swift.Array({obj_str}[..<({self._expr(high)})])"
         return f"Swift.Array({obj_str})"
 
     def _containment_check(self, item: Expr, container: Expr, negated: bool) -> str:
@@ -1353,6 +1414,14 @@ class SwiftBackend:
                 if isinstance(inner_type, Primitive) and inner_type.kind == "string":
                     return f"Int({inner_str}.unicodeScalars.first!.value)"
                 return inner_str
+            if to_type.kind == "byte":
+                if isinstance(inner_type, Primitive) and inner_type.kind == "int":
+                    return f"UInt8({inner_str})"
+                if isinstance(inner_type, Primitive) and inner_type.kind == "string":
+                    return f"UInt8({inner_str}.unicodeScalars.first!.value)"
+                if isinstance(inner_type, Primitive) and inner_type.kind == "rune":
+                    return f"UInt8({inner_str})"
+                return f"UInt8({inner_str})"
         # String to bytes conversion
         if isinstance(to_type, Slice) and isinstance(to_type.element, Primitive) and to_type.element.kind == "byte":
             if isinstance(inner_type, Primitive) and inner_type.kind == "string":
@@ -1463,9 +1532,9 @@ class SwiftBackend:
                 return "Any"
             case FuncType(params=params, ret=ret):
                 if not params:
-                    return f"() -> {self._type(ret)}"
+                    return f"() throws -> {self._type(ret)}"
                 param_types = ", ".join(self._type(p) for p in params)
-                return f"({param_types}) -> {self._type(ret)}"
+                return f"({param_types}) throws -> {self._type(ret)}"
             case _:
                 return "Any"
 
@@ -1539,7 +1608,7 @@ def _primitive_type(kind: str) -> str:
         case "byte":
             return "UInt8"
         case "rune":
-            return "Character"
+            return "Int"
         case "void":
             return "Void"
         case _:
@@ -1669,5 +1738,60 @@ def _expr_calls_any(e: Expr, names: set[str]) -> bool:
     return False
 
 
+def _expr_can_be_nil(expr: Expr, nil_funcs: set[str] | None = None) -> bool:
+    """Check if an expression can produce nil."""
+    if isinstance(expr, NilLit):
+        return True
+    if isinstance(expr, Ternary):
+        return _expr_can_be_nil(expr.then_expr, nil_funcs) or _expr_can_be_nil(expr.else_expr, nil_funcs)
+    if nil_funcs:
+        if isinstance(expr, Call) and expr.func in nil_funcs:
+            return True
+        if isinstance(expr, MethodCall) and expr.method in nil_funcs:
+            return True
+    return False
+
+
+def _is_mutable_value_type(typ: Type) -> bool:
+    """Check if a type is a mutable value type in Swift (needs var for mutation)."""
+    if isinstance(typ, Optional):
+        return _is_mutable_value_type(typ.inner)
+    return isinstance(typ, (Slice, Array, Map, Set))
+
+
+def _returns_nil(stmts: list[Stmt]) -> bool:
+    """Check if statements contain a return-nil (SoftFail or Return(NilLit))."""
+    for s in stmts:
+        if isinstance(s, SoftFail):
+            return True
+        if isinstance(s, Return) and isinstance(s.value, NilLit):
+            return True
+        if isinstance(s, If):
+            if _returns_nil(s.then_body) or _returns_nil(s.else_body):
+                return True
+        elif isinstance(s, (While, ForRange, ForClassic)):
+            if _returns_nil(s.body):
+                return True
+        elif isinstance(s, Block):
+            if _returns_nil(s.body):
+                return True
+        elif isinstance(s, TypeSwitch):
+            for c in s.cases:
+                if _returns_nil(c.body):
+                    return True
+            if s.default and _returns_nil(s.default):
+                return True
+        elif isinstance(s, Match):
+            for c in s.cases:
+                if _returns_nil(c.body):
+                    return True
+            if s.default and _returns_nil(s.default):
+                return True
+        elif isinstance(s, TryCatch):
+            if _returns_nil(s.body) or _returns_nil(s.catch_body):
+                return True
+    return False
+
+
 def _is_string_type(typ: Type) -> bool:
-    return isinstance(typ, Primitive) and typ.kind in ("string", "rune")
+    return isinstance(typ, Primitive) and typ.kind == "string"

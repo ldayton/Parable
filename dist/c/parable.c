@@ -788,6 +788,15 @@ static Vec_Byte _str_to_bytes(Arena *a, const char *s) {
     return (Vec_Byte){data, len, len};
 }
 
+// Bytes to string conversion (null-terminates the result)
+static const char *_bytes_to_str(Arena *a, Vec_Byte v) {
+    if (!v.data || v.len == 0) return "";
+    char *s = (char *)arena_alloc(a, v.len + 1);
+    memcpy(s, v.data, v.len);
+    s[v.len] = '\0';
+    return s;
+}
+
 // Generic set membership - string sets are NULL-terminated const char*[]
 static bool _set_contains(void *set, const char *key) {
     if (!set || !key) return false;
@@ -6274,7 +6283,7 @@ static const char * Word__expand_ansi_c_escapes(Word *self, const char * value) 
     }
     const char * inner = _substring(value, 1, (_rune_len(value) - 1));
     Vec_Byte literal_bytes = Word__ansi_c_to_bytes(self, inner);
-    const char * literal_str = ((const char *)(literal_bytes.data));
+    const char * literal_str = _bytes_to_str(g_arena, literal_bytes);
     return Word__sh_single_quote(self, literal_str);
 }
 

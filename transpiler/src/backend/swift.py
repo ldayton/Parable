@@ -568,12 +568,13 @@ class SwiftBackend:
                 var_name = _safe_name(name)
                 self._declared_vars.add(name)
                 swift_type = self._type(typ)
+                if isinstance(typ, Optional):
+                    self._optional_hoisted.add(name)
                 if value is not None:
                     val = self._try_expr(value)
-                    # nil can only be assigned to optional types
                     if isinstance(value, NilLit) and not swift_type.endswith("?"):
                         swift_type += "?"
-                    # Use let for non-reassigned, var for potentially reassigned
+                        self._optional_hoisted.add(name)
                     keyword = "var" if stmt.is_reassigned else "let"
                     self._line(f"{keyword} {var_name}: {swift_type} = {val}")
                 else:
@@ -710,6 +711,8 @@ class SwiftBackend:
                     self._line(f"var {lv}: {swift_type} = {accessor}")
                     if target_name:
                         self._declared_vars.add(target_name)
+                        if isinstance(elem_type, Optional):
+                            self._optional_hoisted.add(target_name)
         else:
             val_str = self._try_expr(value)
             self.temp_counter += 1

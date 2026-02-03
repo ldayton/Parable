@@ -1380,6 +1380,15 @@ static Vec_Byte _str_to_bytes(Arena *a, const char *s) {
     return (Vec_Byte){data, len, len};
 }
 
+// Bytes to string conversion (null-terminates the result)
+static const char *_bytes_to_str(Arena *a, Vec_Byte v) {
+    if (!v.data || v.len == 0) return "";
+    char *s = (char *)arena_alloc(a, v.len + 1);
+    memcpy(s, v.data, v.len);
+    s[v.len] = '\0';
+    return s;
+}
+
 // Generic set membership - string sets are NULL-terminated const char*[]
 static bool _set_contains(void *set, const char *key) {
     if (!set || !key) return false;
@@ -3060,14 +3069,14 @@ static bool _map_contains(void *map, const char *key) {
             and expr.expr.typ.kind == "string"
         ):
             return f"_str_to_bytes(g_arena, {inner})"
-        # []byte to string: access the data pointer (bytes are null-terminated or we use length)
+        # []byte to string: null-terminate and return as C string
         if (
             isinstance(expr.expr.typ, Slice)
             and expr.expr.typ.element == BYTE
             and isinstance(expr.to_type, Primitive)
             and expr.to_type.kind == "string"
         ):
-            return f"((const char *)({inner}.data))"
+            return f"_bytes_to_str(g_arena, {inner})"
         # int/rune to string: chr() — convert codepoint to UTF-8 string
         if (
             isinstance(expr.to_type, Primitive)

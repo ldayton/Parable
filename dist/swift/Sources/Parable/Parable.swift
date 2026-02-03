@@ -1163,7 +1163,7 @@ class Lexer {
                 var ansiResult0: Node? = _tuple10.0
                 var ansiResult1: String = _tuple10.1
                 if ansiResult0 != nil {
-                    parts.append(ansiResult0)
+                    parts.append(ansiResult0!)
                     chars.append(ansiResult1)
                 } else {
                     chars.append(self.advance())
@@ -1176,7 +1176,7 @@ class Lexer {
                 var localeResult1: String = _tuple11.1
                 var localeResult2: [Node] = _tuple11.2
                 if localeResult0 != nil {
-                    parts.append(localeResult0)
+                    parts.append(localeResult0!)
                     parts.append(contentsOf: localeResult2)
                     chars.append(localeResult1)
                 } else {
@@ -1221,7 +1221,7 @@ class Lexer {
                 var procsubResult1: String = _tuple13.1
                 self._syncFromParser()
                 if procsubResult0 != nil {
-                    parts.append(procsubResult0)
+                    parts.append(procsubResult0!)
                     chars.append(procsubResult1)
                 } else {
                     if (!procsubResult1.isEmpty) {
@@ -1251,7 +1251,7 @@ class Lexer {
                     var arrayResult1: String = _tuple14.1
                     self._syncFromParser()
                     if arrayResult0 != nil {
-                        parts.append(arrayResult0)
+                        parts.append(arrayResult0!)
                         chars.append(arrayResult1)
                     } else {
                         break
@@ -1456,7 +1456,7 @@ class Lexer {
                         var arithText: String = _tuple15.1
                         self._syncFromParser()
                         if arithNode != nil {
-                            innerParts.append(arithNode)
+                            innerParts.append(arithNode!)
                             contentChars.append(arithText)
                         } else {
                             self._syncToParser()
@@ -1492,7 +1492,7 @@ class Lexer {
                                 var paramText: String = _tuple18.1
                                 self._syncFromParser()
                                 if paramNode != nil {
-                                    innerParts.append(paramNode)
+                                    innerParts.append(paramNode!)
                                     contentChars.append(paramText)
                                 } else {
                                     contentChars.append(self.advance())
@@ -7082,7 +7082,7 @@ class Parser {
         var result0: Node? = _tuple36.0
         var result1: String = _tuple36.1
         self._syncParser()
-        return (result0, result1)
+        return (result0!, result1)
     }
 
     func parseRedirect() throws -> Node {

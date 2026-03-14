@@ -5218,7 +5218,7 @@ def _format_cmdsub_node(
         return ""
     sp = _repeat_str(" ", indent)
     inner_sp = _repeat_str(" ", indent + 4)
-    if node.kind == "empty":
+    if isinstance(node, Empty):
         return ""
     if isinstance(node, Command):
         parts: list[str] = []
@@ -5318,7 +5318,7 @@ def _format_cmdsub_node(
                 result = part
             idx += 1
         return result
-    if node.kind == "list":
+    if isinstance(node, List):
         # Check if any command in the list has a heredoc redirect
         has_heredoc = False
         for p in node.parts:
@@ -5431,7 +5431,7 @@ def _format_cmdsub_node(
             while s.endswith("\n"):
                 s = _substring(s, 0, len(s) - 1)
         return s
-    if node.kind == "if":
+    if isinstance(node, If):
         cond = _format_cmdsub_node(node.condition, indent)
         then_body = _format_cmdsub_node(node.then_body, indent + 4)
         result = "if " + cond + "; then\n" + inner_sp + then_body + ";"
@@ -5440,7 +5440,7 @@ def _format_cmdsub_node(
             result = result + "\n" + sp + "else\n" + inner_sp + else_body + ";"
         result = result + "\n" + sp + "fi"
         return result
-    if node.kind == "while":
+    if isinstance(node, While):
         cond = _format_cmdsub_node(node.condition, indent)
         body = _format_cmdsub_node(node.body, indent + 4)
         result = "while " + cond + "; do\n" + inner_sp + body + ";\n" + sp + "done"
@@ -5448,7 +5448,7 @@ def _format_cmdsub_node(
             for r in node.redirects:
                 result = result + " " + _format_redirect(r)
         return result
-    if node.kind == "until":
+    if isinstance(node, Until):
         cond = _format_cmdsub_node(node.condition, indent)
         body = _format_cmdsub_node(node.body, indent + 4)
         result = "until " + cond + "; do\n" + inner_sp + body + ";\n" + sp + "done"
@@ -5456,7 +5456,7 @@ def _format_cmdsub_node(
             for r in node.redirects:
                 result = result + " " + _format_redirect(r)
         return result
-    if node.kind == "for":
+    if isinstance(node, For):
         var = node.var
         body = _format_cmdsub_node(node.body, indent + 4)
         if node.words is not None:
@@ -5493,7 +5493,7 @@ def _format_cmdsub_node(
             for r in node.redirects:
                 result = result + " " + _format_redirect(r)
         return result
-    if node.kind == "for-arith":
+    if isinstance(node, ForArith):
         body = _format_cmdsub_node(node.body, indent + 4)
         result = (
             "for (("
@@ -5513,7 +5513,7 @@ def _format_cmdsub_node(
             for r in node.redirects:
                 result = result + " " + _format_redirect(r)
         return result
-    if node.kind == "case":
+    if isinstance(node, Case):
         word = node.word.value
         patterns: list[str] = []
         i = 0
@@ -5564,7 +5564,7 @@ def _format_cmdsub_node(
         if redirects:
             return "( " + body + " ) " + redirects
         return "( " + body + " )"
-    if node.kind == "brace-group":
+    if isinstance(node, BraceGroup):
         body = _format_cmdsub_node(node.body, indent)
         body = body.rstrip(";")  # Strip trailing semicolons before adding our own
         # Don't add semicolon after background operator
@@ -5583,11 +5583,11 @@ def _format_cmdsub_node(
     if isinstance(node, ConditionalExpr) and isinstance(node.body, CondNode):
         body = _format_cond_body(node.body)
         return "[[ " + body + " ]]"
-    if node.kind == "negation":
+    if isinstance(node, Negation):
         if node.pipeline:
             return "! " + _format_cmdsub_node(node.pipeline, indent)
         return "! "
-    if node.kind == "time":
+    if isinstance(node, Time):
         prefix = "time -p " if node.posix else "time "
         if node.pipeline:
             return prefix + _format_cmdsub_node(node.pipeline, indent)

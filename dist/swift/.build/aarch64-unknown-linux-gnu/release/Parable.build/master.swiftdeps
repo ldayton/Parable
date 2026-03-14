@@ -1,6 +1,0 @@
-version: "Swift version 5.9.2 (swift-5.9.2-RELEASE)"
-options: "bfa42395df83437d9d48e92712bd047114aaeb3d43b9950e429fc83709691902"
-build_start_time: [1770144450, 896937000]
-build_end_time: [1770144480, 806768000]
-inputs:
-  "/workspace/Sources/Parable/Parable.swift": !dirty [1770144449, 0]

@@ -10,7 +10,6 @@ ast = parse("ps aux | grep python | awk '{print $2}'")
 from __future__ import annotations
 
 from collections.abc import Callable
-from typing import Union
 
 
 class ParseError(Exception):
@@ -4636,7 +4635,11 @@ class ArithmeticCommand(Node):
 # Arithmetic expression nodes
 
 
-class ArithNumber(Node):
+class ArithNode(Node):
+    """Base class for arithmetic expression nodes."""
+
+
+class ArithNumber(ArithNode):
     """A numeric literal in arithmetic context."""
 
     value: str  # Raw string (may be hex, octal, base#n)
@@ -4649,7 +4652,7 @@ class ArithNumber(Node):
         return '(number "' + self.value + '")'
 
 
-class ArithEmpty(Node):
+class ArithEmpty(ArithNode):
     """A missing operand in arithmetic context (e.g., in $((|)) or $((1|)))."""
 
     def __init__(self):
@@ -4659,7 +4662,7 @@ class ArithEmpty(Node):
         return "(empty)"
 
 
-class ArithVar(Node):
+class ArithVar(ArithNode):
     """A variable reference in arithmetic context (without $)."""
 
     name: str
@@ -4672,7 +4675,7 @@ class ArithVar(Node):
         return '(var "' + self.name + '")'
 
 
-class ArithBinaryOp(Node):
+class ArithBinaryOp(ArithNode):
     """A binary operation in arithmetic."""
 
     op: str
@@ -4691,7 +4694,7 @@ class ArithBinaryOp(Node):
         )
 
 
-class ArithUnaryOp(Node):
+class ArithUnaryOp(ArithNode):
     """A unary operation in arithmetic."""
 
     op: str
@@ -4706,7 +4709,7 @@ class ArithUnaryOp(Node):
         return '(unary-op "' + self.op + '" ' + self.operand.to_sexp() + ")"
 
 
-class ArithPreIncr(Node):
+class ArithPreIncr(ArithNode):
     """Pre-increment ++var."""
 
     operand: ArithNode
@@ -4719,7 +4722,7 @@ class ArithPreIncr(Node):
         return "(pre-incr " + self.operand.to_sexp() + ")"
 
 
-class ArithPostIncr(Node):
+class ArithPostIncr(ArithNode):
     """Post-increment var++."""
 
     operand: ArithNode
@@ -4732,7 +4735,7 @@ class ArithPostIncr(Node):
         return "(post-incr " + self.operand.to_sexp() + ")"
 
 
-class ArithPreDecr(Node):
+class ArithPreDecr(ArithNode):
     """Pre-decrement --var."""
 
     operand: ArithNode
@@ -4745,7 +4748,7 @@ class ArithPreDecr(Node):
         return "(pre-decr " + self.operand.to_sexp() + ")"
 
 
-class ArithPostDecr(Node):
+class ArithPostDecr(ArithNode):
     """Post-decrement var--."""
 
     operand: ArithNode
@@ -4758,7 +4761,7 @@ class ArithPostDecr(Node):
         return "(post-decr " + self.operand.to_sexp() + ")"
 
 
-class ArithAssign(Node):
+class ArithAssign(ArithNode):
     """Assignment operation (=, +=, -=, etc.)."""
 
     op: str
@@ -4777,7 +4780,7 @@ class ArithAssign(Node):
         )
 
 
-class ArithTernary(Node):
+class ArithTernary(ArithNode):
     """Ternary conditional expr ? expr : expr."""
 
     condition: ArithNode
@@ -4802,7 +4805,7 @@ class ArithTernary(Node):
         )
 
 
-class ArithComma(Node):
+class ArithComma(ArithNode):
     """Comma operator expr, expr."""
 
     left: ArithNode
@@ -4817,7 +4820,7 @@ class ArithComma(Node):
         return "(comma " + self.left.to_sexp() + " " + self.right.to_sexp() + ")"
 
 
-class ArithSubscript(Node):
+class ArithSubscript(ArithNode):
     """Array subscript arr[expr]."""
 
     array: str
@@ -4832,7 +4835,7 @@ class ArithSubscript(Node):
         return '(subscript "' + self.array + '" ' + self.index.to_sexp() + ")"
 
 
-class ArithEscape(Node):
+class ArithEscape(ArithNode):
     """An escaped character in arithmetic expression."""
 
     char: str
@@ -4845,7 +4848,7 @@ class ArithEscape(Node):
         return '(escape "' + self.char + '")'
 
 
-class ArithDeprecated(Node):
+class ArithDeprecated(ArithNode):
     """A deprecated arithmetic expansion $[expr]."""
 
     expression: str
@@ -4859,7 +4862,7 @@ class ArithDeprecated(Node):
         return '(arith-deprecated "' + escaped + '")'
 
 
-class ArithConcat(Node):
+class ArithConcat(ArithNode):
     """A concatenation of prefix + expansion in arithmetic (e.g., 0x$var)."""
 
     parts: list[ArithNode]
@@ -4988,7 +4991,11 @@ class ConditionalExpr(Node):
         return result
 
 
-class UnaryTest(Node):
+class CondNode(Node):
+    """Base class for conditional expression nodes."""
+
+
+class UnaryTest(CondNode):
     """A unary test in [[ ]], e.g., -f file, -z string."""
 
     op: str
@@ -5006,7 +5013,7 @@ class UnaryTest(Node):
         return '(cond-unary "' + self.op + '" (cond-term "' + operand_val + '"))'
 
 
-class BinaryTest(Node):
+class BinaryTest(CondNode):
     """A binary test in [[ ]], e.g., $a == $b, file1 -nt file2."""
 
     op: str
@@ -5035,7 +5042,7 @@ class BinaryTest(Node):
         )
 
 
-class CondAnd(Node):
+class CondAnd(CondNode):
     """Logical AND in [[ ]], e.g., expr1 && expr2."""
 
     left: CondNode
@@ -5050,7 +5057,7 @@ class CondAnd(Node):
         return "(cond-and " + self.left.to_sexp() + " " + self.right.to_sexp() + ")"
 
 
-class CondOr(Node):
+class CondOr(CondNode):
     """Logical OR in [[ ]], e.g., expr1 || expr2."""
 
     left: CondNode
@@ -5065,7 +5072,7 @@ class CondOr(Node):
         return "(cond-or " + self.left.to_sexp() + " " + self.right.to_sexp() + ")"
 
 
-class CondNot(Node):
+class CondNot(CondNode):
     """Logical NOT in [[ ]], e.g., ! expr."""
 
     operand: CondNode
@@ -5079,7 +5086,7 @@ class CondNot(Node):
         return self.operand.to_sexp()
 
 
-class CondParen(Node):
+class CondParen(CondNode):
     """Parenthesized group in [[ ]], e.g., ( expr )."""
 
     inner: CondNode
@@ -5090,29 +5097,6 @@ class CondParen(Node):
 
     def to_sexp(self) -> str:
         return "(cond-expr " + self.inner.to_sexp() + ")"
-
-
-# Type aliases for AST node unions (Union required for Python 3.8/3.9 runtime)
-ArithNode = Union[  # noqa: UP007
-    ArithNumber,
-    ArithEmpty,
-    ArithVar,
-    ArithBinaryOp,
-    ArithUnaryOp,
-    ArithPreIncr,
-    ArithPostIncr,
-    ArithPreDecr,
-    ArithPostDecr,
-    ArithAssign,
-    ArithTernary,
-    ArithComma,
-    ArithSubscript,
-    ArithEscape,
-    ArithDeprecated,
-    ArithConcat,
-]
-
-CondNode = Union[UnaryTest, BinaryTest, CondAnd, CondOr, CondNot, CondParen]  # noqa: UP007
 
 
 class Array(Node):

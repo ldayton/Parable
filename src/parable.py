@@ -29,14 +29,18 @@ class ParseError(Exception):
         return f"Parse error: {self.message}"
 
 
-class MatchedPairError(ParseError):
+class MatchedPairError(Exception):
     """Raised when a matched pair (like parentheses or braces) is unclosed at EOF.
 
     This is distinct from returning None/"" which signals "try alternative parsing".
     MatchedPairError means "this IS the construct, but it's unclosed at EOF".
     """
 
-    pass
+    def __init__(self, message: str, pos: int = 0, line: int = 0):
+        self.message = message
+        self.pos = pos
+        self.line = line
+        super().__init__(message)
 
 
 def _is_hex_digit(c: str) -> bool:
@@ -7733,7 +7737,7 @@ class Parser:
             self._in_process_sub = old_in_process_sub
             return ProcessSubstitution(direction, cmd), text
 
-        except ParseError as e:
+        except (ParseError, MatchedPairError) as e:
             # Parsing failed - check if we should error or fall back to literal
             self._restore_parser_state(saved)
             self._in_process_sub = old_in_process_sub
@@ -7879,7 +7883,7 @@ class Parser:
         # Parse the arithmetic expression
         try:
             expr = self._parse_arith_expr(content)
-        except ParseError:
+        except (ParseError, MatchedPairError):
             self.pos = start
             return None, ""
         return ArithmeticExpansion(expr), text

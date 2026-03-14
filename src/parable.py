@@ -5583,9 +5583,7 @@ def _format_cmdsub_node(
     return ""
 
 
-def _format_redirect(
-    r: Node, compact: bool = False, heredoc_op_only: bool = False
-) -> str:
+def _format_redirect(r: Node, compact: bool = False, heredoc_op_only: bool = False) -> str:
     """Format a redirect for command substitution output."""
     if isinstance(r, HereDoc):
         if r.strip_tabs:

@@ -31,12 +31,26 @@ src-fmt *ARGS: (_banner "src-fmt")
 src-verify-lock: (_banner "src-verify-lock")
     uv lock --check
 
+# Run Tongues pycheck on source (4 known bytearray errors: ldayton/Tongues#244)
+[group: 'source']
+pycheck: (_banner "pycheck")
+    #!/usr/bin/env bash
+    set -euo pipefail
+    errors=$(tongues --stop-at pycheck src/parable.py 2>&1 || true)
+    count=$(echo "$errors" | grep -c '^\[*error' || true)
+    if [[ $count -gt 4 ]]; then
+        echo "$errors"
+        echo "FAIL: expected at most 4 pycheck errors (bytearray), got $count"
+        exit 1
+    fi
+    echo "OK ($count known bytearray errors)"
+
 # --- CI/Check ---
 
 # Internal: run all parallel checks
 [private]
 [parallel]
-_check-parallel: src-test src-lint src-fmt src-verify-lock check-dump-ast
+_check-parallel: src-test src-lint src-fmt src-verify-lock check-dump-ast pycheck
 
 # Run all checks (parallel)
 [group: 'ci']

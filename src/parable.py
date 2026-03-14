@@ -1212,6 +1212,7 @@ class Lexer:
                         elif c == "`":
                             # Callback to Parser for backtick substitution
                             self._sync_to_parser()
+                            assert self._parser is not None
                             cmdsub_result = self._parser._parse_backtick_substitution()
                             self._sync_from_parser()
                             if cmdsub_result[0]:
@@ -1228,6 +1229,7 @@ class Lexer:
                     # COND/REGEX modes - callback to Parser's _scan_double_quote
                     handle_line_continuation = ctx == WORD_CTX_COND
                     self._sync_to_parser()
+                    assert self._parser is not None
                     self._parser._scan_double_quote(chars, parts, start, handle_line_continuation)
                     self._sync_from_parser()
                 continue
@@ -1297,6 +1299,7 @@ class Lexer:
             # NORMAL/COND: Backtick command substitution - callback to Parser
             if ctx != WORD_CTX_REGEX and ch == "`":
                 self._sync_to_parser()
+                assert self._parser is not None
                 cmdsub_result = self._parser._parse_backtick_substitution()
                 self._sync_from_parser()
                 if cmdsub_result[0]:
@@ -2002,6 +2005,7 @@ class Lexer:
 
     def _read_funsub(self, start: int) -> tuple[Node | None, str]:
         """Read brace command substitution ${ cmd; } or ${| cmd; }."""
+        assert self._parser is not None
         return self._parser._parse_funsub(start)
 
     # Reserved words mapping
@@ -3001,9 +3005,9 @@ class Word(Node):
                 i += 1
         return "".join(result)
 
-    def _collect_cmdsubs(self, node: Node) -> list[Node]:
+    def _collect_cmdsubs(self, node: Node) -> list[CommandSubstitution]:
         """Recursively collect CommandSubstitution nodes from an AST node."""
-        result: list[Node] = []
+        result: list[CommandSubstitution] = []
         if isinstance(node, CommandSubstitution):
             result.append(node)
         elif isinstance(node, Array):
@@ -3036,9 +3040,9 @@ class Word(Node):
             result.extend(self._collect_cmdsubs(node.value))
         return result
 
-    def _collect_procsubs(self, node: Node) -> list[Node]:
+    def _collect_procsubs(self, node: Node) -> list[ProcessSubstitution]:
         """Recursively collect ProcessSubstitution nodes from an AST node."""
-        result: list[Node] = []
+        result: list[ProcessSubstitution] = []
         if isinstance(node, ProcessSubstitution):
             result.append(node)
         elif isinstance(node, Array):
@@ -3053,13 +3057,13 @@ class Word(Node):
     def _format_command_substitutions(self, value: str, in_arith: bool = False) -> str:
         """Replace $(...) and >(...) / <(...) with bash-oracle-formatted AST output."""
         # Collect command substitutions from all parts, including nested ones
-        cmdsub_parts: list[Node] = []
-        procsub_parts: list[Node] = []
+        cmdsub_parts: list[CommandSubstitution] = []
+        procsub_parts: list[ProcessSubstitution] = []
         has_arith = False  # Track if we have any arithmetic expansion nodes
         for p in self.parts:
-            if p.kind == "cmdsub":
+            if isinstance(p, CommandSubstitution):
                 cmdsub_parts.append(p)
-            elif p.kind == "procsub":
+            elif isinstance(p, ProcessSubstitution):
                 procsub_parts.append(p)
             elif p.kind == "arith":
                 has_arith = True
@@ -3830,6 +3834,7 @@ class List(Node):
         for i in range(1, len(parts) - 1, 2):
             op = parts[i]
             cmd = parts[i + 1]
+            assert isinstance(op, Operator)
             op_name = op_names.get(op.op, op.op)
             result = "(" + op_name + " " + result + " " + cmd.to_sexp() + ")"
         return result
@@ -5144,37 +5149,36 @@ class Coproc(Node):
         return '(coproc "' + name + '" ' + self.command.to_sexp() + ")"
 
 
-def _format_cond_body(node: Node) -> str:
+def _format_cond_body(node: CondNode) -> str:
     """Format the body of a [[ ]] conditional expression."""
-    kind = node.kind
-    if kind == "unary-test":
+    if isinstance(node, UnaryTest):
         operand_val = node.operand.get_cond_formatted_value()
         return node.op + " " + operand_val
-    if kind == "binary-test":
+    if isinstance(node, BinaryTest):
         left_val = node.left.get_cond_formatted_value()
         right_val = node.right.get_cond_formatted_value()
         return left_val + " " + node.op + " " + right_val
-    if kind == "cond-and":
+    if isinstance(node, CondAnd):
         return _format_cond_body(node.left) + " && " + _format_cond_body(node.right)
-    if kind == "cond-or":
+    if isinstance(node, CondOr):
         return _format_cond_body(node.left) + " || " + _format_cond_body(node.right)
-    if kind == "cond-not":
+    if isinstance(node, CondNot):
         return "! " + _format_cond_body(node.operand)
-    if kind == "cond-paren":
+    if isinstance(node, CondParen):
         return "( " + _format_cond_body(node.inner) + " )"
     return ""
 
 
 def _starts_with_subshell(node: Node) -> bool:
     """Check if a node starts with a subshell (for compact redirect formatting in procsub)."""
-    if node.kind == "subshell":
+    if isinstance(node, Subshell):
         return True
-    if node.kind == "list":
+    if isinstance(node, List):
         for p in node.parts:
             if p.kind != "operator":
                 return _starts_with_subshell(p)
         return False
-    if node.kind == "pipeline":
+    if isinstance(node, Pipeline):
         if node.commands:
             return _starts_with_subshell(node.commands[0])
         return False
@@ -5195,7 +5199,7 @@ def _format_cmdsub_node(
     inner_sp = _repeat_str(" ", indent + 4)
     if node.kind == "empty":
         return ""
-    if node.kind == "command":
+    if isinstance(node, Command):
         parts: list[str] = []
         for w in node.words:
             val = w._expand_all_ansi_c_quotes(w.value)
@@ -5224,7 +5228,7 @@ def _format_cmdsub_node(
         for h in heredocs:
             result = result + _format_heredoc_body(h)
         return result
-    if node.kind == "pipeline":
+    if isinstance(node, Pipeline):
         # Build list of (cmd, needs_pipe_both_redirect) filtering out PipeBoth markers
         cmds: list[tuple[Node, bool]] = []
         i = 0
@@ -5249,7 +5253,7 @@ def _format_cmdsub_node(
             is_last = idx == len(cmds) - 1
             # Check if command has actual heredoc redirects
             has_heredoc = False
-            if cmd.kind == "command" and cmd.redirects:
+            if isinstance(cmd, Command) and cmd.redirects:
                 for r in cmd.redirects:
                     if r.kind == "heredoc":
                         has_heredoc = True
@@ -8259,7 +8263,7 @@ class Parser:
                 left = ArithPostDecr(left)
             elif self._arith_peek() == "[":
                 # Array subscript - but only for variables
-                if left.kind == "var":
+                if isinstance(left, ArithVar):
                     self._arith_advance()  # consume [
                     self._arith_skip_ws()
                     index = self._arith_parse_comma()
@@ -10713,7 +10717,7 @@ class Parser:
                 # Bare ! (no following command) is valid POSIX - equivalent to false
                 inner = self.parse_pipeline()
                 # Double negation cancels out (! ! cmd -> cmd, ! ! -> empty command)
-                if inner is not None and inner.kind == "negation":
+                if isinstance(inner, Negation):
                     if inner.pipeline is not None:
                         return inner.pipeline
                     else:

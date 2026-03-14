@@ -631,7 +631,7 @@ class Lexer:
             self.pos += 1
             if c == "'":
                 return "".join(chars), saw_newline
-        raise ParseError("Unterminated single quote", pos=start)
+        raise ParseError("Unterminated single quote", start)
 
     def _is_word_terminator(
         self, ctx: int, ch: str, bracket_depth: int = 0, paren_depth: int = 0
@@ -1231,7 +1231,7 @@ class Lexer:
                         else:
                             chars.append(self.advance())
                     if self.at_end():
-                        raise ParseError("Unterminated double quote", pos=start)
+                        raise ParseError("Unterminated double quote", start)
                     chars.append(self.advance())
                 else:
                     # COND/REGEX modes - callback to Parser's _scan_double_quote
@@ -1402,7 +1402,7 @@ class Lexer:
             chars.append(self.advance())
         # Check for unclosed bracket at EOF
         if bracket_depth > 0 and bracket_start_pos != -1 and self.at_end():
-            raise MatchedPairError("unexpected EOF looking for `]'", pos=bracket_start_pos)
+            raise MatchedPairError("unexpected EOF looking for `]'", bracket_start_pos)
         if not chars:
             return None
         if parts:
@@ -1526,7 +1526,7 @@ class Lexer:
                 content_chars.append(self.advance())
         if not found_close:
             # Unterminated ANSI-C quote - this is an error, not a fallback
-            raise MatchedPairError("unexpected EOF while looking for matching `''", pos=start)
+            raise MatchedPairError("unexpected EOF while looking for matching `''", start)
         text = _substring(self.source, start, self.pos)
         content = "".join(content_chars)
         node = AnsiCQuote(content)
@@ -1863,7 +1863,7 @@ class Lexer:
         Returns (node, text).
         """
         if self.at_end():
-            raise MatchedPairError("unexpected EOF looking for `}'", pos=start)
+            raise MatchedPairError("unexpected EOF looking for `}'", start)
         # Save and initialize dolbrace state
         saved_dolbrace = self._dolbrace_state
         self._dolbrace_state = DolbraceState.PARAM
@@ -1917,7 +1917,7 @@ class Lexer:
                 # Fell through - continue to general parsing
                 if self.at_end():
                     self._dolbrace_state = saved_dolbrace
-                    raise MatchedPairError("unexpected EOF looking for `}'", pos=start)
+                    raise MatchedPairError("unexpected EOF looking for `}'", start)
                 self.pos = start + 2  # reset to just after ${
             else:
                 # ${! followed by non-param char like | - fall through to regular parsing
@@ -1943,7 +1943,7 @@ class Lexer:
                 return ParamExpansion(content), text
         if self.at_end():
             self._dolbrace_state = saved_dolbrace
-            raise MatchedPairError("unexpected EOF looking for `}'", pos=start)
+            raise MatchedPairError("unexpected EOF looking for `}'", start)
         # Check for closing brace (simple expansion)
         if self.peek() == "}":
             self.advance()
@@ -1977,7 +1977,7 @@ class Lexer:
                     self.advance()
                 if self.at_end():
                     self._dolbrace_state = saved_dolbrace
-                    raise ParseError("Unterminated backtick", pos=backtick_pos)
+                    raise ParseError("Unterminated backtick", backtick_pos)
                 self.advance()
                 op = "`"
             elif (
@@ -2013,7 +2013,8 @@ class Lexer:
             inner = arg[1:-1]
             try:
                 # Use Parser for formatting (calls back via _parser reference)
-                sub_parser = Parser(inner, in_process_sub=True, extglob=self._parser._extglob)
+                assert self._parser is not None
+                sub_parser = Parser(inner, True, self._parser._extglob)
                 parsed = sub_parser.parse_list(True)
                 if parsed and sub_parser.at_end():
                     formatted = _format_cmdsub_node(parsed, 0, True, False, True)
@@ -7166,20 +7167,18 @@ class Parser:
             brace = self.parse_brace_group()
             if brace is None:
                 raise ParseError(
-                    f"Expected brace group body in {context}", pos=self._lex_peek_token().pos
+                    f"Expected brace group body in {context}", self._lex_peek_token().pos
                 )
             return brace.body
         if self._lex_consume_word("do"):
             body = self.parse_list_until({"done"})
             if body is None:
-                raise ParseError("Expected commands after 'do'", pos=self._lex_peek_token().pos)
+                raise ParseError("Expected commands after 'do'", self._lex_peek_token().pos)
             self.skip_whitespace_and_newlines()
             if not self._lex_consume_word("done"):
-                raise ParseError(
-                    f"Expected 'done' to close {context}", pos=self._lex_peek_token().pos
-                )
+                raise ParseError(f"Expected 'done' to close {context}", self._lex_peek_token().pos)
             return body
-        raise ParseError(f"Expected 'do' or '{{' in {context}", pos=self._lex_peek_token().pos)
+        raise ParseError(f"Expected 'do' or '{{' in {context}", self._lex_peek_token().pos)
 
     def peek_word(self) -> str | None:
         """Peek at the next word without consuming it."""
@@ -7278,7 +7277,7 @@ class Parser:
             else:
                 chars.append(self.advance())
         if self.at_end():
-            raise ParseError("Unterminated double quote", pos=start)
+            raise ParseError("Unterminated double quote", start)
         chars.append(self.advance())
 
     def _parse_dollar_expansion(
@@ -7430,7 +7429,7 @@ class Parser:
         self.skip_whitespace_and_newlines()
         if self.at_end() or self.peek() != "}":
             self._restore_parser_state(saved)
-            raise MatchedPairError("unexpected EOF looking for `}'", pos=start)
+            raise MatchedPairError("unexpected EOF looking for `}'", start)
         self.advance()  # consume final }
         text = _substring(self.source, start, self.pos)
         self._restore_parser_state(saved)
@@ -7690,7 +7689,7 @@ class Parser:
             text_chars.append(ch)
 
         if self.at_end():
-            raise ParseError("Unterminated backtick", pos=start)
+            raise ParseError("Unterminated backtick", start)
 
         self.advance()  # consume closing `
         text_chars.append("`")  # closing backtick
@@ -7710,7 +7709,7 @@ class Parser:
                     self._cmdsub_heredoc_end = max(self._cmdsub_heredoc_end, heredoc_end)
 
         # Parse the content as a command list
-        sub_parser = Parser(content, extglob=self._extglob)
+        sub_parser = Parser(content, False, self._extglob)
         cmd = sub_parser.parse_list(True)
         if cmd is None:
             cmd = Empty()
@@ -7753,7 +7752,7 @@ class Parser:
             self.skip_whitespace_and_newlines()
             if self.at_end() or self.peek() != ")":
                 # Parsing didn't reach the closing ) - not a valid process sub
-                raise ParseError("Invalid process substitution", pos=start)
+                raise ParseError("Invalid process substitution", start)
 
             self.advance()  # consume final )
             text_end = self.pos
@@ -7809,7 +7808,7 @@ class Parser:
 
             if self.at_end():
                 self._clear_state(ParserStateFlags.PST_COMPASSIGN)
-                raise ParseError("Unterminated array literal", pos=start)
+                raise ParseError("Unterminated array literal", start)
 
             if self.peek() == ")":
                 break
@@ -7821,13 +7820,13 @@ class Parser:
                 if self.peek() == ")":
                     break
                 self._clear_state(ParserStateFlags.PST_COMPASSIGN)
-                raise ParseError("Expected word in array literal", pos=self.pos)
+                raise ParseError("Expected word in array literal", self.pos)
 
             elements.append(word)
 
         if self.at_end() or self.peek() != ")":
             self._clear_state(ParserStateFlags.PST_COMPASSIGN)
-            raise ParseError("Expected ) to close array literal", pos=self.pos)
+            raise ParseError("Expected ) to close array literal", self.pos)
         self.advance()  # consume )
 
         text = _substring(self.source, start, self.pos)
@@ -7898,7 +7897,7 @@ class Parser:
                 self.advance()
         if depth != 0:
             if self.at_end():
-                raise MatchedPairError("unexpected EOF looking for `))'", pos=start)
+                raise MatchedPairError("unexpected EOF looking for `))'", start)
             self.pos = start
             return None, ""
         # Content ends at first_close_pos if set, else at final )
@@ -8308,7 +8307,7 @@ class Parser:
                     index = self._arith_parse_comma()
                     self._arith_skip_ws()
                     if not self._arith_consume("]"):
-                        raise ParseError("Expected ']' in array subscript", pos=self._arith_pos)
+                        raise ParseError("Expected ']' in array subscript", self._arith_pos)
                     left = ArithSubscript(left.name, index)
                 else:
                     break
@@ -8328,7 +8327,7 @@ class Parser:
             expr = self._arith_parse_comma()
             self._arith_skip_ws()
             if not self._arith_consume(")"):
-                raise ParseError("Expected ')' in arithmetic expression", pos=self._arith_pos)
+                raise ParseError("Expected ')' in arithmetic expression", self._arith_pos)
             return expr
 
         # Parameter length #$var or #${...}
@@ -8357,9 +8356,7 @@ class Parser:
         if c == "\\":
             self._arith_advance()  # consume backslash
             if self._arith_at_end():
-                raise ParseError(
-                    "Unexpected end after backslash in arithmetic", pos=self._arith_pos
-                )
+                raise ParseError("Unexpected end after backslash in arithmetic", self._arith_pos)
             escaped_char = self._arith_advance()  # consume escaped character
             return ArithEscape(escaped_char)
 
@@ -8375,7 +8372,7 @@ class Parser:
     def _arith_parse_expansion(self) -> Node:
         """Parse $var, ${...}, or $(...)."""
         if not self._arith_consume("$"):
-            raise ParseError("Expected '$'", pos=self._arith_pos)
+            raise ParseError("Expected '$'", self._arith_pos)
 
         c = self._arith_peek()
 
@@ -8400,7 +8397,7 @@ class Parser:
             else:
                 break
         if not name_chars:
-            raise ParseError("Expected variable name after $", pos=self._arith_pos)
+            raise ParseError("Expected variable name after $", self._arith_pos)
         return ParamExpansion("".join(name_chars))
 
     def _arith_parse_cmdsub(self) -> Node:
@@ -8450,7 +8447,7 @@ class Parser:
         self._arith_advance()  # consume )
 
         # Parse the command inside
-        sub_parser = Parser(content, extglob=self._extglob)
+        sub_parser = Parser(content, False, self._extglob)
         cmd = sub_parser.parse_list(True)
 
         return CommandSubstitution(cmd)
@@ -8542,7 +8539,7 @@ class Parser:
             self._arith_advance()
         content = _substring(self._arith_src, content_start, self._arith_pos)
         if not self._arith_consume("'"):
-            raise ParseError("Unterminated single quote in arithmetic", pos=self._arith_pos)
+            raise ParseError("Unterminated single quote in arithmetic", self._arith_pos)
         return ArithNumber(content)
 
     def _arith_parse_double_quote(self) -> Node:
@@ -8558,7 +8555,7 @@ class Parser:
                 self._arith_advance()
         content = _substring(self._arith_src, content_start, self._arith_pos)
         if not self._arith_consume('"'):
-            raise ParseError("Unterminated double quote in arithmetic", pos=self._arith_pos)
+            raise ParseError("Unterminated double quote in arithmetic", self._arith_pos)
         return ArithNumber(content)
 
     def _arith_parse_backtick(self) -> Node:
@@ -8574,9 +8571,9 @@ class Parser:
                 self._arith_advance()
         content = _substring(self._arith_src, content_start, self._arith_pos)
         if not self._arith_consume("`"):
-            raise ParseError("Unterminated backtick in arithmetic", pos=self._arith_pos)
+            raise ParseError("Unterminated backtick in arithmetic", self._arith_pos)
         # Parse the command inside
-        sub_parser = Parser(content, extglob=self._extglob)
+        sub_parser = Parser(content, False, self._extglob)
         cmd = sub_parser.parse_list(True)
         return CommandSubstitution(cmd)
 
@@ -8613,7 +8610,7 @@ class Parser:
             return ArithVar("".join(chars))
 
         raise ParseError(
-            "Unexpected character '" + c + "' in arithmetic expression", pos=self._arith_pos
+            "Unexpected character '" + c + "' in arithmetic expression", self._arith_pos
         )
 
     def _parse_deprecated_arithmetic(self) -> tuple[Node | None, str]:
@@ -8737,7 +8734,7 @@ class Parser:
             self.skip_whitespace()
             target = self.parse_word()
             if target is None:
-                raise ParseError("Expected target for redirect " + op, pos=self.pos)
+                raise ParseError("Expected target for redirect " + op, self.pos)
             return Redirect(op, target)
 
         if ch is None or not _is_redirect_char(ch):
@@ -8844,7 +8841,7 @@ class Parser:
                             target = Word("&" + inner_word.value)
                             target.parts = inner_word.parts
                         else:
-                            raise ParseError("Expected target for redirect " + op, pos=self.pos)
+                            raise ParseError("Expected target for redirect " + op, self.pos)
                     else:
                         target = Word("&" + fd_target)
                 else:
@@ -8854,7 +8851,7 @@ class Parser:
                         target = Word("&" + inner_word.value)
                         target.parts = inner_word.parts
                     else:
-                        raise ParseError("Expected target for redirect " + op, pos=self.pos)
+                        raise ParseError("Expected target for redirect " + op, self.pos)
         else:
             self.skip_whitespace()
             # Handle >& - or <& - where space precedes the close syntax
@@ -8871,7 +8868,7 @@ class Parser:
                 target = self.parse_word()
 
         if target is None:
-            raise ParseError("Expected target for redirect " + op, pos=self.pos)
+            raise ParseError("Expected target for redirect " + op, self.pos)
 
         return Redirect(op, target)
 
@@ -9243,12 +9240,12 @@ class Parser:
         body = self.parse_list(True)
         if body is None:
             self._clear_state(ParserStateFlags.PST_SUBSHELL)
-            raise ParseError("Expected command in subshell", pos=self.pos)
+            raise ParseError("Expected command in subshell", self.pos)
 
         self.skip_whitespace()
         if self.at_end() or self.peek() != ")":
             self._clear_state(ParserStateFlags.PST_SUBSHELL)
-            raise ParseError("Expected ) to close subshell", pos=self.pos)
+            raise ParseError("Expected ) to close subshell", self.pos)
         self.advance()  # consume )
         self._clear_state(ParserStateFlags.PST_SUBSHELL)
         return Subshell(body, self._collect_redirects())
@@ -9323,7 +9320,7 @@ class Parser:
 
         if self.at_end():
             # Hit EOF without finding )) - unclosed arithmetic command
-            raise MatchedPairError("unexpected EOF looking for `))'", pos=saved_pos)
+            raise MatchedPairError("unexpected EOF looking for `))'", saved_pos)
         if depth != 1:
             # Didn't find )) - might be nested subshells, not arithmetic command
             self.pos = saved_pos
@@ -9431,7 +9428,7 @@ class Parser:
         ):
             self._clear_state(ParserStateFlags.PST_CONDEXPR)
             self._word_context = WORD_CTX_NORMAL
-            raise ParseError("Expected ]] to close conditional expression", pos=self.pos)
+            raise ParseError("Expected ]] to close conditional expression", self.pos)
 
         self.advance()  # consume first ]
         self.advance()  # consume second ]
@@ -9502,7 +9499,7 @@ class Parser:
         self._cond_skip_whitespace()
 
         if self._cond_at_end():
-            raise ParseError("Unexpected end of conditional expression", pos=self.pos)
+            raise ParseError("Unexpected end of conditional expression", self.pos)
 
         # Negation: ! term
         if self.peek() == "!":
@@ -9522,14 +9519,14 @@ class Parser:
             inner = self._parse_cond_or()
             self._cond_skip_whitespace()
             if self.at_end() or self.peek() != ")":
-                raise ParseError("Expected ) in conditional expression", pos=self.pos)
+                raise ParseError("Expected ) in conditional expression", self.pos)
             self.advance()  # consume )
             return CondParen(inner)
 
         # Parse first word
         word1 = self._parse_cond_word()
         if word1 is None:
-            raise ParseError("Expected word in conditional expression", pos=self.pos)
+            raise ParseError("Expected word in conditional expression", self.pos)
 
         self._cond_skip_whitespace()
 
@@ -9538,7 +9535,7 @@ class Parser:
             # Unary test: -f file
             unary_operand = self._parse_cond_word()
             if unary_operand is None:
-                raise ParseError("Expected operand after " + word1.value, pos=self.pos)
+                raise ParseError("Expected operand after " + word1.value, self.pos)
             return UnaryTest(word1.value, unary_operand)
 
         # Check if next token is a binary operator
@@ -9554,7 +9551,7 @@ class Parser:
                 self._cond_skip_whitespace()
                 word2 = self._parse_cond_word()
                 if word2 is None:
-                    raise ParseError("Expected operand after " + op, pos=self.pos)
+                    raise ParseError("Expected operand after " + op, self.pos)
                 return BinaryTest(op, word1, word2)
             # Peek at next word to see if it's a binary operator
             saved_pos = self.pos
@@ -9568,7 +9565,7 @@ class Parser:
                 else:
                     word2 = self._parse_cond_word()
                 if word2 is None:
-                    raise ParseError("Expected operand after " + op_word.value, pos=self.pos)
+                    raise ParseError("Expected operand after " + op_word.value, self.pos)
                 return BinaryTest(op_word.value, word1, word2)
             else:
                 # Not a binary op, restore position
@@ -9614,11 +9611,11 @@ class Parser:
 
         body = self.parse_list(True)
         if body is None:
-            raise ParseError("Expected command in brace group", pos=self._lex_peek_token().pos)
+            raise ParseError("Expected command in brace group", self._lex_peek_token().pos)
 
         self.skip_whitespace()
         if not self._lex_consume_word("}"):
-            raise ParseError("Expected } to close brace group", pos=self._lex_peek_token().pos)
+            raise ParseError("Expected } to close brace group", self._lex_peek_token().pos)
         return BraceGroup(body, self._collect_redirects())
 
     def parse_if(self) -> Node | None:
@@ -9630,17 +9627,17 @@ class Parser:
         # Parse condition (a list that ends at 'then')
         condition = self.parse_list_until({"then"})
         if condition is None:
-            raise ParseError("Expected condition after 'if'", pos=self._lex_peek_token().pos)
+            raise ParseError("Expected condition after 'if'", self._lex_peek_token().pos)
 
         # Expect 'then'
         self.skip_whitespace_and_newlines()
         if not self._lex_consume_word("then"):
-            raise ParseError("Expected 'then' after if condition", pos=self._lex_peek_token().pos)
+            raise ParseError("Expected 'then' after if condition", self._lex_peek_token().pos)
 
         # Parse then body (ends at elif, else, or fi)
         then_body = self.parse_list_until({"elif", "else", "fi"})
         if then_body is None:
-            raise ParseError("Expected commands after 'then'", pos=self._lex_peek_token().pos)
+            raise ParseError("Expected commands after 'then'", self._lex_peek_token().pos)
 
         # Check what comes next: elif, else, or fi
         self.skip_whitespace_and_newlines()
@@ -9653,17 +9650,15 @@ class Parser:
             # We need to parse: condition; then body [elif|else|fi]
             elif_condition = self.parse_list_until({"then"})
             if elif_condition is None:
-                raise ParseError("Expected condition after 'elif'", pos=self._lex_peek_token().pos)
+                raise ParseError("Expected condition after 'elif'", self._lex_peek_token().pos)
 
             self.skip_whitespace_and_newlines()
             if not self._lex_consume_word("then"):
-                raise ParseError(
-                    "Expected 'then' after elif condition", pos=self._lex_peek_token().pos
-                )
+                raise ParseError("Expected 'then' after elif condition", self._lex_peek_token().pos)
 
             elif_then_body = self.parse_list_until({"elif", "else", "fi"})
             if elif_then_body is None:
-                raise ParseError("Expected commands after 'then'", pos=self._lex_peek_token().pos)
+                raise ParseError("Expected commands after 'then'", self._lex_peek_token().pos)
 
             # Recursively handle more elif/else/fi
             self.skip_whitespace_and_newlines()
@@ -9677,9 +9672,7 @@ class Parser:
                 self._lex_consume_word("else")
                 inner_else = self.parse_list_until({"fi"})
                 if inner_else is None:
-                    raise ParseError(
-                        "Expected commands after 'else'", pos=self._lex_peek_token().pos
-                    )
+                    raise ParseError("Expected commands after 'else'", self._lex_peek_token().pos)
 
             else_body = If(elif_condition, elif_then_body, inner_else)
 
@@ -9687,12 +9680,12 @@ class Parser:
             self._lex_consume_word("else")
             else_body = self.parse_list_until({"fi"})
             if else_body is None:
-                raise ParseError("Expected commands after 'else'", pos=self._lex_peek_token().pos)
+                raise ParseError("Expected commands after 'else'", self._lex_peek_token().pos)
 
         # Expect 'fi'
         self.skip_whitespace_and_newlines()
         if not self._lex_consume_word("fi"):
-            raise ParseError("Expected 'fi' to close if statement", pos=self._lex_peek_token().pos)
+            raise ParseError("Expected 'fi' to close if statement", self._lex_peek_token().pos)
         return If(condition, then_body, else_body, self._collect_redirects())
 
     def _parse_elif_chain(self) -> If:
@@ -9701,15 +9694,15 @@ class Parser:
 
         condition = self.parse_list_until({"then"})
         if condition is None:
-            raise ParseError("Expected condition after 'elif'", pos=self._lex_peek_token().pos)
+            raise ParseError("Expected condition after 'elif'", self._lex_peek_token().pos)
 
         self.skip_whitespace_and_newlines()
         if not self._lex_consume_word("then"):
-            raise ParseError("Expected 'then' after elif condition", pos=self._lex_peek_token().pos)
+            raise ParseError("Expected 'then' after elif condition", self._lex_peek_token().pos)
 
         then_body = self.parse_list_until({"elif", "else", "fi"})
         if then_body is None:
-            raise ParseError("Expected commands after 'then'", pos=self._lex_peek_token().pos)
+            raise ParseError("Expected commands after 'then'", self._lex_peek_token().pos)
 
         self.skip_whitespace_and_newlines()
 
@@ -9720,7 +9713,7 @@ class Parser:
             self._lex_consume_word("else")
             else_body = self.parse_list_until({"fi"})
             if else_body is None:
-                raise ParseError("Expected commands after 'else'", pos=self._lex_peek_token().pos)
+                raise ParseError("Expected commands after 'else'", self._lex_peek_token().pos)
 
         return If(condition, then_body, else_body)
 
@@ -9733,22 +9726,22 @@ class Parser:
         # Parse condition (ends at 'do')
         condition = self.parse_list_until({"do"})
         if condition is None:
-            raise ParseError("Expected condition after 'while'", pos=self._lex_peek_token().pos)
+            raise ParseError("Expected condition after 'while'", self._lex_peek_token().pos)
 
         # Expect 'do'
         self.skip_whitespace_and_newlines()
         if not self._lex_consume_word("do"):
-            raise ParseError("Expected 'do' after while condition", pos=self._lex_peek_token().pos)
+            raise ParseError("Expected 'do' after while condition", self._lex_peek_token().pos)
 
         # Parse body (ends at 'done')
         body = self.parse_list_until({"done"})
         if body is None:
-            raise ParseError("Expected commands after 'do'", pos=self._lex_peek_token().pos)
+            raise ParseError("Expected commands after 'do'", self._lex_peek_token().pos)
 
         # Expect 'done'
         self.skip_whitespace_and_newlines()
         if not self._lex_consume_word("done"):
-            raise ParseError("Expected 'done' to close while loop", pos=self._lex_peek_token().pos)
+            raise ParseError("Expected 'done' to close while loop", self._lex_peek_token().pos)
         return While(condition, body, self._collect_redirects())
 
     def parse_until(self) -> Node | None:
@@ -9760,22 +9753,22 @@ class Parser:
         # Parse condition (ends at 'do')
         condition = self.parse_list_until({"do"})
         if condition is None:
-            raise ParseError("Expected condition after 'until'", pos=self._lex_peek_token().pos)
+            raise ParseError("Expected condition after 'until'", self._lex_peek_token().pos)
 
         # Expect 'do'
         self.skip_whitespace_and_newlines()
         if not self._lex_consume_word("do"):
-            raise ParseError("Expected 'do' after until condition", pos=self._lex_peek_token().pos)
+            raise ParseError("Expected 'do' after until condition", self._lex_peek_token().pos)
 
         # Parse body (ends at 'done')
         body = self.parse_list_until({"done"})
         if body is None:
-            raise ParseError("Expected commands after 'do'", pos=self._lex_peek_token().pos)
+            raise ParseError("Expected commands after 'do'", self._lex_peek_token().pos)
 
         # Expect 'done'
         self.skip_whitespace_and_newlines()
         if not self._lex_consume_word("done"):
-            raise ParseError("Expected 'done' to close until loop", pos=self._lex_peek_token().pos)
+            raise ParseError("Expected 'done' to close until loop", self._lex_peek_token().pos)
         return Until(condition, body, self._collect_redirects())
 
     def parse_for(self) -> Node | None:
@@ -9794,16 +9787,12 @@ class Parser:
             # Command substitution as variable name: for $(echo i) in ...
             var_word = self.parse_word()
             if var_word is None:
-                raise ParseError(
-                    "Expected variable name after 'for'", pos=self._lex_peek_token().pos
-                )
+                raise ParseError("Expected variable name after 'for'", self._lex_peek_token().pos)
             var_name = var_word.value
         else:
             var_name = self.peek_word()
             if var_name is None:
-                raise ParseError(
-                    "Expected variable name after 'for'", pos=self._lex_peek_token().pos
-                )
+                raise ParseError("Expected variable name after 'for'", self._lex_peek_token().pos)
             self.consume_word(var_name)
 
         self.skip_whitespace()
@@ -9843,7 +9832,7 @@ class Parser:
                         break
                     # 'for x in do' or 'for x in a b c do' is invalid
                     raise ParseError(
-                        "Expected ';' or newline before 'do'", pos=self._lex_peek_token().pos
+                        "Expected ';' or newline before 'do'", self._lex_peek_token().pos
                     )
 
                 word = self.parse_word()
@@ -9859,22 +9848,22 @@ class Parser:
             # Bash allows: for x in a b; { cmd; }
             brace_group = self.parse_brace_group()
             if brace_group is None:
-                raise ParseError("Expected brace group in for loop", pos=self._lex_peek_token().pos)
+                raise ParseError("Expected brace group in for loop", self._lex_peek_token().pos)
             return For(var_name, words, brace_group.body, self._collect_redirects())
 
         # Expect 'do'
         if not self._lex_consume_word("do"):
-            raise ParseError("Expected 'do' in for loop", pos=self._lex_peek_token().pos)
+            raise ParseError("Expected 'do' in for loop", self._lex_peek_token().pos)
 
         # Parse body (ends at 'done')
         body = self.parse_list_until({"done"})
         if body is None:
-            raise ParseError("Expected commands after 'do'", pos=self._lex_peek_token().pos)
+            raise ParseError("Expected commands after 'do'", self._lex_peek_token().pos)
 
         # Expect 'done'
         self.skip_whitespace_and_newlines()
         if not self._lex_consume_word("done"):
-            raise ParseError("Expected 'done' to close for loop", pos=self._lex_peek_token().pos)
+            raise ParseError("Expected 'done' to close for loop", self._lex_peek_token().pos)
         return For(var_name, words, body, self._collect_redirects())
 
     def _parse_for_arith(self) -> ForArith:
@@ -9917,7 +9906,7 @@ class Parser:
                 current.append(self.advance())
 
         if len(parts) != 3:
-            raise ParseError("Expected three expressions in for ((;;))", pos=self.pos)
+            raise ParseError("Expected three expressions in for ((;;))", self.pos)
 
         init = parts[0]
         cond = parts[1]
@@ -9943,9 +9932,7 @@ class Parser:
         # Parse variable name
         var_name = self.peek_word()
         if var_name is None:
-            raise ParseError(
-                "Expected variable name after 'select'", pos=self._lex_peek_token().pos
-            )
+            raise ParseError("Expected variable name after 'select'", self._lex_peek_token().pos)
         self.consume_word(var_name)
 
         self.skip_whitespace()
@@ -10006,13 +9993,13 @@ class Parser:
         # Parse the word to match
         word = self.parse_word()
         if word is None:
-            raise ParseError("Expected word after 'case'", pos=self._lex_peek_token().pos)
+            raise ParseError("Expected word after 'case'", self._lex_peek_token().pos)
 
         self.skip_whitespace_and_newlines()
 
         # Expect 'in'
         if not self._lex_consume_word("in"):
-            raise ParseError("Expected 'in' after case word", pos=self._lex_peek_token().pos)
+            raise ParseError("Expected 'in' after case word", self._lex_peek_token().pos)
 
         self.skip_whitespace_and_newlines()
 
@@ -10196,9 +10183,7 @@ class Parser:
 
             pattern = "".join(pattern_chars)
             if not pattern:
-                raise ParseError(
-                    "Expected pattern in case statement", pos=self._lex_peek_token().pos
-                )
+                raise ParseError("Expected pattern in case statement", self._lex_peek_token().pos)
 
             # Parse commands until ;;, ;&, ;;&, or esac
             # Commands are optional (can have empty body)
@@ -10230,9 +10215,7 @@ class Parser:
         self.skip_whitespace_and_newlines()
         if not self._lex_consume_word("esac"):
             self._clear_state(ParserStateFlags.PST_CASESTMT)
-            raise ParseError(
-                "Expected 'esac' to close case statement", pos=self._lex_peek_token().pos
-            )
+            raise ParseError("Expected 'esac' to close case statement", self._lex_peek_token().pos)
         self._clear_state(ParserStateFlags.PST_CASESTMT)
         return Case(word, patterns, self._collect_redirects())
 
@@ -10320,7 +10303,7 @@ class Parser:
         if body is not None:
             return Coproc(body, name)
 
-        raise ParseError("Expected command after coproc", pos=self.pos)
+        raise ParseError("Expected command after coproc", self.pos)
 
     def parse_function(self) -> Node | None:
         """Parse a function definition.
@@ -10363,7 +10346,7 @@ class Parser:
             # Parse body (any compound command)
             body = self._parse_compound_command()
             if body is None:
-                raise ParseError("Expected function body", pos=self.pos)
+                raise ParseError("Expected function body", self.pos)
 
             return Function(name, body)
 
@@ -10439,7 +10422,7 @@ class Parser:
         # Parse body (any compound command)
         body = self._parse_compound_command()
         if body is None:
-            raise ParseError("Expected function body", pos=self.pos)
+            raise ParseError("Expected function body", self.pos)
 
         return Function(name, body)
 
@@ -10581,7 +10564,7 @@ class Parser:
 
             pipeline = self.parse_pipeline()
             if pipeline is None:
-                raise ParseError("Expected command after " + op, pos=self.pos)
+                raise ParseError("Expected command after " + op, self.pos)
             parts.append(pipeline)
 
         if len(parts) == 1:
@@ -10642,9 +10625,7 @@ class Parser:
 
         # Reserved words that cannot start a statement (only valid in specific contexts)
         if reserved in ("fi", "then", "elif", "else", "done", "esac", "do", "in"):
-            raise ParseError(
-                f"Unexpected reserved word '{reserved}'", pos=self._lex_peek_token().pos
-            )
+            raise ParseError(f"Unexpected reserved word '{reserved}'", self._lex_peek_token().pos)
 
         # If statement
         if reserved == "if":
@@ -10813,7 +10794,7 @@ class Parser:
 
             cmd = self.parse_compound_command()
             if cmd is None:
-                raise ParseError("Expected command after |", pos=self.pos)
+                raise ParseError("Expected command after |", self.pos)
             commands.append(cmd)
 
         if len(commands) == 1:
@@ -10930,7 +10911,7 @@ class Parser:
 
             pipeline = self.parse_pipeline()
             if pipeline is None:
-                raise ParseError("Expected command after " + op, pos=self.pos)
+                raise ParseError("Expected command after " + op, self.pos)
             parts.append(pipeline)
 
             # Grammar-level EOF token check after each command
@@ -10994,7 +10975,7 @@ class Parser:
 
             # If no newline and not at end, we have unparsed content
             if not found_newline and not self.at_end():
-                raise ParseError("Syntax error", pos=self.pos)
+                raise ParseError("Syntax error", self.pos)
 
         if not results:
             return [Empty()]

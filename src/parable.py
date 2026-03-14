@@ -229,7 +229,7 @@ class Token:
 
     def __repr__(self) -> str:
         if self.word:
-            return f"Token({str(self.type)}, {self.value}, {str(self.pos)}, word={self.word})"
+            return f"Token({str(self.type)}, {self.value}, {str(self.pos)}, word={str(self.word)})"
         if self.parts:
             return f"Token({str(self.type)}, {self.value}, {str(self.pos)}, parts={str(len(self.parts))})"
         return f"Token({str(self.type)}, {self.value}, {str(self.pos)})"
@@ -299,7 +299,7 @@ class SavedParserState:
         self,
         parser_state: int,
         dolbrace_state: int,
-        pending_heredocs: list[Node],
+        pending_heredocs: list[HereDoc],
         ctx_stack: list[ParseContext],
         eof_token: str | None = None,
     ):
@@ -894,7 +894,7 @@ class Lexer:
             # In DOLBRACE mode, don't track bare '{' - only ${...} nesting matters
             # (handled by the $ block below via recursion)
             if ch == open_char and open_char != close_char:
-                if not (flags & MatchedPairFlags.DOLBRACE and open_char == "{"):
+                if not ((flags & MatchedPairFlags.DOLBRACE) != 0 and open_char == "{"):
                     count += 1
                 chars.append(ch)
                 was_dollar = False
@@ -3363,7 +3363,7 @@ class Word(Node):
                             if leading_ws:
                                 # Leading whitespace before subshell: normalize ws + format subshell with spaces
                                 normalized_ws = leading_ws.replace("\n", " ").replace("\t", " ")
-                                spaced = _format_cmdsub_node(procsub.command, in_procsub=False)
+                                spaced = _format_cmdsub_node(procsub.command, 0, False)
                                 result.append(direction + "(" + normalized_ws + spaced + ")")
                             else:
                                 # No leading whitespace - preserve original raw content
@@ -5024,8 +5024,10 @@ class ConditionalExpr(Node):
         if isinstance(body, str):
             escaped = body.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
             result = '(cond "' + escaped + '")'
-        else:
+        elif isinstance(body, CondNode):
             result = "(cond " + body.to_sexp() + ")"
+        else:
+            result = "(cond)"
         if self.redirects:
             redirect_parts: list[str] = []
             for r in self.redirects:
@@ -10123,7 +10125,7 @@ class Parser:
                     # Skip ] as first char (literal in char class) only if there's another ]
                     if scan_pos < self.length and self.source[scan_pos] == "]":
                         # Check if there's another ] later
-                        if self.source.find("]", scan_pos + 1) != -1:
+                        if _substring(self.source, scan_pos + 1, self.length).find("]") != -1:
                             scan_pos += 1
                             has_first_bracket_literal = True
                     while scan_pos < self.length:

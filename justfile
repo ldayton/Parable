@@ -31,19 +31,27 @@ src-fmt *ARGS: (_banner "src-fmt")
 src-verify-lock: (_banner "src-verify-lock")
     uv lock --check
 
-# Run Tongues pycheck on source (4 known bytearray errors: ldayton/Tongues#244)
+# Verify Tongues is installed at required version
 [group: 'source']
-pycheck: (_banner "pycheck")
+check-tongues: (_banner "check-tongues")
     #!/usr/bin/env bash
     set -euo pipefail
-    errors=$(tongues --stop-at pycheck src/parable.py 2>&1 || true)
-    count=$(echo "$errors" | grep -c '^\[*error' || true)
-    if [[ $count -gt 4 ]]; then
-        echo "$errors"
-        echo "FAIL: expected at most 4 pycheck errors (bytearray), got $count"
+    required="0.2.1"
+    if ! command -v tongues &>/dev/null; then
+        echo "FAIL: tongues not found. Install with: brew install ldayton/tap/tongues"
         exit 1
     fi
-    echo "OK ($count known bytearray errors)"
+    version=$(tongues --version)
+    if [[ "$(printf '%s\n' "$required" "$version" | sort -V | head -1)" != "$required" ]]; then
+        echo "FAIL: tongues $version < $required. Run: brew upgrade tongues"
+        exit 1
+    fi
+    echo "OK (tongues $version)"
+
+# Run Tongues pycheck on source
+[group: 'source']
+pycheck: check-tongues (_banner "pycheck")
+    tongues --stop-at pycheck src/parable.py > /dev/null
 
 # --- CI/Check ---
 

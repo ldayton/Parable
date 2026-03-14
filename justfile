@@ -28,21 +28,6 @@ src-lint *ARGS: (_banner "src-lint")
 src-fmt *ARGS: (_banner "src-fmt")
     uvx ruff format {{ if ARGS == "--fix" { "" } else { "--check" } }} src/
 
-# Verify source is subset-compliant
-[group: 'source']
-src-subset: (_banner "src-subset")
-    uv run --directory transpiler python -m src.tongues --verify < src/parable.py
-
-# Verify transpiler is subset-compliant (self-hosting)
-[group: 'transpiler']
-transpiler-subset: (_banner "transpiler-subset")
-    just -f transpiler/justfile style
-
-# Run transpiler tests
-[group: 'transpiler']
-transpiler-test: (_banner "transpiler-test")
-    just -f transpiler/justfile test-transpiler
-
 # Verify lock file is up to date
 [group: 'source']
 src-verify-lock: (_banner "src-verify-lock")
@@ -53,12 +38,12 @@ src-verify-lock: (_banner "src-verify-lock")
 # Transpile via Docker
 [group: 'backends']
 backend-transpile backend: (_banner "backend-transpile " + backend)
-    just -f dist/{{backend}}/justfile transpile "$(pwd)/src/parable.py" "$(pwd)/transpiler"
+    just -f dist/{{backend}}/justfile transpile "$(pwd)/src/parable.py"
 
 # Run tests via Docker
 [group: 'backends']
 backend-test backend: (_banner "backend-test " + backend)
-    just -f dist/{{backend}}/justfile check "$(pwd)/src/parable.py" "$(pwd)/transpiler" "$(pwd)/tests"
+    just -f dist/{{backend}}/justfile check "$(pwd)/src/parable.py" "$(pwd)/tests"
 
 # --- CI/Check ---
 
@@ -71,7 +56,7 @@ c-compile:
 # Internal: run all parallel checks
 [private]
 [parallel]
-_check-parallel: src-test src-lint src-fmt src-verify-lock src-subset transpiler-subset transpiler-test check-dump-ast _backend-test-all
+_check-parallel: src-test src-lint src-fmt src-verify-lock check-dump-ast _backend-test-all
 
 # Internal: run backend tests in parallel
 [private]
@@ -100,7 +85,7 @@ check: _ensure-biome _check-parallel
 
 # Quick check: test source, transpile and test Go
 [group: 'ci']
-check-quick: src-subset transpiler-subset src-test (backend-test "go")
+check-quick: src-test (backend-test "go")
 
 # --- Tools ---
 
@@ -195,7 +180,7 @@ backend-coverage backend:
         go)
             rm -rf /tmp/parable-coverage-go-raw
             mkdir -p /tmp/parable-coverage-go-raw
-            just -f dist/go/justfile transpile "$(pwd)/src/parable.py" "$(pwd)/transpiler"
+            just -f dist/go/justfile transpile "$(pwd)/src/parable.py"
             GOCOVERDIR=/tmp/parable-coverage-go-raw go run -C dist/go -cover ./cmd/run-tests "$(pwd)/tests"
             go tool covdata textfmt -i=/tmp/parable-coverage-go-raw -o=/tmp/parable-coverage-go.txt
             cd dist/go && go tool cover -html=/tmp/parable-coverage-go.txt -o=/tmp/parable-coverage-go.html

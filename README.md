@@ -145,12 +145,6 @@ print(ast[0].to_sexp())
 src/
 └── parable.py                   # Single-file Python parser
 
-transpiler/                      # Python → multi-language transpiler
-├── src/frontend/                # Parser and type inference
-├── src/middleend/               # Analysis passes
-└── src/backend/                 # Code generators
-├── src/ir.py                    # Intermediate representation
-
 tests/
 ├── bin/                         # Test runners + corpus utilities
 ├── parable/                     # Parable test cases

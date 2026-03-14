@@ -23,9 +23,9 @@ class ParseError(Exception):
 
     def _format_message(self) -> str:
         if self.line != 0 and self.pos != 0:
-            return f"Parse error at line {self.line}, position {self.pos}: {self.message}"
+            return f"Parse error at line {str(self.line)}, position {str(self.pos)}: {self.message}"
         elif self.pos != 0:
-            return f"Parse error at position {self.pos}: {self.message}"
+            return f"Parse error at position {str(self.pos)}: {self.message}"
         return f"Parse error: {self.message}"
 
 
@@ -229,10 +229,10 @@ class Token:
 
     def __repr__(self) -> str:
         if self.word:
-            return f"Token({self.type}, {self.value}, {self.pos}, word={self.word})"
+            return f"Token({str(self.type)}, {self.value}, {str(self.pos)}, word={self.word})"
         if self.parts:
-            return f"Token({self.type}, {self.value}, {self.pos}, parts={len(self.parts)})"
-        return f"Token({self.type}, {self.value}, {self.pos})"
+            return f"Token({str(self.type)}, {self.value}, {str(self.pos)}, parts={str(len(self.parts))})"
+        return f"Token({str(self.type)}, {self.value}, {str(self.pos)})"
 
 
 class ParserStateFlags:
@@ -790,6 +790,7 @@ class Lexer:
             elif for_regex and c == "$":
                 # Callback to Parser for dollar expansion
                 self._sync_to_parser()
+                assert self._parser is not None
                 if not self._parser._parse_dollar_expansion(chars, parts):
                     self._sync_from_parser()
                     chars.append(self.advance())
@@ -958,6 +959,7 @@ class Lexer:
                     # ${ ... } parameter expansion - use full parsing
                     self.pos -= 1  # back up to before $
                     self._sync_to_parser()
+                    assert self._parser is not None
                     in_dquote = bool(flags & MatchedPairFlags.DQUOTE)
                     param_node, param_text = self._parser._parse_param_expansion(in_dquote)
                     self._sync_from_parser()
@@ -975,6 +977,7 @@ class Lexer:
                     # Back up to before $ for Parser callback
                     self.pos -= 1
                     self._sync_to_parser()
+                    assert self._parser is not None
                     # Check if $(( arithmetic or $( command substitution
                     if self.pos + 2 < self.length and self.source[self.pos + 2] == "(":
                         # $(( ... )) arithmetic - use full parsing
@@ -987,6 +990,7 @@ class Lexer:
                         else:
                             # Arithmetic failed - try as command substitution fallback
                             self._sync_to_parser()
+                            assert self._parser is not None
                             cmd_node, cmd_text = self._parser._parse_command_substitution()
                             self._sync_from_parser()
                             if cmd_node:
@@ -1001,6 +1005,7 @@ class Lexer:
                                 was_gtlt = False
                     else:
                         # $( ... ) command substitution - use full parsing
+                        assert self._parser is not None
                         cmd_node, cmd_text = self._parser._parse_command_substitution()
                         self._sync_from_parser()
                         if cmd_node:
@@ -1018,6 +1023,7 @@ class Lexer:
                     # Deprecated $[ ... ] arithmetic - use full parsing
                     self.pos -= 1  # back up to before $
                     self._sync_to_parser()
+                    assert self._parser is not None
                     arith_node, arith_text = self._parser._parse_deprecated_arithmetic()
                     self._sync_from_parser()
                     if arith_node:
@@ -1042,6 +1048,7 @@ class Lexer:
                 direction = chars.pop()
                 self.pos -= 1  # Back up before (
                 self._sync_to_parser()
+                assert self._parser is not None
                 procsub_node, procsub_text = self._parser._parse_process_substitution()
                 self._sync_from_parser()
                 if procsub_node:
@@ -1201,6 +1208,7 @@ class Lexer:
                         elif c == "$":
                             # Callback to Parser for dollar expansion (inside dquote)
                             self._sync_to_parser()
+                            assert self._parser is not None
                             if not self._parser._parse_dollar_expansion(
                                 chars, parts, in_dquote=True
                             ):
@@ -1277,6 +1285,7 @@ class Lexer:
             # Dollar expansions - callback to Parser
             if ch == "$":
                 self._sync_to_parser()
+                assert self._parser is not None
                 if not self._parser._parse_dollar_expansion(chars, parts):
                     self._sync_from_parser()
                     chars.append(self.advance())
@@ -1577,6 +1586,7 @@ class Lexer:
             ):
                 # Delegate to Parser (sync positions for callback)
                 self._sync_to_parser()
+                assert self._parser is not None
                 arith_node, arith_text = self._parser._parse_arithmetic_expansion()
                 self._sync_from_parser()
                 if arith_node:
@@ -1585,6 +1595,7 @@ class Lexer:
                 else:
                     # Not arithmetic - try command substitution
                     self._sync_to_parser()
+                    assert self._parser is not None
                     cmdsub_node, cmdsub_text = self._parser._parse_command_substitution()
                     self._sync_from_parser()
                     if cmdsub_node:
@@ -1595,6 +1606,7 @@ class Lexer:
             # Handle command substitution $(...)
             elif _is_expansion_start(self.source, self.pos, "$("):
                 self._sync_to_parser()
+                assert self._parser is not None
                 cmdsub_node, cmdsub_text = self._parser._parse_command_substitution()
                 self._sync_from_parser()
                 if cmdsub_node:
@@ -1605,6 +1617,7 @@ class Lexer:
             # Handle parameter expansion
             elif ch == "$":
                 self._sync_to_parser()
+                assert self._parser is not None
                 param_node, param_text = self._parser._parse_param_expansion()
                 self._sync_from_parser()
                 if param_node:
@@ -1615,6 +1628,7 @@ class Lexer:
             # Handle backtick command substitution
             elif ch == "`":
                 self._sync_to_parser()
+                assert self._parser is not None
                 cmdsub_node, cmdsub_text = self._parser._parse_backtick_substitution()
                 self._sync_from_parser()
                 if cmdsub_node:
@@ -5324,90 +5338,90 @@ def _format_cmdsub_node(
                     if has_heredoc:
                         break
         # Join commands with operators
-        result: list[str] = []
+        segments: list[str] = []
         skipped_semi = False
         cmd_count = 0  # Track number of non-operator commands seen
         for p in node.parts:
             if isinstance(p, Operator):
                 if p.op == ";":
                     # Skip semicolon if previous command ends with heredoc (newline)
-                    if result and result[len(result) - 1].endswith("\n"):
+                    if segments and segments[len(segments) - 1].endswith("\n"):
                         skipped_semi = True
                         continue
                     # Skip semicolon after pattern: heredoc, newline, command
                     if (
-                        len(result) >= 3
-                        and result[len(result) - 2] == "\n"
-                        and result[len(result) - 3].endswith("\n")
+                        len(segments) >= 3
+                        and segments[len(segments) - 2] == "\n"
+                        and segments[len(segments) - 3].endswith("\n")
                     ):
                         skipped_semi = True
                         continue
-                    result.append(";")
+                    segments.append(";")
                     skipped_semi = False
                 elif p.op == "\n":
                     # Skip newline if it follows a semicolon (redundant separator)
-                    if result and result[len(result) - 1] == ";":
+                    if segments and segments[len(segments) - 1] == ";":
                         skipped_semi = False
                         continue
                     # If previous ends with heredoc newline
-                    if result and result[len(result) - 1].endswith("\n"):
+                    if segments and segments[len(segments) - 1].endswith("\n"):
                         # Add space if semicolon was skipped, else newline
-                        result.append(" " if skipped_semi else "\n")
+                        segments.append(" " if skipped_semi else "\n")
                         skipped_semi = False
                         continue
-                    result.append("\n")
+                    segments.append("\n")
                     skipped_semi = False
                 elif p.op == "&":
                     # If previous command has heredoc, insert & before heredoc content
                     # But if it's a pipeline (contains |), append at end instead
                     if (
-                        result
-                        and "<<" in result[len(result) - 1]
-                        and "\n" in result[len(result) - 1]
+                        segments
+                        and "<<" in segments[len(segments) - 1]
+                        and "\n" in segments[len(segments) - 1]
                     ):
-                        last = result[len(result) - 1]
+                        last = segments[len(segments) - 1]
                         # If this is a pipeline (has |), append & at the end
                         if " |" in last or last.startswith("|"):
-                            result[len(result) - 1] = last + " &"
+                            segments[len(segments) - 1] = last + " &"
                         else:
                             first_nl = last.find("\n")
-                            result[len(result) - 1] = last[:first_nl] + " &" + last[first_nl:]
+                            segments[len(segments) - 1] = last[:first_nl] + " &" + last[first_nl:]
                     else:
-                        result.append(" &")
+                        segments.append(" &")
                 else:
                     # For || and &&, insert before heredoc content like we do for &
                     if (
-                        result
-                        and "<<" in result[len(result) - 1]
-                        and "\n" in result[len(result) - 1]
+                        segments
+                        and "<<" in segments[len(segments) - 1]
+                        and "\n" in segments[len(segments) - 1]
                     ):
-                        last = result[len(result) - 1]
+                        last = segments[len(segments) - 1]
                         first_nl = last.find("\n")
-                        result[len(result) - 1] = (
+                        segments[len(segments) - 1] = (
                             last[:first_nl] + " " + p.op + " " + last[first_nl:]
                         )
                     else:
-                        result.append(" " + p.op)
+                        segments.append(" " + p.op)
             else:
-                if result and not result[len(result) - 1].endswith((" ", "\n")):
-                    result.append(" ")
+                if segments and not segments[len(segments) - 1].endswith((" ", "\n")):
+                    segments.append(" ")
                 # Only first command in list inherits procsub_first
                 formatted_cmd = _format_cmdsub_node(
                     p, indent, in_procsub, compact_redirects, procsub_first and cmd_count == 0
                 )
                 # After heredoc with || or && inserted, add leading space to next command
-                if len(result) > 0:
-                    last = result[len(result) - 1]
+                if len(segments) > 0:
+                    last = segments[len(segments) - 1]
                     if " || \n" in last or " && \n" in last:
                         formatted_cmd = " " + formatted_cmd
                 # When semicolon was skipped due to heredoc, add leading space
                 if skipped_semi:
                     formatted_cmd = " " + formatted_cmd
                     skipped_semi = False
-                result.append(formatted_cmd)
+                segments.append(formatted_cmd)
                 cmd_count += 1
         # Strip trailing ; or newline (but preserve heredoc's trailing newline)
-        s = "".join(result)
+        s = "".join(segments)
         # If we have & with heredoc (& before newline content), preserve trailing newline and add space
         if " &\n" in s and s.endswith("\n"):
             return s + " "

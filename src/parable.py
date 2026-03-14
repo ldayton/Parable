@@ -135,7 +135,7 @@ def _sublist(lst: list[Node], start: int, end: int) -> list[Node]:
 
 def _repeat_str(s: str, n: int) -> str:
     """Repeat string s n times."""
-    result = []
+    result: list[str] = []
     i = 0
     while i < n:
         result.append(s)
@@ -418,14 +418,14 @@ class ContextStack:
 
     def copy_stack(self) -> list[ParseContext]:
         """Return a deep copy of the context stack for state saving."""
-        result = []
+        result: list[ParseContext] = []
         for ctx in self._stack:
             result.append(ctx.copy())
         return result
 
     def restore_from(self, saved_stack: list[ParseContext]) -> None:
         """Restore the context stack from a saved copy."""
-        result = []
+        result: list[ParseContext] = []
         for ctx in saved_stack:
             result.append(ctx.copy())
         self._stack = result
@@ -2037,7 +2037,7 @@ def _strip_line_continuations_comment_aware(text: str) -> str:
     In comments, backslash-newline is replaced with just newline (to keep the comment
     terminator). Outside comments, backslash-newline is fully removed.
     """
-    result = []
+    result: list[str] = []
     i = 0
     in_comment = False
     quote = QuoteState()
@@ -2080,7 +2080,7 @@ def _strip_line_continuations_comment_aware(text: str) -> str:
 def _append_redirects(base: str, redirects: list[Node] | None) -> str:
     """Append redirect sexp strings to a base sexp string."""
     if redirects:
-        parts = []
+        parts: list[str] = []
         for r in redirects:
             parts.append(r.to_sexp())
         return base + " " + " ".join(parts)
@@ -2144,7 +2144,7 @@ class Word(Node):
 
     def _double_ctlesc_smart(self, value: str) -> str:
         """Double CTLESC bytes unless escaped by backslash inside double quotes."""
-        result = []
+        result: list[str] = []
         quote = QuoteState()
         for c in value:
             # Track quote state
@@ -2176,7 +2176,7 @@ class Word(Node):
         When there's a newline immediately after ${, bash converts it to a space
         and adds a trailing space before the closing }.
         """
-        result = []
+        result: list[str] = []
         i = 0
         quote = QuoteState()
         while i < len(value):
@@ -2378,7 +2378,7 @@ class Word(Node):
 
     def _expand_all_ansi_c_quotes(self, value: str) -> str:
         """Find and expand ALL $'...' ANSI-C quoted strings in value."""
-        result = []
+        result: list[str] = []
         i = 0
         quote = QuoteState()
         in_backtick = False  # Track backtick substitutions - don't expand inside
@@ -2562,7 +2562,7 @@ class Word(Node):
 
     def _strip_locale_string_dollars(self, value: str) -> str:
         """Strip $ from locale strings $"..." while tracking quote context."""
-        result = []
+        result: list[str] = []
         i = 0
         brace_depth = 0
         bracket_depth = 0
@@ -2750,7 +2750,7 @@ class Word(Node):
 
     def _normalize_array_inner(self, inner: str) -> str:
         """Normalize whitespace inside array content, handling nested constructs."""
-        normalized = []
+        normalized: list[str] = []
         i = 0
         in_whitespace = True  # Start true to skip leading whitespace
         brace_depth = 0  # Track ${...} nesting
@@ -2931,7 +2931,7 @@ class Word(Node):
 
     def _strip_arith_line_continuations(self, value: str) -> str:
         """Strip backslash-newline (line continuation) from inside $((...))."""
-        result = []
+        result: list[str] = []
         i = 0
         while i < len(value):
             # Check for $(( arithmetic expression
@@ -2939,7 +2939,7 @@ class Word(Node):
                 start = i
                 i += 3
                 depth = 2  # Track single parens: $(( starts at depth 2
-                arith_content = []
+                arith_content: list[str] = []
                 # Track position of first ) that brings depth 2→1 (-1 = not set)
                 first_close_idx: int = -1
                 while i < len(value) and depth > 0:
@@ -3053,8 +3053,8 @@ class Word(Node):
     def _format_command_substitutions(self, value: str, in_arith: bool = False) -> str:
         """Replace $(...) and >(...) / <(...) with bash-oracle-formatted AST output."""
         # Collect command substitutions from all parts, including nested ones
-        cmdsub_parts = []
-        procsub_parts = []
+        cmdsub_parts: list[Node] = []
+        procsub_parts: list[Node] = []
         has_arith = False  # Track if we have any arithmetic expansion nodes
         for p in self.parts:
             if p.kind == "cmdsub":
@@ -3121,7 +3121,7 @@ class Word(Node):
             and not has_param_with_procsub_pattern
         ):
             return value
-        result = []
+        result: list[str] = []
         i = 0
         cmdsub_idx = 0
         procsub_idx = 0
@@ -3511,7 +3511,7 @@ class Word(Node):
 
     def _normalize_extglob_whitespace(self, value: str) -> str:
         """Normalize whitespace around | in >() and <() patterns for regex contexts."""
-        result = []
+        result: list[str] = []
         i = 0
         extglob_quote = QuoteState()
         deprecated_arith_depth = 0  # Track $[...] depth
@@ -3544,8 +3544,8 @@ class Word(Node):
                     i += 2
                     # Process content until matching )
                     depth = 1
-                    pattern_parts = []
-                    current_part = []
+                    pattern_parts: list[str] = []
+                    current_part: list[str] = []
                     has_pipe = False
                     while i < len(value) and depth > 0:
                         if value[i] == "\\" and i + 1 < len(value):
@@ -3586,7 +3586,7 @@ class Word(Node):
                                     pattern_parts.append(part_content)
                                 else:
                                     pattern_parts.append(part_content.strip())
-                                current_part = []
+                                current_part: list[str] = []
                                 i += 1
                         else:
                             current_part.append(value[i])
@@ -3631,7 +3631,7 @@ class Command(Node):
         self.redirects = redirects
 
     def to_sexp(self) -> str:
-        parts = []
+        parts: list[str] = []
         for w in self.words:
             parts.append(w.to_sexp())
         for r in self.redirects:
@@ -3655,7 +3655,7 @@ class Pipeline(Node):
         if len(self.commands) == 1:
             return self.commands[0].to_sexp()
         # Build list of (cmd, needs_pipe_both_redirect) filtering out PipeBoth markers
-        cmds = []
+        cmds: list[tuple[Node, bool]] = []
         i = 0
         while i < len(self.commands):
             cmd = self.commands[i]
@@ -3695,7 +3695,7 @@ class Pipeline(Node):
             return cmd.to_sexp()
         if cmd.kind == "command":
             # Inject redirect inside command
-            parts = []
+            parts: list[str] = []
             for w in cmd.words:
                 parts.append(w.to_sexp())
             for r in cmd.redirects:
@@ -3759,13 +3759,13 @@ class List(Node):
         # Process operators by precedence: ; (lowest), then &, then && and ||
         # Use iterative approach to avoid stack overflow on large lists
         # Find all ; or \n positions (may not be at regular intervals due to consecutive ops)
-        semi_positions = []
+        semi_positions: list[int] = []
         for i in range(len(parts)):
             if parts[i].kind == "operator" and (parts[i].op == ";" or parts[i].op == "\n"):
                 semi_positions.append(i)
         if semi_positions:
             # Split into segments at ; and \n positions, filtering empty/operator-only segments
-            segments = []
+            segments: list[list[Node]] = []
             start = 0
             for pos in semi_positions:
                 seg = _sublist(parts, start, pos)
@@ -3796,13 +3796,13 @@ class List(Node):
         # Handle & operator iteratively
         if len(parts) == 1:
             return parts[0].to_sexp()
-        amp_positions = []
+        amp_positions: list[int] = []
         for i in range(1, len(parts) - 1, 2):
             if parts[i].kind == "operator" and parts[i].op == "&":
                 amp_positions.append(i)
         if amp_positions:
             # Split into segments at & positions
-            segments = []
+            segments: list[list[Node]] = []
             start = 0
             for pos in amp_positions:
                 segments.append(_sublist(parts, start, pos))
@@ -4139,7 +4139,7 @@ class For(Node):
         # bash-oracle format: (for (word "var") (in (word "a") ...) body)
         suffix = ""
         if self.redirects:
-            redirect_parts = []
+            redirect_parts: list[str] = []
             for r in self.redirects:
                 redirect_parts.append(r.to_sexp())
             suffix = " " + " ".join(redirect_parts)
@@ -4161,7 +4161,7 @@ class For(Node):
             # Empty 'in' clause - bash-oracle outputs (in)
             return '(for (word "' + var_escaped + '") (in) ' + self.body.to_sexp() + ")" + suffix
         else:
-            word_parts = []
+            word_parts: list[str] = []
             for w in self.words:
                 word_parts.append(w.to_sexp())
             word_strs = " ".join(word_parts)
@@ -4213,7 +4213,7 @@ class ForArith(Node):
         # bash-oracle format: (arith-for (init (word "x")) (test (word "y")) (step (word "z")) body)
         suffix = ""
         if self.redirects:
-            redirect_parts = []
+            redirect_parts: list[str] = []
             for r in self.redirects:
                 redirect_parts.append(r.to_sexp())
             suffix = " " + " ".join(redirect_parts)
@@ -4250,13 +4250,13 @@ class Select(Node):
         # bash-oracle format: (select (word "var") (in (word "a") ...) body)
         suffix = ""
         if self.redirects:
-            redirect_parts = []
+            redirect_parts: list[str] = []
             for r in self.redirects:
                 redirect_parts.append(r.to_sexp())
             suffix = " " + " ".join(redirect_parts)
         var_escaped = self.var.replace("\\", "\\\\").replace('"', '\\"')
         if self.words is not None:
-            word_parts = []
+            word_parts: list[str] = []
             for w in self.words:
                 word_parts.append(w.to_sexp())
             word_strs = " ".join(word_parts)
@@ -4297,7 +4297,7 @@ class Case(Node):
         self.redirects = redirects
 
     def to_sexp(self) -> str:
-        parts = []
+        parts: list[str] = []
         parts.append("(case " + self.word.to_sexp())
         for p in self.patterns:
             parts.append(p.to_sexp())
@@ -4408,8 +4408,8 @@ class CasePattern(Node):
     def to_sexp(self) -> str:
         # bash-oracle format: (pattern ((word "a") (word "b")) body)
         # Split pattern by | respecting escapes, extglobs, quotes, and brackets
-        alternatives = []
-        current = []
+        alternatives: list[str] = []
+        current: list[str] = []
         i = 0
         depth = 0  # Track extglob/paren depth
         while i < len(self.pattern):
@@ -4455,13 +4455,13 @@ class CasePattern(Node):
                 current.extend(result[1])
             elif ch == "|" and depth == 0:
                 alternatives.append("".join(current))
-                current = []
+                current: list[str] = []
                 i += 1
             else:
                 current.append(ch)
                 i += 1
         alternatives.append("".join(current))
-        word_list = []
+        word_list: list[str] = []
         for alt in alternatives:
             # Use Word.to_sexp() to properly expand ANSI-C quotes and escape
             word_list.append(Word(alt).to_sexp())
@@ -4624,7 +4624,7 @@ class ArithmeticCommand(Node):
         )
         result = '(arith (word "' + escaped + '"))'
         if self.redirects:
-            redirect_parts = []
+            redirect_parts: list[str] = []
             for r in self.redirects:
                 redirect_parts.append(r.to_sexp())
             redirect_sexps = " ".join(redirect_parts)
@@ -4872,7 +4872,7 @@ class ArithConcat(ArithNode):
         self.parts = parts
 
     def to_sexp(self) -> str:
-        sexps = []
+        sexps: list[str] = []
         for p in self.parts:
             sexps.append(p.to_sexp())
         return "(arith-concat " + " ".join(sexps) + ")"
@@ -4983,7 +4983,7 @@ class ConditionalExpr(Node):
         else:
             result = "(cond " + body.to_sexp() + ")"
         if self.redirects:
-            redirect_parts = []
+            redirect_parts: list[str] = []
             for r in self.redirects:
                 redirect_parts.append(r.to_sexp())
             redirect_sexps = " ".join(redirect_parts)
@@ -5111,7 +5111,7 @@ class Array(Node):
     def to_sexp(self) -> str:
         if not self.elements:
             return "(array)"
-        parts = []
+        parts: list[str] = []
         for e in self.elements:
             parts.append(e.to_sexp())
         inner = " ".join(parts)
@@ -5190,7 +5190,7 @@ def _format_cmdsub_node(
     if node.kind == "empty":
         return ""
     if node.kind == "command":
-        parts = []
+        parts: list[str] = []
         for w in node.words:
             val = w._expand_all_ansi_c_quotes(w.value)
             # Strip $ from locale strings $"..." (quote-aware)
@@ -5232,7 +5232,7 @@ def _format_cmdsub_node(
             cmds.append((cmd, needs_redirect))
             i += 1
         # Format pipeline, handling heredocs specially
-        result_parts = []
+        result_parts: list[tuple[Node, bool]] = []
         idx = 0
         while idx < len(cmds):
             cmd, needs_redirect = cmds[idx]
@@ -6292,7 +6292,7 @@ def _is_quote(c: str) -> bool:
 
 def _collapse_whitespace(s: str) -> str:
     """Collapse consecutive tabs/spaces to single space and strip."""
-    result = []
+    result: list[str] = []
     prev_was_ws = False
     for c in s:
         if c == " " or c == "\t":
@@ -6319,7 +6319,7 @@ def _count_trailing_backslashes(s: str) -> int:
 
 def _normalize_heredoc_delimiter(delimiter: str) -> str:
     """Normalize heredoc delimiter for matching."""
-    result = []
+    result: list[str] = []
     i = 0
     while i < len(delimiter):
         # Handle command substitution $(...)
@@ -6327,7 +6327,7 @@ def _normalize_heredoc_delimiter(delimiter: str) -> str:
             result.append("$(")
             i += 2
             depth = 1
-            inner = []
+            inner: list[str] = []
             while i < len(delimiter) and depth > 0:
                 if delimiter[i] == "(":
                     depth += 1
@@ -6349,7 +6349,7 @@ def _normalize_heredoc_delimiter(delimiter: str) -> str:
             result.append("${")
             i += 2
             depth = 1
-            inner = []
+            inner: list[str] = []
             while i < len(delimiter) and depth > 0:
                 if delimiter[i] == "{":
                     depth += 1
@@ -6372,7 +6372,7 @@ def _normalize_heredoc_delimiter(delimiter: str) -> str:
             result.append("(")
             i += 2
             depth = 1
-            inner = []
+            inner: list[str] = []
             while i < len(delimiter) and depth > 0:
                 if delimiter[i] == "(":
                     depth += 1
@@ -7107,7 +7107,7 @@ class Parser:
 
     def _collect_redirects(self) -> list[Node] | None:
         """Collect trailing redirects after a compound command."""
-        redirects = []
+        redirects: list[Node] = []
         while True:
             self.skip_whitespace()
             redirect = self.parse_redirect()
@@ -7146,7 +7146,7 @@ class Parser:
             self.pos = saved_pos
             return None
 
-        chars = []
+        chars: list[str] = []
         while not self.at_end() and not _is_metachar(self.peek()):
             ch = self.peek()
             # Stop at quotes - don't include in peek
@@ -7752,7 +7752,7 @@ class Parser:
         self.advance()  # consume (
         self._set_state(ParserStateFlags.PST_COMPASSIGN)
 
-        elements = []
+        elements: list[Word] = []
 
         while True:
             # Skip whitespace, newlines, and comments between elements
@@ -8339,7 +8339,7 @@ class Parser:
             return self._arith_parse_braced_param()
 
         # Simple $var
-        name_chars = []
+        name_chars: list[str] = []
         while not self._arith_at_end():
             ch = self._arith_peek()
             if ch.isalnum() or ch == "_":
@@ -8413,7 +8413,7 @@ class Parser:
         # Handle indirect ${!var}
         if self._arith_peek() == "!":
             self._arith_advance()
-            name_chars = []
+            name_chars: list[str] = []
             while not self._arith_at_end() and self._arith_peek() != "}":
                 name_chars.append(self._arith_advance())
             self._arith_consume("}")
@@ -8422,14 +8422,14 @@ class Parser:
         # Handle length ${#var}
         if self._arith_peek() == "#":
             self._arith_advance()
-            name_chars = []
+            name_chars: list[str] = []
             while not self._arith_at_end() and self._arith_peek() != "}":
                 name_chars.append(self._arith_advance())
             self._arith_consume("}")
             return ParamLength("".join(name_chars))
 
         # Regular ${var} or ${var...}
-        name_chars = []
+        name_chars: list[str] = []
         while not self._arith_at_end():
             ch = self._arith_peek()
             if ch == "}":
@@ -8443,7 +8443,7 @@ class Parser:
         name = "".join(name_chars)
 
         # Check for operator
-        op_chars = []
+        op_chars: list[str] = []
         depth = 1
         while not self._arith_at_end() and depth > 0:
             ch = self._arith_peek()
@@ -8534,7 +8534,7 @@ class Parser:
     def _arith_parse_number_or_var(self) -> Node:
         """Parse a number or variable name."""
         self._arith_skip_ws()
-        chars = []
+        chars: list[str] = []
         c = self._arith_peek()
 
         # Check for number (starts with digit or base#)
@@ -8613,7 +8613,7 @@ class Parser:
         if self.peek() == "{":
             saved = self.pos
             self.advance()  # consume {
-            varname_chars = []
+            varname_chars: list[str] = []
             in_bracket = False
             while not self.at_end() and not _is_redirect_char(self.peek()):
                 ch = self.peek()
@@ -9131,8 +9131,8 @@ class Parser:
 
     def parse_command(self) -> Command | None:
         """Parse a simple command (sequence of words and redirections)."""
-        words = []
-        redirects = []
+        words: list[Word] = []
+        redirects: list[Node] = []
 
         while True:
             self.skip_whitespace()
@@ -9836,8 +9836,8 @@ class Parser:
 
         # Parse the three expressions separated by semicolons
         # Each can be empty
-        parts = []
-        current = []
+        parts: list[str] = []
+        current: list[str] = []
         paren_depth = 0
 
         while not self.at_end():
@@ -9862,7 +9862,7 @@ class Parser:
             elif ch == ";" and paren_depth == 0:
                 # Preserve trailing whitespace in expressions
                 parts.append("".join(current).lstrip(" \t"))
-                current = []
+                current: list[str] = []
                 self.advance()  # consume ;
             else:
                 current.append(self.advance())
@@ -10018,7 +10018,7 @@ class Parser:
             # Parse pattern (everything until ')' at depth 0)
             # Pattern can contain | for alternation, quotes, globs, extglobs, etc.
             # Extglob patterns @(), ?(), *(), +(), !() contain nested parens
-            pattern_chars = []
+            pattern_chars: list[str] = []
             extglob_depth = 0
             while not self.at_end():
                 ch = self.peek()
@@ -10908,7 +10908,7 @@ class Parser:
         if not source:
             return [Empty()]
 
-        results = []
+        results: list[Node] = []
 
         # Skip leading comments (bash-oracle doesn't output them)
         while True:

@@ -1354,8 +1354,9 @@ class Lexer:
                     assert self._parser is not None
                     array_result = self._parser._parse_array_literal()
                     self._sync_from_parser()
-                    if array_result[0]:
-                        parts.append(array_result[0])
+                    array_node = array_result[0]
+                    if array_node is not None:
+                        parts.append(array_node)
                         chars.append(array_result[1])
                     else:
                         break
@@ -4027,9 +4028,9 @@ class Subshell(Node):
     """A subshell ( list )."""
 
     body: Node
-    redirects: list[Redirect | HereDoc] | None = None
+    redirects: list[Node] | None = None
 
-    def __init__(self, body: Node, redirects: list[Redirect | HereDoc] | None = None):
+    def __init__(self, body: Node, redirects: list[Node] | None = None):
         self.kind = "subshell"
         self.body = body
         self.redirects = redirects
@@ -4043,9 +4044,9 @@ class BraceGroup(Node):
     """A brace group { list; }."""
 
     body: Node
-    redirects: list[Redirect | HereDoc] | None = None
+    redirects: list[Node] | None = None
 
-    def __init__(self, body: Node, redirects: list[Redirect | HereDoc] | None = None):
+    def __init__(self, body: Node, redirects: list[Node] | None = None):
         self.kind = "brace-group"
         self.body = body
         self.redirects = redirects
@@ -5219,7 +5220,7 @@ def _format_cmdsub_node(
         # Check for heredocs - their bodies need to come at the end
         heredocs: list[HereDoc] = []
         for r in node.redirects:
-            if r.kind == "heredoc":
+            if isinstance(r, HereDoc):
                 heredocs.append(r)
         for r in node.redirects:
             # For heredocs, output just the operator part; body comes at end
@@ -5249,7 +5250,7 @@ def _format_cmdsub_node(
             cmds.append((cmd, needs_redirect))
             i += 1
         # Format pipeline, handling heredocs specially
-        result_parts: list[tuple[Node, bool]] = []
+        result_parts: list[str] = []
         idx = 0
         while idx < len(cmds):
             cmd, needs_redirect = cmds[idx]
@@ -5308,27 +5309,27 @@ def _format_cmdsub_node(
         # Check if any command in the list has a heredoc redirect
         has_heredoc = False
         for p in node.parts:
-            if p.kind == "command" and p.redirects:
+            if isinstance(p, Command) and p.redirects:
                 for r in p.redirects:
-                    if r.kind == "heredoc":
+                    if isinstance(r, HereDoc):
                         has_heredoc = True
                         break
-            elif p.kind == "pipeline":
+            elif isinstance(p, Pipeline):
                 # Check commands within the pipeline
                 for cmd in p.commands:
-                    if cmd.kind == "command" and cmd.redirects:
+                    if isinstance(cmd, Command) and cmd.redirects:
                         for r in cmd.redirects:
-                            if r.kind == "heredoc":
+                            if isinstance(r, HereDoc):
                                 has_heredoc = True
                                 break
                     if has_heredoc:
                         break
         # Join commands with operators
-        result = []
+        result: list[str] = []
         skipped_semi = False
         cmd_count = 0  # Track number of non-operator commands seen
         for p in node.parts:
-            if p.kind == "operator":
+            if isinstance(p, Operator):
                 if p.op == ";":
                     # Skip semicolon if previous command ends with heredoc (newline)
                     if result and result[len(result) - 1].endswith("\n"):
@@ -5528,16 +5529,16 @@ def _format_cmdsub_node(
                 redirect_parts.append(_format_redirect(r))
             redirects = " " + " ".join(redirect_parts)
         return "case " + word + " in" + pattern_str + "\n" + sp + "esac" + redirects
-    if node.kind == "function":
+    if isinstance(node, Function):
         name = node.name
         # Get the body content - if it's a BraceGroup, unwrap it
-        inner_body = node.body.body if node.body.kind == "brace-group" else node.body
+        inner_body = node.body.body if isinstance(node.body, BraceGroup) else node.body
         body = _format_cmdsub_node(inner_body, indent + 4).rstrip(";")
         return f"function {name} () \n{{ \n{inner_sp}{body}\n}}"
-    if node.kind == "subshell":
+    if isinstance(node, Subshell):
         body = _format_cmdsub_node(node.body, indent, in_procsub, compact_redirects)
         redirects = ""
-        if node.redirects:
+        if node.redirects is not None and len(node.redirects) > 0:
             redirect_parts: list[str] = []
             for r in node.redirects:
                 redirect_parts.append(_format_redirect(r))
@@ -5556,7 +5557,7 @@ def _format_cmdsub_node(
         # Don't add semicolon after background operator
         terminator = " }" if body.endswith(" &") else "; }"
         redirects = ""
-        if node.redirects:
+        if node.redirects is not None and len(node.redirects) > 0:
             redirect_parts: list[str] = []
             for r in node.redirects:
                 redirect_parts.append(_format_redirect(r))
@@ -5564,9 +5565,9 @@ def _format_cmdsub_node(
         if redirects:
             return "{ " + body + terminator + " " + redirects
         return "{ " + body + terminator
-    if node.kind == "arith-cmd":
+    if isinstance(node, ArithmeticCommand):
         return "((" + node.raw_content + "))"
-    if node.kind == "cond-expr":
+    if isinstance(node, ConditionalExpr) and isinstance(node.body, CondNode):
         body = _format_cond_body(node.body)
         return "[[ " + body + " ]]"
     if node.kind == "negation":
@@ -5583,10 +5584,10 @@ def _format_cmdsub_node(
 
 
 def _format_redirect(
-    r: Redirect | HereDoc, compact: bool = False, heredoc_op_only: bool = False
+    r: Node, compact: bool = False, heredoc_op_only: bool = False
 ) -> str:
     """Format a redirect for command substitution output."""
-    if r.kind == "heredoc":
+    if isinstance(r, HereDoc):
         if r.strip_tabs:
             op = "<<-"
         else:
@@ -5604,6 +5605,7 @@ def _format_redirect(
             return op + delim
         # Include heredoc content: <<DELIM\ncontent\nDELIM\n
         return op + delim + "\n" + r.content + r.delimiter + "\n"
+    assert isinstance(r, Redirect)
     op = r.op
     # Normalize default fd: 1> -> >, 0< -> <
     if op == "1>":
@@ -9151,7 +9153,7 @@ class Parser:
         self._clear_state(ParserStateFlags.PST_HEREDOC)
         return heredoc
 
-    def parse_command(self) -> Command | None:
+    def parse_command(self) -> Node | None:
         """Parse a simple command (sequence of words and redirections)."""
         words: list[Word] = []
         redirects: list[Node] = []
@@ -9204,7 +9206,7 @@ class Parser:
 
         return Command(words, redirects)
 
-    def parse_subshell(self) -> Subshell | None:
+    def parse_subshell(self) -> Node | None:
         """Parse a subshell ( list )."""
         self.skip_whitespace()
         if self.at_end() or self.peek() != "(":
@@ -9594,7 +9596,7 @@ class Parser:
             raise ParseError("Expected } to close brace group", pos=self._lex_peek_token().pos)
         return BraceGroup(body, self._collect_redirects())
 
-    def parse_if(self) -> If | None:
+    def parse_if(self) -> Node | None:
         """Parse an if statement: if list; then list [elif list; then list]* [else list] fi."""
         self.skip_whitespace()
         if not self._lex_consume_word("if"):
@@ -9697,7 +9699,7 @@ class Parser:
 
         return If(condition, then_body, else_body)
 
-    def parse_while(self) -> While | None:
+    def parse_while(self) -> Node | None:
         """Parse a while loop: while list; do list; done."""
         self.skip_whitespace()
         if not self._lex_consume_word("while"):
@@ -9724,7 +9726,7 @@ class Parser:
             raise ParseError("Expected 'done' to close while loop", pos=self._lex_peek_token().pos)
         return While(condition, body, self._collect_redirects())
 
-    def parse_until(self) -> Until | None:
+    def parse_until(self) -> Node | None:
         """Parse an until loop: until list; do list; done."""
         self.skip_whitespace()
         if not self._lex_consume_word("until"):
@@ -9751,7 +9753,7 @@ class Parser:
             raise ParseError("Expected 'done' to close until loop", pos=self._lex_peek_token().pos)
         return Until(condition, body, self._collect_redirects())
 
-    def parse_for(self) -> For | ForArith | None:
+    def parse_for(self) -> Node | None:
         """Parse a for loop: for name [in words]; do list; done or C-style for ((;;))."""
         self.skip_whitespace()
         if not self._lex_consume_word("for"):
@@ -9906,7 +9908,7 @@ class Parser:
         body = self._parse_loop_body("for loop")
         return ForArith(init, cond, incr, body, self._collect_redirects())
 
-    def parse_select(self) -> Select | None:
+    def parse_select(self) -> Node | None:
         """Parse a select statement: select name [in words]; do list; done."""
         self.skip_whitespace()
         if not self._lex_consume_word("select"):
@@ -9968,7 +9970,7 @@ class Parser:
             return term
         return ";;"  # default
 
-    def parse_case(self) -> Case | None:
+    def parse_case(self) -> Node | None:
         """Parse a case statement: case word in pattern) commands;; ... esac."""
         # Use consume_word for initial keyword to handle leading } in process subs
         if not self.consume_word("case"):
@@ -10209,7 +10211,7 @@ class Parser:
         self._clear_state(ParserStateFlags.PST_CASESTMT)
         return Case(word, patterns, self._collect_redirects())
 
-    def parse_coproc(self) -> Coproc | None:
+    def parse_coproc(self) -> Node | None:
         """Parse a coproc statement.
 
         bash-oracle behavior:
@@ -10295,7 +10297,7 @@ class Parser:
 
         raise ParseError("Expected command after coproc", pos=self.pos)
 
-    def parse_function(self) -> Function | None:
+    def parse_function(self) -> Node | None:
         """Parse a function definition.
 
         Forms:

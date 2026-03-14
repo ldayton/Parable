@@ -1996,7 +1996,7 @@ class Lexer:
             try:
                 # Use Parser for formatting (calls back via _parser reference)
                 sub_parser = Parser(inner, in_process_sub=True, extglob=self._parser._extglob)
-                parsed = sub_parser.parse_list()
+                parsed = sub_parser.parse_list(True)
                 if parsed and sub_parser.at_end():
                     formatted = _format_cmdsub_node(parsed, 0, True, False, True)
                     arg = "(" + formatted + ")"
@@ -3235,7 +3235,7 @@ class Word(Node):
                     # No AST node (e.g., inside arithmetic) - parse content on the fly
                     try:
                         parser = Parser(inner)
-                        parsed = parser.parse_list()
+                        parsed = parser.parse_list(True)
                         formatted = _format_cmdsub_node(parsed) if parsed else ""
                     except Exception:
                         formatted = inner
@@ -3374,7 +3374,7 @@ class Word(Node):
                     inner = _substring(value, i + 2, j - 1)
                     try:
                         parser = Parser(inner)
-                        parsed = parser.parse_list()
+                        parsed = parser.parse_list(True)
                         # Only use parsed result if parser consumed all input and no newlines in content
                         # (newlines would be lost during formatting)
                         if parsed and parser.pos == len(inner) and "\n" not in inner:
@@ -3435,7 +3435,7 @@ class Word(Node):
                 else:
                     try:
                         parser = Parser(inner.lstrip(" \t\n|"))
-                        parsed = parser.parse_list()
+                        parsed = parser.parse_list(True)
                         if parsed:
                             formatted = _format_cmdsub_node(parsed)
                             formatted = formatted.rstrip(";")
@@ -7226,7 +7226,7 @@ class Parser:
         return self._lexer._is_word_terminator(ctx, ch, bracket_depth, paren_depth)
 
     def _scan_double_quote(
-        self, chars: list[str], parts: list[Node], start: int, handle_line_continuation: bool = True
+        self, chars: list[str], parts: list[Node], start: int, handle_line_continuation: bool
     ) -> None:
         """Scan double-quoted string with expansions. Assumes opening quote consumed."""
         chars.append('"')
@@ -7358,7 +7358,7 @@ class Parser:
         self._eof_token = ")"
 
         # Parse the command list inline - grammar will stop at matching )
-        cmd = self.parse_list()
+        cmd = self.parse_list(True)
         if cmd is None:
             cmd = Empty()
 
@@ -7391,7 +7391,7 @@ class Parser:
         self._set_state(ParserStateFlags.PST_CMDSUBST | ParserStateFlags.PST_EOFTOKEN)
         self._eof_token = "}"
         # Parse the command list inline - grammar will stop at matching }
-        cmd = self.parse_list()
+        cmd = self.parse_list(True)
         if cmd is None:
             cmd = Empty()
         # After parse_list, we should be at the closing }
@@ -7679,7 +7679,7 @@ class Parser:
 
         # Parse the content as a command list
         sub_parser = Parser(content, extglob=self._extglob)
-        cmd = sub_parser.parse_list()
+        cmd = sub_parser.parse_list(True)
         if cmd is None:
             cmd = Empty()
 
@@ -7713,7 +7713,7 @@ class Parser:
 
         # Try to parse the command list inline - grammar will stop at matching )
         try:
-            cmd = self.parse_list()
+            cmd = self.parse_list(True)
             if cmd is None:
                 cmd = Empty()
 
@@ -8419,7 +8419,7 @@ class Parser:
 
         # Parse the command inside
         sub_parser = Parser(content, extglob=self._extglob)
-        cmd = sub_parser.parse_list()
+        cmd = sub_parser.parse_list(True)
 
         return CommandSubstitution(cmd)
 
@@ -8545,7 +8545,7 @@ class Parser:
             raise ParseError("Unterminated backtick in arithmetic", pos=self._arith_pos)
         # Parse the command inside
         sub_parser = Parser(content, extglob=self._extglob)
-        cmd = sub_parser.parse_list()
+        cmd = sub_parser.parse_list(True)
         return CommandSubstitution(cmd)
 
     def _arith_parse_number_or_var(self) -> Node:
@@ -9208,7 +9208,7 @@ class Parser:
         self.advance()  # consume (
         self._set_state(ParserStateFlags.PST_SUBSHELL)
 
-        body = self.parse_list()
+        body = self.parse_list(True)
         if body is None:
             self._clear_state(ParserStateFlags.PST_SUBSHELL)
             raise ParseError("Expected command in subshell", pos=self.pos)
@@ -9580,7 +9580,7 @@ class Parser:
             return None
         self.skip_whitespace_and_newlines()
 
-        body = self.parse_list()
+        body = self.parse_list(True)
         if body is None:
             raise ParseError("Expected command in brace group", pos=self._lex_peek_token().pos)
 
@@ -10815,7 +10815,7 @@ class Parser:
         self.pos = saved_pos
         return op
 
-    def parse_list(self, newline_as_separator: bool = True) -> Node | None:
+    def parse_list(self, newline_as_separator: bool) -> Node | None:
         """Parse a command list (pipelines separated by &&, ||, ;, &).
 
         Args:

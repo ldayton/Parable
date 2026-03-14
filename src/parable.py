@@ -1215,8 +1215,9 @@ class Lexer:
                             assert self._parser is not None
                             cmdsub_result = self._parser._parse_backtick_substitution()
                             self._sync_from_parser()
-                            if cmdsub_result[0]:
-                                parts.append(cmdsub_result[0])
+                            cmdsub_node = cmdsub_result[0]
+                            if cmdsub_node is not None:
+                                parts.append(cmdsub_node)
                                 chars.append(cmdsub_result[1])
                             else:
                                 chars.append(self.advance())
@@ -1251,8 +1252,9 @@ class Lexer:
                 and self.source[self.pos + 1] == "'"
             ):
                 ansi_result = self._read_ansi_c_quote()
-                if ansi_result[0]:
-                    parts.append(ansi_result[0])
+                ansi_node = ansi_result[0]
+                if ansi_node is not None:
+                    parts.append(ansi_node)
                     chars.append(ansi_result[1])
                 else:
                     chars.append(self.advance())
@@ -1265,8 +1267,9 @@ class Lexer:
                 and self.source[self.pos + 1] == '"'
             ):
                 locale_result = self._read_locale_string()
-                if locale_result[0]:
-                    parts.append(locale_result[0])
+                locale_node = locale_result[0]
+                if locale_node is not None:
+                    parts.append(locale_node)
                     parts.extend(locale_result[2])
                     chars.append(locale_result[1])
                 else:
@@ -1302,8 +1305,9 @@ class Lexer:
                 assert self._parser is not None
                 cmdsub_result = self._parser._parse_backtick_substitution()
                 self._sync_from_parser()
-                if cmdsub_result[0]:
-                    parts.append(cmdsub_result[0])
+                cmdsub_node = cmdsub_result[0]
+                if cmdsub_node is not None:
+                    parts.append(cmdsub_node)
                     chars.append(cmdsub_result[1])
                 else:
                     chars.append(self.advance())
@@ -1316,10 +1320,12 @@ class Lexer:
                 and self.source[self.pos + 1] == "("
             ):
                 self._sync_to_parser()
+                assert self._parser is not None
                 procsub_result = self._parser._parse_process_substitution()
                 self._sync_from_parser()
-                if procsub_result[0]:
-                    parts.append(procsub_result[0])
+                procsub_node = procsub_result[0]
+                if procsub_node is not None:
+                    parts.append(procsub_node)
                     chars.append(procsub_result[1])
                 elif procsub_result[1]:
                     chars.append(procsub_result[1])
@@ -1345,6 +1351,7 @@ class Lexer:
                     is_array_assign = _is_array_assignment_prefix(chars[:-1])
                 if is_array_assign and (at_command_start or in_assign_builtin):
                     self._sync_to_parser()
+                    assert self._parser is not None
                     array_result = self._parser._parse_array_literal()
                     self._sync_from_parser()
                     if array_result[0]:
@@ -1771,7 +1778,7 @@ class Lexer:
             return "".join(name_chars)
         # Variable name
         if ch.isalpha() or ch == "_":
-            name_chars = []
+            name_chars: list[str] = []
             while not self.at_end():
                 c = self.peek()
                 if c.isalnum() or c == "_":
@@ -1855,7 +1862,7 @@ class Lexer:
         if ch == "#":
             self.advance()
             param = self._consume_param_name()
-            if param and not self.at_end() and self.peek() == "}":
+            if param is not None and param != "" and not self.at_end() and self.peek() == "}":
                 self.advance()
                 text = _substring(self.source, start, self.pos)
                 self._dolbrace_state = saved_dolbrace
@@ -1868,7 +1875,7 @@ class Lexer:
             while not self.at_end() and _is_whitespace_no_newline(self.peek()):
                 self.advance()
             param = self._consume_param_name()
-            if param:
+            if param is not None and param != "":
                 # Skip optional whitespace before closing brace
                 while not self.at_end() and _is_whitespace_no_newline(self.peek()):
                     self.advance()
@@ -1903,7 +1910,7 @@ class Lexer:
                 self.pos = start + 2  # reset to just after ${
         # ${param} or ${param<op><arg>}
         param = self._consume_param_name()
-        if not param:
+        if param is None or param == "":
             # Allow empty parameter for simple operators like ${:-word}
             if not self.at_end() and (
                 self.peek() in "-=+?"
@@ -2083,7 +2090,7 @@ def _strip_line_continuations_comment_aware(text: str) -> str:
 
 def _append_redirects(base: str, redirects: list[Node] | None) -> str:
     """Append redirect sexp strings to a base sexp string."""
-    if redirects:
+    if redirects is not None and len(redirects) > 0:
         parts: list[str] = []
         for r in redirects:
             parts.append(r.to_sexp())
@@ -5142,7 +5149,7 @@ class Coproc(Node):
 
     def to_sexp(self) -> str:
         # Use provided name for compound commands, "COPROC" for simple commands
-        if self.name:
+        if self.name is not None:
             name = self.name
         else:
             name = "COPROC"
@@ -7258,37 +7265,42 @@ class Parser:
             and self.source[self.pos + 2] == "("
         ):
             result = self._parse_arithmetic_expansion()
-            if result[0]:
-                parts.append(result[0])
+            node = result[0]
+            if node is not None:
+                parts.append(node)
                 chars.append(result[1])
                 return True
             # Not arithmetic (e.g., '$( ( ... ) )' is command sub + subshell)
             result = self._parse_command_substitution()
-            if result[0]:
-                parts.append(result[0])
+            node = result[0]
+            if node is not None:
+                parts.append(node)
                 chars.append(result[1])
                 return True
             return False
         # Check $[ -> deprecated arithmetic
         if self.pos + 1 < self.length and self.source[self.pos + 1] == "[":
             result = self._parse_deprecated_arithmetic()
-            if result[0]:
-                parts.append(result[0])
+            node = result[0]
+            if node is not None:
+                parts.append(node)
                 chars.append(result[1])
                 return True
             return False
         # Check $( -> command substitution
         if self.pos + 1 < self.length and self.source[self.pos + 1] == "(":
             result = self._parse_command_substitution()
-            if result[0]:
-                parts.append(result[0])
+            node = result[0]
+            if node is not None:
+                parts.append(node)
                 chars.append(result[1])
                 return True
             return False
         # Otherwise -> parameter expansion
         result = self._parse_param_expansion(in_dquote)
-        if result[0]:
-            parts.append(result[0])
+        node = result[0]
+        if node is not None:
+            parts.append(node)
             chars.append(result[1])
             return True
         return False
@@ -8670,8 +8682,8 @@ class Parser:
                 self.pos = saved
 
         # Check for optional fd number before redirect (if no varfd)
-        if varfd == "" and self.peek() and self.peek().isdigit():
-            fd_chars = []
+        if varfd == "" and self.peek() != "" and self.peek().isdigit():
+            fd_chars: list[str] = []
             while not self.at_end() and self.peek().isdigit():
                 fd_chars.append(self.advance())
             fd = int("".join(fd_chars))
@@ -8786,7 +8798,7 @@ class Parser:
             if target is None:
                 if not self.at_end() and (self.peek().isdigit() or self.peek() == "-"):
                     word_start = self.pos
-                    fd_chars = []
+                    fd_chars: list[str] = []
                     while not self.at_end() and self.peek().isdigit():
                         fd_chars.append(self.advance())
                     if fd_chars:
@@ -10238,7 +10250,7 @@ class Parser:
         # Check if first word is NAME followed by compound command
         word_start = self.pos
         potential_name = self.peek_word()
-        if potential_name:
+        if potential_name is not None:
             # Skip past the potential name
             while (
                 not self.at_end() and not _is_metachar(self.peek()) and not _is_quote(self.peek())

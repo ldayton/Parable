@@ -466,16 +466,16 @@ class Lexer:
         self._cached_in_array_literal: bool = False
         self._cached_in_assign_builtin: bool = False
 
-    def peek(self) -> str | None:
+    def peek(self) -> str:
         """Return current character without consuming."""
         if self.pos >= self.length:
-            return None
+            return ""
         return self.source[self.pos]
 
-    def advance(self) -> str | None:
+    def advance(self) -> str:
         """Consume and return current character."""
         if self.pos >= self.length:
-            return None
+            return ""
         c = self.source[self.pos]
         self.pos += 1
         return c
@@ -4638,6 +4638,9 @@ class ArithmeticCommand(Node):
 class ArithNode(Node):
     """Base class for arithmetic expression nodes."""
 
+    def to_sexp(self) -> str:
+        raise NotImplementedError
+
 
 class ArithNumber(ArithNode):
     """A numeric literal in arithmetic context."""
@@ -4993,6 +4996,9 @@ class ConditionalExpr(Node):
 
 class CondNode(Node):
     """Base class for conditional expression nodes."""
+
+    def to_sexp(self) -> str:
+        raise NotImplementedError
 
 
 class UnaryTest(CondNode):
@@ -6991,16 +6997,16 @@ class Parser:
         """Check if we've reached the end of input."""
         return self.pos >= self.length
 
-    def peek(self) -> str | None:
+    def peek(self) -> str:
         """Return current character without consuming."""
         if self.at_end():
-            return None
+            return ""
         return self.source[self.pos]
 
-    def advance(self) -> str | None:
+    def advance(self) -> str:
         """Consume and return current character."""
         if self.at_end():
-            return None
+            return ""
         ch = self.source[self.pos]
         self.pos += 1
         return ch

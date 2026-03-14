@@ -3041,16 +3041,21 @@ class Word(Node):
         elif isinstance(node, ArithmeticExpansion):
             if node.expression is not None:
                 result.extend(self._collect_cmdsubs(node.expression))
-        elif isinstance(node, ArithBinaryOp) or isinstance(node, ArithComma):
+        elif isinstance(node, ArithBinaryOp):
             result.extend(self._collect_cmdsubs(node.left))
             result.extend(self._collect_cmdsubs(node.right))
-        elif (
-            isinstance(node, ArithUnaryOp)
-            or isinstance(node, ArithPreIncr)
-            or isinstance(node, ArithPostIncr)
-            or isinstance(node, ArithPreDecr)
-            or isinstance(node, ArithPostDecr)
-        ):
+        elif isinstance(node, ArithComma):
+            result.extend(self._collect_cmdsubs(node.left))
+            result.extend(self._collect_cmdsubs(node.right))
+        elif isinstance(node, ArithUnaryOp):
+            result.extend(self._collect_cmdsubs(node.operand))
+        elif isinstance(node, ArithPreIncr):
+            result.extend(self._collect_cmdsubs(node.operand))
+        elif isinstance(node, ArithPostIncr):
+            result.extend(self._collect_cmdsubs(node.operand))
+        elif isinstance(node, ArithPreDecr):
+            result.extend(self._collect_cmdsubs(node.operand))
+        elif isinstance(node, ArithPostDecr):
             result.extend(self._collect_cmdsubs(node.operand))
         elif isinstance(node, ArithTernary):
             result.extend(self._collect_cmdsubs(node.condition))
@@ -3086,7 +3091,7 @@ class Word(Node):
                 cmdsub_parts.append(p)
             elif isinstance(p, ProcessSubstitution):
                 procsub_parts.append(p)
-            elif p.kind == "arith":
+            elif isinstance(p, ArithmeticExpansion):
                 has_arith = True
             else:
                 cmdsub_parts.extend(self._collect_cmdsubs(p))
@@ -3246,8 +3251,8 @@ class Word(Node):
                 inner = _substring(value, i + 2, j - 1)
                 if cmdsub_idx < len(cmdsub_parts):
                     # Have parsed AST node - use it (} is preserved in AST)
-                    node = cmdsub_parts[cmdsub_idx]
-                    formatted = _format_cmdsub_node(node.command)
+                    cmdsub = cmdsub_parts[cmdsub_idx]
+                    formatted = _format_cmdsub_node(cmdsub.command)
                     cmdsub_idx += 1
                 else:
                     # No AST node (e.g., inside arithmetic) - parse content on the fly
@@ -3291,8 +3296,7 @@ class Word(Node):
                 # Check if we have a parsed node with brace=True
                 cmdsub_node = cmdsub_parts[cmdsub_idx] if cmdsub_idx < len(cmdsub_parts) else None
                 if isinstance(cmdsub_node, CommandSubstitution) and cmdsub_node.brace:
-                    node = cmdsub_node
-                    formatted = _format_cmdsub_node(node.command)
+                    formatted = _format_cmdsub_node(cmdsub_node.command)
                     # Determine prefix: ${ or ${|
                     has_pipe = value[i + 2] == "|"
                     prefix = "${|" if has_pipe else "${ "
@@ -3340,11 +3344,11 @@ class Word(Node):
                     # Have parsed AST node - use it
                     direction = value[i]
                     j = _find_cmdsub_end(value, i + 2)
-                    node = procsub_parts[procsub_idx]
-                    compact = _starts_with_subshell(node.command)
-                    formatted = _format_cmdsub_node(node.command, 0, True, compact, True)
+                    procsub = procsub_parts[procsub_idx]
+                    compact = _starts_with_subshell(procsub.command)
+                    formatted = _format_cmdsub_node(procsub.command, 0, True, compact, True)
                     raw_content = _substring(value, i + 2, j - 1)
-                    if node.command.kind == "subshell":
+                    if isinstance(procsub.command, Subshell):
                         # Extract leading whitespace
                         leading_ws_end = 0
                         while (
@@ -3358,7 +3362,7 @@ class Word(Node):
                             if leading_ws:
                                 # Leading whitespace before subshell: normalize ws + format subshell with spaces
                                 normalized_ws = leading_ws.replace("\n", " ").replace("\t", " ")
-                                spaced = _format_cmdsub_node(node.command, in_procsub=False)
+                                spaced = _format_cmdsub_node(procsub.command, in_procsub=False)
                                 result.append(direction + "(" + normalized_ws + spaced + ")")
                             else:
                                 # No leading whitespace - preserve original raw content
@@ -3372,7 +3376,7 @@ class Word(Node):
                     raw_stripped = raw_content.replace("\\\n", "")
                     # Check for pattern: subshell followed by operator with no space (e.g., "(0)&+")
                     # In this case, preserve original to match bash-oracle behavior
-                    if _starts_with_subshell(node.command) and formatted != raw_stripped:
+                    if _starts_with_subshell(procsub.command) and formatted != raw_stripped:
                         # Starts with subshell and formatting would change it - preserve original
                         result.append(direction + "(" + raw_stripped + ")")
                     else:
@@ -3684,11 +3688,13 @@ class Pipeline(Node):
         i = 0
         while i < len(self.commands):
             cmd = self.commands[i]
-            if cmd.kind == "pipe-both":
+            if isinstance(cmd, PipeBoth):
                 i += 1
                 continue
             # Check if next element is PipeBoth
-            needs_redirect = i + 1 < len(self.commands) and self.commands[i + 1].kind == "pipe-both"
+            needs_redirect = i + 1 < len(self.commands) and isinstance(
+                self.commands[i + 1], PipeBoth
+            )
             cmds.append((cmd, needs_redirect))
             i += 1
         if len(cmds) == 1:
@@ -3706,7 +3712,7 @@ class Pipeline(Node):
             pair = cmds[j]
             cmd = pair[0]
             needs = pair[1]
-            if needs and cmd.kind != "command":
+            if needs and not isinstance(cmd, Command):
                 # Compound command: redirect as sibling in pipe
                 result = "(pipe " + cmd.to_sexp() + ' (redirect ">&" 1) ' + result + ")"
             else:
@@ -3718,7 +3724,7 @@ class Pipeline(Node):
         """Get s-expression for a command, optionally injecting pipe-both redirect."""
         if not needs_redirect:
             return cmd.to_sexp()
-        if cmd.kind == "command":
+        if isinstance(cmd, Command):
             # Inject redirect inside command
             parts: list[str] = []
             for w in cmd.words:
@@ -3746,20 +3752,25 @@ class List(Node):
         parts = list(self.parts)
         op_names = {"&&": "and", "||": "or", ";": "semi", "\n": "semi", "&": "background"}
         # Strip trailing ; or \n (bash ignores it)
-        while (
-            len(parts) > 1
-            and parts[len(parts) - 1].kind == "operator"
-            and (parts[len(parts) - 1].op == ";" or parts[len(parts) - 1].op == "\n")
-        ):
+        while len(parts) > 1:
+            last = parts[len(parts) - 1]
+            if not isinstance(last, Operator):
+                break
+            if last.op != ";" and last.op != "\n":
+                break
             parts = _sublist(parts, 0, len(parts) - 1)
         if len(parts) == 1:
             return parts[0].to_sexp()
         # Handle trailing & as unary background operator
         # & only applies to the immediately preceding pipeline, not the whole list
-        if parts[len(parts) - 1].kind == "operator" and parts[len(parts) - 1].op == "&":
+        last = parts[len(parts) - 1]
+        if isinstance(last, Operator) and last.op == "&":
             # Find rightmost ; or \n to split there
             for i in range(len(parts) - 3, 0, -2):
-                if parts[i].kind == "operator" and (parts[i].op == ";" or parts[i].op == "\n"):
+                item = parts[i]
+                if isinstance(item, Operator):
+                    if item.op != ";" and item.op != "\n":
+                        continue
                     left = _sublist(parts, 0, i)
                     right = _sublist(parts, i + 1, len(parts) - 1)  # exclude trailing &
                     if len(left) > 1:
@@ -3786,20 +3797,22 @@ class List(Node):
         # Find all ; or \n positions (may not be at regular intervals due to consecutive ops)
         semi_positions: list[int] = []
         for i in range(len(parts)):
-            if parts[i].kind == "operator" and (parts[i].op == ";" or parts[i].op == "\n"):
-                semi_positions.append(i)
+            item = parts[i]
+            if isinstance(item, Operator):
+                if item.op == ";" or item.op == "\n":
+                    semi_positions.append(i)
         if semi_positions:
             # Split into segments at ; and \n positions, filtering empty/operator-only segments
             segments: list[list[Node]] = []
             start = 0
             for pos in semi_positions:
                 seg = _sublist(parts, start, pos)
-                if seg and seg[0].kind != "operator":
+                if seg and not isinstance(seg[0], Operator):
                     segments.append(seg)
                 start = pos + 1
             # Final segment
             seg = _sublist(parts, start, len(parts))
-            if seg and seg[0].kind != "operator":
+            if seg and not isinstance(seg[0], Operator):
                 segments.append(seg)
             if not segments:
                 return "()"
@@ -3823,7 +3836,8 @@ class List(Node):
             return parts[0].to_sexp()
         amp_positions: list[int] = []
         for i in range(1, len(parts) - 1, 2):
-            if parts[i].kind == "operator" and parts[i].op == "&":
+            item = parts[i]
+            if isinstance(item, Operator) and item.op == "&":
                 amp_positions.append(i)
         if amp_positions:
             # Split into segments at & positions

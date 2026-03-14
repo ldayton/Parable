@@ -3,8 +3,6 @@ set shell := ["bash", "-o", "pipefail", "-cu"]
 # --- Configuration ---
 project := "parable"
 run_id := `head -c 16 /dev/urandom | xxd -p`
-backends := "csharp dart go java javascript lua perl php python ruby typescript"
-
 # --- Helpers ---
 
 [private]
@@ -33,59 +31,20 @@ src-fmt *ARGS: (_banner "src-fmt")
 src-verify-lock: (_banner "src-verify-lock")
     uv lock --check
 
-# --- Backends (transpiled output in dist/) ---
-
-# Transpile via Docker
-[group: 'backends']
-backend-transpile backend: (_banner "backend-transpile " + backend)
-    just -f dist/{{backend}}/justfile transpile "$(pwd)/src/parable.py"
-
-# Run tests via Docker
-[group: 'backends']
-backend-test backend: (_banner "backend-test " + backend)
-    just -f dist/{{backend}}/justfile check "$(pwd)/src/parable.py" "$(pwd)/tests"
-
 # --- CI/Check ---
-
-# Check that C backend compiles (without running tests)
-[group: 'ci']
-c-compile:
-    just backend-transpile c
-    just -f dist/c/justfile build
 
 # Internal: run all parallel checks
 [private]
 [parallel]
-_check-parallel: src-test src-lint src-fmt src-verify-lock check-dump-ast _backend-test-all
-
-# Internal: run backend tests in parallel
-[private]
-_backend-test-all:
-    #!/usr/bin/env bash
-    set -e
-    pids=()
-    for backend in {{backends}}; do
-        just backend-test "$backend" &
-        pids+=($!)
-    done
-    failed=0
-    for pid in "${pids[@]}"; do
-        wait "$pid" || failed=1
-    done
-    exit $failed
-
-# Ensure biome is installed (prevents race condition in parallel JS checks)
-[private]
-_ensure-biome:
-    @npx -y @biomejs/biome --version >/dev/null 2>&1
+_check-parallel: src-test src-lint src-fmt src-verify-lock check-dump-ast
 
 # Run all checks (parallel)
 [group: 'ci']
-check: _ensure-biome _check-parallel
+check: _check-parallel
 
-# Quick check: test source, transpile and test Go
+# Quick check
 [group: 'ci']
-check-quick: src-test (backend-test "go")
+check-quick: src-test
 
 # --- Tools ---
 
@@ -169,32 +128,6 @@ src-coverage: (_banner "src-coverage")
     echo "  HTML: /tmp/parable-coverage/index.html"
     echo "  JSON: /tmp/parable-coverage.json"
     open /tmp/parable-coverage/index.html 2>/dev/null || true
-
-# Run coverage analysis on backend test suite
-[group: 'profiling']
-backend-coverage backend:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    printf '{{BOLD}}{{CYAN}}==> backend-coverage %s{{NORMAL}}\n' '{{backend}}'
-    case "{{backend}}" in
-        go)
-            rm -rf /tmp/parable-coverage-go-raw
-            mkdir -p /tmp/parable-coverage-go-raw
-            just -f dist/go/justfile transpile "$(pwd)/src/parable.py"
-            GOCOVERDIR=/tmp/parable-coverage-go-raw go run -C dist/go -cover ./cmd/run-tests "$(pwd)/tests"
-            go tool covdata textfmt -i=/tmp/parable-coverage-go-raw -o=/tmp/parable-coverage-go.txt
-            cd dist/go && go tool cover -html=/tmp/parable-coverage-go.txt -o=/tmp/parable-coverage-go.html
-            echo ""
-            echo "Output:"
-            echo "  HTML: /tmp/parable-coverage-go.html"
-            echo "  Text: /tmp/parable-coverage-go.txt"
-            open /tmp/parable-coverage-go.html 2>/dev/null || true
-            ;;
-        *)
-            echo "Coverage not implemented for backend: {{backend}}"
-            exit 1
-            ;;
-    esac
 
 # Benchmark source test suite
 [group: 'profiling']

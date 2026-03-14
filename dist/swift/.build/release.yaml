@@ -1,0 +1,80 @@
+client:
+  name: basic
+tools: {}
+targets:
+  "PackageStructure": ["<PackageStructure>"]
+  "Parable-release.module": ["<Parable-release.module>"]
+  "RunTests-release.exe": ["<RunTests-release.exe>"]
+  "RunTests-release.module": ["<RunTests-release.module>"]
+  "main": ["<Parable-release.module>","<RunTests-release.exe>","<RunTests-release.module>"]
+  "test": ["<Parable-release.module>","<RunTests-release.exe>","<RunTests-release.module>"]
+default: "main"
+nodes:
+  "/workspace/Sources/Parable/":
+    is-directory-structure: true
+    content-exclusion-patterns: [".git",".build"]
+  "/workspace/Sources/RunTests/":
+    is-directory-structure: true
+    content-exclusion-patterns: [".git",".build"]
+commands:
+  "<Parable-release.module>":
+    tool: phony
+    inputs: ["/workspace/.build/aarch64-unknown-linux-gnu/release/Parable.build/Parable.swift.o","/workspace/.build/aarch64-unknown-linux-gnu/release/Parable.swiftmodule"]
+    outputs: ["<Parable-release.module>"]
+
+  "<RunTests-release.exe>":
+    tool: phony
+    inputs: ["/workspace/.build/aarch64-unknown-linux-gnu/release/RunTests"]
+    outputs: ["<RunTests-release.exe>"]
+
+  "<RunTests-release.module>":
+    tool: phony
+    inputs: ["/workspace/.build/aarch64-unknown-linux-gnu/release/RunTests.build/main.swift.o","/workspace/.build/aarch64-unknown-linux-gnu/release/RunTests.swiftmodule"]
+    outputs: ["<RunTests-release.module>"]
+
+  "C.Parable-release.module":
+    tool: swift-compiler
+    inputs: ["/workspace/Sources/Parable/Parable.swift"]
+    outputs: ["/workspace/.build/aarch64-unknown-linux-gnu/release/Parable.build/Parable.swift.o","/workspace/.build/aarch64-unknown-linux-gnu/release/Parable.swiftmodule"]
+    executable: "/usr/bin/swiftc"
+    module-name: "Parable"
+    module-output-path: "/workspace/.build/aarch64-unknown-linux-gnu/release/Parable.swiftmodule"
+    import-paths: ["/workspace/.build/aarch64-unknown-linux-gnu/release"]
+    temps-path: "/workspace/.build/aarch64-unknown-linux-gnu/release/Parable.build"
+    objects: ["/workspace/.build/aarch64-unknown-linux-gnu/release/Parable.build/Parable.swift.o"]
+    other-args: ["-target","aarch64-unknown-linux-gnu","-swift-version","5","-O","-g","-j8","-DSWIFT_PACKAGE","-module-cache-path","/workspace/.build/aarch64-unknown-linux-gnu/release/ModuleCache","-parseable-output","-parse-as-library","-Xcc","-fPIC","-package-name","workspace","-Xcc","-fno-omit-frame-pointer"]
+    sources: ["/workspace/Sources/Parable/Parable.swift"]
+    is-library: true
+    enable-whole-module-optimization: true
+    num-threads: 8
+
+  "C.RunTests-release.exe":
+    tool: shell
+    inputs: ["/workspace/.build/aarch64-unknown-linux-gnu/release/Parable.build/Parable.swift.o","/workspace/.build/aarch64-unknown-linux-gnu/release/RunTests.build/main.swift.o"]
+    outputs: ["/workspace/.build/aarch64-unknown-linux-gnu/release/RunTests"]
+    description: "Linking ./.build/aarch64-unknown-linux-gnu/release/RunTests"
+    args: ["/usr/bin/swiftc","-g","-L","/workspace/.build/aarch64-unknown-linux-gnu/release","-o","/workspace/.build/aarch64-unknown-linux-gnu/release/RunTests","-module-name","RunTests","-emit-executable","-Xlinker","--gc-sections","-Xlinker","--defsym","-Xlinker","main=RunTests_main","-Xlinker","-rpath=$ORIGIN","@/workspace/.build/aarch64-unknown-linux-gnu/release/RunTests.product/Objects.LinkFileList","-target","aarch64-unknown-linux-gnu"]
+
+  "C.RunTests-release.module":
+    tool: swift-compiler
+    inputs: ["/workspace/Sources/RunTests/main.swift","/workspace/.build/aarch64-unknown-linux-gnu/release/Parable.swiftmodule"]
+    outputs: ["/workspace/.build/aarch64-unknown-linux-gnu/release/RunTests.build/main.swift.o","/workspace/.build/aarch64-unknown-linux-gnu/release/RunTests.swiftmodule"]
+    executable: "/usr/bin/swiftc"
+    module-name: "RunTests"
+    module-output-path: "/workspace/.build/aarch64-unknown-linux-gnu/release/RunTests.swiftmodule"
+    import-paths: ["/workspace/.build/aarch64-unknown-linux-gnu/release"]
+    temps-path: "/workspace/.build/aarch64-unknown-linux-gnu/release/RunTests.build"
+    objects: ["/workspace/.build/aarch64-unknown-linux-gnu/release/RunTests.build/main.swift.o"]
+    other-args: ["-target","aarch64-unknown-linux-gnu","-swift-version","5","-O","-g","-j8","-DSWIFT_PACKAGE","-module-cache-path","/workspace/.build/aarch64-unknown-linux-gnu/release/ModuleCache","-parseable-output","-Xfrontend","-entry-point-function-name","-Xfrontend","RunTests_main","-Xcc","-fPIC","-package-name","workspace","-Xcc","-fno-omit-frame-pointer"]
+    sources: ["/workspace/Sources/RunTests/main.swift"]
+    is-library: false
+    enable-whole-module-optimization: true
+    num-threads: 8
+
+  "PackageStructure":
+    tool: package-structure-tool
+    inputs: ["/workspace/Sources/Parable/","/workspace/Sources/RunTests/","/workspace/Package.swift","/workspace/Package.resolved"]
+    outputs: ["<PackageStructure>"]
+    description: "Planning build"
+    allow-missing-inputs: true
+

@@ -18,19 +18,19 @@ Parse bash exactly as bash does. One file, zero dependencies, in your language. 
 
 **Match bash exactly.** Bash is the oracle. We [patched](https://github.com/ldayton/bash-oracle) GNU Bash 5.3 so it reveals its internal parse tree, then test against it. No spec interpretation, no "close enough"—if bash parses it one way, so do we. Bash always tells the truth, even when it's lying.
 
-**Portable performance.** Hand-written recursive descent—no generators, no native extensions, no imports. Tongues, our custom-built transpiler builds release binaries in many languages. All run the same tests.
+**Portable performance.** Hand-written recursive descent—no generators, no native extensions, no imports. [Tongues](https://github.com/ldayton/Tongues), our custom-built transpiler, builds release binaries in many languages. All run the same tests.
 
 ## Languages
 
 All releases, even Python, run through the transpiler. Current languages:
 
-| Language   | Min Version  | Status     |
-| ---------- | ------------ | ---------- |
-| Java       | Temurin 21   | Tests pass |
-| Javascript | Node.js 21   | Tests pass |
-| Perl       | Perl 5.38    | Tests pass |
-| Python     | CPython 3.12 | Tests pass |
-| Ruby       | Ruby 3.2     | Tests pass |
+| Language   | Min Version       | Status     |
+| ---------- | ----------------- | ---------- |
+| Java       | Temurin 21        | Tests pass |
+| Javascript | Node.js 21        | Tests pass |
+| Perl       | Perl 5.38         | Tests pass |
+| Python     | CPython/Pypy 3.12 | Tests pass |
+| Ruby       | Ruby 3.2          | Tests pass |
 
 Output code quality is a work in progress. Currently the transpiler prioritizes correctness over readability; generated code may not yet match hand-written idioms, yet.
 

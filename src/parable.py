@@ -4914,9 +4914,9 @@ class ArithDeprecated(ArithNode):
 class ArithConcat(ArithNode):
     """A concatenation of prefix + expansion in arithmetic (e.g., 0x$var)."""
 
-    parts: list[ArithNode]
+    parts: list[Node]
 
-    def __init__(self, parts: list[ArithNode]):
+    def __init__(self, parts: list[Node]):
         self.kind = "arith-concat"
         self.parts = parts
 

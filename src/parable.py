@@ -7156,7 +7156,7 @@ class Parser:
             return tok.type == TokenType.WORD and tok.value == "}"
         return False
 
-    def _collect_redirects(self) -> list[Node] | None:
+    def _collect_redirects(self) -> list[Node]:
         """Collect trailing redirects after a compound command."""
         redirects: list[Node] = []
         while True:
@@ -7165,7 +7165,7 @@ class Parser:
             if redirect is None:
                 break
             redirects.append(redirect)
-        return redirects if redirects else None
+        return redirects
 
     def _parse_loop_body(self, context: str) -> Node:
         """Parse a loop body that can be either do/done or brace group."""

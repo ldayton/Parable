@@ -1924,7 +1924,9 @@ class Lexer:
                 self.pos = start + 2  # reset to just after ${
         # ${param} or ${param<op><arg>}
         param = self._consume_param_name()
-        if param is None or param == "":
+        if param is None:
+            param = ""
+        if param == "":
             # Allow empty parameter for simple operators like ${:-word}
             if not self.at_end() and (
                 self.peek() in "-=+?"
@@ -1934,7 +1936,7 @@ class Lexer:
                     and _is_simple_param_op(self.source[self.pos + 1])
                 )
             ):
-                param = ""
+                pass
             else:
                 # Unknown syntax - consume until matching }
                 content = self._parse_matched_pair("{", "}", MatchedPairFlags.DOLBRACE)
@@ -9796,6 +9798,7 @@ class Parser:
             return self._parse_for_arith()
 
         # Parse variable name (bash allows reserved words and command substitutions as variable names)
+        var_name: str = ""
         if self.peek() == "$":
             # Command substitution as variable name: for $(echo i) in ...
             var_word = self.parse_word()
@@ -9803,9 +9806,10 @@ class Parser:
                 raise ParseError("Expected variable name after 'for'", self._lex_peek_token().pos)
             var_name = var_word.value
         else:
-            var_name = self.peek_word()
-            if var_name is None:
+            peek_name = self.peek_word()
+            if peek_name is None:
                 raise ParseError("Expected variable name after 'for'", self._lex_peek_token().pos)
+            var_name = peek_name
             self.consume_word(var_name)
 
         self.skip_whitespace()
@@ -9816,7 +9820,7 @@ class Parser:
         self.skip_whitespace_and_newlines()
 
         # Check for optional 'in' clause
-        words = None
+        words: list[Word] | None = None
         if self._lex_is_at_reserved_word("in"):
             self._lex_consume_word("in")
             self.skip_whitespace()  # Only skip whitespace, not newlines
@@ -9828,7 +9832,7 @@ class Parser:
             self.skip_whitespace_and_newlines()
 
             # Parse words until semicolon or newline (not 'do' directly)
-            words: list[Word] = []
+            words = []
             while True:
                 self.skip_whitespace()
                 # Check for end of word list
@@ -9956,13 +9960,13 @@ class Parser:
         self.skip_whitespace_and_newlines()
 
         # Check for optional 'in' clause
-        words = None
+        words: list[Word] | None = None
         if self._lex_is_at_reserved_word("in"):
             self._lex_consume_word("in")
             self.skip_whitespace_and_newlines()  # Allow newlines after 'in'
 
             # Parse words until semicolon, newline, 'do', or '{'
-            words: list[Word] = []
+            words = []
             while True:
                 self.skip_whitespace()
                 # Check for end of word list

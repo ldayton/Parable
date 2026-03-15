@@ -5219,6 +5219,15 @@ def _starts_with_subshell(node: Node) -> bool:
     return False
 
 
+def _pipeline_has_heredoc(p: Pipeline) -> bool:
+    for cmd in p.commands:
+        if isinstance(cmd, Command) and cmd.redirects:
+            for r in cmd.redirects:
+                if isinstance(r, HereDoc):
+                    return True
+    return False
+
+
 def _format_cmdsub_node(
     node: Node,
     indent: int = 0,
@@ -5341,15 +5350,8 @@ def _format_cmdsub_node(
                         has_heredoc = True
                         break
             elif isinstance(p, Pipeline):
-                # Check commands within the pipeline
-                for cmd in p.commands:
-                    if isinstance(cmd, Command) and cmd.redirects:
-                        for r in cmd.redirects:
-                            if isinstance(r, HereDoc):
-                                has_heredoc = True
-                                break
-                    if has_heredoc:
-                        break
+                has_heredoc = _pipeline_has_heredoc(p)
+
         # Join commands with operators
         segments: list[str] = []
         skipped_semi = False

@@ -9,8 +9,6 @@ ast = parse("ps aux | grep python | awk '{print $2}'")
 
 from __future__ import annotations
 
-from collections.abc import Callable
-
 
 class ParseError(Exception):
     """Raised when parsing fails."""

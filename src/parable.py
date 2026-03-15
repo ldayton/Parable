@@ -10748,13 +10748,12 @@ class Parser:
                 return Negation(inner)
 
         # Parse the actual pipeline
-        result = self._parse_simple_pipeline()
+        parsed: Node | None = self._parse_simple_pipeline()
 
-        if result is None:
-            if prefix_order == "":
-                return None
-            # bare time / time ! / ! are valid (null command timing/negation)
-            result = Command([])
+        if parsed is None and prefix_order == "":
+            return None
+        # After early return, parsed is either Node or None with a prefix
+        result: Node = parsed if parsed is not None else Command([])
 
         # Wrap based on prefix order
         if prefix_order == "time":

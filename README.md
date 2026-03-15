@@ -18,31 +18,21 @@ Parse bash exactly as bash does. One file, zero dependencies, in your language. 
 
 **Match bash exactly.** Bash is the oracle. We [patched](https://github.com/ldayton/bash-oracle) GNU Bash 5.3 so it reveals its internal parse tree, then test against it. No spec interpretation, no "close enough"—if bash parses it one way, so do we. Bash always tells the truth, even when it's lying.
 
-**Portable performance.** Hand-written recursive descent—no generators, no native extensions, no imports. Pure Python transpiles to other target languages. All run the same tests.
+**Portable performance.** Hand-written recursive descent—no generators, no native extensions, no imports. Tongues, our custom-built transpiler builds release binaries in many languages. All run the same tests.
 
-## Transpiler
+## Languages
 
-The transpiler supports these target languages:
+All releases, even Python, run through the transpiler. Current languages:
 
 | Language   | Min Version  | Status     |
 | ---------- | ------------ | ---------- |
-| C          | GCC 13       | Tests pass |
-| C#         | .NET 8       | Tests pass |
-| Dart       | Dart 3.2     | Test pass  |
-| Go         | Go 1.21      | Tests pass |
 | Java       | Temurin 21   | Tests pass |
 | Javascript | Node.js 21   | Tests pass |
-| Lua        | Lua 5.4      | Tests pass |
 | Perl       | Perl 5.38    | Tests pass |
-| PHP        | PHP 8.3      | Tests pass |
 | Python     | CPython 3.12 | Tests pass |
 | Ruby       | Ruby 3.2     | Tests pass |
-| Typescript | tsc 5.3      | Tests pass |
-| Swift      | Swift 5.9    | WIP        |
-| Rust       | Rust 1.75    | Future     |
-| Zig        | Zig 0.11     | Future     |
 
-Output code quality is a work in progress. Currently the transpiler prioritizes correctness over readability; generated code may not yet match hand-written idioms.
+Output code quality is a work in progress. Currently the transpiler prioritizes correctness over readability; generated code may not yet match hand-written idioms, yet.
 
 ## Why Parable?
 
@@ -145,21 +135,13 @@ print(ast[0].to_sexp())
 src/
 └── parable.py                   # Single-file Python parser
 
-transpiler/                      # Python → multi-language transpiler
-├── src/frontend/                # Parser and type inference
-├── src/middleend/               # Analysis passes
-└── src/backend/                 # Code generators
-├── src/ir.py                    # Intermediate representation
-
 tests/
 ├── bin/                         # Test runners + corpus utilities
 ├── parable/                     # Parable test cases
 └── corpus/                      # Validation corpus
 
 tools/
-└── fuzzer/                      # Differential fuzzers
-
-dist/                            # Transpiled outputs
+└── fuzzer/                      # Differential fuzzer
 ```
 
 ## License

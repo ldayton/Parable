@@ -834,7 +834,7 @@ class Lexer:
             if self.at_end():
                 raise MatchedPairError(
                     f"unexpected EOF while looking for matching `{close_char}'",
-                    pos=start,
+                    start,
                 )
 
             ch = self.advance()
@@ -1494,7 +1494,9 @@ class Lexer:
             saved_last = self._last_read_token
             self._token_cache = self.next_token()
             self._last_read_token = saved_last  # Peeking shouldn't advance history
-        return self._token_cache
+        result = self._token_cache
+        assert result is not None
+        return result
 
     def _read_ansi_c_quote(self) -> tuple[Node | None, str]:
         """Read ANSI-C quoting $'...'.
@@ -9391,7 +9393,7 @@ class Parser:
         "-ef",
     }
 
-    def parse_conditional_expr(self) -> ConditionalExpr | None:
+    def parse_conditional_expr(self) -> Node | None:
         """Parse a conditional expression [[ expression ]]."""
         self.skip_whitespace()
 
@@ -10436,9 +10438,9 @@ class Parser:
     def _parse_compound_command(self) -> Node | None:
         """Parse any compound command (for function bodies, etc.)."""
         # Try each compound command type
-        result = self.parse_brace_group()
-        if result:
-            return result
+        brace = self.parse_brace_group()
+        if brace is not None:
+            return brace
 
         # Arithmetic command ((...)) - check before subshell
         if (
@@ -10447,42 +10449,34 @@ class Parser:
             and self.pos + 1 < self.length
             and self.source[self.pos + 1] == "("
         ):
-            result = self.parse_arithmetic_command()
-            if result is not None:
-                return result
+            arith = self.parse_arithmetic_command()
+            if arith is not None:
+                return arith
 
-        result = self.parse_subshell()
-        if result:
-            return result
-
-        result = self.parse_conditional_expr()
-        if result:
-            return result
-
-        result = self.parse_if()
-        if result:
-            return result
-
-        result = self.parse_while()
-        if result:
-            return result
-
-        result = self.parse_until()
-        if result:
-            return result
-
-        result = self.parse_for()
-        if result:
-            return result
-
-        result = self.parse_case()
-        if result:
-            return result
-
-        result = self.parse_select()
-        if result:
-            return result
-
+        compound: Node | None = self.parse_subshell()
+        if compound is not None:
+            return compound
+        compound = self.parse_conditional_expr()
+        if compound is not None:
+            return compound
+        compound = self.parse_if()
+        if compound is not None:
+            return compound
+        compound = self.parse_while()
+        if compound is not None:
+            return compound
+        compound = self.parse_until()
+        if compound is not None:
+            return compound
+        compound = self.parse_for()
+        if compound is not None:
+            return compound
+        compound = self.parse_case()
+        if compound is not None:
+            return compound
+        compound = self.parse_select()
+        if compound is not None:
+            return compound
         return None
 
     def _at_list_until_terminator(self, stop_words: set[str]) -> bool:

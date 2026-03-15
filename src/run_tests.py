@@ -70,7 +70,7 @@ def normalize(s):
 
 def run_test(test_input, test_expected):
     """Run a single test. Returns (passed, actual, error_msg)."""
-    from parable import ParseError, parse
+    from parable import MatchedPairError, ParseError, parse
 
     extglob = False
     if test_input.startswith("# @extglob\n"):
@@ -84,7 +84,7 @@ def run_test(test_input, test_expected):
         actual = " ".join(node.to_sexp() for node in nodes)
     except TimeoutError:
         return (False, "<timeout>", "Test timed out after 10 seconds")
-    except ParseError as e:
+    except (ParseError, MatchedPairError) as e:
         if normalize(test_expected) == "<error>":
             return (True, "<error>", None)
         return (False, "<parse error>", str(e))

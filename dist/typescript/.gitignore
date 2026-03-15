@@ -1,6 +1,0 @@
-node_modules/
-dist/
-package-lock.json
-
-# Generated source (transpiled)
-src/parable.ts

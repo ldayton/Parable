@@ -3,8 +3,6 @@ set shell := ["bash", "-o", "pipefail", "-cu"]
 # --- Configuration ---
 project := "parable"
 run_id := `head -c 16 /dev/urandom | xxd -p`
-backends := "csharp dart go java javascript lua perl php python ruby typescript"
-
 # --- Helpers ---
 
 [private]
@@ -28,79 +26,47 @@ src-lint *ARGS: (_banner "src-lint")
 src-fmt *ARGS: (_banner "src-fmt")
     uvx ruff format {{ if ARGS == "--fix" { "" } else { "--check" } }} src/
 
-# Verify source is subset-compliant
-[group: 'source']
-src-subset: (_banner "src-subset")
-    uv run --directory transpiler python -m src.tongues --verify < src/parable.py
-
-# Verify transpiler is subset-compliant (self-hosting)
-[group: 'transpiler']
-transpiler-subset: (_banner "transpiler-subset")
-    just -f transpiler/justfile style
-
-# Run transpiler tests
-[group: 'transpiler']
-transpiler-test: (_banner "transpiler-test")
-    just -f transpiler/justfile test-transpiler
-
 # Verify lock file is up to date
 [group: 'source']
 src-verify-lock: (_banner "src-verify-lock")
     uv lock --check
 
-# --- Backends (transpiled output in dist/) ---
+# Verify Tongues is installed at required version
+[group: 'source']
+check-tongues: (_banner "check-tongues")
+    #!/usr/bin/env bash
+    set -euo pipefail
+    required="0.2.2"
+    if ! command -v tongues &>/dev/null; then
+        echo "FAIL: tongues not found. Install with: brew install ldayton/tap/tongues"
+        exit 1
+    fi
+    version=$(tongues --version)
+    if [[ "$(printf '%s\n' "$required" "$version" | sort -V | head -1)" != "$required" ]]; then
+        echo "FAIL: tongues $version < $required. Run: brew upgrade tongues"
+        exit 1
+    fi
+    echo "OK (tongues $version)"
 
-# Transpile via Docker
-[group: 'backends']
-backend-transpile backend: (_banner "backend-transpile " + backend)
-    just -f dist/{{backend}}/justfile transpile "$(pwd)/src/parable.py" "$(pwd)/transpiler"
-
-# Run tests via Docker
-[group: 'backends']
-backend-test backend: (_banner "backend-test " + backend)
-    just -f dist/{{backend}}/justfile check "$(pwd)/src/parable.py" "$(pwd)/transpiler" "$(pwd)/tests"
+# Run Tongues pycheck on source
+[group: 'source']
+pycheck: check-tongues (_banner "pycheck")
+    tongues --stop-at pycheck src/parable.py > /dev/null
 
 # --- CI/Check ---
-
-# Check that C backend compiles (without running tests)
-[group: 'ci']
-c-compile:
-    just backend-transpile c
-    just -f dist/c/justfile build
 
 # Internal: run all parallel checks
 [private]
 [parallel]
-_check-parallel: src-test src-lint src-fmt src-verify-lock src-subset transpiler-subset transpiler-test check-dump-ast _backend-test-all
-
-# Internal: run backend tests in parallel
-[private]
-_backend-test-all:
-    #!/usr/bin/env bash
-    set -e
-    pids=()
-    for backend in {{backends}}; do
-        just backend-test "$backend" &
-        pids+=($!)
-    done
-    failed=0
-    for pid in "${pids[@]}"; do
-        wait "$pid" || failed=1
-    done
-    exit $failed
-
-# Ensure biome is installed (prevents race condition in parallel JS checks)
-[private]
-_ensure-biome:
-    @npx -y @biomejs/biome --version >/dev/null 2>&1
+_check-parallel: src-test src-lint src-fmt src-verify-lock check-dump-ast pycheck
 
 # Run all checks (parallel)
 [group: 'ci']
-check: _ensure-biome _check-parallel
+check: _check-parallel
 
-# Quick check: test source, transpile and test Go
+# Quick check
 [group: 'ci']
-check-quick: src-subset transpiler-subset src-test (backend-test "go")
+check-quick: src-test
 
 # --- Tools ---
 
@@ -184,32 +150,6 @@ src-coverage: (_banner "src-coverage")
     echo "  HTML: /tmp/parable-coverage/index.html"
     echo "  JSON: /tmp/parable-coverage.json"
     open /tmp/parable-coverage/index.html 2>/dev/null || true
-
-# Run coverage analysis on backend test suite
-[group: 'profiling']
-backend-coverage backend:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    printf '{{BOLD}}{{CYAN}}==> backend-coverage %s{{NORMAL}}\n' '{{backend}}'
-    case "{{backend}}" in
-        go)
-            rm -rf /tmp/parable-coverage-go-raw
-            mkdir -p /tmp/parable-coverage-go-raw
-            just -f dist/go/justfile transpile "$(pwd)/src/parable.py" "$(pwd)/transpiler"
-            GOCOVERDIR=/tmp/parable-coverage-go-raw go run -C dist/go -cover ./cmd/run-tests "$(pwd)/tests"
-            go tool covdata textfmt -i=/tmp/parable-coverage-go-raw -o=/tmp/parable-coverage-go.txt
-            cd dist/go && go tool cover -html=/tmp/parable-coverage-go.txt -o=/tmp/parable-coverage-go.html
-            echo ""
-            echo "Output:"
-            echo "  HTML: /tmp/parable-coverage-go.html"
-            echo "  Text: /tmp/parable-coverage-go.txt"
-            open /tmp/parable-coverage-go.html 2>/dev/null || true
-            ;;
-        *)
-            echo "Coverage not implemented for backend: {{backend}}"
-            exit 1
-            ;;
-    esac
 
 # Benchmark source test suite
 [group: 'profiling']

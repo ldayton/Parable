@@ -1,1 +1,0 @@
-../../javascript/bin/run-tests.js

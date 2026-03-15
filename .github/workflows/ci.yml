@@ -16,6 +16,12 @@ jobs:
 
       - uses: extractions/setup-just@v2
 
+      - name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@master
+
+      - name: Install Tongues
+        run: brew install ldayton/tongues/tongues
+
       - name: Job summary
         run: |
           echo "## 🗣️ Parable CI" >> $GITHUB_STEP_SUMMARY
@@ -36,10 +42,6 @@ jobs:
         with:
           name: logs
           path: |
-            /tmp/parable-test-py3.8.log
-            /tmp/parable-test-py3.9.log
-            /tmp/parable-test-py3.10.log
-            /tmp/parable-test-py3.11.log
             /tmp/parable-test-py3.12.log
             /tmp/parable-test-py3.13.log
             /tmp/parable-test-py3.14.log

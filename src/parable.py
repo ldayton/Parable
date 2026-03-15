@@ -5325,7 +5325,7 @@ def _format_cmdsub_node(
             idx += 1
         # Join with " | " for commands without heredocs, or just join if heredocs handled
         # In procsub, if first command is subshell, use compact "|" separator
-        compact_pipe = in_procsub and cmds and cmds[0][0].kind == "subshell"
+        compact_pipe = in_procsub and len(cmds) > 0 and cmds[0][0].kind == "subshell"
         result = ""
         idx = 0
         while idx < len(result_parts):

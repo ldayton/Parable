@@ -2328,7 +2328,8 @@ class Word(Node):
                         codepoint = int(_substring(inner, i + 2, j), 16)
                         if codepoint == 0:
                             return result
-                        result.extend(chr(codepoint).encode("utf-8"))
+                        for b in chr(codepoint).encode("utf-8"):
+                            result.append(b)
                         i = j
                     else:
                         result.append(ord(inner[i]))
@@ -2341,7 +2342,8 @@ class Word(Node):
                         codepoint = int(_substring(inner, i + 2, j), 16)
                         if codepoint == 0:
                             return result
-                        result.extend(chr(codepoint).encode("utf-8"))
+                        for b in chr(codepoint).encode("utf-8"):
+                            result.append(b)
                         i = j
                     else:
                         result.append(ord(inner[i]))
@@ -2386,7 +2388,8 @@ class Word(Node):
                     result.append(ord(c))
                     i += 2
             else:
-                result.extend(inner[i].encode("utf-8"))
+                for b in inner[i].encode("utf-8"):
+                    result.append(b)
                 i += 1
         return result
 

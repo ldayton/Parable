@@ -16,6 +16,9 @@ jobs:
 
       - uses: extractions/setup-just@v2
 
+      - name: Set up Homebrew
+        uses: Homebrew/actions/setup-homebrew@master
+
       - name: Install Tongues
         run: brew install ldayton/tongues/tongues
 

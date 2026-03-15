@@ -8064,23 +8064,6 @@ class Parser:
             return ArithTernary(cond, if_true, if_false)
         return cond
 
-    def _arith_parse_left_assoc(self, ops: list[str], parsefn: Callable[[], Node]) -> Node:
-        """Parse left-associative binary operators using match/consume."""
-        left = parsefn()
-        while True:
-            self._arith_skip_ws()
-            matched = False
-            for op in ops:
-                if self._arith_match(op):
-                    self._arith_consume(op)
-                    self._arith_skip_ws()
-                    left = ArithBinaryOp(op, left, parsefn())
-                    matched = True
-                    break
-            if not matched:
-                break
-        return left
-
     def _arith_parse_logical_or(self) -> Node:
         """Parse logical or (||)."""
         left = self._arith_parse_logical_and()

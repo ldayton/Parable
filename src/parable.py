@@ -1407,7 +1407,7 @@ class Lexer:
             return None
         if parts:
             return Word("".join(chars), parts)
-        return Word("".join(chars), None)
+        return Word("".join(chars))
 
     def _read_word(self) -> Token | None:
         """Read a word token using _read_word_internal with current context."""
@@ -1435,7 +1435,7 @@ class Lexer:
         )
         if word is None:
             return None
-        return Token(TokenType.WORD, word.value, start, None, word)
+        return Token(TokenType.WORD, word.value, start, word=word)
 
     def next_token(self) -> Token:
         """Return the next token from the input."""

@@ -8451,7 +8451,8 @@ class Parser:
         # Parse the command inside
         sub_parser = Parser(content, False, self._extglob)
         cmd = sub_parser.parse_list(True)
-
+        if cmd is None:
+            cmd = Empty()
         return CommandSubstitution(cmd)
 
     def _arith_parse_braced_param(self) -> Node:
@@ -8577,6 +8578,8 @@ class Parser:
         # Parse the command inside
         sub_parser = Parser(content, False, self._extglob)
         cmd = sub_parser.parse_list(True)
+        if cmd is None:
+            cmd = Empty()
         return CommandSubstitution(cmd)
 
     def _arith_parse_number_or_var(self) -> Node:
@@ -9817,7 +9820,7 @@ class Parser:
             self.skip_whitespace_and_newlines()
 
             # Parse words until semicolon or newline (not 'do' directly)
-            words = []
+            words: list[Word] = []
             while True:
                 self.skip_whitespace()
                 # Check for end of word list
@@ -9951,7 +9954,7 @@ class Parser:
             self.skip_whitespace_and_newlines()  # Allow newlines after 'in'
 
             # Parse words until semicolon, newline, 'do', or '{'
-            words = []
+            words: list[Word] = []
             while True:
                 self.skip_whitespace()
                 # Check for end of word list
@@ -10744,13 +10747,20 @@ class Parser:
                         return inner.pipeline
                     else:
                         return Command([])
+                if inner is None:
+                    return Negation(Command([]))
                 return Negation(inner)
 
         # Parse the actual pipeline
         result = self._parse_simple_pipeline()
 
+        if result is None:
+            if prefix_order == "":
+                return None
+            # bare time / time ! / ! are valid (null command timing/negation)
+            result = Command([])
+
         # Wrap based on prefix order
-        # Note: bare time and time ! are valid (null command timing)
         if prefix_order == "time":
             result = Time(result, time_posix)
         elif prefix_order == "negation":
@@ -10763,9 +10773,6 @@ class Parser:
             # ! time cmd -> Negation(Time(cmd))
             result = Time(result, time_posix)
             result = Negation(result)
-        elif result is None:
-            # No prefix and no pipeline
-            return None
 
         return result
 

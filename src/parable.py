@@ -4980,9 +4980,6 @@ class Negation(Node):
         self.pipeline = pipeline
 
     def to_sexp(self) -> str:
-        if self.pipeline is None:
-            # Bare "!" with no command - bash-oracle shows empty command
-            return "(negation (command))"
         return "(negation " + self.pipeline.to_sexp() + ")"
 
 
@@ -4998,12 +4995,6 @@ class Time(Node):
         self.posix = posix
 
     def to_sexp(self) -> str:
-        if self.pipeline is None:
-            # Bare "time" with no command - bash-oracle shows empty command
-            if self.posix:
-                return "(time -p (command))"
-            else:
-                return "(time (command))"
         if self.posix:
             return "(time -p " + self.pipeline.to_sexp() + ")"
         return "(time " + self.pipeline.to_sexp() + ")"
@@ -5606,14 +5597,10 @@ def _format_cmdsub_node(
         body = _format_cond_body(node.body)
         return "[[ " + body + " ]]"
     if isinstance(node, Negation):
-        if node.pipeline:
-            return "! " + _format_cmdsub_node(node.pipeline, indent)
-        return "! "
+        return "! " + _format_cmdsub_node(node.pipeline, indent)
     if isinstance(node, Time):
         prefix = "time -p " if node.posix else "time "
-        if node.pipeline:
-            return prefix + _format_cmdsub_node(node.pipeline, indent)
-        return prefix
+        return prefix + _format_cmdsub_node(node.pipeline, indent)
     # Fallback: return empty for unknown types
     return ""
 

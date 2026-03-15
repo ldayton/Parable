@@ -8083,11 +8083,29 @@ class Parser:
 
     def _arith_parse_logical_or(self) -> Node:
         """Parse logical or (||)."""
-        return self._arith_parse_left_assoc(["||"], self._arith_parse_logical_and)
+        left = self._arith_parse_logical_and()
+        while True:
+            self._arith_skip_ws()
+            if self._arith_match("||"):
+                self._arith_consume("||")
+                self._arith_skip_ws()
+                left = ArithBinaryOp("||", left, self._arith_parse_logical_and())
+            else:
+                break
+        return left
 
     def _arith_parse_logical_and(self) -> Node:
         """Parse logical and (&&)."""
-        return self._arith_parse_left_assoc(["&&"], self._arith_parse_bitwise_or)
+        left = self._arith_parse_bitwise_or()
+        while True:
+            self._arith_skip_ws()
+            if self._arith_match("&&"):
+                self._arith_consume("&&")
+                self._arith_skip_ws()
+                left = ArithBinaryOp("&&", left, self._arith_parse_bitwise_or())
+            else:
+                break
+        return left
 
     def _arith_parse_bitwise_or(self) -> Node:
         """Parse bitwise or (|)."""
@@ -8140,7 +8158,20 @@ class Parser:
 
     def _arith_parse_equality(self) -> Node:
         """Parse equality (== !=)."""
-        return self._arith_parse_left_assoc(["==", "!="], self._arith_parse_comparison)
+        left = self._arith_parse_comparison()
+        while True:
+            self._arith_skip_ws()
+            matched = False
+            for op in ["==", "!="]:
+                if self._arith_match(op):
+                    self._arith_consume(op)
+                    self._arith_skip_ws()
+                    left = ArithBinaryOp(op, left, self._arith_parse_comparison())
+                    matched = True
+                    break
+            if not matched:
+                break
+        return left
 
     def _arith_parse_comparison(self) -> Node:
         """Parse comparison (< > <= >=)."""

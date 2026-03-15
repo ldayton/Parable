@@ -9462,7 +9462,7 @@ class Parser:
             self.peek() == "]" and self.pos + 1 < self.length and self.source[self.pos + 1] == "]"
         )
 
-    def _parse_cond_or(self) -> Node:
+    def _parse_cond_or(self) -> CondNode:
         """Parse: or_expr = and_expr (|| or_expr)?  (right-associative)"""
         self._cond_skip_whitespace()
         left = self._parse_cond_and()
@@ -9479,7 +9479,7 @@ class Parser:
             return CondOr(left, right)
         return left
 
-    def _parse_cond_and(self) -> Node:
+    def _parse_cond_and(self) -> CondNode:
         """Parse: and_expr = term (&& and_expr)?  (right-associative)"""
         self._cond_skip_whitespace()
         left = self._parse_cond_term()
@@ -9496,7 +9496,7 @@ class Parser:
             return CondAnd(left, right)
         return left
 
-    def _parse_cond_term(self) -> Node:
+    def _parse_cond_term(self) -> CondNode:
         """Parse: term = '!' term | '(' or_expr ')' | unary_test | binary_test | bare_word"""
         self._cond_skip_whitespace()
 

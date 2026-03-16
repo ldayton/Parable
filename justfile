@@ -68,6 +68,75 @@ check: _check-parallel
 [group: 'ci']
 check-quick: src-test
 
+# --- Transpiled backends ---
+
+# SHA256 of source file (truncated to 16 chars)
+[private]
+_src-checksum:
+    @cat src/parable.py | { sha256sum 2>/dev/null || shasum -a 256; } | cut -c1-16
+
+# Transpile source to target language (skips if unchanged)
+[private]
+_transpile target:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    declare -A ext=([python]=py [ruby]=rb [perl]=pl [javascript]=js [java]=java)
+    e=${ext[{{target}}]}
+    out=".out/parable.$e"
+    sum_file=".out/.sum-{{target}}"
+    current=$(just -f {{justfile()}} _src-checksum)
+    cached=$(cat "$sum_file" 2>/dev/null || echo "")
+    if [ -f "$out" ] && [ "$current" = "$cached" ]; then
+        printf '\033[33m[transpile-{{target}}] up to date\033[0m\n'
+        exit 0
+    fi
+    rm -f "$sum_file"
+    printf '\033[32m[transpile-{{target}}]\033[0m\n'
+    start=$SECONDS
+    mkdir -p .out
+    tongues --target {{target}} -o "$out" src/parable.py
+    case "{{target}}" in
+        javascript) echo 'module.exports = { parse, ParseError, MatchedPairError };' >> "$out" ;;
+        perl)       echo '1;' >> "$out" ;;
+    esac
+    printf '\033[32m[transpile-{{target}}] %ds\033[0m\n' "$((SECONDS - start))"
+    echo "$current" > "$sum_file"
+
+# Transpile and run tests in target language
+# Usage: just lang javascript
+[group: 'backends']
+lang target: check-tongues (_transpile target)
+    #!/usr/bin/env bash
+    set -euo pipefail
+    printf '\033[32m[lang-{{target}}]\033[0m\n'
+    start=$SECONDS
+    case "{{target}}" in
+        javascript)
+            PARABLE_PATH="$(pwd)/.out" node tests/transpiled/javascript/run-tests.js tests
+            ;;
+        python)
+            PYTHONPATH=.out uv run python tests/transpiled/python/run_tests.py tests
+            ;;
+        java)
+            mkdir -p .out/java-classes
+            cp .out/parable.java .out/java-classes/Main.java
+            javac -encoding UTF-8 .out/java-classes/Main.java -d .out/java-classes
+            javac -encoding UTF-8 -cp .out/java-classes tests/transpiled/java/RunTests.java -d .out/java-classes
+            java -cp .out/java-classes RunTests tests
+            ;;
+        perl)
+            perl -I.out tests/transpiled/perl/run_tests.pl tests
+            ;;
+        ruby)
+            ruby -I.out tests/transpiled/ruby/run_tests.rb tests
+            ;;
+        *)
+            echo "Unknown target: {{target}}"
+            exit 1
+            ;;
+    esac
+    printf '\033[32m[lang-{{target}}] %ds\033[0m\n' "$((SECONDS - start))"
+
 # --- Tools ---
 
 # Run the fuzzer (e.g., just fuzz char --stop-after 10)

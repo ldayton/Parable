@@ -24,13 +24,14 @@ jobs:
         env:
           TONGUES_VERSION: v0.2.3
         run: |
-          mkdir -p /usr/local/lib/tongues/lib
+          mkdir -p "$HOME/.local/lib/tongues/lib" "$HOME/.local/bin"
           curl -sSfL "https://github.com/ldayton/Tongues/releases/download/${TONGUES_VERSION}/tongues.js" \
-              -o /usr/local/lib/tongues/lib/tongues.js
+              -o "$HOME/.local/lib/tongues/lib/tongues.js"
           curl -sSfL "https://raw.githubusercontent.com/ldayton/Tongues/${TONGUES_VERSION}/tongues/bin/tongues.js" \
-              -o /usr/local/lib/tongues/bin/tongues.js
-          printf '#!/bin/sh\nexec node /usr/local/lib/tongues/bin/tongues.js "$@"\n' > /usr/local/bin/tongues
-          chmod +x /usr/local/bin/tongues
+              -o "$HOME/.local/lib/tongues/bin/tongues.js"
+          printf '#!/bin/sh\nexec node %s/.local/lib/tongues/bin/tongues.js "$@"\n' "$HOME" > "$HOME/.local/bin/tongues"
+          chmod +x "$HOME/.local/bin/tongues"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Job summary
         run: |

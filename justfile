@@ -1,5 +1,7 @@
 set shell := ["bash", "-o", "pipefail", "-cu"]
 
+export VIRTUAL_ENV := ""
+
 # --- Configuration ---
 project := "parable"
 run_id := `head -c 16 /dev/urandom | xxd -p`
@@ -102,10 +104,9 @@ _transpile target:
     printf '\033[32m[transpile-{{target}}] %ds\033[0m\n' "$((SECONDS - start))"
     echo "$current" > "$sum_file"
 
-# Transpile and run tests in target language
-# Usage: just lang javascript
-[group: 'backends']
-lang target: check-tongues (_transpile target)
+# Run transpiled tests for a target language
+[private]
+_run-lang-tests target:
     #!/usr/bin/env bash
     set -euo pipefail
     printf '\033[32m[lang-{{target}}]\033[0m\n'
@@ -136,6 +137,34 @@ lang target: check-tongues (_transpile target)
             ;;
     esac
     printf '\033[32m[lang-{{target}}] %ds\033[0m\n' "$((SECONDS - start))"
+
+# Transpile and run tests in target language
+# Usage: just lang javascript
+[group: 'backends']
+lang target: check-tongues (_transpile target) (_run-lang-tests target)
+
+# Transpile using local Tongues dev source and run tests
+# Usage: just lang-dev javascript
+[group: 'backends']
+lang-dev target: (_transpile-dev target) (_run-lang-tests target)
+
+# Transpile using local Tongues source (no caching)
+[private]
+_transpile-dev target:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    declare -A ext=([python]=py [ruby]=rb [perl]=pl [javascript]=js [java]=java)
+    e=${ext[{{target}}]}
+    out=".out/parable.$e"
+    mkdir -p .out
+    printf '\033[32m[transpile-{{target}} (dev)]\033[0m\n'
+    start=$SECONDS
+    python3 ~/source/Tongues/tongues/bin/tongues --target {{target}} -o "$out" src/parable.py
+    case "{{target}}" in
+        javascript) echo 'module.exports = { parse, ParseError, MatchedPairError };' >> "$out" ;;
+        perl)       echo '1;' >> "$out" ;;
+    esac
+    printf '\033[32m[transpile-{{target}} (dev)] %ds\033[0m\n' "$((SECONDS - start))"
 
 # --- Tools ---
 

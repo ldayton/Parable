@@ -20,7 +20,7 @@ if (!isMainThread) {
     }
     try {
       const nodes = parse(testInput, extglob);
-      const actual = nodes.map(n => n.toSexp()).join(' ');
+      const actual = nodes.map(n => n.to_sexp()).join(' ');
       parentPort.postMessage({ actual, error: null, parseSuccess: true });
     } catch (e) {
       if (e instanceof ParseError) {

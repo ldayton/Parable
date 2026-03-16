@@ -24,7 +24,7 @@ jobs:
         env:
           TONGUES_VERSION: v0.2.3
         run: |
-          mkdir -p "$HOME/.local/lib/tongues/lib" "$HOME/.local/bin"
+          mkdir -p "$HOME/.local/lib/tongues/lib" "$HOME/.local/lib/tongues/bin" "$HOME/.local/bin"
           curl -sSfL "https://github.com/ldayton/Tongues/releases/download/${TONGUES_VERSION}/tongues.js" \
               -o "$HOME/.local/lib/tongues/lib/tongues.js"
           curl -sSfL "https://raw.githubusercontent.com/ldayton/Tongues/${TONGUES_VERSION}/tongues/bin/tongues.js" \

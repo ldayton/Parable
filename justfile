@@ -36,7 +36,7 @@ src-verify-lock: (_banner "src-verify-lock")
 check-tongues: (_banner "check-tongues")
     #!/usr/bin/env bash
     set -euo pipefail
-    required="0.2.2"
+    required="0.2.3"
     if ! command -v tongues &>/dev/null; then
         echo "FAIL: tongues not found. Install with: brew install ldayton/tap/tongues"
         exit 1

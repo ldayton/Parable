@@ -8,7 +8,7 @@ const parablePath = process.env.PARABLE_PATH || path.join(__dirname, '..', '..',
 
 // Worker thread: runs tests sequentially, responds to messages
 if (!isMainThread) {
-  const { parse, ParseError } = require(path.join(workerData.parablePath, 'parable.js'));
+  const { parse, ParseError, MatchedPairError } = require(path.join(workerData.parablePath, 'parable.js'));
 
   parentPort.on('message', (msg) => {
     let testInput = msg.testInput;
@@ -23,7 +23,7 @@ if (!isMainThread) {
       const actual = nodes.map(n => n.to_sexp()).join(' ');
       parentPort.postMessage({ actual, error: null, parseSuccess: true });
     } catch (e) {
-      if (e instanceof ParseError) {
+      if (e instanceof ParseError || e instanceof MatchedPairError) {
         parentPort.postMessage({ actual: '<parse error>', error: e.message, parseSuccess: false, isParseError: true });
       } else {
         parentPort.postMessage({ actual: '<exception>', error: e.message + '\n' + e.stack, parseSuccess: false, isParseError: false });
@@ -32,7 +32,7 @@ if (!isMainThread) {
   });
 } else {
 
-const { parse, ParseError } = require(path.join(parablePath, 'parable.js'));
+const { parse, ParseError, MatchedPairError } = require(path.join(parablePath, 'parable.js'));
 
 function createWorker() {
   return new Worker(__filename, { workerData: { parablePath } });

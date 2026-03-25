@@ -60,7 +60,7 @@ pycheck: check-tongues (_banner "pycheck")
 # Internal: run all parallel checks
 [private]
 [parallel]
-_check-parallel: src-test src-lint src-fmt src-verify-lock check-dump-ast pycheck (_transpile "javascript") (_run-lang-tests "javascript")
+_check-parallel: src-test src-lint src-fmt src-verify-lock check-dump-ast pycheck (lang "javascript")
 
 # Run all checks (parallel)
 [group: 'ci']

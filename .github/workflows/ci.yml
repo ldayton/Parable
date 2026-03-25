@@ -16,11 +16,22 @@ jobs:
 
       - uses: extractions/setup-just@v2
 
-      - name: Set up Homebrew
-        uses: Homebrew/actions/setup-homebrew@master
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
 
       - name: Install Tongues
-        run: brew install ldayton/tongues/tongues
+        env:
+          TONGUES_VERSION: v0.2.4
+        run: |
+          mkdir -p "$HOME/.local/lib/tongues/lib" "$HOME/.local/lib/tongues/bin" "$HOME/.local/bin"
+          curl -sSfL "https://github.com/ldayton/Tongues/releases/download/${TONGUES_VERSION}/tongues.js" \
+              -o "$HOME/.local/lib/tongues/lib/tongues.js"
+          curl -sSfL "https://raw.githubusercontent.com/ldayton/Tongues/${TONGUES_VERSION}/tongues/bin/tongues.js" \
+              -o "$HOME/.local/lib/tongues/bin/tongues.js"
+          printf '#!/bin/sh\nexec node %s/.local/lib/tongues/bin/tongues.js "$@"\n' "$HOME" > "$HOME/.local/bin/tongues"
+          chmod +x "$HOME/.local/bin/tongues"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
 
       - name: Job summary
         run: |

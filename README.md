@@ -24,12 +24,12 @@ Parse bash exactly as bash does. One file, zero dependencies, in your language. 
 
 All releases, even Python, run through the transpiler. Current languages:
 
-| Language   | Min Version       |
-| ---------- | ----------------- |
-| Javascript | Node.js 21        |
-| Python     | CPython/Pypy 3.12 |
+| Language   | Min Version       | v0.1.0                                                                               |
+| ---------- | ----------------- | ------------------------------------------------------------------------------------ |
+| Javascript | Node.js 21        | [parable.js](https://github.com/ldayton/Parable/releases/download/v0.1.0/parable.js) |
+| Python     | CPython/Pypy 3.12 | [parable.py](https://github.com/ldayton/Parable/releases/download/v0.1.0/parable.py) |
 
-Output code quality is a work in progress. Currently the transpiler prioritizes correctness over readability; generated code may not yet match hand-written idioms, yet.
+Caveats: output code quality is a work in progress. Currently the transpiler prioritizes correctness over readability; generated code may not yet match hand-written idioms, yet. Additionally, the project's fuzzer still finds obscure edge cases where Parable differs from GNU Bash. While Parable matches bash for essentially 100% of real world examples, we're still shaking out remaining theoretical differences.
 
 ## Why Parable?
 

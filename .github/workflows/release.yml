@@ -1,0 +1,83 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Extract version from tag
+        id: version
+        run: echo "version=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Verify version matches pyproject.toml
+        run: |
+          toml_version=$(grep -oP 'version = "\K[^"]+' pyproject.toml)
+          if [ "$toml_version" != "${{ steps.version.outputs.version }}" ]; then
+            echo "Tag version (${{ steps.version.outputs.version }}) does not match pyproject.toml ($toml_version)"
+            exit 1
+          fi
+
+      - name: Get release notes from PR
+        id: notes
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          body=$(gh pr list --state merged --head "release/v${{ steps.version.outputs.version }}" --json body --jq '.[0].body // empty')
+          if [ -z "$body" ]; then
+            echo "No release PR found, using auto-generated notes"
+            echo "auto=true" >> $GITHUB_OUTPUT
+          else
+            echo "body<<EOF" >> $GITHUB_OUTPUT
+            echo "$body" >> $GITHUB_OUTPUT
+            echo "EOF" >> $GITHUB_OUTPUT
+          fi
+
+      - uses: astral-sh/setup-uv@v4
+
+      - uses: extractions/setup-just@v2
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install Tongues
+        env:
+          TONGUES_VERSION: v0.2.4
+        run: |
+          mkdir -p "$HOME/.local/lib/tongues/lib" "$HOME/.local/lib/tongues/bin" "$HOME/.local/bin"
+          curl -sSfL "https://github.com/ldayton/Tongues/releases/download/${TONGUES_VERSION}/tongues.js" \
+              -o "$HOME/.local/lib/tongues/lib/tongues.js"
+          curl -sSfL "https://raw.githubusercontent.com/ldayton/Tongues/${TONGUES_VERSION}/tongues/bin/tongues.js" \
+              -o "$HOME/.local/lib/tongues/bin/tongues.js"
+          printf '#!/bin/sh\nexec node %s/.local/lib/tongues/bin/tongues.js "$@"\n' "$HOME" > "$HOME/.local/bin/tongues"
+          chmod +x "$HOME/.local/bin/tongues"
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      - name: Run checks
+        run: just check
+
+      - name: Transpile release binaries
+        run: |
+          mkdir -p .out
+          tongues --target python -o .out/parable.py src/parable.py
+          tongues --target javascript -o .out/parable.js src/parable.py
+          echo 'module.exports = { parse, ParseError, MatchedPairError };' >> .out/parable.js
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body: ${{ steps.notes.outputs.body }}
+          generate_release_notes: ${{ steps.notes.outputs.auto == 'true' }}
+          files: |
+            .out/parable.py
+            .out/parable.js

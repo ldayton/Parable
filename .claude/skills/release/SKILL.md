@@ -2,7 +2,7 @@
 name: release
 description: Create a release PR with version bump and changelog
 disable-model-invocation: true
-argument-hint: [version]
+argument-hint: version
 ---
 
 Create a PR with branch name `release/v$ARGUMENTS` containing only these changes:

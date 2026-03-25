@@ -8,6 +8,7 @@ argument-hint: version
 Create a PR with branch name `release/v$ARGUMENTS` containing only these changes:
 
 1. Update version in `pyproject.toml`
+2. Ensure `TONGUES_VERSION` matches between `.github/workflows/ci.yml` and `.github/workflows/release.yml`
 
 No other changes—no refactors, no fixes, no documentation updates.
 

@@ -22,7 +22,7 @@ jobs:
 
       - name: Install Tongues
         env:
-          TONGUES_VERSION: v0.2.3
+          TONGUES_VERSION: v0.2.4
         run: |
           mkdir -p "$HOME/.local/lib/tongues/lib" "$HOME/.local/lib/tongues/bin" "$HOME/.local/bin"
           curl -sSfL "https://github.com/ldayton/Tongues/releases/download/${TONGUES_VERSION}/tongues.js" \

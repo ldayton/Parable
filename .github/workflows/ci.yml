@@ -22,7 +22,7 @@ jobs:
 
       - name: Install Tongues
         env:
-          TONGUES_VERSION: v0.2.4
+          TONGUES_VERSION: v0.2.5
         run: |
           mkdir -p "$HOME/.local/lib/tongues/lib" "$HOME/.local/lib/tongues/bin" "$HOME/.local/bin"
           curl -sSfL "https://github.com/ldayton/Tongues/releases/download/${TONGUES_VERSION}/tongues.js" \
@@ -46,6 +46,15 @@ jobs:
 
       - name: Run checks
         run: just check
+
+      - name: Transpile Perl
+        run: just _transpile perl
+
+      - name: Build Perl Docker image
+        run: docker build -t parable-perl docker/perl
+
+      - name: Test Perl backend
+        run: docker run --rm -v $PWD:/workspace parable-perl just _run-lang-tests perl
 
       - name: Upload logs
         if: always()

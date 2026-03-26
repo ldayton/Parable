@@ -37,4 +37,4 @@ Tag, push, and clean up:
 git checkout main && git pull && git tag v$ARGUMENTS && git push --tags && git push origin --delete release/v$ARGUMENTS
 ```
 
-The tag triggers a workflow that creates the GitHub release with transpiled binaries (parable.py, parable.js).
+The tag triggers a workflow that creates the GitHub release with transpiled binaries (parable.py, parable.js, parable.pl).

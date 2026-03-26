@@ -52,7 +52,7 @@ jobs:
 
       - name: Install Tongues
         env:
-          TONGUES_VERSION: v0.2.4
+          TONGUES_VERSION: v0.2.5
         run: |
           mkdir -p "$HOME/.local/lib/tongues/lib" "$HOME/.local/lib/tongues/bin" "$HOME/.local/bin"
           curl -sSfL "https://github.com/ldayton/Tongues/releases/download/${TONGUES_VERSION}/tongues.js" \
@@ -72,6 +72,14 @@ jobs:
           tongues --target python -o .out/parable.py src/parable.py
           tongues --target javascript -o .out/parable.js src/parable.py
           echo 'module.exports = { parse, ParseError, MatchedPairError };' >> .out/parable.js
+          tongues --target perl -o .out/parable.pl src/parable.py
+          echo '1;' >> .out/parable.pl
+
+      - name: Build Perl Docker image
+        run: docker build -t parable-perl docker/perl
+
+      - name: Test Perl backend
+        run: docker run --rm -v $PWD:/workspace parable-perl just _run-lang-tests perl
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -81,3 +89,4 @@ jobs:
           files: |
             .out/parable.py
             .out/parable.js
+            .out/parable.pl

@@ -38,7 +38,7 @@ src-verify-lock: (_banner "src-verify-lock")
 check-tongues: (_banner "check-tongues")
     #!/usr/bin/env bash
     set -euo pipefail
-    required="0.2.4"
+    required="0.2.5"
     if ! command -v tongues &>/dev/null; then
         echo "FAIL: tongues not found. Install with: brew install ldayton/tap/tongues"
         exit 1
@@ -60,7 +60,7 @@ pycheck: check-tongues (_banner "pycheck")
 # Internal: run all parallel checks
 [private]
 [parallel]
-_check-parallel: src-test src-lint src-fmt src-verify-lock check-dump-ast pycheck (lang "javascript")
+_check-parallel: src-test src-lint src-fmt src-verify-lock check-dump-ast pycheck (lang "javascript") (lang "python")
 
 # Run all checks (parallel)
 [group: 'ci']

@@ -20,7 +20,7 @@ sub find_test_files ($directory) {
 }
 
 sub parse_test_file ($filepath) {
-    open my $fh, '<', $filepath or die "Cannot open $filepath: $!";
+    open my $fh, '<:utf8', $filepath or die "Cannot open $filepath: $!";
     my @lines = <$fh>;
     close $fh;
     chomp @lines;
